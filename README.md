@@ -14,6 +14,8 @@ La parrocchia è l'ente base. Ogni attività può avere logo, colori e contatti 
 
 La versione `0.2.0` è installata e attiva sul sito. Il collaudo ha verificato homepage, pagina Santiago, pannello eventi, migrazione compatibile, preset Minimo/Standard/Viaggio, anteprima amministrativa e caricamento condizionale degli asset. La bozza 2027 conserva il profilo Minimo; attività ed evento non sono pubblicati. La versione aggiunge selezione puntuale dei dati dei partecipanti e validazione server allowlist. Email, pagamenti e sincronizzazione Workspace restano non operativi.
 
+Il backend Google Workspace è predisposto in `workspace-apps-script/` come candidato sanitizzato: crea le schede operative, convalida i pagamenti manuali, conserva audit e outbox in anteprima e accetta soltanto richieste WordPress firmate. Non contiene l'ID del foglio, URL di deployment, segreti o destinatari reali e non è ancora installato né eseguito nell'account Workspace.
+
 - [Progetto funzionale e tecnico](PROGETTO.md)
 - [Decisioni della Fase A](docs/DECISIONI_FASE_A.md)
 - [Schema dati](docs/SCHEMA_DATI.md)
@@ -21,6 +23,7 @@ La versione `0.2.0` è installata e attiva sul sito. Il collaudo ha verificato h
 - [Configurazione evento dimostrativa](schema/evento.example.json)
 - [Prototipo statico](prototipo/README.md)
 - [Plugin WordPress — vertical slice](wordpress-plugin/modulo-iscrizioni/README.md)
+- [Backend Google Workspace](workspace-apps-script/README.md)
 - [Politica di sanitizzazione](docs/SANITIZZAZIONE.md)
 
 ## Dati reali vietati

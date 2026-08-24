@@ -5,6 +5,8 @@ Data: 24 agosto 2026
 
 Esito Fase A: completata. Fase 2: vertical slice WordPress 0.2.0 installata, attiva e collaudata. Sono stati verificati homepage, pagina Santiago, pannello eventi, salvataggio delle bozze, caricamento condizionale degli asset, preset dei dati e migrazione compatibile della tabella partecipanti. I dati estesi usano allowlist e validazione server; la bozza 2027 mantiene il profilo Minimo. Le prime bozze di attività ed evento esistono nel pannello, ma non è stato pubblicato alcun modulo e nessun invio reale è attivo.
 
+Backend Workspace: candidato Apps Script predisposto e testato localmente, non ancora installato. Il setup è associabile a un foglio senza incorporarne l'ID, crea registri separati per iscrizioni, partecipanti, pagamenti, intake, email e audit, mantiene l'outbox in `PREVIEW` e richiede HMAC con anti-replay per ogni futura scrittura proveniente da WordPress.
+
 ## Artefatti della Fase A
 
 - [Decisioni operative](docs/DECISIONI_FASE_A.md)
