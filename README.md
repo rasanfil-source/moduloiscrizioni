@@ -12,7 +12,7 @@ La parrocchia è l'ente base. Ogni attività può avere logo, colori e contatti 
 
 ## Stato
 
-La cartella contiene documentazione, schema dati, prototipo statico e la prima vertical slice del plugin WordPress. La versione `0.1.0` è stata installata e poi lasciata inattiva dopo che il primo collaudo ha rilevato un errore 500 sul frontend. Poiché il sito usa regole `.htaccess` personalizzate e il frontend è tornato disponibile dopo il secondo aggiornamento delle regole, la correzione prudenziale `0.1.1` elimina dal plugin ogni riscrittura non necessaria dei permalink. Le email restano in modalità `PREVIEW`; pagamenti e sincronizzazione Workspace non sono ancora operativi.
+La cartella contiene documentazione, schema dati, prototipo statico e la prima vertical slice del plugin WordPress. La versione `0.1.1` è installata e attiva sul sito: il collaudo ha verificato homepage, pagina Santiago, pannello eventi e assenza degli asset del plugin nelle pagine prive di shortcode. La correzione introdotta dopo il primo tentativo elimina dal plugin ogni riscrittura non necessaria dei permalink personalizzati del sito. Le email restano in modalità `PREVIEW`; pagamenti e sincronizzazione Workspace non sono ancora operativi.
 
 - [Progetto funzionale e tecnico](PROGETTO.md)
 - [Decisioni della Fase A](docs/DECISIONI_FASE_A.md)
