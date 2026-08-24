@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="360" height="120" viewBox="0 0 360 120" role="img" aria-labelledby="title description">
-  <title id="title">Logo dimostrativo della Parrocchia Sant'Eugenio</title>
+  <title id="title">Logo dimostrativo della Parrocchia Demo</title>
   <desc id="description">Una chiesa stilizzata blu notte accanto al nome della parrocchia.</desc>
   <rect width="360" height="120" rx="18" fill="#f7fafc"/>
   <g transform="translate(24 18)" fill="none" stroke="#1a365d" stroke-linecap="round" stroke-linejoin="round">
@@ -8,5 +8,5 @@
     <path d="M3 84h94" stroke-width="6"/>
   </g>
   <text x="136" y="52" fill="#1a365d" font-family="Georgia, serif" font-size="23" font-weight="700">Parrocchia</text>
-  <text x="136" y="82" fill="#1a365d" font-family="Arial, sans-serif" font-size="25" font-weight="700">Sant'Eugenio</text>
+  <text x="136" y="82" fill="#1a365d" font-family="Arial, sans-serif" font-size="25" font-weight="700">Parrocchia Demo</text>
 </svg>

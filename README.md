@@ -17,6 +17,7 @@ La cartella contiene documentazione di progetto, schema dati e un prototipo stat
 - [Progetto funzionale e tecnico](PROGETTO.md)
 - [Decisioni della Fase A](docs/DECISIONI_FASE_A.md)
 - [Schema dati](docs/SCHEMA_DATI.md)
+- [Criteri di accettazione della prima vertical slice](docs/CRITERI_ACCETTAZIONE_VERTICAL_SLICE.md)
 - [Configurazione evento dimostrativa](schema/evento.example.json)
 - [Prototipo statico](prototipo/README.md)
 - [Politica di sanitizzazione](docs/SANITIZZAZIONE.md)

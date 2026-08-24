@@ -81,6 +81,9 @@
     }
 
     const stepNames = ['Evento', 'Biglietti', 'Referente', 'Partecipanti', 'Riepilogo', 'Conferma'];
+    const scenario = config.demoScenario || { flow: 'deposit', fields: 'minimal' };
+    const hasPricing = scenario.pricingMode !== 'NONE';
+    const hasManagedPayment = scenario.collectionMode === 'TRACKED_MANUAL';
     const state = {
     currentStep: 1,
     ticketQuantities: Object.fromEntries(
@@ -152,8 +155,26 @@
     hero.alt = event.heroImage.alt;
 
     byId('confirmationBookingStatus').textContent = event.registrationStatus;
-    byId('confirmationPaymentStatus').textContent = event.paymentStatus;
+    byId('confirmationPaymentStatus').textContent = hasManagedPayment
+      ? event.paymentStatus
+      : (hasPricing ? 'Incasso non gestito dal sistema' : 'Non richiesto');
     byId('confirmationCode').textContent = event.bookingCode;
+    root.dataset.demoFlow = scenario.flow;
+    root.dataset.demoFields = scenario.fields;
+    root.querySelectorAll('[data-economic-only]').forEach((element) => {
+      element.hidden = !hasPricing;
+    });
+    root.querySelectorAll('[data-payment-only]').forEach((element) => {
+      element.hidden = !hasManagedPayment;
+    });
+    root.querySelectorAll('[data-extended-only]').forEach((element) => {
+      element.hidden = scenario.fields !== 'extended';
+    });
+    if (!hasManagedPayment) {
+      byId('confirmationLead').textContent = hasPricing
+        ? 'La prenotazione è registrata; il prezzo è informativo e l’incasso non è gestito dal sistema.'
+        : 'La prenotazione è registrata senza prezzo né pagamento. Conserva il codice per ogni comunicazione.';
+    }
   }
 
   function resolveBrand(layers) {
@@ -221,7 +242,7 @@
           <span class="se-booking__ticket-name">${escapeHtml(ticket.name)}</span>
           <span class="se-booking__ticket-description">${escapeHtml(ticket.description)}</span>
           <span class="se-booking__ticket-availability">${escapeHtml(ticket.availabilityLabel)}</span>
-          <span class="se-booking__ticket-price">${escapeHtml(formatMoney(ticket.priceCents))}</span>
+          <span class="se-booking__ticket-price">${hasPricing ? escapeHtml(formatMoney(ticket.priceCents)) : 'Iscrizione'}</span>
         </div>
         <div class="se-booking__quantity">
           <button
@@ -309,6 +330,8 @@
         lastName: container.querySelector('[data-participant-field="lastName"]')?.value.trim() || '',
         email: container.querySelector('[data-participant-field="email"]')?.value.trim() || '',
         phone: canonicalizePhone(container.querySelector('[data-participant-field="phone"]')?.value || ''),
+        shirtSize: container.querySelector('[data-participant-field="shirtSize"]')?.value || '',
+        jerseyNumber: container.querySelector('[data-participant-field="jerseyNumber"]')?.value || '',
         prefilled: Boolean(existing.prefilled)
       });
     });
@@ -333,6 +356,8 @@
           lastName: '',
           email: '',
           phone: '',
+          shirtSize: '',
+          jerseyNumber: '',
           prefilled: false
         });
       }
@@ -460,6 +485,18 @@
             <p id="${inputBaseId}-contactHelp" class="se-booking__field-help se-booking__field--wide">
               Aggiungi email e cellulare se desideri che il partecipante possa essere contattato direttamente. Se li lasci vuoti, tutte le comunicazioni saranno inviate al referente.
             </p>
+            ${scenario.fields === 'extended' ? `
+            <div class="se-booking__field">
+              <label class="se-booking__label" for="${inputBaseId}-shirtSize">Taglia maglietta <span class="se-booking__required-note">(profilo esteso)</span></label>
+              <select id="${inputBaseId}-shirtSize" class="se-booking__input" name="participant-${safeKey}-shirtSize" data-participant-field="shirtSize">
+                <option value="">Seleziona</option>
+                ${['S', 'M', 'L', 'XL'].map((size) => `<option value="${size}"${participant.shirtSize === size ? ' selected' : ''}>${size}</option>`).join('')}
+              </select>
+            </div>
+            <div class="se-booking__field">
+              <label class="se-booking__label" for="${inputBaseId}-jerseyNumber">Numero maglia <span class="se-booking__required-note">(facoltativo)</span></label>
+              <input id="${inputBaseId}-jerseyNumber" class="se-booking__input" type="number" min="0" max="99" name="participant-${safeKey}-jerseyNumber" value="${escapeHtml(participant.jerseyNumber)}" data-participant-field="jerseyNumber">
+            </div>` : ''}
           </div>
         </div>
       `;
@@ -496,7 +533,7 @@
 
     const price = document.createElement('span');
     price.className = 'se-booking__option-price';
-    price.textContent = `+ ${formatMoney(priceCents)}`;
+    price.textContent = hasPricing ? `+ ${formatMoney(priceCents)}` : 'Inclusa';
 
     copy.append(title, descriptionElement, price);
     label.append(input, copy);
@@ -657,7 +694,10 @@
     });
 
     const ticketCount = getTicketCount();
-    const dueNowCents = Math.min(totalCents, config.event.depositPerTicketCents * ticketCount);
+    if (!hasPricing) totalCents = 0;
+    const dueNowCents = hasManagedPayment
+      ? Math.min(totalCents, config.event.depositPerTicketCents * ticketCount)
+      : 0;
     return {
       lineItems,
       totalCents,
@@ -683,13 +723,13 @@
         const label = document.createElement('span');
         label.textContent = line.label;
         const amount = document.createElement('span');
-        amount.textContent = formatMoney(line.amountCents);
+        amount.textContent = hasPricing ? formatMoney(line.amountCents) : '';
         item.append(label, amount);
         summaryLines.append(item);
       });
     }
 
-    const totalLabel = formatMoney(totals.totalCents);
+    const totalLabel = hasPricing ? formatMoney(totals.totalCents) : 'Nessun prezzo';
     summaryTotal.textContent = totalLabel;
     summaryDue.textContent = formatMoney(totals.dueNowCents);
     mobileTotal.textContent = totalLabel;

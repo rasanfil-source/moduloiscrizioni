@@ -1,17 +1,25 @@
 (function () {
   'use strict';
 
+  const params = new URLSearchParams(window.location.search);
+  const flow = ['registration', 'priced', 'deposit'].includes(params.get('flow'))
+    ? params.get('flow')
+    : 'deposit';
+  const fields = ['minimal', 'extended'].includes(params.get('fields'))
+    ? params.get('fields')
+    : 'minimal';
+
   window.SE_BOOKING_DEMO_CONFIG = {
     locale: 'it-IT',
     currency: 'EUR',
     schemaVersion: 'demo-1.0.0',
 
     parish: {
-      id: 'par_sant_eugenio_demo',
-      name: 'Parrocchia Sant\'Eugenio',
+      id: 'par_demo',
+      name: 'Parrocchia Demo',
       logo: {
         src: 'assets/img/logo-parrocchia.svg',
-        alt: 'Logo dimostrativo della Parrocchia Sant\'Eugenio'
+        alt: 'Logo dimostrativo della Parrocchia Demo'
       },
       primaryColor: '#1a365d',
       primaryDarkColor: '#10243f'
@@ -20,11 +28,11 @@
     activities: [
       {
         id: 'act_pellegrinaggi_demo',
-        parishId: 'par_sant_eugenio_demo',
-        name: 'Pellegrinaggi e Cammini',
+        parishId: 'par_demo',
+        name: 'Attività Cammini Demo',
         logo: {
           src: 'assets/img/logo-attivita.svg',
-          alt: 'Logo dimostrativo di Pellegrinaggi e Cammini'
+          alt: 'Logo dimostrativo di Attività Cammini Demo'
         },
         primaryColor: '#337ab7',
         primaryDarkColor: '#285f8f'
@@ -32,32 +40,32 @@
     ],
 
     event: {
-      id: 'evt_cammino_2027_demo',
+      id: 'evt_percorso_2030_demo',
       activityId: 'act_pellegrinaggi_demo',
-      slug: 'cammino-portoghese-2027-demo',
-      title: 'Cammino di Santiago 2027',
-      subtitle: 'Cammino Portoghese da Tui a Santiago',
-      startDateLabel: '23 maggio 2027',
-      endDateLabel: '30 maggio 2027',
+      slug: 'percorso-collinare-2030-demo',
+      title: 'Percorso collinare dimostrativo 2030',
+      subtitle: 'Evento fittizio per provare iscrizioni e pagamenti',
+      startDateLabel: '23 maggio 2030',
+      endDateLabel: '30 maggio 2030',
       timeZone: 'Europe/Rome',
-      location: 'Tui → Santiago de Compostela, Spagna',
-      shortDescription: 'Otto giorni di cammino, fraternità e scoperta lungo gli ultimi chilometri del Cammino Portoghese.',
+      location: 'Località Demo, Italia',
+      shortDescription: 'Otto giorni dimostrativi di cammino e attività di gruppo in una località completamente fittizia.',
       availabilityLabel: 'Iscrizioni aperte · 12 posti disponibili',
       preliminaryNotice: 'Porta con te un documento valido per l\'espatrio. Programma, prezzi e disponibilità di questo prototipo sono puramente dimostrativi.',
       heroImage: {
         src: 'assets/img/hero-cammino.svg',
-        alt: 'Illustrazione dimostrativa di un sentiero tra colline diretto verso Santiago'
+        alt: 'Illustrazione dimostrativa di un sentiero tra colline'
       },
       logoOverride: {
         src: 'assets/img/logo-evento.svg',
-        alt: 'Logo dimostrativo del Cammino di Santiago 2027'
+        alt: 'Logo dimostrativo dell’evento Percorso 2030'
       },
       primaryColor: '#67458f',
       primaryDarkColor: '#4b3269',
       minTicketsPerOrder: 1,
       maxTicketsPerOrder: 6,
       depositPerTicketCents: 15000,
-      bookingCode: 'CS27-K4M8Q2',
+      bookingCode: 'EV30-K4M8Q2',
       registrationStatus: 'Registrata',
       paymentStatus: 'In attesa di verifica',
       tickets: [
@@ -109,6 +117,14 @@
         }
       ],
       consentVersion: 'privacy-demo-v1'
+    },
+
+    demoScenario: {
+      flow,
+      fields,
+      pricingMode: flow === 'registration' ? 'NONE' : 'CALCULATED',
+      collectionMode: flow === 'priced' ? 'NOT_MANAGED' : (flow === 'registration' ? 'NONE' : 'TRACKED_MANUAL'),
+      paymentPlan: flow === 'deposit' ? 'DEPOSIT_BALANCE' : 'NONE'
     },
 
     demoBrandModes: {

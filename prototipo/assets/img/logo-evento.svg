@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="360" height="120" viewBox="0 0 360 120" role="img" aria-labelledby="title description">
-  <title id="title">Logo dimostrativo del Cammino di Santiago 2027</title>
+  <title id="title">Logo dimostrativo dell'evento Percorso 2030</title>
   <desc id="description">Una conchiglia viola stilizzata accanto al nome Cammino 2027.</desc>
   <rect width="360" height="120" rx="18" fill="#fbf8ff"/>
   <g transform="translate(18 13)" fill="none" stroke="#67458f" stroke-linecap="round" stroke-width="5">
@@ -7,5 +7,5 @@
     <path d="M47 87V27M47 87 23 34M47 87 71 34M47 87 12 54M47 87 82 54"/>
   </g>
   <text x="132" y="51" fill="#4b3269" font-family="Georgia, serif" font-size="25" font-weight="700">Cammino</text>
-  <text x="132" y="84" fill="#67458f" font-family="Arial, sans-serif" font-size="28" font-weight="700">Santiago 2027</text>
+  <text x="132" y="84" fill="#67458f" font-family="Arial, sans-serif" font-size="28" font-weight="700">Percorso 2030</text>
 </svg>

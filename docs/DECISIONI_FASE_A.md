@@ -17,6 +17,8 @@ Il documento non contiene credenziali, segreti, indirizzi email operativi o dati
 
 ## 2. Requisiti confermati
 
+L'architettura rimane volutamente essenziale: plugin monolitico WordPress, singolo progetto Apps Script e singolo spreadsheet in Google Workspace. Non sono previsti microservizi, container, code cloud esterne, cluster o database aggiuntivi. La scelta viene rivalutata soltanto se cambiano sensibilmente i volumi o viene abbandonato l'uso operativo del foglio.
+
 ### 2.1 Gerarchia organizzativa
 
 Il modello è composto da tre livelli con ID stabili:
@@ -92,6 +94,8 @@ Soltanto le righe convalidate aggiornano `PENDING`, `PAID_TO_DATE`, `PARTIALLY_P
 
 L'accesso diretto allo spreadsheet globale è riservato a operatori finanziari globali, perché comporta visibilità sui dati di tutte le attività. I delegati limitati a una o più attività non ricevono accesso al foglio e operano soltanto nel proprio ambito attraverso WordPress.
 
+La convalida concorrente usa un `ScriptLock` breve soltanto per assegnare l'ID e trascrivere atomicamente la riga canonica in `Payments`. Lettura, normalizzazione e controlli non mutanti restano fuori dal lock; duplicati e retry sono risolti con una chiave idempotente.
+
 ### 2.6 Profili economici e raccolta dati
 
 Ogni evento dichiara quattro assi economici indipendenti:
@@ -105,9 +109,13 @@ Sono quindi supportati senza ambiguità sola iscrizione, prezzo senza incasso ge
 
 La raccolta dati usa `data_profile: MINIMAL` oppure `EXTENDED`. Il profilo esteso abilita soltanto moduli espliciti, per esempio `APPAREL`, `POSTAL_ADDRESS` o `LOGISTICS`. Ogni campo dichiara ambito, tipo, finalità, conservazione e capability di visualizzazione. Dati di documenti, minori o categorie particolari restano fuori dai preset ordinari.
 
+Le fonti storiche confermano anche un possibile modulo `TRAVEL_DOCUMENTS` con dati di nascita, cittadinanza/nazionalità e documento di viaggio. È separato da `EXTENDED`, disattivato per default e soggetto a revisione privacy e autorizzazioni più restrittive.
+
 ### 2.7 Repository pubblico sanitizzato
 
 Fogli reali, esportazioni, dati personali, coordinate bancarie, link di pagamento operativi, credenziali e percorsi locali non entrano nel repository. Le fixture sono completamente sintetiche e marcate come non pubblicabili. Il controllo automatico di sanitizzazione è parte della pipeline GitHub.
+
+L'audit tecnico ricevuto è trattato come revisione consultiva. Sono accolti come requisiti di Fase B: prova di carico anticipata, configurazione esplicita della Web App GAS, nonce anti-replay persistito, lock sulla trascrizione `PaymentIntake` → `Payments`, cache WordPress con invalidazione dipendente, protezione antispam leggera e test automatici delle funzioni economiche pure.
 
 ## 3. Default operativi per il prototipo
 
@@ -160,13 +168,13 @@ Il modello dei campi resta estensibile. `MINIMAL` è il default; `EXTENDED` abil
 
 ### 3.4 Volumi e concorrenza
 
-Assunzione tecnica iniziale, da usare per progettazione e collaudo ma non come SLA:
+Il limite operativo confermato è di tre attività contemporanee da circa 100, 50 e 30 partecipanti, cioè 180 persone complessive nel picco. Il margine di prova arriva a 300 partecipanti complessivi, con 10 invii finali contemporanei e almeno 20 richieste in contesa sugli ultimi posti.
 
-- fino a circa 500 ordini e 1.000 biglietti per evento;
-- picco ordinario fino a 10 invii finali contemporanei;
-- prova specifica di contesa con almeno 20 richieste sugli ultimi posti disponibili.
+La Web App GAS esegue come proprietario del deployment e riceve le richieste dal proxy WordPress; non usa la sessione Google dell'utente finale. L'HMAC è quindi obbligatorio. La richiesta usa una finestra temporale iniziale massima di 120 secondi, nonce univoco registrato atomicamente sotto `ScriptLock` almeno oltre tale finestra, chiave versionata e ruotabile e idempotency key distinta dal nonce. Il nonce ha anche un archivio durevole minimo, perché una cache può essere evasa prima del TTL. Nessun token OAuth del proprietario viene restituito al client.
 
-Il prototipo implementa comunque ID stabili, idempotenza, lock breve sulla capienza e assenza di email o chiamate esterne dentro il lock. Se i volumi attesi superano sensibilmente questa ipotesi, prima della produzione si rivaluta l'uso di Google Sheets/Apps Script come archivio autorevole.
+Le quote GAS vengono ricontrollate all'avvio della Fase B. Baseline ufficiale consultata il 24 agosto 2026: 6 minuti per esecuzione, 30 esecuzioni simultanee per utente, 1.000 per script, 100 destinatari email al giorno per account consumer e 1.500 per Google Workspace, oltre alle quote giornaliere per trigger e `UrlFetch`. Google può modificarle senza preavviso.
+
+La prova di carico è il primo incremento di Fase B e misura durata, collisioni, retry, quote email e recupero da interruzione. Le elaborazioni massive usano letture e scritture a blocchi, checkpoint idempotenti e batch limitati.
 
 ### 3.5 Invio email
 
@@ -177,6 +185,8 @@ La configurazione distingue:
 - `reply-to`, ereditabile da parrocchia, attività o evento;
 - destinatari interni protetti;
 - template versionato.
+
+Ogni ordine ha un codice univoco testuale. Per singolo evento l'organizzatore sceglie `NONE`, `TEXT`, `QR` o `BARCODE` come presentazione nell'email; QR e barcode codificano lo stesso valore e non sono requisiti di accesso salvo futura attivazione esplicita di un flusso check-in.
 
 Default di Fase A: generazione di anteprima ed `EmailOutbox`, con invio esterno disattivato oppure limitato a destinatari di test. Non si presume che un alias possa essere usato finché non risulta verificato dall'account organizzativo.
 
@@ -196,6 +206,12 @@ Default di Fase A: profilo fittizio/non pubblicabile, senza dati bancari reali. 
 Default di Fase A: configurazione e pannello gestionale soltanto in `wp-admin`. L'inserimento operativo dei versamenti in `PaymentIntake` è l'unica eccezione prevista e non costituisce una seconda area amministrativa o un secondo sistema di autenticazione WordPress.
 
 Un eventuale pannello frontend è rinviato a una fase successiva e, se richiesto, dovrà riusare le stesse API, capability, ACL per attività e protezioni CSRF. Non dovrà creare account o password paralleli a WordPress.
+
+### 3.8 Antispam e cache WordPress
+
+Per i volumi confermati il default è honeypot accessibile, tempo minimo di compilazione e rate limit nel proxy WordPress. CAPTCHA di terze parti non viene caricato nel primo rilascio; potrà essere attivato soltanto dopo evidenza di abuso e valutazione privacy/prestazioni.
+
+La configurazione pubblica usa la Transients API con TTL breve e rigenerazione sicura in caso di cache miss. La chiave include revisione ed evento; pubblicazione o modifica di organizzazione, attività o evento invalida esplicitamente tutti i transient dipendenti. Un transient può sparire prima del TTL e non è mai fonte autorevole.
 
 ## 4. Matrice iniziale di ereditarietà
 
@@ -240,6 +256,8 @@ Le seguenti risposte non bloccano lo sviluppo del prototipo, ma bloccano la pubb
 - Quali base giuridica, informativa, tempi di conservazione e gruppi di accesso si applicano?
 
 ### 5.4 Dimensionamento
+
+Il limite operativo dichiarato è di tre attività contemporanee con circa 100, 50 e 30 partecipanti, cioè 180 persone complessive nel picco. I test useranno un margine fino a 300 partecipanti complessivi e includeranno la contesa sugli ultimi posti; non è richiesta un'infrastruttura dimensionata per grandi volumi.
 
 - Ordini e partecipanti massimi previsti per evento;
 - picchi attesi in occasione dell'apertura iscrizioni;

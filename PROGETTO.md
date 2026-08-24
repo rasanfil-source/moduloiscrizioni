@@ -10,6 +10,7 @@ Data: 24 agosto 2026
 - [Configurazione evento di esempio](schema/evento.example.json)
 - [Riferimenti legacy e linea visiva](docs/RIFERIMENTI_E_LINEE_GUIDA.md)
 - [Politica di sanitizzazione](docs/SANITIZZAZIONE.md)
+- [Criteri di accettazione della prima vertical slice](docs/CRITERI_ACCETTAZIONE_VERTICAL_SLICE.md)
 - [Prototipo responsive](prototipo/README.md)
 
 ## 1. Obiettivo
@@ -25,6 +26,7 @@ Realizzare un sistema riutilizzabile per più eventi, integrato in WordPress, ch
 - ricalcolare e mostrare il riepilogo economico, conservando ogni rettifica successiva in modo auditabile;
 - registrare l'ordine in Google Sheets tramite Google Apps Script;
 - inviare al referente un'email riepilogativa affidabile e configurabile;
+- generare per ogni ordine un codice univoco interno e lasciare all'organizzatore la scelta di mostrarlo nell'email come testo, QR, codice a barre o senza rappresentazione grafica;
 - proporre il pagamento tramite bonifico, link carta esterno, contanti o una combinazione configurabile;
 - amministrare eventi, schermate, email e prenotazioni da WordPress e consultare nel pannello i pagamenti acquisiti manualmente dallo spreadsheet;
 - rappresentare la parrocchia come ente base e le sue diverse attività come organizzatori distinti, ciascuno con identità visiva e logo propri.
@@ -32,6 +34,10 @@ Realizzare un sistema riutilizzabile per più eventi, integrato in WordPress, ch
 Il sistema deve partire da uno schema iniziale ben progettato. L'amministratore potrà personalizzare contenuti e regole senza poter compromettere struttura, accessibilità o sicurezza inserendo JavaScript arbitrario.
 
 ## 2. Architettura consigliata
+
+La scelta confermata resta essenziale: plugin monolitico WordPress sul sito esistente, un solo progetto Apps Script e un solo spreadsheet Google Workspace. Non sono previsti microservizi, container, bilanciatori, code cloud esterne, cluster o un secondo database applicativo. Il database MySQL di WordPress conserva configurazione, ruoli e ACL del plugin; Sheets/GAS gestisce il registro operativo previsto dal progetto.
+
+Spostare il registro nel solo database WordPress avrebbe senso soltanto se venisse abbandonato l'uso operativo del foglio. Finché il foglio resta il canale richiesto per consultazione e inserimento manuale dei versamenti, una sincronizzazione bidirezionale MySQL ↔ Sheets aumenterebbe la complessità.
 
 ```text
 Pagina dell'evento WordPress
@@ -182,6 +188,8 @@ Il plugin non deve appesantire la navigazione delle altre pagine del sito.
 
 Budget iniziale del frontend pubblico, da verificare sulle build di produzione: JavaScript proprio del plugin entro circa 80 KB compressi, CSS entro circa 35 KB compressi e nessuna dipendenza che blocchi il rendering. Eventuali superamenti richiedono una motivazione e un nuovo test prestazionale.
 
+Per il volume previsto la protezione predefinita è leggera: honeypot, tempo minimo di compilazione e rate limit lato WordPress. Nessun CAPTCHA di terze parti viene caricato per default; l'eventuale attivazione richiede evidenza di abuso e una verifica privacy e prestazionale.
+
 ### Direzione grafica e semplicità d'uso
 
 La qualità visiva è un requisito funzionale del progetto. L'interfaccia predefinita deve essere elegante, chiara e immediatamente comprensibile anche per chi usa raramente moduli online.
@@ -277,6 +285,7 @@ I profili sono preset modificabili e non tabelle rigide:
 
 - `MINIMAL`: referente con nome, cognome, email e telefono; partecipante con nome e cognome;
 - `EXTENDED`: mantiene il nucleo minimo e abilita soltanto i moduli dichiarati in `extended_modules`, per esempio `APPAREL`, `POSTAL_ADDRESS` o `LOGISTICS`;
+- `TRAVEL_DOCUMENTS`: modulo separato ad alto impatto per nascita, cittadinanza/nazionalità e documento di viaggio; non è incluso automaticamente in `EXTENDED`, richiede finalità documentata, campi a scelta controllata dove possibile e approvazione privacy prima della pubblicazione;
 - moduli ad alto rischio, come documenti di viaggio, minori o categorie particolari di dati, restano disattivati finché non sono approvati finalità, accessi, informativa e conservazione.
 
 Ogni risposta viene salvata con `field_definition_id`, versione della definizione e valore tipizzato. Il browser non inventa colonne e il foglio non usa una nuova colonna per ogni evento: `ParticipantAnswers` conserva le risposte normalizzate, mentre eventuali viste larghe sono soltanto esportazioni ricostruibili.
@@ -370,6 +379,8 @@ Nel primo rilascio i dati dei versamenti vengono inseriti manualmente nel foglio
 Le colonne tecniche, tra cui `payment_id`, `order_id`, importo canonico in centesimi e stato, sono generate nel registro `Payments`. Una riga di acquisizione conta ai fini di `PARTIALLY_PAID` o `PAID` soltanto dopo che Apps Script ha verificato ordine, valuta, importo e duplicati e ha creato la corrispondente riga canonica. Per i contanti sono obbligatori data, importo e operatore; non vengono mai salvati numeri di carta, codici di sicurezza o altri dati dello strumento di pagamento.
 
 Il foglio può contenere più righe per lo stesso ordine, così caparra, versamenti intermedi, saldo, pagamenti parziali e rimborsi restano ricostruibili. Ogni riga dichiara `transaction_kind` (`RECEIPT`, `REFUND` o `REVERSAL`) e, per un incasso, l'eventuale `installment_kind` (`FULL`, `DEPOSIT`, `INTERIM`, `BALANCE` o `UNALLOCATED`). La convalida avviene tramite un'azione Apps Script esplicita o un trigger installabile, non tramite formule considerate autorevoli. La correzione non sovrascrive silenziosamente una riga già convalidata: genera una rettifica auditabile o richiede un'azione amministrativa esplicita.
+
+Quando più righe vengono convalidate quasi insieme, Apps Script usa un lock breve soltanto per la scrittura canonica e l'assegnazione dell'identificativo in `Payments`. Controlli, normalizzazione e preparazione restano fuori dal lock; idempotenza e rilevamento duplicati impediscono doppie trascrizioni.
 
 `PaymentIntake` e le colonne tecniche di `Payments` sono protetti e modificabili soltanto da operatori finanziari globali autorizzati come editor Google dell'intero spreadsheet. Poiché un editor del foglio può vedere dati di più attività, questo accesso non viene concesso ai normali delegati limitati per attività. Questi ultimi continuano a vedere soltanto i pagamenti del proprio ambito attraverso WordPress.
 
@@ -468,6 +479,7 @@ Deve includere almeno:
 
 - titolo, data e luogo dell'evento;
 - codice ordine e stato;
+- eventuale QR o codice a barre, soltanto se attivato dall'organizzatore; è una rappresentazione del codice ordine e non un identificatore distinto;
 - referente;
 - elenco dei biglietti e dei partecipanti;
 - opzioni selezionate;
@@ -609,9 +621,11 @@ Il plugin firma ogni richiesta WordPress -> GAS con HMAC-SHA256, timestamp e non
 
 La configurazione pubblica dell'evento contiene anche uno snapshot del branding effettivo già risolto. Il browser non decide quale logo usare e non costruisce URL arbitrari: riceve URL, testo alternativo e colori validati dal backend.
 
+WordPress conserva la proiezione pubblica nella Transients API con chiavi versionate. Gli hook di pubblicazione e modifica di parrocchia, attività ed evento invalidano esplicitamente tutti i transient dipendenti; un cache miss rigenera la configurazione dalla fonte autorevole.
+
 La pubblicazione verifica anche relazione tra evento e attività, stato dell'attività, revisione delle dipendenze, URL HTTPS degli asset, testo alternativo, dimensioni e contrasto dei colori. Una modifica al branding dell'attività marca gli eventi dipendenti come da ripubblicare, senza cambiare retroattivamente revisioni e ordini storici.
 
-Inviluppo provvisorio di collaudo, non SLA: fino a circa 500 ordini e 1.000 biglietti per evento, 10 invii finali simultanei e una prova di contesa con almeno 20 richieste sugli ultimi posti. I volumi reali devono essere confermati prima della produzione; se sono sensibilmente superiori, l'uso di Sheets/GAS come archivio autorevole viene rivalutato.
+Dimensionamento confermato: nel picco massimo sono previste tre attività contemporanee, rispettivamente di circa 100, 50 e 30 partecipanti, per un limite operativo complessivo di circa 180 persone. Il collaudo usa un margine prudenziale fino a 300 partecipanti complessivi, 10 invii finali simultanei e una prova di contesa con almeno 20 richieste sugli ultimi posti. Questi volumi restano compatibili con l'architettura WordPress + Apps Script + Sheets; un aumento stabile oltre il margine di collaudo richiede una nuova verifica tecnica.
 
 Creazione ordine:
 
@@ -646,6 +660,7 @@ Email, callback e chiamate esterne non rimangono dentro il lock.
 - versione dell'informativa e delle accettazioni salvata nell'ordine;
 - conservazione configurabile e procedura di esportazione/cancellazione;
 - particolare attenzione a dati di minori, salute, allergie o disabilità;
+- raccolta di dati di minori, documenti di viaggio o categorie particolari disattivata finché finalità, base giuridica, informativa, conservazione e gruppi autorizzati non sono approvati con il referente privacy competente;
 - raccolta per evento limitata ai campi necessari: i moduli estesi non vengono ereditati automaticamente da eventi precedenti;
 - risposte a campi di documenti, indirizzo e logistica separate dal nucleo minimo e protette da capability specifiche;
 - nessun foglio reale, export, dato personale, coordinata bancaria o link di pagamento operativo nel repository Git pubblico;
@@ -785,6 +800,7 @@ Il nuovo ordine viene prima registrato in modo autorevole e riceve un codice uni
 - Sotto i contatti facoltativi comparirà un invito come: `Aggiungi email e cellulare se desideri che il partecipante possa essere contattato direttamente. Se li lasci vuoti, tutte le comunicazioni saranno inviate al referente.`
 - Il referente e i biglietti sono entità separate; il primo biglietto viene precompilato soltanto se è selezionato `Il referente partecipa`.
 - Il riepilogo completo viene inviato al referente. I partecipanti non ricevono automaticamente dati relativi all'intero ordine.
+- QR e codice a barre sono opzioni libere per evento (`NONE`, `TEXT`, `QR`, `BARCODE`); il codice univoco interno esiste comunque e la grafica non è mai obbligatoria.
 - Direzione visiva iniziale coerente con il sito: titoli ispirati a `Roboto Slab`, testo semplice nello stile `Open Sans`, bianco e grigi chiari, blu principale vicino a `#337ab7`, accenti blu notte e card pulite.
 - Gli stili del plugin saranno completamente namespaced: il codice precedente modifica globalmente il `body` della pagina e questo comportamento non verrà ripetuto.
 - La parrocchia è l'ente base, ma contiene più attività organizzatrici. Ogni attività può impostare il proprio logo e usarlo come predefinito per i suoi eventi; il singolo evento può configurare un override esplicito.
@@ -794,6 +810,7 @@ Il nuovo ordine viene prima registrato in modo autorevole e riceve un codice uni
 - Caparra, saldo, link carta e profili di bonifico sono configurabili per evento, con ereditarietà controllata; nessuna coordinata o modalità economica è una costante globale.
 - I versamenti vengono inseriti manualmente in `PaymentIntake` e trasformati in righe canoniche di `Payments`; ogni riga indica obbligatoriamente se la fonte è bonifico/IBAN, carta oppure contante e viene validata prima di aggiornare lo stato dell'ordine.
 - Ogni evento sceglie esplicitamente tra sola iscrizione, prezzo senza gestione dell'incasso, pagamento completo oppure caparra/saldo; gli eventi senza prezzo non mostrano né salvano dati economici.
+- Per i volumi confermati si mantiene Google Workspace con un progetto Apps Script e un solo spreadsheet; non si introducono microservizi, container o infrastrutture cloud aggiuntive.
 - Il modello supporta più versamenti e rettifiche del prezzo prima del saldo senza sovrascrivere il totale originario o la storia dei pagamenti.
 - I campi raccolti sono configurabili per evento: il profilo minimo può essere esteso con moduli come indirizzo, maglietta o logistica, ma ogni estensione richiede finalità e conservazione dichiarate.
 - I fogli Excel reali sono fonti locali di struttura e casi d'uso: non vengono copiati nel repository GitHub e non se ne pubblicano righe, screenshot, nomi file o metadati.

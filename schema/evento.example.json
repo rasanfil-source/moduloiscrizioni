@@ -190,6 +190,13 @@
     "unpaid_order_expiry_mode": "MANUAL",
     "buyer_participation_default": true
   },
+  "registration_identifier": {
+    "internal_code_required": true,
+    "email_display": "TEXT",
+    "allowed_email_displays": ["NONE", "TEXT", "QR", "BARCODE"],
+    "check_in_enabled": false,
+    "help": "QR e barcode sono rappresentazioni facoltative dello stesso codice; non creano una nuova identità."
+  },
   "buyer_fields": [
     {
       "field_definition_id": "fld_demo_buyer_first_name_v1",
@@ -629,6 +636,8 @@
       "resolved_branding",
       "resolved_public_contacts",
       "registration",
+      "registration_identifier.email_display",
+      "registration_identifier.check_in_enabled",
       "workflow.pricing_mode",
       "workflow.price_finalization",
       "workflow.collection_mode",

@@ -1,0 +1,42 @@
+# Dati ed esportazioni: non devono mai entrare nel repository pubblico.
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+*.tsv
+*.ods
+imports/
+exports/
+data-private/
+private-data/
+
+# Credenziali e configurazioni locali.
+.env
+.env.*
+!.env.example
+.clasp.json
+credentials*.json
+service-account*.json
+*secret*.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# File temporanei, log e dipendenze.
+node_modules/
+.tmp/
+tmp/
+temp/
+*.log
+*.bak
+*.tmp
+*.swp
+~$*
+
+# IDE e sistema operativo.
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

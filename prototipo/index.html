@@ -47,19 +47,19 @@
               id="brandLogo"
               class="se-booking__brand-logo"
               src="assets/img/logo-attivita.svg"
-              alt="Logo dimostrativo di Pellegrinaggi e Cammini"
+              alt="Logo dimostrativo di Attività Cammini Demo"
               width="420"
               height="120"
             >
             <div class="se-booking__brand-copy">
-              <p id="brandName" class="se-booking__brand-name">Pellegrinaggi e Cammini</p>
+              <p id="brandName" class="se-booking__brand-name">Attività Cammini Demo</p>
               <p id="brandSource" class="se-booking__brand-source">Logo ereditato dall'attività</p>
             </div>
           </div>
 
           <p class="se-booking__organizer">
-            Organizzato da <strong id="organizerActivity">Pellegrinaggi e Cammini</strong>
-            · <strong id="organizerParish">Parrocchia Sant'Eugenio</strong>
+            Organizzato da <strong id="organizerActivity">Attività Cammini Demo</strong>
+            · <strong id="organizerParish">Parrocchia Demo</strong>
           </p>
         </header>
 
@@ -120,15 +120,15 @@
                       id="eventHero"
                       class="se-booking__hero-image"
                       src="assets/img/hero-cammino.svg"
-                      alt="Illustrazione dimostrativa di un sentiero tra colline diretto verso Santiago"
+                      alt="Illustrazione dimostrativa di un sentiero tra colline"
                       width="1600"
                       height="900"
                     >
                   </div>
                   <div class="se-booking__hero-copy">
                     <p class="se-booking__eyebrow">Iscrizione all'evento</p>
-                    <h1 id="step1Title" class="se-booking__title" data-step-title tabindex="-1">Cammino di Santiago 2027</h1>
-                    <p id="eventSubtitle" class="se-booking__event-subtitle">Cammino Portoghese da Tui a Santiago</p>
+                    <h1 id="step1Title" class="se-booking__title" data-step-title tabindex="-1">Percorso collinare dimostrativo 2030</h1>
+                    <p id="eventSubtitle" class="se-booking__event-subtitle">Evento fittizio per provare iscrizioni e pagamenti</p>
                     <ul class="se-booking__meta-list">
                       <li class="se-booking__meta-item">
                         <span class="se-booking__meta-icon" aria-hidden="true">▣</span>
@@ -136,7 +136,7 @@
                       </li>
                       <li class="se-booking__meta-item">
                         <span class="se-booking__meta-icon" aria-hidden="true">◇</span>
-                        <span id="eventLocation">Tui → Santiago de Compostela, Spagna</span>
+                        <span id="eventLocation">Località Demo, Italia</span>
                       </li>
                     </ul>
                     <span id="eventAvailability" class="se-booking__status-pill">
@@ -214,6 +214,11 @@
                       </span>
                     </label>
                   </div>
+                  <div class="se-booking__field se-booking__field--wide" data-extended-only hidden>
+                    <label class="se-booking__label" for="orderAddress">Indirizzo postale <span class="se-booking__required-note">(profilo esteso)</span></label>
+                    <input class="se-booking__input" id="orderAddress" name="orderAddress" type="text" autocomplete="street-address" maxlength="180">
+                    <p class="se-booking__field-help">Raccolto una sola volta per ordine e soltanto quando l’attività ne dichiara la finalità.</p>
+                  </div>
                 </div>
 
                 <div class="se-booking__actions">
@@ -282,14 +287,14 @@
                 <span class="se-booking__confirmation-mark" aria-hidden="true">✓</span>
                 <p class="se-booking__eyebrow">Passaggio completato</p>
                 <h2 id="step6Title" class="se-booking__section-title" data-step-title tabindex="-1">Prenotazione registrata</h2>
-                <p class="se-booking__lead">La registrazione e il pagamento hanno stati distinti. Conserva il codice per ogni comunicazione.</p>
+                <p id="confirmationLead" class="se-booking__lead">La registrazione e il pagamento hanno stati distinti. Conserva il codice per ogni comunicazione.</p>
 
                 <div class="se-booking__status-grid">
                   <div class="se-booking__state-card se-booking__state-card--booking">
                     <span class="se-booking__state-label">Prenotazione</span>
                     <span id="confirmationBookingStatus" class="se-booking__state-value">Registrata</span>
                   </div>
-                  <div class="se-booking__state-card se-booking__state-card--payment">
+                  <div class="se-booking__state-card se-booking__state-card--payment" data-payment-only>
                     <span class="se-booking__state-label">Pagamento</span>
                     <span id="confirmationPaymentStatus" class="se-booking__state-value">In attesa di verifica</span>
                   </div>
@@ -298,12 +303,12 @@
                 <div class="se-booking__booking-code">
                   <div>
                     <span class="se-booking__booking-code-label">Codice prenotazione</span>
-                    <strong id="confirmationCode" class="se-booking__booking-code-value">CS27-K4M8Q2</strong>
+                    <strong id="confirmationCode" class="se-booking__booking-code-value">EV30-K4M8Q2</strong>
                   </div>
                   <button id="copyBookingCode" class="se-booking__button se-booking__button--secondary" type="button">Copia codice</button>
                 </div>
 
-                <div class="se-booking__confirmation-summary">
+                <div class="se-booking__confirmation-summary" data-economic-only>
                   <h3 class="se-booking__card-title">Importi dimostrativi</h3>
                   <ul class="se-booking__confirmation-list">
                     <li><span>Totale ordine</span><strong id="confirmationTotal">€ 0,00</strong></li>
@@ -314,7 +319,7 @@
 
                 <div id="confirmationDetails" class="se-booking__review-grid" aria-label="Dettagli della prenotazione"></div>
 
-                <div class="se-booking__payment-grid">
+                <div class="se-booking__payment-grid" data-payment-only>
                   <article class="se-booking__payment-card">
                     <h3 class="se-booking__card-title">Bonifico</h3>
                     <p>Le coordinate reali non sono incluse nella demo. In produzione proverranno dalla configurazione protetta dell'evento.</p>
@@ -332,7 +337,7 @@
                   </article>
                 </div>
 
-                <p id="paymentDemoMessage" class="se-booking__notice" tabindex="-1" hidden></p>
+                <p id="paymentDemoMessage" class="se-booking__notice" data-payment-only tabindex="-1" hidden></p>
 
                 <p class="se-booking__email-state"><strong>Email riepilogativa:</strong> simulata; nessun messaggio è stato inviato.</p>
 
@@ -346,11 +351,11 @@
               <div id="summaryPanel" class="se-booking__summary-panel">
                 <h2 id="summaryTitle" class="se-booking__summary-title">Riepilogo ordine</h2>
                 <ul id="summaryLines" class="se-booking__summary-lines"></ul>
-                <div class="se-booking__summary-total">
+                <div class="se-booking__summary-total" data-economic-only>
                   <span>Totale</span>
                   <span id="summaryTotal">€ 0,00</span>
                 </div>
-                <div class="se-booking__summary-due">
+                <div class="se-booking__summary-due" data-payment-only>
                   <span>Da versare ora</span>
                   <span id="summaryDue">€ 0,00</span>
                 </div>

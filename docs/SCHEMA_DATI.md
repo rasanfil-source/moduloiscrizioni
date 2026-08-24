@@ -4,6 +4,14 @@ Questo documento dettaglia il modello descritto in `PROGETTO.md`. Definisce la g
 
 La struttura completa di una revisione è esemplificata in `schema/evento.example.json`. La fixture è intenzionalmente non pubblicabile: nomi, indirizzi, profili e URL sono fittizi e marcati `DEMO_ONLY`.
 
+## Stato normativo del documento
+
+- **Confermato**: gerarchia parrocchia/attività/evento, assi economici, snapshot immutabili, rettifiche append-only, pagamenti canonici separati dall'intake e ACL WordPress per attività.
+- **Default di Fase A**: nomi esatti dei fogli, granularità di alcune capability, tempi di hold e struttura fisica delle proiezioni Sheets.
+- **Da validare in Fase B**: dimensione dei batch, indici ausiliari, cache, checkpoint e dettagli di deploy GAS in base alla prova di carico.
+
+Le sezioni fisiche dei fogli descrivono il contratto logico richiesto; possono essere ottimizzate senza cambiare gli invarianti confermati.
+
 ## 1. Principi invarianti
 
 - La parrocchia è rappresentata in `Organizations` con `type: PARISH`.
@@ -217,6 +225,8 @@ Lo stato del prezzo è `NOT_APPLICABLE`, `PROVISIONAL` o `FINAL`. Prenotazione, 
 | `include_in_email`, `include_in_export` | disattivati per impostazione predefinita sui moduli estesi |
 
 Il profilo `MINIMAL` abilita soltanto identità e contatti necessari. `EXTENDED` richiede una lista esplicita di `extended_modules`, per esempio `APPAREL`, `POSTAL_ADDRESS` o `LOGISTICS`; non equivale ad “abilita tutto”. Indirizzo, dati di viaggio e logistica sono separati dal nucleo minimo. Categorie particolari, minori e documenti di viaggio non sono preset ordinari e richiedono una revisione privacy specifica.
+
+`TRAVEL_DOCUMENTS` è un modulo autonomo ad alto impatto, non un'estensione implicita: può includere soltanto i campi di nascita, cittadinanza/nazionalità e documento effettivamente richiesti dal viaggio. Liste controllate, date e stringhe preservano i tipi; accesso, email, esportazione e retention sono configurati in modo restrittivo.
 
 Se la “maglietta” indica una taglia, viene usato un `SELECT`; un eventuale numero assegnabile usa `INTEGER` con limiti o un'opzione con disponibilità. Se indica quantità, viene modellata come `OptionChoice` quantitativa, non come campo libero.
 

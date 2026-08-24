@@ -67,6 +67,16 @@ Il logo usa `object-fit: contain`; l'immagine editoriale dell'evento usa `object
 
 Tutti gli importi della fixture sono centesimi interi. Il totale live serve soltanto a validare la UX; il testo del riepilogo ricorda che in produzione prezzi, disponibilità e totale saranno ricalcolati dal server.
 
+## Scenari configurabili
+
+Il prototipo usa esclusivamente query string locali e non invia dati:
+
+- `?flow=registration&fields=minimal`: sola iscrizione, senza prezzo;
+- `?flow=priced&fields=minimal`: prezzo informativo, incasso non gestito;
+- `?flow=deposit&fields=extended`: caparra/saldo e campi estesi per indirizzo, taglia e numero maglia.
+
+I valori predefiniti sono `flow=deposit` e `fields=minimal`. Tutti i nomi, codici, luoghi e importi sono fixture fittizie.
+
 La pagina finale non contiene coordinate reali e non apre link esterni. Le azioni dimostrative per bonifico, carta e contanti mostrano soltanto un messaggio e non cambiano lo stato `In attesa di verifica`. In produzione la fonte effettiva del versamento sarà registrata manualmente nel foglio protetto previsto dal progetto.
 
 ## Accorgimenti di accessibilità presenti

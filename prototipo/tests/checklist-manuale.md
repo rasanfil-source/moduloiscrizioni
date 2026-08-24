@@ -30,7 +30,7 @@ Legenda suggerita per la colonna `Esito`: `OK`, `KO`, `NA`. Per ogni `KO` annota
 
 | ID | Scenario/procedura | Logo e colori attesi | Testo atteso | Esito/note |
 |---|---|---|---|---|
-| BR-01 | Selettore `Logo attività` oppure `?brand=activity` | `logo-attivita.svg`; colori dell'attività | `Pellegrinaggi e Cammini`; fonte `Logo ereditato dall'attività` |  |
+| BR-01 | Selettore `Logo attività` oppure `?brand=activity` | `logo-attivita.svg`; colori dell'attività | `Attività Cammini Demo`; fonte `Logo ereditato dall'attività` |  |
 | BR-02 | Selettore `Logo evento` oppure `?brand=event` | `logo-evento.svg`; override e colori evento | titolo evento; fonte `Logo specifico dell'evento` |  |
 | BR-03 | Selettore `Logo parrocchia` oppure `?brand=parish` | `logo-parrocchia.svg`; fallback e colori parrocchia | nome parrocchia; fonte `Logo di fallback della parrocchia` |  |
 | BR-04 | Aprire `?brand=valore-sconosciuto` | fallback sicuro allo scenario attività | descrizione del logo attività, nessun errore console |  |
