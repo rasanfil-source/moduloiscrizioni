@@ -40,3 +40,6 @@ temp/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Pacchetti installabili generati localmente.
+dist/*.zip

@@ -42,7 +42,7 @@ foreach ($file in $files) {
     continue
   }
 
-  if ($extension -notin @('.md', '.json', '.html', '.js', '.css', '.svg', '.ps1', '.yml', '.yaml', '.txt') -and $name -notin @('.gitignore', '.gitattributes')) {
+  if ($extension -notin @('.md', '.json', '.html', '.php', '.js', '.mjs', '.css', '.svg', '.ps1', '.yml', '.yaml', '.txt') -and $name -notin @('.gitignore', '.gitattributes')) {
     continue
   }
 

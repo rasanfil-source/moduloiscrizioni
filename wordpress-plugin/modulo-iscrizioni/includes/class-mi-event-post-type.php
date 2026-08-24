@@ -1,0 +1,239 @@
+<?php
+
+defined( 'ABSPATH' ) || exit;
+
+final class MI_Event_Post_Type {
+	const EVENT_TYPE = 'mi_event';
+	const ACTIVITY_TYPE = 'mi_activity';
+
+	public static function boot() {
+		add_action( 'init', array( __CLASS__, 'register_types' ) );
+		add_action( 'add_meta_boxes', array( __CLASS__, 'add_meta_boxes' ) );
+		add_action( 'save_post_' . self::EVENT_TYPE, array( __CLASS__, 'save_event' ), 10, 2 );
+		add_filter( 'manage_' . self::EVENT_TYPE . '_posts_columns', array( __CLASS__, 'event_columns' ) );
+		add_action( 'manage_' . self::EVENT_TYPE . '_posts_custom_column', array( __CLASS__, 'render_event_column' ), 10, 2 );
+		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'admin_assets' ) );
+	}
+
+	public static function register_types() {
+		register_post_status(
+			'mi_archived',
+			array(
+				'label'                     => 'Archiviato',
+				'public'                    => false,
+				'internal'                  => false,
+				'protected'                 => true,
+				'show_in_admin_all_list'    => true,
+				'show_in_admin_status_list' => true,
+				'label_count'               => _n_noop( 'Archiviato <span class="count">(%s)</span>', 'Archiviati <span class="count">(%s)</span>', 'modulo-iscrizioni' ),
+			)
+		);
+
+		$event_caps = array(
+			'edit_post'              => 'mi_manage_events',
+			'read_post'              => 'read',
+			'delete_post'            => 'mi_manage_events',
+			'edit_posts'             => 'mi_manage_events',
+			'edit_others_posts'      => 'mi_manage_events',
+			'publish_posts'          => 'mi_publish_events',
+			'read_private_posts'     => 'mi_manage_events',
+			'delete_posts'           => 'mi_manage_events',
+			'delete_private_posts'   => 'mi_manage_events',
+			'delete_published_posts' => 'mi_manage_events',
+			'edit_private_posts'     => 'mi_manage_events',
+			'edit_published_posts'   => 'mi_manage_events',
+			'create_posts'           => 'mi_manage_events',
+		);
+
+		register_post_type(
+			self::EVENT_TYPE,
+			array(
+				'labels' => array(
+					'name'          => 'Eventi iscrizioni',
+					'singular_name' => 'Evento iscrizioni',
+					'add_new_item'  => 'Aggiungi evento',
+					'edit_item'     => 'Modifica evento',
+					'menu_name'     => 'Modulo iscrizioni',
+				),
+				'public'              => false,
+				'show_ui'             => true,
+				'show_in_menu'        => true,
+				'menu_icon'           => 'dashicons-tickets-alt',
+				'supports'            => array( 'title', 'editor' ),
+				'capabilities'        => $event_caps,
+				'map_meta_cap'        => false,
+				'show_in_rest'        => false,
+				'exclude_from_search' => true,
+			)
+		);
+
+		register_post_type(
+			self::ACTIVITY_TYPE,
+			array(
+				'labels' => array(
+					'name'          => 'Attività',
+					'singular_name' => 'Attività',
+					'add_new_item'  => 'Aggiungi attività',
+					'edit_item'     => 'Modifica attività',
+					'menu_name'     => 'Attività',
+				),
+				'public'              => false,
+				'show_ui'             => true,
+				'show_in_menu'        => 'edit.php?post_type=' . self::EVENT_TYPE,
+				'supports'            => array( 'title', 'editor', 'thumbnail' ),
+				'capabilities'        => array_fill_keys( array_keys( $event_caps ), 'manage_options' ),
+				'map_meta_cap'        => false,
+				'show_in_rest'        => false,
+				'exclude_from_search' => true,
+			)
+		);
+	}
+
+	public static function add_meta_boxes() {
+		add_meta_box( 'mi_event_configuration', 'Configurazione iscrizioni', array( __CLASS__, 'render_event_box' ), self::EVENT_TYPE, 'normal', 'high' );
+		add_meta_box( 'mi_event_shortcode', 'Pubblicazione nel sito', array( __CLASS__, 'render_shortcode_box' ), self::EVENT_TYPE, 'side', 'default' );
+		add_meta_box( 'mi_activity_branding', 'Identità attività', array( __CLASS__, 'render_activity_box' ), self::ACTIVITY_TYPE, 'side', 'default' );
+	}
+
+	public static function render_event_box( $post ) {
+		wp_nonce_field( 'mi_save_event', 'mi_event_nonce' );
+		$activity_id = absint( get_post_meta( $post->ID, '_mi_activity_id', true ) );
+		$opens_at = (string) get_post_meta( $post->ID, '_mi_registration_opens_at', true );
+		$closes_at = (string) get_post_meta( $post->ID, '_mi_registration_closes_at', true );
+		$capacity = max( 1, absint( get_post_meta( $post->ID, '_mi_capacity', true ) ?: 30 ) );
+		$waitlist = '1' === get_post_meta( $post->ID, '_mi_waitlist_enabled', true );
+		$pricing_mode = get_post_meta( $post->ID, '_mi_pricing_mode', true ) ?: 'NONE';
+		$identifier_display = get_post_meta( $post->ID, '_mi_identifier_display', true ) ?: 'TEXT';
+		$ticket_types = get_post_meta( $post->ID, '_mi_ticket_types', true );
+		if ( ! is_array( $ticket_types ) || empty( $ticket_types ) ) {
+			$ticket_types = array( array( 'code' => 'standard', 'name' => 'Iscrizione', 'price_cents' => 0, 'max_per_order' => 5 ) );
+		}
+		$activities = get_posts( array( 'post_type' => self::ACTIVITY_TYPE, 'post_status' => array( 'publish', 'draft' ), 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) );
+		if ( class_exists( 'MI_Access' ) && 'ALL' !== MI_Access::activity_ids() ) {
+			$scope = MI_Access::activity_ids();
+			$activities = array_values( array_filter( $activities, static function ( $activity ) use ( $scope ) { return in_array( $activity->ID, $scope, true ); } ) );
+		}
+		?>
+		<div class="mi-admin-grid">
+			<p><label for="mi_activity_id"><strong>Attività organizzatrice</strong></label><br>
+			<select id="mi_activity_id" name="mi_activity_id" required>
+				<option value="">Seleziona attività</option>
+				<?php foreach ( $activities as $activity ) : ?>
+					<option value="<?php echo esc_attr( $activity->ID ); ?>" <?php selected( $activity_id, $activity->ID ); ?>><?php echo esc_html( $activity->post_title ); ?></option>
+				<?php endforeach; ?>
+			</select></p>
+			<p><label for="mi_capacity"><strong>Posti disponibili</strong></label><br><input id="mi_capacity" name="mi_capacity" type="number" min="1" max="10000" value="<?php echo esc_attr( $capacity ); ?>" required></p>
+			<p><label for="mi_registration_opens_at"><strong>Apertura iscrizioni</strong></label><br><input id="mi_registration_opens_at" name="mi_registration_opens_at" type="datetime-local" value="<?php echo esc_attr( $opens_at ); ?>" required></p>
+			<p><label for="mi_registration_closes_at"><strong>Chiusura iscrizioni</strong></label><br><input id="mi_registration_closes_at" name="mi_registration_closes_at" type="datetime-local" value="<?php echo esc_attr( $closes_at ); ?>" required></p>
+			<p><label><input name="mi_waitlist_enabled" type="checkbox" value="1" <?php checked( $waitlist ); ?>> Attiva automaticamente la lista d’attesa a esaurimento posti</label></p>
+			<p><label for="mi_pricing_mode"><strong>Prezzo</strong></label><br><select id="mi_pricing_mode" name="mi_pricing_mode"><option value="NONE" <?php selected( $pricing_mode, 'NONE' ); ?>>Nessun prezzo</option><option value="ZERO" <?php selected( $pricing_mode, 'ZERO' ); ?>>Gratuito esplicito</option><option value="CALCULATED" <?php selected( $pricing_mode, 'CALCULATED' ); ?>>Calcolato dalle quote</option></select></p>
+			<p><label for="mi_identifier_display"><strong>Codice nell’email</strong></label><br><select id="mi_identifier_display" name="mi_identifier_display"><option value="NONE" <?php selected( $identifier_display, 'NONE' ); ?>>Non mostrare</option><option value="TEXT" <?php selected( $identifier_display, 'TEXT' ); ?>>Testo</option><option value="QR" <?php selected( $identifier_display, 'QR' ); ?>>QR (fase successiva)</option><option value="BARCODE" <?php selected( $identifier_display, 'BARCODE' ); ?>>Barcode (fase successiva)</option></select></p>
+		</div>
+		<h3>Tipologie di iscrizione</h3>
+		<table class="widefat striped" id="mi-ticket-types"><thead><tr><th>Codice</th><th>Nome</th><th>Prezzo €</th><th>Massimo per ordine</th><th></th></tr></thead><tbody>
+		<?php foreach ( $ticket_types as $index => $ticket ) : ?>
+			<tr><td><input name="mi_ticket_code[]" value="<?php echo esc_attr( $ticket['code'] ); ?>" pattern="[a-z0-9-]+" required></td><td><input name="mi_ticket_name[]" value="<?php echo esc_attr( $ticket['name'] ); ?>" required></td><td><input name="mi_ticket_price[]" type="number" min="0" step="0.01" value="<?php echo esc_attr( number_format( (int) $ticket['price_cents'] / 100, 2, '.', '' ) ); ?>" required></td><td><input name="mi_ticket_max[]" type="number" min="1" max="20" value="<?php echo esc_attr( $ticket['max_per_order'] ); ?>" required></td><td><button type="button" class="button mi-remove-ticket">Rimuovi</button></td></tr>
+		<?php endforeach; ?>
+		</tbody></table>
+		<p><button type="button" class="button" id="mi-add-ticket">Aggiungi tipologia</button></p>
+		<p class="description">Il totale sarà sempre ricalcolato sul server. In questa vertical slice le email restano in anteprima e non vengono spedite.</p>
+		<?php
+	}
+
+	public static function render_shortcode_box( $post ) {
+		echo '<p>Inserisci questo shortcode nella bozza destinata al modulo:</p>';
+		echo '<code>[modulo_iscrizioni event=&quot;' . esc_html( $post->ID ) . '&quot;]</code>';
+	}
+
+	public static function render_activity_box( $post ) {
+		echo '<p>Usa l’immagine in evidenza come logo dell’attività. Il singolo evento potrà applicare un override in una fase successiva.</p>';
+	}
+
+	public static function save_event( $post_id, $post ) {
+		if ( ! isset( $_POST['mi_event_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['mi_event_nonce'] ) ), 'mi_save_event' ) ) {
+			return;
+		}
+		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) || ! current_user_can( 'mi_manage_events' ) ) {
+			return;
+		}
+
+		$activity_id = isset( $_POST['mi_activity_id'] ) ? absint( $_POST['mi_activity_id'] ) : 0;
+		if ( $activity_id && self::ACTIVITY_TYPE === get_post_type( $activity_id ) ) {
+			if ( ! MI_Access::can_access_activity( $activity_id ) ) {
+				return;
+			}
+			update_post_meta( $post_id, '_mi_activity_id', $activity_id );
+		}
+
+		$capacity = isset( $_POST['mi_capacity'] ) ? min( 10000, max( 1, absint( $_POST['mi_capacity'] ) ) ) : 30;
+		update_post_meta( $post_id, '_mi_capacity', $capacity );
+		update_post_meta( $post_id, '_mi_waitlist_enabled', isset( $_POST['mi_waitlist_enabled'] ) ? '1' : '0' );
+
+		foreach ( array( 'opens_at', 'closes_at' ) as $field ) {
+			$key = 'mi_registration_' . $field;
+			$value = isset( $_POST[ $key ] ) ? sanitize_text_field( wp_unslash( $_POST[ $key ] ) ) : '';
+			if ( preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $value ) ) {
+				update_post_meta( $post_id, '_mi_registration_' . $field, $value );
+			}
+		}
+
+		$pricing_mode = isset( $_POST['mi_pricing_mode'] ) ? sanitize_key( wp_unslash( $_POST['mi_pricing_mode'] ) ) : 'none';
+		$pricing_mode = strtoupper( $pricing_mode );
+		update_post_meta( $post_id, '_mi_pricing_mode', in_array( $pricing_mode, array( 'NONE', 'ZERO', 'CALCULATED' ), true ) ? $pricing_mode : 'NONE' );
+
+		$identifier = isset( $_POST['mi_identifier_display'] ) ? strtoupper( sanitize_key( wp_unslash( $_POST['mi_identifier_display'] ) ) ) : 'TEXT';
+		update_post_meta( $post_id, '_mi_identifier_display', in_array( $identifier, array( 'NONE', 'TEXT', 'QR', 'BARCODE' ), true ) ? $identifier : 'TEXT' );
+
+		$codes = isset( $_POST['mi_ticket_code'] ) ? (array) wp_unslash( $_POST['mi_ticket_code'] ) : array();
+		$names = isset( $_POST['mi_ticket_name'] ) ? (array) wp_unslash( $_POST['mi_ticket_name'] ) : array();
+		$prices = isset( $_POST['mi_ticket_price'] ) ? (array) wp_unslash( $_POST['mi_ticket_price'] ) : array();
+		$maximums = isset( $_POST['mi_ticket_max'] ) ? (array) wp_unslash( $_POST['mi_ticket_max'] ) : array();
+		$tickets = array();
+		$seen = array();
+		foreach ( $codes as $index => $raw_code ) {
+			$code = sanitize_title( $raw_code );
+			$name = isset( $names[ $index ] ) ? sanitize_text_field( $names[ $index ] ) : '';
+			if ( ! $code || ! $name || isset( $seen[ $code ] ) ) {
+				continue;
+			}
+			$seen[ $code ] = true;
+			$tickets[] = array(
+				'code'          => $code,
+				'name'          => $name,
+				'price_cents'   => max( 0, (int) round( (float) ( $prices[ $index ] ?? 0 ) * 100 ) ),
+				'max_per_order' => min( 20, max( 1, absint( $maximums[ $index ] ?? 1 ) ) ),
+			);
+		}
+		if ( empty( $tickets ) ) {
+			$tickets[] = array( 'code' => 'standard', 'name' => 'Iscrizione', 'price_cents' => 0, 'max_per_order' => 5 );
+		}
+		update_post_meta( $post_id, '_mi_ticket_types', $tickets );
+	}
+
+	public static function event_columns( $columns ) {
+		$columns['mi_activity'] = 'Attività';
+		$columns['mi_window'] = 'Finestra iscrizioni';
+		$columns['mi_capacity'] = 'Capienza';
+		return $columns;
+	}
+
+	public static function render_event_column( $column, $post_id ) {
+		if ( 'mi_activity' === $column ) {
+			$activity = get_post( absint( get_post_meta( $post_id, '_mi_activity_id', true ) ) );
+			echo $activity ? esc_html( $activity->post_title ) : '—';
+		} elseif ( 'mi_window' === $column ) {
+			echo esc_html( get_post_meta( $post_id, '_mi_registration_opens_at', true ) . ' → ' . get_post_meta( $post_id, '_mi_registration_closes_at', true ) );
+		} elseif ( 'mi_capacity' === $column ) {
+			echo esc_html( (string) absint( get_post_meta( $post_id, '_mi_capacity', true ) ) );
+		}
+	}
+
+	public static function admin_assets( $hook ) {
+		$screen = get_current_screen();
+		if ( ! $screen || self::EVENT_TYPE !== $screen->post_type ) {
+			return;
+		}
+		wp_enqueue_style( 'mi-admin', MI_PLUGIN_URL . 'assets/admin.css', array(), MI_VERSION );
+		wp_enqueue_script( 'mi-admin', MI_PLUGIN_URL . 'assets/admin.js', array(), MI_VERSION, true );
+	}
+}

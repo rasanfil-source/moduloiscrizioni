@@ -3,7 +3,7 @@
 Stato: bozza funzionale e tecnica 0.7  
 Data: 24 agosto 2026
 
-Esito Fase A: completata. La Fase 2 può iniziare con una vertical slice dimostrativa, senza dati o invii reali.
+Esito Fase A: completata. Fase 2: vertical slice WordPress 0.1.0 implementata localmente, in attesa di collaudo controllato sul sito; nessun invio reale è attivo.
 
 ## Artefatti della Fase A
 

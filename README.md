@@ -12,7 +12,7 @@ La parrocchia è l'ente base. Ogni attività può avere logo, colori e contatti 
 
 ## Stato
 
-La cartella contiene documentazione di progetto, schema dati e un prototipo statico offline. Non contiene ancora il plugin WordPress o un backend operativo e non effettua iscrizioni, pagamenti o invii email reali.
+La cartella contiene documentazione, schema dati, prototipo statico e la prima vertical slice locale del plugin WordPress. Il plugin non è ancora installato sul sito e mantiene le email in modalità `PREVIEW`; pagamenti e sincronizzazione Workspace non sono ancora operativi.
 
 - [Progetto funzionale e tecnico](PROGETTO.md)
 - [Decisioni della Fase A](docs/DECISIONI_FASE_A.md)
@@ -20,6 +20,7 @@ La cartella contiene documentazione di progetto, schema dati e un prototipo stat
 - [Criteri di accettazione della prima vertical slice](docs/CRITERI_ACCETTAZIONE_VERTICAL_SLICE.md)
 - [Configurazione evento dimostrativa](schema/evento.example.json)
 - [Prototipo statico](prototipo/README.md)
+- [Plugin WordPress — vertical slice](wordpress-plugin/modulo-iscrizioni/README.md)
 - [Politica di sanitizzazione](docs/SANITIZZAZIONE.md)
 
 ## Dati reali vietati

@@ -1,0 +1,11 @@
+.post-type-mi_event .mi-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 1.25rem;
+}
+.post-type-mi_event .mi-admin-grid input,
+.post-type-mi_event .mi-admin-grid select,
+.post-type-mi_event #mi-ticket-types input { width: 100%; }
+@media (max-width: 782px) {
+  .post-type-mi_event .mi-admin-grid { grid-template-columns: 1fr; }
+}
