@@ -7,8 +7,16 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.1\.1/);
+  assert.match(source, /Version:\s+0\.1\.2/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
+});
+
+test('le bozze incomplete possono essere salvate senza aggirare il controllo di pubblicazione', async () => {
+  const source = await read('assets/admin.js');
+  const postType = await read('includes/class-mi-event-post-type.php');
+  assert.match(source, /save-post/);
+  assert.match(source, /formnovalidate/);
+  assert.match(postType, /\$activity_id\s*\?\s*get_post/);
 });
 
 test('attivazione e disattivazione non riscrivono le regole del sito', async () => {

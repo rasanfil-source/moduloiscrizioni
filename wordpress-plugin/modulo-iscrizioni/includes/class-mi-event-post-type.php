@@ -219,7 +219,8 @@ final class MI_Event_Post_Type {
 
 	public static function render_event_column( $column, $post_id ) {
 		if ( 'mi_activity' === $column ) {
-			$activity = get_post( absint( get_post_meta( $post_id, '_mi_activity_id', true ) ) );
+			$activity_id = absint( get_post_meta( $post_id, '_mi_activity_id', true ) );
+			$activity = $activity_id ? get_post( $activity_id ) : null;
 			echo $activity ? esc_html( $activity->post_title ) : '—';
 		} elseif ( 'mi_window' === $column ) {
 			echo esc_html( get_post_meta( $post_id, '_mi_registration_opens_at', true ) . ' → ' . get_post_meta( $post_id, '_mi_registration_closes_at', true ) );

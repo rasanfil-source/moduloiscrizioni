@@ -1,6 +1,11 @@
 (function () {
   'use strict';
 
+  const saveDraftButton = document.getElementById('save-post');
+  if (saveDraftButton) {
+    saveDraftButton.setAttribute('formnovalidate', 'formnovalidate');
+  }
+
   const table = document.getElementById('mi-ticket-types');
   const addButton = document.getElementById('mi-add-ticket');
   if (!table || !addButton) return;
