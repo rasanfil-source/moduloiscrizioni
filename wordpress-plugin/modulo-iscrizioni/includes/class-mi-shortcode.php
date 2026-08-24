@@ -46,7 +46,7 @@ final class MI_Shortcode {
 		?>
 		<section id="<?php echo esc_attr( $instance_id ); ?>" class="mi-registration" data-mi-config="<?php echo esc_attr( wp_json_encode( $config ) ); ?>">
 			<header class="mi-registration__header">
-				<?php if ( $event['activity_logo'] ) : ?><img class="mi-registration__logo" src="<?php echo esc_url( $event['activity_logo'] ); ?>" alt="" width="180" height="80"><?php endif; ?>
+				<?php if ( $event['activity_logo'] ) : ?><img class="mi-registration__logo" src="<?php echo esc_url( $event['activity_logo'] ); ?>" alt="<?php echo esc_attr( $event['activity_logo_alt'] ); ?>" width="180" height="80"><?php endif; ?>
 				<p class="mi-registration__eyebrow"><?php echo esc_html( $event['activity'] ); ?></p>
 				<h2 class="mi-registration__title"><?php echo esc_html( $event['title'] ); ?></h2>
 				<?php if ( $event['description'] ) : ?><p class="mi-registration__lead"><?php echo esc_html( $event['description'] ); ?></p><?php endif; ?>

@@ -105,6 +105,9 @@ final class MI_Event_Post_Type {
 		$pricing_mode = get_post_meta( $post->ID, '_mi_pricing_mode', true ) ?: 'NONE';
 		$identifier_display = get_post_meta( $post->ID, '_mi_identifier_display', true ) ?: 'TEXT';
 		$ticket_types = get_post_meta( $post->ID, '_mi_ticket_types', true );
+		$field_configuration = MI_Field_Schema::event_configuration( $post->ID );
+		$field_catalog = MI_Field_Schema::catalog();
+		$field_profiles = MI_Field_Schema::profiles();
 		if ( ! is_array( $ticket_types ) || empty( $ticket_types ) ) {
 			$ticket_types = array( array( 'code' => 'standard', 'name' => 'Iscrizione', 'price_cents' => 0, 'max_per_order' => 5 ) );
 		}
@@ -128,6 +131,28 @@ final class MI_Event_Post_Type {
 			<p><label><input name="mi_waitlist_enabled" type="checkbox" value="1" <?php checked( $waitlist ); ?>> Attiva automaticamente la lista d’attesa a esaurimento posti</label></p>
 			<p><label for="mi_pricing_mode"><strong>Prezzo</strong></label><br><select id="mi_pricing_mode" name="mi_pricing_mode"><option value="NONE" <?php selected( $pricing_mode, 'NONE' ); ?>>Nessun prezzo</option><option value="ZERO" <?php selected( $pricing_mode, 'ZERO' ); ?>>Gratuito esplicito</option><option value="CALCULATED" <?php selected( $pricing_mode, 'CALCULATED' ); ?>>Calcolato dalle quote</option></select></p>
 			<p><label for="mi_identifier_display"><strong>Codice nell’email</strong></label><br><select id="mi_identifier_display" name="mi_identifier_display"><option value="NONE" <?php selected( $identifier_display, 'NONE' ); ?>>Non mostrare</option><option value="TEXT" <?php selected( $identifier_display, 'TEXT' ); ?>>Testo</option><option value="QR" <?php selected( $identifier_display, 'QR' ); ?>>QR (fase successiva)</option><option value="BARCODE" <?php selected( $identifier_display, 'BARCODE' ); ?>>Barcode (fase successiva)</option></select></p>
+		</div>
+		<hr>
+		<h3>Dati dei partecipanti</h3>
+		<p><label for="mi_data_profile"><strong>Profilo iniziale</strong></label><br>
+		<select id="mi_data_profile" name="mi_data_profile">
+		<?php foreach ( $field_profiles as $profile_key => $profile ) : ?>
+			<option value="<?php echo esc_attr( $profile_key ); ?>" <?php selected( $field_configuration['profile'], $profile_key ); ?>><?php echo esc_html( $profile['label'] ); ?></option>
+		<?php endforeach; ?>
+		</select></p>
+		<p class="description">Nome e cognome sono sempre richiesti. Attiva soltanto gli altri dati realmente necessari per questo evento.</p>
+		<div class="mi-field-config" data-mi-profiles="<?php echo esc_attr( wp_json_encode( $field_profiles ) ); ?>">
+		<?php foreach ( $field_catalog as $field_key => $field ) : ?>
+			<div class="mi-field-config__item" data-mi-field="<?php echo esc_attr( $field_key ); ?>">
+				<label><input type="checkbox" name="mi_participant_fields[]" value="<?php echo esc_attr( $field_key ); ?>" <?php checked( in_array( $field_key, $field_configuration['enabled'], true ) ); ?> data-mi-field-enabled> <strong><?php echo esc_html( $field['label'] ); ?></strong></label>
+				<label class="mi-field-config__required"><input type="checkbox" name="mi_participant_required[]" value="<?php echo esc_attr( $field_key ); ?>" <?php checked( in_array( $field_key, $field_configuration['required'], true ) ); ?> data-mi-field-required> Obbligatorio</label>
+				<small><?php echo esc_html( $field['help'] ); ?></small>
+			</div>
+		<?php endforeach; ?>
+		</div>
+		<div class="mi-field-preview" aria-live="polite">
+			<strong>Anteprima partecipante</strong>
+			<ul data-mi-field-preview></ul>
 		</div>
 		<h3>Tipologie di iscrizione</h3>
 		<table class="widefat striped" id="mi-ticket-types"><thead><tr><th>Codice</th><th>Nome</th><th>Prezzo €</th><th>Massimo per ordine</th><th></th></tr></thead><tbody>
@@ -183,6 +208,15 @@ final class MI_Event_Post_Type {
 
 		$identifier = isset( $_POST['mi_identifier_display'] ) ? strtoupper( sanitize_key( wp_unslash( $_POST['mi_identifier_display'] ) ) ) : 'TEXT';
 		update_post_meta( $post_id, '_mi_identifier_display', in_array( $identifier, array( 'NONE', 'TEXT', 'QR', 'BARCODE' ), true ) ? $identifier : 'TEXT' );
+
+		$field_configuration = MI_Field_Schema::sanitize_configuration(
+			isset( $_POST['mi_data_profile'] ) ? wp_unslash( $_POST['mi_data_profile'] ) : 'MINIMAL',
+			isset( $_POST['mi_participant_fields'] ) ? (array) wp_unslash( $_POST['mi_participant_fields'] ) : array(),
+			isset( $_POST['mi_participant_required'] ) ? (array) wp_unslash( $_POST['mi_participant_required'] ) : array()
+		);
+		update_post_meta( $post_id, '_mi_data_profile', $field_configuration['profile'] );
+		update_post_meta( $post_id, '_mi_participant_fields', $field_configuration['enabled'] );
+		update_post_meta( $post_id, '_mi_participant_required_fields', $field_configuration['required'] );
 
 		$codes = isset( $_POST['mi_ticket_code'] ) ? (array) wp_unslash( $_POST['mi_ticket_code'] ) : array();
 		$names = isset( $_POST['mi_ticket_name'] ) ? (array) wp_unslash( $_POST['mi_ticket_name'] ) : array();

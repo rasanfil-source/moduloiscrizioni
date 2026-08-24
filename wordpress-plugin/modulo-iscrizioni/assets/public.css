@@ -30,8 +30,10 @@
 .mi-registration__participant { padding: 1rem; border: 1px solid var(--mi-border); border-radius: 10px; }
 .mi-registration__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .mi-registration label { color: var(--mi-ink); font-weight: 600; }
-.mi-registration input, .mi-registration select { display: block; width: 100%; min-height: 44px; margin-top: .35rem; padding: .65rem .75rem; border: 1px solid #9badba; border-radius: 8px; background: #fff; color: #10283c; font: inherit; }
-.mi-registration input:focus { outline: 3px solid rgba(51, 122, 183, .25); border-color: var(--mi-primary); }
+.mi-registration input, .mi-registration select, .mi-registration textarea { display: block; width: 100%; min-height: 44px; margin-top: .35rem; padding: .65rem .75rem; border: 1px solid #9badba; border-radius: 8px; background: #fff; color: #10283c; font: inherit; }
+.mi-registration textarea { resize: vertical; }
+.mi-registration input:focus, .mi-registration select:focus, .mi-registration textarea:focus { outline: 3px solid rgba(51, 122, 183, .25); border-color: var(--mi-primary); }
+.mi-registration__field-help { display: block; margin-top: .3rem; color: #52697a; font-weight: 400; line-height: 1.35; }
 .mi-registration__consent { display: flex; align-items: flex-start; gap: .65rem; margin: 1rem 0; font-weight: 500 !important; }
 .mi-registration__consent input { width: 1.2rem; min-height: auto; margin: .2rem 0 0; }
 .mi-registration__submit { min-height: 46px; padding: .75rem 1.2rem; border: 0; border-radius: 9px; background: var(--mi-primary); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }

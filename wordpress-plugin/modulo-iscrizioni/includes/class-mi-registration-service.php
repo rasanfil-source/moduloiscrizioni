@@ -16,18 +16,23 @@ final class MI_Registration_Service {
 
 		$activity_id = absint( get_post_meta( $event_id, '_mi_activity_id', true ) );
 		$activity = get_post( $activity_id );
+		$field_configuration = MI_Field_Schema::event_configuration( $event_id );
+		$activity_thumbnail_id = $activity ? get_post_thumbnail_id( $activity ) : 0;
 		return array(
 			'id'               => $event_id,
 			'title'            => get_the_title( $event_id ),
 			'description'      => wp_strip_all_tags( $event->post_content ),
 			'activity'         => $activity ? $activity->post_title : '',
 			'activity_logo'    => $activity ? get_the_post_thumbnail_url( $activity, 'medium' ) : '',
+			'activity_logo_alt'=> $activity_thumbnail_id ? (string) get_post_meta( $activity_thumbnail_id, '_wp_attachment_image_alt', true ) : '',
 			'capacity'         => max( 1, absint( get_post_meta( $event_id, '_mi_capacity', true ) ) ),
 			'waitlist_enabled' => '1' === get_post_meta( $event_id, '_mi_waitlist_enabled', true ),
 			'opens_at'         => (string) get_post_meta( $event_id, '_mi_registration_opens_at', true ),
 			'closes_at'        => (string) get_post_meta( $event_id, '_mi_registration_closes_at', true ),
 			'pricing_mode'     => (string) get_post_meta( $event_id, '_mi_pricing_mode', true ),
 			'ticket_types'     => array_values( $ticket_types ),
+			'data_profile'     => $field_configuration['profile'],
+			'participant_fields'=> MI_Field_Schema::public_fields( $field_configuration ),
 		);
 	}
 
@@ -77,7 +82,7 @@ final class MI_Registration_Service {
 		if ( is_wp_error( $selection ) ) {
 			return $selection;
 		}
-		$participants = self::validate_participants( $payload['participants'] ?? array(), $selection['quantity'] );
+		$participants = self::validate_participants( $payload['participants'] ?? array(), $selection['quantity'], $event['participant_fields'] );
 		if ( is_wp_error( $participants ) ) {
 			return $participants;
 		}
@@ -157,7 +162,7 @@ final class MI_Registration_Service {
 				}
 			}
 			foreach ( $participants as $participant ) {
-				if ( false === $wpdb->insert( $participants_table, array( 'registration_id' => $registration_id, 'first_name' => $participant['first_name'], 'last_name' => $participant['last_name'] ), array( '%d', '%s', '%s' ) ) ) {
+				if ( false === $wpdb->insert( $participants_table, array( 'registration_id' => $registration_id, 'first_name' => $participant['first_name'], 'last_name' => $participant['last_name'], 'extra_json' => wp_json_encode( $participant['fields'] ) ), array( '%d', '%s', '%s', '%s' ) ) ) {
 					throw new RuntimeException( 'Partecipante non salvato.' );
 				}
 			}
@@ -207,7 +212,7 @@ final class MI_Registration_Service {
 		return array( 'items' => $items, 'quantity' => $quantity, 'total_cents' => $total );
 	}
 
-	private static function validate_participants( $raw_participants, $expected ) {
+	private static function validate_participants( $raw_participants, $expected, $fields ) {
 		if ( ! is_array( $raw_participants ) || count( $raw_participants ) !== $expected ) {
 			return new WP_Error( 'mi_participants', 'Inserisci nome e cognome di ogni partecipante.', array( 'status' => 400 ) );
 		}
@@ -218,7 +223,11 @@ final class MI_Registration_Service {
 			if ( ! $first_name || ! $last_name || strlen( $first_name ) > 80 || strlen( $last_name ) > 80 ) {
 				return new WP_Error( 'mi_participant_invalid', 'Controlla i dati dei partecipanti.', array( 'status' => 400 ) );
 			}
-			$participants[] = compact( 'first_name', 'last_name' );
+			$answers = MI_Field_Schema::validate_answers( $raw['fields'] ?? array(), $fields );
+			if ( is_wp_error( $answers ) ) {
+				return $answers;
+			}
+			$participants[] = array( 'first_name' => $first_name, 'last_name' => $last_name, 'fields' => $answers );
 		}
 		return $participants;
 	}

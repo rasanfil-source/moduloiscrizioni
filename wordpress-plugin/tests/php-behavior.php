@@ -5,17 +5,19 @@ define( 'ABSPATH', __DIR__ . '/' );
 final class WP_Error {
 	public $code;
 	public $message;
-	public function __construct( $code, $message ) { $this->code = $code; $this->message = $message; }
+	public function __construct( $code, $message, $data = null ) { $this->code = $code; $this->message = $message; }
 }
 
 function is_wp_error( $value ) { return $value instanceof WP_Error; }
 function absint( $value ) { return abs( (int) $value ); }
 function sanitize_key( $value ) { return preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $value ) ); }
 function sanitize_text_field( $value ) { return trim( strip_tags( (string) $value ) ); }
+function sanitize_textarea_field( $value ) { return trim( strip_tags( (string) $value ) ); }
 function sanitize_email( $value ) { return filter_var( (string) $value, FILTER_SANITIZE_EMAIL ); }
 function is_email( $value ) { return false !== filter_var( $value, FILTER_VALIDATE_EMAIL ); }
 function wp_timezone() { return new DateTimeZone( 'Europe/Rome' ); }
 
+require_once __DIR__ . '/../modulo-iscrizioni/includes/class-mi-field-schema.php';
 require_once __DIR__ . '/../modulo-iscrizioni/includes/class-mi-registration-service.php';
 
 function invoke_private( $name, array $arguments ) {
@@ -47,8 +49,17 @@ expect( 2400 === $selection['total_cents'], 'totale server-side errato' );
 $too_many = invoke_private( 'validate_selection', array( $event, array( 'intero' => 5 ) ) );
 expect( is_wp_error( $too_many ) && 'mi_ticket_limit' === $too_many->code, 'limite quota non applicato' );
 
-$participants = invoke_private( 'validate_participants', array( array( array( 'first_name' => 'Persona', 'last_name' => 'Demo' ) ), 1 ) );
+$participants = invoke_private( 'validate_participants', array( array( array( 'first_name' => 'Persona', 'last_name' => 'Demo' ) ), 1, array() ) );
 expect( ! is_wp_error( $participants ) && 1 === count( $participants ), 'partecipante minimo non accettato' );
+
+$extended_fields = array(
+	array( 'key' => 'birth_date', 'type' => 'date', 'required' => true ),
+	array( 'key' => 'tshirt_size', 'type' => 'select', 'required' => false, 'options' => array( 'S', 'M', 'L' ) ),
+);
+$extended = invoke_private( 'validate_participants', array( array( array( 'first_name' => 'Persona', 'last_name' => 'Demo', 'fields' => array( 'birth_date' => '2000-01-02', 'tshirt_size' => 'M', 'ignored' => 'no' ) ) ), 1, $extended_fields ) );
+expect( ! is_wp_error( $extended ) && ! isset( $extended[0]['fields']['ignored'] ), 'allowlist campi estesi non applicata' );
+$missing_required = invoke_private( 'validate_participants', array( array( array( 'first_name' => 'Persona', 'last_name' => 'Demo', 'fields' => array() ) ), 1, $extended_fields ) );
+expect( is_wp_error( $missing_required ), 'campo esteso obbligatorio non applicato' );
 
 $buyer = invoke_private( 'validate_buyer', array( array( 'first_name' => 'Referente', 'last_name' => 'Demo', 'email' => 'referente@example.invalid', 'phone' => '+39 000 0000000' ) ) );
 expect( ! is_wp_error( $buyer ), 'referente dimostrativo valido rifiutato' );

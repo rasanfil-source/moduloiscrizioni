@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.1\.2/);
+  assert.match(source, /Version:\s+0\.2\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -37,6 +37,21 @@ test('gli asset pubblici sono caricati soltanto in presenza dello shortcode', as
   const source = await read('includes/class-mi-shortcode.php');
   assert.match(source, /has_shortcode/);
   assert.match(source, /wp_enqueue_scripts/);
+});
+
+test('i campi partecipante usano profili, allowlist e validazione server', async () => {
+  const schema = await read('includes/class-mi-field-schema.php');
+  const service = await read('includes/class-mi-registration-service.php');
+  const publicScript = await read('assets/public.js');
+  const activator = await read('includes/class-mi-activator.php');
+  assert.match(schema, /'MINIMAL'/);
+  assert.match(schema, /'STANDARD'/);
+  assert.match(schema, /'TRAVEL'/);
+  assert.match(schema, /validate_answers/);
+  assert.match(service, /MI_Field_Schema::validate_answers/);
+  assert.match(publicScript, /data-mi-participant-field/);
+  assert.match(activator, /extra_json longtext/);
+  assert.match(activator, /maybe_upgrade/);
 });
 
 test('la coda email rimane in anteprima', async () => {

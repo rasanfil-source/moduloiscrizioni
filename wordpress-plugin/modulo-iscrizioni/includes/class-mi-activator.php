@@ -10,6 +10,13 @@ final class MI_Activator {
 
 	public static function deactivate() {}
 
+	public static function maybe_upgrade() {
+		if ( MI_VERSION !== get_option( 'mi_db_version' ) ) {
+			self::create_tables();
+			self::add_roles_and_capabilities();
+		}
+	}
+
 	private static function create_tables() {
 		global $wpdb;
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
@@ -49,11 +56,12 @@ final class MI_Activator {
 			KEY registration_id (registration_id)
 		) ENGINE=InnoDB {$charset};" );
 
-		dbDelta( "CREATE TABLE {$participants} (
+			dbDelta( "CREATE TABLE {$participants} (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			registration_id bigint(20) unsigned NOT NULL,
 			first_name varchar(80) NOT NULL,
 			last_name varchar(80) NOT NULL,
+			extra_json longtext NULL,
 			PRIMARY KEY  (id),
 			KEY registration_id (registration_id)
 		) ENGINE=InnoDB {$charset};" );

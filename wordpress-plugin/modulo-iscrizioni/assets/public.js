@@ -37,7 +37,8 @@
     function captureParticipants() {
       participantValues = Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).map((row) => ({
         firstName: row.querySelector('[data-mi-first-name]')?.value || '',
-        lastName: row.querySelector('[data-mi-last-name]')?.value || ''
+        lastName: row.querySelector('[data-mi-last-name]')?.value || '',
+        fields: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-field]')).map((input) => [input.dataset.miParticipantField, input.value]))
       }));
     }
 
@@ -63,6 +64,9 @@
           participantField('Nome', 'given-name', 'firstName', participantValues[index]?.firstName || '', index),
           participantField('Cognome', 'family-name', 'lastName', participantValues[index]?.lastName || '', index)
         );
+		(config.event.participant_fields || []).forEach((field) => {
+		  grid.append(configuredParticipantField(field, participantValues[index]?.fields?.[field.key] || '', index));
+		});
         row.append(legend, grid);
         participantsRoot.append(row);
       }
@@ -82,10 +86,50 @@
       return label;
     }
 
+    function configuredParticipantField(field, value, index) {
+      const label = document.createElement('label');
+      label.textContent = field.required ? `${field.label} *` : field.label;
+      let input;
+      if (field.type === 'select') {
+        input = document.createElement('select');
+        const empty = document.createElement('option');
+        empty.value = '';
+        empty.textContent = 'Seleziona';
+        input.append(empty);
+        (field.options || []).forEach((choice) => {
+          const option = document.createElement('option');
+          option.value = choice;
+          option.textContent = choice;
+          input.append(option);
+        });
+      } else if (field.type === 'textarea') {
+        input = document.createElement('textarea');
+        input.rows = 3;
+      } else {
+        input = document.createElement('input');
+        input.type = field.type === 'date' ? 'date' : 'text';
+      }
+      input.name = `participant-${index}-field-${field.key}`;
+      input.required = Boolean(field.required);
+      input.value = value;
+      input.dataset.miParticipantField = field.key;
+      if (field.max_length) input.maxLength = field.max_length;
+      if (field.autocomplete) input.autocomplete = `section-participant-${index + 1} ${field.autocomplete}`;
+      label.append(input);
+      if (field.help) {
+        const help = document.createElement('small');
+        help.className = 'mi-registration__field-help';
+        help.textContent = field.help;
+        label.append(help);
+      }
+      return label;
+    }
+
     function participantPayload() {
       return Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).map((row) => ({
         first_name: row.querySelector('[data-mi-first-name]').value.trim(),
-        last_name: row.querySelector('[data-mi-last-name]').value.trim()
+        last_name: row.querySelector('[data-mi-last-name]').value.trim(),
+        fields: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-field]')).map((input) => [input.dataset.miParticipantField, input.value.trim()]))
       }));
     }
 

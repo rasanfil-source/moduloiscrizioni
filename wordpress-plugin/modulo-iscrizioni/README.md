@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — vertical slice 0.1.2
+# Modulo Iscrizioni — vertical slice 0.2.0
 
 Plugin WordPress dimostrativo per la Fase 2. Implementa:
 
@@ -7,7 +7,8 @@ Plugin WordPress dimostrativo per la Fase 2. Implementa:
 - apertura e chiusura automatica delle iscrizioni;
 - capienza server-side e lista d'attesa;
 - più tipologie di iscrizione nello stesso evento;
-- profilo dati minimo per referente e partecipanti;
+- profili dati Minimo, Standard e Viaggio, con campi partecipante attivabili singolarmente;
+- anteprima amministrativa dei campi e validazione allowlist lato server;
 - codice ordine univoco;
 - email registrate soltanto nell'outbox `PREVIEW`;
 - ruolo `Gestore iscrizioni` limitabile alle attività assegnate;
@@ -15,7 +16,7 @@ Plugin WordPress dimostrativo per la Fase 2. Implementa:
 
 ## Limiti intenzionali
 
-Questa versione non invia email, non sincronizza Google Workspace, non gestisce pagamenti e non genera ancora QR/barcode. Queste funzioni verranno aggiunte per incrementi dopo il collaudo del nucleo.
+Questa versione non invia email, non sincronizza Google Workspace, non gestisce pagamenti e non genera ancora QR/barcode. Il pacchetto 0.2.0 resta un candidato locale finché non viene autorizzato e collaudato sul sito.
 
 ## Installazione di prova
 
