@@ -3,7 +3,7 @@
 Stato: bozza funzionale e tecnica 0.7  
 Data: 24 agosto 2026
 
-Esito Fase A: completata. Fase 2: vertical slice WordPress 0.1.1 installata e attiva. Il collaudo controllato ha verificato homepage, pagina Santiago, pannello eventi e caricamento condizionale degli asset; la versione non riscrive le regole `.htaccess` personalizzate del sito. Nessun invio reale è attivo.
+Esito Fase A: completata. Fase 2: vertical slice WordPress 0.1.2 installata e attiva. Il collaudo controllato ha verificato homepage, pagina Santiago, pannello eventi, salvataggio delle configurazioni incomplete in bozza e caricamento condizionale degli asset; la versione non riscrive le regole `.htaccess` personalizzate del sito. Le prime bozze di attività ed evento 2027 esistono nel pannello, ma non è stato pubblicato alcun modulo e nessun invio reale è attivo.
 
 ## Artefatti della Fase A
 
