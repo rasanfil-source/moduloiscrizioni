@@ -14,6 +14,8 @@ La struttura completa di una revisione è esemplificata in `schema/evento.exampl
 - ID, prezzi e quantità sono dati autorevoli del server. Le righe del foglio e i valori calcolati dal browser non sono identità né fonti attendibili.
 - Una revisione pubblicata è immutabile. Le modifiche successive restano in bozza fino a una nuova pubblicazione.
 - Un ordine fotografa configurazione, prezzi, consensi e branding della revisione usata al momento della creazione.
+- Prezzo, finalizzazione, gestione dell'incasso e piano rateale sono assi distinti; un evento senza prezzo non viene rappresentato come un evento a prezzo zero.
+- I campi estesi sono abilitati esplicitamente per evento, con finalità e conservazione: nessun profilo eredita automaticamente dati aggiuntivi da un evento precedente.
 - Ruoli, capability e assegnazioni delle attività sono mantenuti e verificati da WordPress, non dal foglio e non dal JSON pubblico.
 
 ## 2. Gerarchia e cardinalità
@@ -25,7 +27,10 @@ Organizations (type = PARISH)
                         1 └── N EventRevisions
                         1 └── N Orders
                                    1 └── N Tickets
+                                   1 └── N ParticipantAnswers
                                    1 └── N Selections
+                                   1 └── N OrderAdjustments
+                                   1 └── N PaymentSchedule
                                    1 └── N Payments
 ```
 
@@ -121,7 +126,7 @@ Un'attività può configurare un proprio logo WordPress con testo alternativo. P
 | `published_at` | timestamp | UTC |
 | `published_by_actor_ref` | stringa | riferimento tecnico WordPress auditabile |
 
-I fogli `Screens`, `TicketTypes`, `CustomFields`, `OptionGroups`, `OptionChoices`, `Messages`, `PaymentMethods` ed `EmailTemplates` alimentano la bozza. Alla pubblicazione vengono validati e compilati dentro `EventRevisions.config_json`.
+I fogli `Screens`, `TicketTypes`, `FieldDefinitions`, `OptionGroups`, `OptionChoices`, `Messages`, `PaymentMethods` ed `EmailTemplates` alimentano la bozza. Alla pubblicazione vengono validati e compilati dentro `EventRevisions.config_json`.
 
 ## 5. Ereditarietà del branding
 
@@ -170,6 +175,50 @@ Lo stesso criterio per campo viene applicato, con allowlist specifiche, anche a:
 - `resolved_payment_profile`, per il profilo di pagamento autorizzato e la sua revisione.
 
 Ogni sezione conserva la provenienza dei valori. La proiezione pubblica include soltanto ciò che serve al wizard; destinatari interni, coordinate non attive, note di approvazione e altri valori protetti restano nello snapshot server-side. Funzioni facoltative usano un booleano o enum esplicito, non `null` o stringhe vuote per annullare un valore ereditato.
+
+### Profilo economico compilato
+
+La revisione pubblicata dichiara sempre quattro assi:
+
+| Campo | Valori iniziali | Regola |
+|---|---|---|
+| `pricing_mode` | `NONE`, `ZERO`, `CALCULATED` | `NONE` omette ogni prezzo; `ZERO` dichiara gratuità; `CALCULATED` produce righe economiche |
+| `price_finalization` | `NOT_APPLICABLE`, `AT_ORDER`, `POST_ORDER` | `POST_ORDER` mantiene il prezzo `PROVISIONAL` fino a `PRICE_FINALIZED` |
+| `collection_mode` | `NONE`, `NOT_MANAGED`, `TRACKED_MANUAL`, futuro `TRACKED_PROVIDER` | separa il prezzo dalla responsabilità di registrare l'incasso |
+| `payment_plan` | `NONE`, `FULL_AMOUNT`, `DEPOSIT_BALANCE` | definisce le obbligazioni attese |
+
+Combinazioni non valide vengono rifiutate alla pubblicazione. In particolare:
+
+- `NONE` o `ZERO` non ammettono rate o incasso tracciato;
+- `NOT_MANAGED` non ammette metodi, hold o righe `PaymentIntake`;
+- una modalità tracciata richiede almeno un metodo attivo e un piano;
+- `DEPOSIT_BALANCE` richiede una caparra positiva e inferiore al totale iniziale;
+- `POST_ORDER` richiede scadenza, procedura e capability di finalizzazione.
+
+Lo stato del prezzo è `NOT_APPLICABLE`, `PROVISIONAL` o `FINAL`. Prenotazione, prezzo e pagamento restano stati separati.
+
+### Definizione configurabile dei campi
+
+`FieldDefinitions` usa almeno:
+
+| Campo | Regola |
+|---|---|
+| `field_definition_id`, `version` | identità e revisione immutabili nello snapshot |
+| `key` | chiave stabile e univoca nell'ambito dell'evento |
+| `scope` | `BUYER`, `ORDER` oppure `PARTICIPANT` |
+| `type` | `TEXT`, `TEXTAREA`, `EMAIL`, `PHONE`, `DATE`, `INTEGER`, `DECIMAL`, `SELECT`, `MULTISELECT`, `CHECKBOX`, `ADDRESS` |
+| `label`, `help`, `sort_order` | testo filtrato e ordinamento |
+| `required`, `required_when` | obbligatorietà esplicita o condizione dichiarativa in allowlist |
+| `validation_json` | limiti, formato e scelte consentite |
+| `purpose_code` | finalità dichiarata della raccolta |
+| `data_class` | classificazione privacy |
+| `retention_policy_id` | politica applicabile |
+| `visibility_capability` | capability richiesta nel pannello |
+| `include_in_email`, `include_in_export` | disattivati per impostazione predefinita sui moduli estesi |
+
+Il profilo `MINIMAL` abilita soltanto identità e contatti necessari. `EXTENDED` richiede una lista esplicita di `extended_modules`, per esempio `APPAREL`, `POSTAL_ADDRESS` o `LOGISTICS`; non equivale ad “abilita tutto”. Indirizzo, dati di viaggio e logistica sono separati dal nucleo minimo. Categorie particolari, minori e documenti di viaggio non sono preset ordinari e richiedono una revisione privacy specifica.
+
+Se la “maglietta” indica una taglia, viene usato un `SELECT`; un eventuale numero assegnabile usa `INTEGER` con limiti o un'opzione con disponibilità. Se indica quantità, viene modellata come `OptionChoice` quantitativa, non come campo libero.
 
 ## 6. Asset della Media Library WordPress
 
@@ -222,11 +271,33 @@ Lo snapshot contiene:
 - opzioni selezionate con etichetta e prezzo fotografati;
 - subtotali, totale, valuta e importo dovuto;
 - regole e riferimento di pagamento applicati;
+- i quattro assi economici, stato del prezzo e piano delle obbligazioni applicabile;
+- definizioni, finalità e conservazione dei campi effettivamente raccolti;
 - versioni di privacy, condizioni e accettazioni.
 
 Non contiene segreti, token amministrativi, capability WordPress o destinatari interni. I fogli `Tickets` e `Selections` sono proiezioni idempotenti dello snapshot: possono essere ricostruiti se una scrittura secondaria fallisce.
 
-Le rate sono righe distinte in `Payments` con tipo `FULL`, `DEPOSIT` o `BALANCE`. Lo stato aggregato dell'ordine è derivato dalle rate e può assumere anche `PARTIALLY_PAID`; per esempio una caparra `PAID` con saldo `PENDING` non equivale a pagamento completo.
+Le obbligazioni attese sono righe di `PaymentSchedule` con tipo `FULL`, `DEPOSIT`, `INTERIM` o `BALANCE`. Gli incassi effettivi non sovrascrivono le rate: sono transazioni in `Payments`. Lo stato aggregato può assumere anche `PAID_TO_DATE`, `PARTIALLY_PAID` e `OVERPAID`; per esempio una caparra verificata con prezzo ancora provvisorio non equivale a pagamento completo.
+
+### `ParticipantAnswers`
+
+Ogni risposta configurabile usa una riga con `answer_id`, `order_id`, eventuale `ticket_id`, `field_definition_id`, versione, tipo e valore canonico. Non vengono create colonne ad hoc per ogni evento. Telefono, CAP, documenti e altri identificativi restano stringhe per conservare prefissi e zeri iniziali. Le viste larghe per operatori o esportazioni sono proiezioni ricostruibili e non la fonte autorevole.
+
+### `OrderAdjustments`
+
+Gli eventi economici successivi all'ordine sono append-only e contengono almeno:
+
+- `financial_event_id`, `order_id`, sequenza e chiave di idempotenza;
+- `event_type`: `ADJUSTMENT`, `PRICE_FINALIZED` oppure `REVERSAL`;
+- `direction`: `CHARGE` o `CREDIT`, con importo positivo in centesimi;
+- `reason_code`, nota protetta ed eventuale `reverses_event_id`;
+- attore, canale e timestamp.
+
+Il totale corrente è `base_total + CHARGE - CREDIT`. Un errore viene corretto da uno storno collegato e da una nuova riga; nessun evento viene aggiornato o cancellato. Se una diminuzione porta gli incassi sopra il totale, l'ordine diventa `OVERPAID` e l'eventuale rimborso viene registrato separatamente in `Payments`.
+
+### `Payments`
+
+Ogni movimento effettivo conserva `transaction_kind` (`RECEIPT`, `REFUND`, `REVERSAL`), eventuale `installment_kind` (`FULL`, `DEPOSIT`, `INTERIM`, `BALANCE`, `UNALLOCATED`), importo, valuta, fonte, data, riferimento, operatore e stato di convalida. Un rimborso non è un prezzo negativo e una rettifica di prezzo non è un pagamento.
 
 ### Inserimento manuale dei pagamenti
 
@@ -238,16 +309,18 @@ Il primo rilascio usa due fogli nello stesso spreadsheet:
 Le colonne editabili di `PaymentIntake` sono almeno:
 
 - `order_code`;
-- `received_at`;
-- `amount_received` nel formato valuta del foglio;
-- `payment_source`, con convalida a elenco obbligatoria: `BANK_TRANSFER`, `EXTERNAL_CARD`, `CASH`;
+- `transaction_kind`, con lista `RECEIPT`, `REFUND`, `REVERSAL`;
+- `installment_kind`, obbligatorio per un incasso quando la rata è nota: `FULL`, `DEPOSIT`, `INTERIM`, `BALANCE`, `UNALLOCATED`;
+- `effective_at`;
+- `amount` positivo nel formato valuta del foglio;
+- `payment_source`, con convalida a elenco obbligatoria: `BANK_TRANSFER`, `CARD`, `CASH`;
 - `external_reference`, facoltativo e privo di dati completi della carta;
 - `operator_label`, obbligatorio per `CASH` e quando Google non espone l'identità dell'editor;
 - `administrative_note`, facoltativa.
 
-Apps Script convalida le righe tramite comando esplicito o trigger installabile, converte l'importo nel valore canonico `amount_cents`, risolve `order_id`, verifica valuta e duplicati, assegna `payment_id` e scrive `Payments`. Le colonne di esito dell'area di acquisizione indicano `PENDING`, `VALIDATED` o `REJECTED` e un errore breve. Soltanto righe canoniche convalidate contribuiscono agli aggregati dell'ordine.
+Apps Script convalida le righe tramite comando esplicito o trigger installabile, converte l'importo nel valore canonico `amount_cents`, risolve `order_id`, verifica profilo economico, valuta e duplicati, assegna `payment_id` e scrive `Payments`. Le colonne di esito dell'area di acquisizione indicano `PENDING`, `VALIDATED`, `REJECTED` o `REVIEW_REQUIRED` e un errore breve. Soltanto righe canoniche convalidate contribuiscono agli aggregati dell'ordine. Un ordine `NOT_REQUIRED` o `NOT_MANAGED` viene rifiutato; un ordine scaduto o annullato richiede revisione e non viene aggiornato automaticamente.
 
-Ogni riga canonica conserva anche `recording_channel: MANUAL_SHEET`, riferimento alla riga di acquisizione, timestamp e attore quando disponibile. Una correzione di un pagamento convalidato genera una rettifica collegata invece di sovrascrivere la storia. Per la fonte `EXTERNAL_CARD` non sono ammessi PAN, data di scadenza, CVV o altri dati della carta.
+Ogni riga canonica conserva anche `recording_channel: MANUAL_SHEET`, riferimento alla riga di acquisizione, timestamp e attore quando disponibile. Una correzione di un pagamento convalidato genera una rettifica collegata invece di sovrascrivere la storia. Per la fonte `CARD` non sono ammessi PAN, data di scadenza, CVV o altri dati della carta.
 
 L'accesso Google allo spreadsheet globale consente la visibilità dei dati di tutte le attività ed è quindi distinto dalle ACL WordPress per attività. Non viene concesso ai normali delegati activity-scoped: gli editor di `PaymentIntake` sono operatori finanziari globali. Un futuro operatore finanziario limitato a una singola attività dovrà usare il pannello WordPress oppure un intake separato che non esponga le altre attività.
 
@@ -297,7 +370,7 @@ L'acquisizione manuale da `PaymentIntake` è un canale separato e non finge di p
 
 - I payload usano un'allowlist di proprietà, limiti di lunghezza e tipi espliciti.
 - Le FK vengono verificate prima di acquisire il lock di scrittura.
-- Prezzi, sconti, caparra e saldo sono ricalcolati dalla revisione pubblicata.
+- Prezzi, sconti, caparra e saldo sono ricalcolati dalla revisione pubblicata e dagli eventi economici append-only convalidati.
 - La scadenza degli ordini non pagati dichiara sia `unpaid_order_expiry_minutes` sia `unpaid_order_expiry_mode`, con valori `MANUAL` o `AUTO`; il default di Fase A è 4.320 minuti e `MANUAL`.
 - Il lock protegge soltanto idempotenza, disponibilità e commit autorevole; email e chiamate esterne restano fuori.
 - Ogni evento, attività e organizzazione archiviati rimangono leggibili per ordini e audit storici.

@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.1.0",
+  "schema_version": "1.2.0",
   "document_type": "EXAMPLE_EVENT_REVISION",
   "fixture": {
     "demo_only": true,
@@ -146,12 +146,34 @@
     }
   },
   "resolved_payment_profile": {
-    "payment_profile_id": "payprof_demo_external_card",
+    "payment_profile_id": "payprof_demo_multi_method",
     "revision": 1,
     "source": "event",
     "status": "DEMO_ONLY",
     "publication_blocked": true,
-    "type": "EXTERNAL_CARD_LINK"
+    "type": "DEMO_MULTI_METHOD"
+  },
+  "workflow": {
+    "pricing_mode": "CALCULATED",
+    "price_finalization": "POST_ORDER",
+    "collection_mode": "TRACKED_MANUAL",
+    "payment_plan": "DEPOSIT_BALANCE",
+    "initial_price_status": "PROVISIONAL",
+    "adjustments": {
+      "enabled": true,
+      "reason_required": true,
+      "normal_cutoff": "PRICE_FINALIZED",
+      "post_finalization_capability": "eventi_finalize_price"
+    }
+  },
+  "data_collection": {
+    "profile": "EXTENDED",
+    "extended_modules": [
+      "APPAREL",
+      "POSTAL_ADDRESS"
+    ],
+    "special_category_fields_enabled": false,
+    "travel_documents_enabled": false
   },
   "registration": {
     "opens_at": "2030-02-01T08:00:00+01:00",
@@ -170,70 +192,173 @@
   },
   "buyer_fields": [
     {
+      "field_definition_id": "fld_demo_buyer_first_name_v1",
+      "version": 1,
       "key": "first_name",
+      "scope": "BUYER",
       "type": "TEXT",
       "label": "Nome",
       "required": true,
-      "max_length": 80
+      "max_length": 80,
+      "purpose_code": "ORDER_CONTACT",
+      "data_class": "ORDINARY_IDENTITY",
+      "retention_policy_id": "ret_demo_order"
     },
     {
+      "field_definition_id": "fld_demo_buyer_last_name_v1",
+      "version": 1,
       "key": "last_name",
+      "scope": "BUYER",
       "type": "TEXT",
       "label": "Cognome",
       "required": true,
-      "max_length": 80
+      "max_length": 80,
+      "purpose_code": "ORDER_CONTACT",
+      "data_class": "ORDINARY_IDENTITY",
+      "retention_policy_id": "ret_demo_order"
     },
     {
+      "field_definition_id": "fld_demo_buyer_email_v1",
+      "version": 1,
       "key": "email",
+      "scope": "BUYER",
       "type": "EMAIL",
       "label": "Email",
       "required": true,
-      "max_length": 254
+      "max_length": 254,
+      "purpose_code": "ORDER_COMMUNICATION",
+      "data_class": "ORDINARY_CONTACT",
+      "retention_policy_id": "ret_demo_order"
     },
     {
+      "field_definition_id": "fld_demo_buyer_mobile_v1",
+      "version": 1,
       "key": "mobile_phone",
+      "scope": "BUYER",
       "type": "PHONE",
       "label": "Cellulare",
       "required": true,
-      "max_length": 32
+      "max_length": 32,
+      "purpose_code": "ORDER_COMMUNICATION",
+      "data_class": "ORDINARY_CONTACT",
+      "retention_policy_id": "ret_demo_order"
+    }
+  ],
+  "order_fields": [
+    {
+      "field_definition_id": "fld_demo_order_address_v1",
+      "version": 1,
+      "key": "postal_address",
+      "scope": "ORDER",
+      "type": "ADDRESS",
+      "label": "Indirizzo postale",
+      "help": "Fixture dimostrativa: raccogliere soltanto se necessario per una finalità dichiarata.",
+      "required": false,
+      "required_when": {
+        "module_enabled": "POSTAL_ADDRESS"
+      },
+      "purpose_code": "DEMO_POSTAL_FULFILMENT",
+      "data_class": "POSTAL_ADDRESS",
+      "retention_policy_id": "ret_demo_fulfilment",
+      "include_in_email": false,
+      "include_in_export": false
     }
   ],
   "ticket_fields": [
     {
+      "field_definition_id": "fld_demo_participant_first_name_v1",
+      "version": 1,
       "key": "first_name",
+      "scope": "PARTICIPANT",
       "type": "TEXT",
       "label": "Nome",
       "required": true,
-      "max_length": 80
+      "max_length": 80,
+      "purpose_code": "EVENT_REGISTRATION",
+      "data_class": "ORDINARY_IDENTITY",
+      "retention_policy_id": "ret_demo_order"
     },
     {
+      "field_definition_id": "fld_demo_participant_last_name_v1",
+      "version": 1,
       "key": "last_name",
+      "scope": "PARTICIPANT",
       "type": "TEXT",
       "label": "Cognome",
       "required": true,
-      "max_length": 80
+      "max_length": 80,
+      "purpose_code": "EVENT_REGISTRATION",
+      "data_class": "ORDINARY_IDENTITY",
+      "retention_policy_id": "ret_demo_order"
     },
     {
+      "field_definition_id": "fld_demo_participant_email_v1",
+      "version": 1,
       "key": "email",
+      "scope": "PARTICIPANT",
       "type": "EMAIL",
       "label": "Email",
       "required": false,
       "max_length": 254,
-      "help": "Compila se il partecipante può ricevere comunicazioni dirette."
+      "help": "Compila se il partecipante può ricevere comunicazioni dirette.",
+      "purpose_code": "PARTICIPANT_COMMUNICATION",
+      "data_class": "ORDINARY_CONTACT",
+      "retention_policy_id": "ret_demo_order",
+      "include_in_email": false,
+      "include_in_export": false
     },
     {
+      "field_definition_id": "fld_demo_participant_mobile_v1",
+      "version": 1,
       "key": "mobile_phone",
+      "scope": "PARTICIPANT",
       "type": "PHONE",
       "label": "Cellulare",
       "required": false,
-      "max_length": 32
+      "max_length": 32,
+      "purpose_code": "PARTICIPANT_COMMUNICATION",
+      "data_class": "ORDINARY_CONTACT",
+      "retention_policy_id": "ret_demo_order",
+      "include_in_email": false,
+      "include_in_export": false
     },
     {
+      "field_definition_id": "fld_demo_participant_shirt_size_v1",
+      "version": 1,
       "key": "shirt_size",
+      "scope": "PARTICIPANT",
       "type": "SELECT",
       "label": "Taglia maglietta",
       "required": false,
-      "choices": ["S", "M", "L", "XL"]
+      "required_when": {
+        "module_enabled": "APPAREL"
+      },
+      "choices": ["S", "M", "L", "XL"],
+      "purpose_code": "APPAREL_FULFILMENT",
+      "data_class": "ORDINARY_PREFERENCE",
+      "retention_policy_id": "ret_demo_fulfilment",
+      "include_in_email": false,
+      "include_in_export": false
+    },
+    {
+      "field_definition_id": "fld_demo_participant_jersey_number_v1",
+      "version": 1,
+      "key": "jersey_number",
+      "scope": "PARTICIPANT",
+      "type": "INTEGER",
+      "label": "Numero maglia",
+      "help": "Campo dimostrativo opzionale; per numeri univoci usare invece un'opzione con disponibilità.",
+      "required": false,
+      "required_when": {
+        "module_enabled": "APPAREL"
+      },
+      "min": 0,
+      "max": 99,
+      "purpose_code": "APPAREL_FULFILMENT",
+      "data_class": "ORDINARY_PREFERENCE",
+      "retention_policy_id": "ret_demo_fulfilment",
+      "include_in_email": false,
+      "include_in_export": false
     }
   ],
   "ticket_types": [
@@ -387,10 +512,26 @@
     }
   ],
   "payment": {
-    "payment_profile_id": "payprof_demo_external_card",
+    "payment_profile_id": "payprof_demo_multi_method",
     "currency": "EUR",
-    "mode": "FULL_AMOUNT",
-    "amount_due_rule": "ORDER_TOTAL",
+    "confirmation_threshold_rule": "DEPOSIT_DUE",
+    "deposit_rule": {
+      "type": "FIXED_PER_ORDER",
+      "amount_cents": 15000
+    },
+    "balance_rule": "CURRENT_TOTAL_MINUS_VALIDATED_RECEIPTS_PLUS_VALIDATED_REFUNDS",
+    "schedule_rules": [
+      {
+        "installment_kind": "DEPOSIT",
+        "amount_rule": "DEPOSIT_RULE",
+        "due_rule": "REGISTRATION_DEADLINE"
+      },
+      {
+        "installment_kind": "BALANCE",
+        "amount_rule": "CURRENT_OUTSTANDING_BALANCE",
+        "due_rule": "AFTER_PRICE_FINALIZATION"
+      }
+    ],
     "manual_recording": {
       "enabled": true,
       "intake_sheet": "PaymentIntake",
@@ -398,11 +539,21 @@
       "recording_channel": "MANUAL_SHEET",
       "validation_mode": "EXPLICIT_OR_INSTALLABLE_TRIGGER",
       "allowed_sources": [
-        "EXTERNAL_CARD",
+        "BANK_TRANSFER",
+        "CARD",
         "CASH"
       ]
     },
     "methods": [
+      {
+        "payment_method_id": "pm_demo_bank_transfer",
+        "type": "BANK_TRANSFER",
+        "enabled": true,
+        "instructions": "Coordinate bancarie gestite nel profilo privato dell'attività e mai nella configurazione pubblica.",
+        "reference_template": "{{order.code}}",
+        "manual_reconciliation": true,
+        "open_in_new_tab": false
+      },
       {
         "payment_method_id": "pm_demo_external_card",
         "type": "EXTERNAL_CARD_LINK",
@@ -478,7 +629,14 @@
       "resolved_branding",
       "resolved_public_contacts",
       "registration",
+      "workflow.pricing_mode",
+      "workflow.price_finalization",
+      "workflow.collection_mode",
+      "workflow.payment_plan",
+      "data_collection.profile",
+      "data_collection.extended_modules",
       "buyer_fields",
+      "order_fields",
       "ticket_fields",
       "ticket_types",
       "option_groups",
@@ -486,8 +644,10 @@
       "messages",
       "consents",
       "payment.currency",
-      "payment.mode",
-      "payment.amount_due_rule",
+      "payment.confirmation_threshold_rule",
+      "payment.deposit_rule",
+      "payment.balance_rule",
+      "payment.schedule_rules",
       "payment.methods"
     ]
   }

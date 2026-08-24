@@ -1,6 +1,6 @@
 # Progetto: sistema multi-evento di iscrizione e pagamento
 
-Stato: bozza funzionale e tecnica 0.6  
+Stato: bozza funzionale e tecnica 0.7  
 Data: 24 agosto 2026
 
 ## Artefatti della Fase A
@@ -9,6 +9,7 @@ Data: 24 agosto 2026
 - [Schema dati iniziale](docs/SCHEMA_DATI.md)
 - [Configurazione evento di esempio](schema/evento.example.json)
 - [Riferimenti legacy e linea visiva](docs/RIFERIMENTI_E_LINEE_GUIDA.md)
+- [Politica di sanitizzazione](docs/SANITIZZAZIONE.md)
 - [Prototipo responsive](prototipo/README.md)
 
 ## 1. Obiettivo
@@ -18,8 +19,10 @@ Realizzare un sistema riutilizzabile per più eventi, integrato in WordPress, ch
 - mostrare una pagina di iscrizione coerente con l'evento e ottimizzata per mobile e desktop;
 - prenotare uno o più posti;
 - raccogliere i dati del referente e di ogni partecipante;
+- adattare i campi richiesti al singolo evento, da un profilo minimo a moduli estesi come indirizzo o dati logistici;
 - configurare opzioni gratuite o a pagamento, per ordine o per singolo biglietto;
-- ricalcolare e mostrare il riepilogo economico;
+- gestire separatamente eventi senza prezzo, eventi con prezzo informativo ed eventi con incasso, caparra, versamenti intermedi e saldo;
+- ricalcolare e mostrare il riepilogo economico, conservando ogni rettifica successiva in modo auditabile;
 - registrare l'ordine in Google Sheets tramite Google Apps Script;
 - inviare al referente un'email riepilogativa affidabile e configurabile;
 - proporre il pagamento tramite bonifico, link carta esterno, contanti o una combinazione configurabile;
@@ -76,7 +79,7 @@ Un'unica pagina riutilizzabile, per esempio:
 /iscrizione/?evento=cammino-2027
 ```
 
-Il sistema usa un solo wizard responsive, non due applicazioni diverse.
+Il sistema usa un solo wizard responsive, non due applicazioni diverse. Passaggi, campi e riepiloghi economici vengono composti dalla revisione pubblicata: un evento senza prezzo non mostra importi o pagamenti, mentre un evento con caparra espone soltanto le fasi economiche applicabili.
 
 ### Passaggio 1: riepilogo evento
 
@@ -85,7 +88,7 @@ Il sistema usa un solo wizard responsive, non due applicazioni diverse.
 - immagine e testo alternativo;
 - titolo, date, ora, luogo e descrizione breve;
 - stato delle iscrizioni e disponibilità, se configurata;
-- prezzo iniziale o indicazione di evento gratuito;
+- prezzo iniziale soltanto quando il profilo economico lo prevede; negli eventi di sola iscrizione non compare alcuna sezione economica;
 - avvertenze preliminari;
 - pulsanti `Iscriviti` e `Torna all'evento`.
 
@@ -93,8 +96,9 @@ Il sistema usa un solo wizard responsive, non due applicazioni diverse.
 
 - numero di posti con minimo e massimo per ordine;
 - eventuali tipi di biglietto, per esempio adulto, minore o accompagnatore;
-- prezzo e disponibilità per tipo;
-- subtotale aggiornato in tempo reale.
+- prezzo per tipo soltanto negli eventi valorizzati;
+- disponibilità per tipo;
+- subtotale aggiornato in tempo reale soltanto quando esiste un prezzo.
 
 ### Passaggio 3: referente
 
@@ -102,7 +106,7 @@ Il sistema usa un solo wizard responsive, non due applicazioni diverse.
 - cognome;
 - email;
 - telefono cellulare con prefisso internazionale;
-- eventuali campi aggiuntivi configurati per l'ordine.
+- eventuali campi aggiuntivi configurati per l'ordine, per esempio indirizzo di fatturazione o recapito postale, soltanto se necessari all'evento.
 
 ### Passaggio 4: partecipanti
 
@@ -110,14 +114,14 @@ Il sistema usa un solo wizard responsive, non due applicazioni diverse.
 - il primo biglietto viene precompilato con il referente;
 - opzione `Il referente partecipa` per gestire chi prenota per altre persone;
 - nome, cognome, email e cellulare per ogni partecipante, con obbligatorietà configurabile;
-- eventuali campi aggiuntivi per il singolo biglietto;
+- eventuali campi aggiuntivi per il singolo biglietto, per esempio taglia o numero della maglietta, sistemazione e dati logistici;
 - pannelli espandibili su mobile e schede più ampie su desktop.
 
 ### Passaggio 5: opzioni, consensi e riepilogo
 
 - opzioni riferite all'intero ordine;
 - opzioni riferite a ogni biglietto;
-- dettaglio di prezzi, quantità, maggiorazioni e totale;
+- dettaglio di prezzi, quantità, maggiorazioni e totale, se il profilo economico non è `REGISTRATION_ONLY`;
 - informativa privacy e termini;
 - eventuali accettazioni obbligatorie;
 - consenso marketing separato, facoltativo e non preselezionato;
@@ -132,7 +136,7 @@ Prima di mostrare le istruzioni di pagamento, il server crea un ordine con codic
 - codice prenotazione;
 - stato della prenotazione;
 - partecipanti e opzioni;
-- importo totale e importo da versare ora;
+- importo totale e importo da versare ora, soltanto quando applicabili;
 - avvertenze finali configurate per l'evento;
 - metodi di pagamento ammessi;
 - indicazione dell'email riepilogativa inviata.
@@ -214,12 +218,15 @@ Prima dello sviluppo definitivo verranno preparati e approvati almeno quattro wi
 
 ## 5. Configurazione dell'evento
 
-Ogni evento viene creato a partire da un preset controllato:
+Ogni evento viene creato a partire da un preset controllato, poi salvato come configurazione esplicita:
 
-- evento gratuito;
-- prenotazione con pagamento completo;
-- prenotazione con caparra e saldo successivo;
-- semplice raccolta nominativi.
+- `REGISTRATION_ONLY`: sola raccolta delle iscrizioni, senza prezzi né registro pagamenti;
+- `PRICED_REGISTRATION`: il server calcola e fotografa il prezzo, ma l'incasso non è gestito dal modulo;
+- `FULL_PAYMENT`: prezzo e pagamento completo gestiti dal modulo;
+- `DEPOSIT_AND_BALANCE`: prezzo, caparra, eventuali versamenti intermedi e saldo;
+- `FREE_EVENT`: prezzo pari a zero dichiarato, utile quando si desidera mostrare esplicitamente la gratuità.
+
+Il preset non rimane una scorciatoia ambigua: alla pubblicazione viene compilato nei campi ortogonali `pricing_mode`, `price_finalization`, `collection_mode` e `payment_plan` descritti nella sezione pagamenti.
 
 Il pannello è suddiviso in sezioni.
 
@@ -258,8 +265,21 @@ Il pannello è suddiviso in sezioni.
 - nome, descrizione, prezzo e disponibilità del tipo di biglietto;
 - campi del referente e del partecipante;
 - visibilità, obbligatorietà, aiuto e validazione;
-- campi personalizzati di tipo testo, email, telefono, data, scelta e checkbox;
-- ambito `ordine` oppure `biglietto`.
+- campi personalizzati di tipo testo, testo lungo, email, telefono, data, intero, decimale, scelta singola, scelta multipla, checkbox e indirizzo strutturato;
+- ambito `buyer`, `order` oppure `participant`;
+- chiave stabile, etichetta, aiuto, ordine, obbligatorietà, validazione e condizione entro una allowlist;
+- classificazione privacy, finalità e politica di conservazione associate al campo;
+- nessun JavaScript o espressione arbitraria nelle condizioni.
+
+### Profili di raccolta dati
+
+I profili sono preset modificabili e non tabelle rigide:
+
+- `MINIMAL`: referente con nome, cognome, email e telefono; partecipante con nome e cognome;
+- `EXTENDED`: mantiene il nucleo minimo e abilita soltanto i moduli dichiarati in `extended_modules`, per esempio `APPAREL`, `POSTAL_ADDRESS` o `LOGISTICS`;
+- moduli ad alto rischio, come documenti di viaggio, minori o categorie particolari di dati, restano disattivati finché non sono approvati finalità, accessi, informativa e conservazione.
+
+Ogni risposta viene salvata con `field_definition_id`, versione della definizione e valore tipizzato. Il browser non inventa colonne e il foglio non usa una nuova colonna per ogni evento: `ParticipantAnswers` conserva le risposte normalizzate, mentre eventuali viste larghe sono soltanto esportazioni ricostruibili.
 
 ### Opzioni
 
@@ -293,6 +313,34 @@ Il layout e i componenti restano controllati dal sistema per evitare che un sing
 
 ## 6. Pagamenti
 
+### Profilo economico dell'evento
+
+Prezzo e incasso sono due dimensioni distinte:
+
+| Profilo | `pricing_mode` | `price_finalization` | `collection_mode` | `payment_plan` |
+|---|---|---|---|---|
+| sola iscrizione | `NONE` | `NOT_APPLICABLE` | `NONE` | `NONE` |
+| evento esplicitamente gratuito | `ZERO` | `AT_ORDER` | `NONE` | `NONE` |
+| iscrizione valorizzata | `CALCULATED` | `AT_ORDER` oppure `POST_ORDER` | `NOT_MANAGED` | `NONE` |
+| pagamento completo | `CALCULATED` | `AT_ORDER` | `TRACKED_MANUAL` | `FULL_AMOUNT` |
+| caparra e saldo | `CALCULATED` | `AT_ORDER` oppure `POST_ORDER` | `TRACKED_MANUAL` | `DEPOSIT_BALANCE` |
+
+`pricing_mode: NONE` vieta prezzi su biglietti e opzioni. `ZERO` dichiara invece in modo esplicito la gratuità. `collection_mode: NONE` vieta metodi e righe di acquisizione; `NOT_MANAGED` conserva il prezzo ma indica chiaramente che l'incasso è fuori sistema; `TRACKED_MANUAL` abilita `PaymentIntake`; una futura integrazione usa `TRACKED_PROVIDER`. In questo modo un evento gratuito non viene confuso con un evento a prezzo noto ma incassato altrove.
+
+Il piano di pagamento è `NONE`, `FULL_AMOUNT` oppure `DEPOSIT_BALANCE`. La caparra può essere fissa per ordine, fissa per biglietto o percentuale. Ogni scadenza viene salvata nello snapshot della revisione e ogni rata attesa ha un ID stabile.
+
+Con `price_finalization: AT_ORDER` il totale iniziale è definitivo. Con `POST_ORDER` il totale iniziale è `PROVISIONAL` finché un operatore autorizzato emette `PRICE_FINALIZED`; prima o dopo tale evento, secondo capability, può aggiungere una rettifica motivata. Ogni evento economico è append-only in `OrderAdjustments`: non sovrascrive il totale originario, indica direzione `CHARGE` o `CREDIT`, importo positivo in centesimi, motivo, attore, timestamp ed eventuale evento stornato. Il saldo corrente è calcolato dal server come:
+
+```text
+totale originario
++ rettifiche confermate
+- incassi convalidati
++ rimborsi convalidati
+= residuo corrente
+```
+
+Un ricalcolo non modifica una caparra già ricevuta e non può produrre un residuo negativo senza trasformare l'eccedenza in credito o rimborso esplicito. La nuova cifra viene comunicata al referente e resta ricostruibile nell'audit.
+
 Metodi configurabili per evento:
 
 - nessun pagamento;
@@ -302,18 +350,9 @@ Metodi configurabili per evento:
 - qualsiasi combinazione dei metodi precedenti;
 - futura integrazione API merchant.
 
-Modalità economiche:
-
-- saldo completo al momento dell'iscrizione;
-- caparra fissa per ordine;
-- caparra fissa per biglietto;
-- caparra percentuale;
-- saldo successivo;
-- ordine gratuito.
-
 Tutti gli importi sono memorizzati come centesimi interi.
 
-Caparra, saldo e profili di pagamento sono sempre configurazioni dell'evento, eventualmente ereditate dall'attività o dalla parrocchia: non diventano costanti globali. Le rate attese sono registrate in `Payments` con tipo `FULL`, `DEPOSIT` oppure `BALANCE`; lo stato aggregato dell'ordine viene derivato dalle rate e non sostituisce il loro dettaglio.
+Caparra, saldo e profili di pagamento sono sempre configurazioni dell'evento, eventualmente ereditate dall'attività o dalla parrocchia: non diventano costanti globali. Le rate attese sono configurate nella revisione con tipo `FULL`, `DEPOSIT`, `INTERIM` oppure `BALANCE`; gli incassi effettivi restano transazioni distinte in `Payments`. Lo stato aggregato dell'ordine viene derivato da totale corrente, rate attese, incassi e rimborsi, senza sostituirne il dettaglio.
 
 ### Registrazione manuale dei versamenti in Google Sheets
 
@@ -322,7 +361,7 @@ Nel primo rilascio i dati dei versamenti vengono inseriti manualmente nel foglio
 - codice ordine;
 - data del versamento;
 - importo ricevuto;
-- fonte obbligatoria scelta da elenco: `BANK_TRANSFER` (`Bonifico / IBAN`), `EXTERNAL_CARD` (`Carta`) oppure `CASH` (`Contante`);
+- fonte obbligatoria scelta da elenco: `BANK_TRANSFER` (`Bonifico / IBAN`), `CARD` (`Carta`) oppure `CASH` (`Contante`);
 - riferimento esterno facoltativo, per esempio CRO/TRN o ID della transazione, senza dati completi della carta;
 - nota amministrativa facoltativa;
 - operatore e data di registrazione, quando disponibili;
@@ -330,7 +369,7 @@ Nel primo rilascio i dati dei versamenti vengono inseriti manualmente nel foglio
 
 Le colonne tecniche, tra cui `payment_id`, `order_id`, importo canonico in centesimi e stato, sono generate nel registro `Payments`. Una riga di acquisizione conta ai fini di `PARTIALLY_PAID` o `PAID` soltanto dopo che Apps Script ha verificato ordine, valuta, importo e duplicati e ha creato la corrispondente riga canonica. Per i contanti sono obbligatori data, importo e operatore; non vengono mai salvati numeri di carta, codici di sicurezza o altri dati dello strumento di pagamento.
 
-Il foglio può contenere più righe per lo stesso ordine, così caparra, saldo e pagamenti parziali restano ricostruibili. La convalida avviene tramite un'azione Apps Script esplicita o un trigger installabile, non tramite formule considerate autorevoli. La correzione non sovrascrive silenziosamente una riga già convalidata: genera una rettifica auditabile o richiede un'azione amministrativa esplicita.
+Il foglio può contenere più righe per lo stesso ordine, così caparra, versamenti intermedi, saldo, pagamenti parziali e rimborsi restano ricostruibili. Ogni riga dichiara `transaction_kind` (`RECEIPT`, `REFUND` o `REVERSAL`) e, per un incasso, l'eventuale `installment_kind` (`FULL`, `DEPOSIT`, `INTERIM`, `BALANCE` o `UNALLOCATED`). La convalida avviene tramite un'azione Apps Script esplicita o un trigger installabile, non tramite formule considerate autorevoli. La correzione non sovrascrive silenziosamente una riga già convalidata: genera una rettifica auditabile o richiede un'azione amministrativa esplicita.
 
 `PaymentIntake` e le colonne tecniche di `Payments` sono protetti e modificabili soltanto da operatori finanziari globali autorizzati come editor Google dell'intero spreadsheet. Poiché un editor del foglio può vedere dati di più attività, questo accesso non viene concesso ai normali delegati limitati per attività. Questi ultimi continuano a vedere soltanto i pagamenti del proprio ambito attraverso WordPress.
 
@@ -355,9 +394,9 @@ Se l'evento accetta contanti, configura luogo, orari o referente, scadenza ed ev
 
 Quando il denaro viene effettivamente ricevuto, l'operatore inserisce in `PaymentIntake` codice ordine, data, importo e fonte `CASH`; l'operatore è obbligatorio e l'eventuale numero di ricevuta può essere usato come riferimento esterno.
 
-### Link carta Banca Profilo / Tinaba attuale
+### Link carta esterno
 
-La pagina fornita, `https://crowdfunding.bancaprofilo.it/donate-with-card/1020284`, chiede all'utente importo, nome, cognome, email e un messaggio facoltativo. Il link non contiene oggi un checkout specifico dell'ordine né un ritorno applicativo.
+Nel primo rilascio un eventuale provider esterno viene configurato per evento con un URL approvato, per esempio `https://payments.example.invalid/demo-checkout`. Un link generico può chiedere all'utente importo, dati di contatto e un messaggio, ma non equivale a un checkout specifico dell'ordine né fornisce necessariamente un ritorno applicativo.
 
 Il flusso iniziale sarà quindi:
 
@@ -370,7 +409,7 @@ Il flusso iniziale sarà quindi:
 
 Il semplice click sul link non imposta mai lo stato `PAID`.
 
-### Possibile integrazione Tinaba Pay
+### Possibile integrazione API del provider
 
 Se l'organizzazione possiede un contratto merchant e le relative credenziali, si può realizzare una seconda integrazione:
 
@@ -397,13 +436,18 @@ Prenotazione:
 Pagamento:
 
 - `NOT_REQUIRED`;
+- `NOT_MANAGED`;
 - `PENDING`;
+- `PAID_TO_DATE`;
 - `PARTIALLY_PAID`;
 - `PAID`;
+- `OVERPAID`;
 - `FAILED`;
 - `EXPIRED`;
 - `REFUNDED`;
 - `PARTIALLY_REFUNDED`.
+
+Lo stato del prezzo rimane separato: `NOT_APPLICABLE`, `PROVISIONAL` oppure `FINAL`. `PAID_TO_DATE` significa che tutte le obbligazioni già scadute sono coperte, ma il prezzo non è ancora definitivo; `OVERPAID` richiede revisione ed eventuale rimborso. Un errore nell'acquisizione manuale è `REJECTED` sulla riga di intake e non trasforma l'ordine in `FAILED`.
 
 ## 7. Email configurabili
 
@@ -427,10 +471,10 @@ Deve includere almeno:
 - referente;
 - elenco dei biglietti e dei partecipanti;
 - opzioni selezionate;
-- dettaglio economico e totale;
-- importo dovuto ora;
+- dettaglio economico, totale e stato provvisorio/finale, quando il prezzo è applicabile;
+- importo dovuto ora, quando l'incasso è gestito;
 - istruzioni per bonifico, carta e/o contanti, secondo i metodi attivi;
-- scadenza e causale univoca;
+- scadenza e causale univoca, quando previste;
 - avvertenze finali e contatti;
 - link alla privacy e alle condizioni applicate.
 
@@ -520,7 +564,7 @@ Si usa un unico spreadsheet per tutti gli eventi, con ID stabili e non con numer
 | `Events` | attività proprietaria, dati generali, stato, date, capienza, override branding e revisione pubblicata |
 | `Screens` | testi e impostazioni dei passaggi del wizard |
 | `TicketTypes` | tipi di biglietto, prezzi e disponibilità |
-| `CustomFields` | campi aggiuntivi e regole di validazione |
+| `FieldDefinitions` | definizioni versionate dei campi, ambito, tipo, privacy, obbligatorietà e condizioni |
 | `OptionGroups` | gruppi di opzioni e ambito ordine/biglietto |
 | `OptionChoices` | scelte, prezzi, quantità e stock |
 | `Messages` | avvisi, consensi e messaggi finali |
@@ -528,9 +572,13 @@ Si usa un unico spreadsheet per tutti gli eventi, con ID stabili e non con numer
 | `EmailTemplates` | template versionati e configurazione invio |
 | `Orders` | ordine autorevole, ente, attività, referente, totali, stati, revisione evento, branding risolto e idempotenza |
 | `Tickets` | partecipanti e tipo biglietto |
+| `ParticipantAnswers` | risposte tipizzate ai campi configurabili, una riga per partecipante e definizione |
 | `Selections` | opzioni scelte con etichetta e prezzo fotografati |
+| `OrderAdjustments` | eventi economici append-only: rettifica, finalizzazione, storno, motivo e attore |
+| `Itinerary` | dati logistici facoltativi per gli eventi che li richiedono, separati dal nucleo anagrafico |
+| `PaymentSchedule` | obbligazioni attese `FULL`/`DEPOSIT`/`INTERIM`/`BALANCE`, importo, scadenza e stato derivato |
 | `PaymentIntake` | area protetta per l'inserimento manuale di codice ordine, data, importo, fonte e riferimento |
-| `Payments` | righe canoniche con importi attesi/ricevuti, fonte `BANK_TRANSFER`/`EXTERNAL_CARD`/`CASH`, stato, riferimento, canale e verifica |
+| `Payments` | transazioni canoniche di incasso, rimborso o storno, con rata, fonte `BANK_TRANSFER`/`CARD`/`CASH`, stato, riferimento, canale e verifica |
 | `EmailOutbox` | messaggi da inviare, stato, tentativi ed errore |
 | `AuditLog` | utente, data, azione, entità e differenze essenziali |
 
@@ -570,7 +618,7 @@ Creazione ordine:
 1. validare schema e limiti del payload;
 2. caricare la revisione pubblicata dell'evento;
 3. verificare finestra iscrizioni, biglietti e opzioni;
-4. ricalcolare tutti gli importi in centesimi;
+4. applicare il profilo economico e ricalcolare sul server tutti gli importi in centesimi, oppure verificare l'assenza di prezzi per `REGISTRATION_ONLY`;
 5. acquisire uno `ScriptLock` breve;
 6. verificare idempotenza e posti disponibili;
 7. scrivere l'ordine canonico e riservare i posti;
@@ -597,7 +645,12 @@ Email, callback e chiamate esterne non rimangono dentro il lock.
 - niente dati personali nei log ordinari;
 - versione dell'informativa e delle accettazioni salvata nell'ordine;
 - conservazione configurabile e procedura di esportazione/cancellazione;
-- particolare attenzione a dati di minori, salute, allergie o disabilità.
+- particolare attenzione a dati di minori, salute, allergie o disabilità;
+- raccolta per evento limitata ai campi necessari: i moduli estesi non vengono ereditati automaticamente da eventi precedenti;
+- risposte a campi di documenti, indirizzo e logistica separate dal nucleo minimo e protette da capability specifiche;
+- nessun foglio reale, export, dato personale, coordinata bancaria o link di pagamento operativo nel repository Git pubblico;
+- fixture pubbliche esclusivamente sintetiche, marcate `demo_only` e bloccate per la pubblicazione reale;
+- controllo automatico `tools/check-sanitization.ps1` prima del push e nella pipeline GitHub.
 
 ## 12. Riuso del codice esistente
 
@@ -629,7 +682,7 @@ Elementi da sostituire:
 
 Il vecchio modulo del saldo può diventare una funzione separata del nuovo sistema: accesso tramite link firmato e token ordine, ricalcolo server-side, pagamento del residuo e aggiornamento dello stesso registro `Payments`.
 
-### Prototipo iscrizione Assisi 2026
+### Secondo prototipo legacy di iscrizione
 
 I file `iscrizione_assisi.html` e `gas_iscrizione.js` costituiscono un riferimento ancora più vicino al nuovo flusso di iscrizione. Dimostrano già:
 
@@ -647,7 +700,7 @@ Componenti da evolvere nel nuovo frontend:
 - la card `Partecipante` diventa la card configurabile `Biglietto n`;
 - il riepilogo laterale resta sticky su desktop e diventa richiudibile/fisso su mobile;
 - le opzioni Pullman e Pranzo diventano normali `OptionChoices` per-ticket;
-- il template email Assisi diventa uno dei preset dell'editor email;
+- il template email legacy diventa uno dei preset dell'editor email;
 - il blocco del pulsante durante l'invio e il totale live restano comportamenti standard;
 - il blu sobrio, le card bianche e la gerarchia semplice possono ispirare il tema visuale iniziale, con controlli più ampi e maggiore cura tipografica.
 
@@ -706,8 +759,9 @@ Il nuovo ordine viene prima registrato in modo autorevole e riceve un codice uni
 
 - IBAN, link carta esterno e contanti;
 - stati e riconciliazione manuale;
-- caparra e saldo;
-- eventuale Tinaba Pay API, se disponibile contrattualmente.
+- caparra, versamenti intermedi, saldo e rimborsi;
+- rettifiche economiche append-only e ricalcolo prima del saldo;
+- eventuale API merchant, se disponibile contrattualmente.
 
 ### Fase F: collaudo e rilascio
 
@@ -721,7 +775,7 @@ Il nuovo ordine viene prima registrato in modo autorevole e riceve un codice uni
 
 ## 14. Decisioni confermate
 
-- Il sito target è `https://www.parrocchiasanteugenio.it/` e il riferimento evento esaminato è la pagina `cammino-di-santiago-2026`.
+- I riferimenti stilistici pubblici approvati sono elencati separatamente in `docs/RIFERIMENTI_E_LINEE_GUIDA.md` e non vengono usati come fonte di dati o configurazioni operative.
 - WordPress consente il caricamento di plugin ZIP dal computer: il prodotto verrà quindi consegnato come plugin personalizzato installabile.
 - La pagina pubblicata conferma l'approccio precedente: HTML e JavaScript sono inseriti direttamente in WordPress e chiamano un endpoint GAS con `fetch`; il modulo non è ospitato in un iframe GAS.
 - Nel primo rilascio il pagamento carta usa soltanto un link esterno, senza API merchant e senza conferma automatica.
@@ -739,11 +793,15 @@ Il nuovo ordine viene prima registrato in modo autorevole e riceve un codice uni
 - Il plugin carica asset e logica soltanto nelle pagine che usano il modulo e nelle proprie schermate amministrative; sulle altre pagine WordPress deve avere un impatto trascurabile e verificato.
 - Caparra, saldo, link carta e profili di bonifico sono configurabili per evento, con ereditarietà controllata; nessuna coordinata o modalità economica è una costante globale.
 - I versamenti vengono inseriti manualmente in `PaymentIntake` e trasformati in righe canoniche di `Payments`; ogni riga indica obbligatoriamente se la fonte è bonifico/IBAN, carta oppure contante e viene validata prima di aggiornare lo stato dell'ordine.
+- Ogni evento sceglie esplicitamente tra sola iscrizione, prezzo senza gestione dell'incasso, pagamento completo oppure caparra/saldo; gli eventi senza prezzo non mostrano né salvano dati economici.
+- Il modello supporta più versamenti e rettifiche del prezzo prima del saldo senza sovrascrivere il totale originario o la storia dei pagamenti.
+- I campi raccolti sono configurabili per evento: il profilo minimo può essere esteso con moduli come indirizzo, maglietta o logistica, ma ogni estensione richiede finalità e conservazione dichiarate.
+- I fogli Excel reali sono fonti locali di struttura e casi d'uso: non vengono copiati nel repository GitHub e non se ne pubblicano righe, screenshot, nomi file o metadati.
 
 ## 15. Decisioni ancora aperte
 
 1. Quando uno o più biglietti sono considerati confermati: subito dopo l'invio oppure soltanto dopo la verifica manuale del pagamento? Per gli eventi con capienza, per quanto tempo una prenotazione non pagata deve bloccare i posti?
-2. Quali eventi reali useranno pagamento completo, caparra o nessun pagamento, e quali saranno importi e scadenze applicabili?
+2. Quali eventi reali useranno ciascun profilo economico, quali saranno importi e scadenze e chi potrà approvare una rettifica prima del saldo?
 3. Sono previste iscrizioni di minori o raccolta di dati sensibili, come salute, allergie o disabilità?
 4. I volumi reali rientrano nell'inviluppo provvisorio di 500 ordini, 1.000 biglietti e 10 invii simultanei per evento?
 5. È disponibile un account Google Workspace organizzativo? Quale indirizzo deve inviare le email e quali alias sono già verificati?

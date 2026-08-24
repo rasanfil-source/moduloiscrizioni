@@ -85,12 +85,29 @@ I versamenti vengono inseriti manualmente nello stesso spreadsheet che raccoglie
 Ogni inserimento dichiara obbligatoriamente una fonte controllata:
 
 - `BANK_TRANSFER` — Bonifico / IBAN;
-- `EXTERNAL_CARD` — Carta tramite canale esterno;
+- `CARD` — Carta, anche quando l'incasso avviene tramite un link esterno;
 - `CASH` — Contante.
 
-Soltanto le righe convalidate aggiornano `PENDING`, `PARTIALLY_PAID` o `PAID`. Non si memorizzano dati completi della carta. Il canale di audit è `MANUAL_SHEET`; per i contanti sono obbligatori data, importo e operatore.
+Soltanto le righe convalidate aggiornano `PENDING`, `PAID_TO_DATE`, `PARTIALLY_PAID`, `PAID` o `OVERPAID`. Ogni movimento dichiara anche se è incasso, rimborso o storno e, quando nota, la rata `FULL`, `DEPOSIT`, `INTERIM` o `BALANCE`. Non si memorizzano dati completi della carta. Il canale di audit è `MANUAL_SHEET`; per i contanti sono obbligatori data, importo e operatore.
 
 L'accesso diretto allo spreadsheet globale è riservato a operatori finanziari globali, perché comporta visibilità sui dati di tutte le attività. I delegati limitati a una o più attività non ricevono accesso al foglio e operano soltanto nel proprio ambito attraverso WordPress.
+
+### 2.6 Profili economici e raccolta dati
+
+Ogni evento dichiara quattro assi economici indipendenti:
+
+- `pricing_mode`: `NONE`, `ZERO`, `CALCULATED`;
+- `price_finalization`: `NOT_APPLICABLE`, `AT_ORDER`, `POST_ORDER`;
+- `collection_mode`: `NONE`, `NOT_MANAGED`, `TRACKED_MANUAL`, futuro `TRACKED_PROVIDER`;
+- `payment_plan`: `NONE`, `FULL_AMOUNT`, `DEPOSIT_BALANCE`.
+
+Sono quindi supportati senza ambiguità sola iscrizione, prezzo senza incasso gestito, pagamento completo e caparra/saldo con eventuale ricalcolo finale. Le rettifiche sono append-only; ricevute e rimborsi sono movimenti separati e non modificano il prezzo originario.
+
+La raccolta dati usa `data_profile: MINIMAL` oppure `EXTENDED`. Il profilo esteso abilita soltanto moduli espliciti, per esempio `APPAREL`, `POSTAL_ADDRESS` o `LOGISTICS`. Ogni campo dichiara ambito, tipo, finalità, conservazione e capability di visualizzazione. Dati di documenti, minori o categorie particolari restano fuori dai preset ordinari.
+
+### 2.7 Repository pubblico sanitizzato
+
+Fogli reali, esportazioni, dati personali, coordinate bancarie, link di pagamento operativi, credenziali e percorsi locali non entrano nel repository. Le fixture sono completamente sintetiche e marcate come non pubblicabili. Il controllo automatico di sanitizzazione è parte della pipeline GitHub.
 
 ## 3. Default operativi per il prototipo
 
@@ -98,7 +115,9 @@ L'accesso diretto allo spreadsheet globale è riservato a operatori finanziari g
 
 | Caso | Stato iniziale prenotazione | Stato pagamento | Effetto sulla capienza |
 |---|---|---|---|
+| Sola iscrizione | `CONFIRMED` | `NOT_REQUIRED` | posti occupati definitivamente |
 | Evento gratuito | `CONFIRMED` | `NOT_REQUIRED` | posti occupati definitivamente |
+| Prezzo con incasso non gestito | `CONFIRMED` | `NOT_MANAGED` | nessun hold economico |
 | Evento a pagamento | `HELD` | `PENDING` | posti riservati fino alla scadenza |
 | Pagamento dovuto ora verificato | `CONFIRMED` | rata corrente `PAID` | posti occupati definitivamente |
 | Hold scaduto e chiuso dall'operatore, oppure scaduto in modalità automatica | `EXPIRED` | `EXPIRED` | posti rilasciati |
@@ -120,20 +139,13 @@ Con `unpaid_order_expiry_mode: MANUAL`, al raggiungimento delle 72 ore l'ordine 
 
 Si aggiunge `EXPIRED` agli stati della prenotazione, per non confondere una scadenza automatica con un annullamento intenzionale.
 
-### 3.2 Caparra e saldo
+### 3.2 Prezzo, caparra e saldo
 
-Caparra e saldo sono configurabili per singolo evento e non sono regole globali.
+I quattro assi economici sono configurabili per singolo evento e non sono regole globali. Default di Fase A per un evento a pagamento tracciato: `CALCULATED / AT_ORDER / TRACKED_MANUAL / FULL_AMOUNT`.
 
-Default di Fase A per un evento a pagamento: `FULL_AMOUNT`, cioè importo completo dovuto al momento dell'iscrizione.
+Il modello prevede caparra fissa per ordine, fissa per biglietto o percentuale, zero o più versamenti intermedi e saldo con scadenza successiva. `POST_ORDER` mantiene il prezzo `PROVISIONAL`; quando le obbligazioni correnti sono coperte lo stato è `PAID_TO_DATE`, non `PAID`. `PRICE_FINALIZED` e ogni rettifica sono eventi append-only. Un'eccedenza produce `OVERPAID` ed eventuale rimborso separato.
 
-Il modello continua a prevedere:
-
-- caparra fissa per ordine;
-- caparra fissa per biglietto;
-- caparra percentuale;
-- saldo con scadenza successiva.
-
-Tutti gli importi sono interi in centesimi e vengono calcolati dal server sulla revisione pubblicata dell'evento.
+Tutti gli importi sono interi in centesimi e vengono calcolati dal server sulla revisione pubblicata e sugli eventi economici convalidati.
 
 ### 3.3 Minori e dati particolari
 
@@ -144,7 +156,7 @@ Default di Fase A:
 - soli campi anagrafici e di contatto già previsti dal progetto;
 - nessun campo libero destinato implicitamente a raccogliere informazioni sanitarie.
 
-Il modello dei campi resta estensibile, ma queste categorie non vengono abilitate nel prototipo pubblico senza una revisione organizzativa e privacy.
+Il modello dei campi resta estensibile. `MINIMAL` è il default; `EXTENDED` abilita soltanto moduli nominati. Indirizzo, taglia o numero maglietta e logistica possono essere aggiunti con finalità e conservazione esplicite. Documenti di viaggio e categorie particolari non vengono abilitati nel prototipo pubblico senza una revisione organizzativa e privacy.
 
 ### 3.4 Volumi e concorrenza
 
@@ -214,9 +226,11 @@ Le seguenti risposte non bloccano lo sviluppo del prototipo, ma bloccano la pubb
 
 ### 5.2 Regole economiche
 
-- Quali eventi usano saldo completo e quali caparra?
+- Quali eventi usano sola iscrizione, prezzo non gestito, saldo completo oppure caparra?
 - Quando scade l'eventuale saldo?
 - Il pagamento della caparra è sufficiente a confermare definitivamente il posto?
+- Quali eventi consentono `POST_ORDER`, chi finalizza il prezzo e fino a quando?
+- Quali motivi di rettifica sono ammessi e chi può approvarli dopo la finalizzazione?
 
 ### 5.3 Minori e privacy
 
@@ -272,6 +286,8 @@ Nessun dato reale deve essere inserito in fixture, esempi, repository o log.
 | Invio da identità non autorizzata o superamento quote | account organizzativo, alias verificati, coda con retry e monitoraggio |
 | Raccolta impropria di dati di minori o sanitari | campi disattivati per default e gate privacy prima della produzione |
 | Pagamento verso coordinate errate | profili approvati, controllo alla pubblicazione, audit e snapshot nell'ordine |
+| Sovrascrittura di prezzi o pagamenti storici | eventi economici, incassi, rimborsi e storni append-only con idempotenza |
+| Pubblicazione accidentale di dati reali | `.gitignore`, fixture sintetiche, revisione umana e controllo automatico di sanitizzazione |
 
 ## 7. Criterio per non bloccare il prototipo
 
