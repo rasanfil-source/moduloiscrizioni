@@ -820,6 +820,6 @@ Il nuovo ordine viene prima registrato in modo autorevole e riceve un codice uni
 1. Quando uno o più biglietti sono considerati confermati: subito dopo l'invio oppure soltanto dopo la verifica manuale del pagamento? Per gli eventi con capienza, per quanto tempo una prenotazione non pagata deve bloccare i posti?
 2. Quali eventi reali useranno ciascun profilo economico, quali saranno importi e scadenze e chi potrà approvare una rettifica prima del saldo?
 3. Sono previste iscrizioni di minori o raccolta di dati sensibili, come salute, allergie o disabilità?
-4. I volumi reali rientrano nell'inviluppo provvisorio di 500 ordini, 1.000 biglietti e 10 invii simultanei per evento?
+4. Il dimensionamento è confermato: massimo ordinario di tre attività contemporanee da circa 100, 50 e 30 partecipanti, con margine di collaudo fino a 300 persone complessive e 10 invii simultanei.
 5. È disponibile un account Google Workspace organizzativo? Quale indirizzo deve inviare le email e quali alias sono già verificati?
 6. Quali profili bancari reali sono approvati e quali attività o eventi sono autorizzati a usarli?
