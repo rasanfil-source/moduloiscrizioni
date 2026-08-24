@@ -12,7 +12,7 @@ La parrocchia è l'ente base. Ogni attività può avere logo, colori e contatti 
 
 ## Stato
 
-La cartella contiene documentazione, schema dati, prototipo statico e la prima vertical slice locale del plugin WordPress. Il plugin non è ancora installato sul sito e mantiene le email in modalità `PREVIEW`; pagamenti e sincronizzazione Workspace non sono ancora operativi.
+La cartella contiene documentazione, schema dati, prototipo statico e la prima vertical slice del plugin WordPress. La versione `0.1.0` è stata installata e poi lasciata inattiva dopo che il primo collaudo ha rilevato un errore 500 sul frontend. Poiché il sito usa regole `.htaccess` personalizzate e il frontend è tornato disponibile dopo il secondo aggiornamento delle regole, la correzione prudenziale `0.1.1` elimina dal plugin ogni riscrittura non necessaria dei permalink. Le email restano in modalità `PREVIEW`; pagamenti e sincronizzazione Workspace non sono ancora operativi.
 
 - [Progetto funzionale e tecnico](PROGETTO.md)
 - [Decisioni della Fase A](docs/DECISIONI_FASE_A.md)

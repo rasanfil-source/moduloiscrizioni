@@ -7,8 +7,13 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.1\.0/);
+  assert.match(source, /Version:\s+0\.1\.1/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
+});
+
+test('attivazione e disattivazione non riscrivono le regole del sito', async () => {
+  const source = await read('includes/class-mi-activator.php');
+  assert.doesNotMatch(source, /flush_rewrite_rules\s*\(/);
 });
 
 test('la registrazione usa transazione, lock di riga e idempotenza', async () => {

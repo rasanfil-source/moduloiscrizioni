@@ -3,7 +3,7 @@
 Stato: bozza funzionale e tecnica 0.7  
 Data: 24 agosto 2026
 
-Esito Fase A: completata. Fase 2: vertical slice WordPress 0.1.0 implementata localmente, in attesa di collaudo controllato sul sito; nessun invio reale è attivo.
+Esito Fase A: completata. Fase 2: vertical slice WordPress 0.1.1 implementata; la 0.1.0 è stata installata e disattivata durante il primo collaudo dopo un errore 500 sul frontend. Come correzione prudenziale, la 0.1.1 non riscrive le regole `.htaccess` personalizzate del sito e resta da collaudare; nessun invio reale è attivo.
 
 ## Artefatti della Fase A
 

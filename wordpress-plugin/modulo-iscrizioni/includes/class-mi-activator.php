@@ -6,13 +6,9 @@ final class MI_Activator {
 	public static function activate() {
 		self::create_tables();
 		self::add_roles_and_capabilities();
-		MI_Event_Post_Type::register_types();
-		flush_rewrite_rules();
 	}
 
-	public static function deactivate() {
-		flush_rewrite_rules();
-	}
+	public static function deactivate() {}
 
 	private static function create_tables() {
 		global $wpdb;
