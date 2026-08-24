@@ -16,7 +16,7 @@ Plugin WordPress dimostrativo per la Fase 2. Implementa:
 
 ## Limiti intenzionali
 
-Questa versione non invia email, non sincronizza Google Workspace, non gestisce pagamenti e non genera ancora QR/barcode. Il pacchetto 0.2.0 resta un candidato locale finché non viene autorizzato e collaudato sul sito.
+Questa versione non invia email, non sincronizza Google Workspace, non gestisce pagamenti e non genera ancora QR/barcode. Il pacchetto 0.2.0 è installato e collaudato sul sito autorizzato; attività ed evento di prova restano in bozza.
 
 ## Installazione di prova
 

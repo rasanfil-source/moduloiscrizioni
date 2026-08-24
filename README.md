@@ -12,7 +12,7 @@ La parrocchia è l'ente base. Ogni attività può avere logo, colori e contatti 
 
 ## Stato
 
-La versione `0.1.2` è installata e attiva sul sito e ha superato il collaudo di homepage, pagina Santiago, pannello eventi e caricamento condizionale degli asset. La versione `0.2.0` è il candidato locale successivo: aggiunge profili Minimo, Standard e Viaggio, selezione puntuale dei dati dei partecipanti, anteprima amministrativa, validazione server allowlist e migrazione compatibile della tabella partecipanti. Le bozze dell'attività Cammino di Santiago e dell'evento 2027 non sono pubblicate. Email, pagamenti e sincronizzazione Workspace restano non operativi.
+La versione `0.2.0` è installata e attiva sul sito. Il collaudo ha verificato homepage, pagina Santiago, pannello eventi, migrazione compatibile, preset Minimo/Standard/Viaggio, anteprima amministrativa e caricamento condizionale degli asset. La bozza 2027 conserva il profilo Minimo; attività ed evento non sono pubblicati. La versione aggiunge selezione puntuale dei dati dei partecipanti e validazione server allowlist. Email, pagamenti e sincronizzazione Workspace restano non operativi.
 
 - [Progetto funzionale e tecnico](PROGETTO.md)
 - [Decisioni della Fase A](docs/DECISIONI_FASE_A.md)

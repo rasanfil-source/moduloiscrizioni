@@ -3,7 +3,7 @@
 Stato: bozza funzionale e tecnica 0.7  
 Data: 24 agosto 2026
 
-Esito Fase A: completata. Fase 2: vertical slice WordPress 0.1.2 installata e attiva; candidato 0.2.0 predisposto localmente con profili e campi partecipante configurabili. Il collaudo live della 0.1.2 ha verificato homepage, pagina Santiago, pannello eventi, salvataggio delle configurazioni incomplete in bozza e caricamento condizionale degli asset. Il candidato successivo applica allowlist e validazione server ai dati estesi e migra la tabella partecipanti senza sostituire i dati esistenti. Le prime bozze di attività ed evento 2027 esistono nel pannello, ma non è stato pubblicato alcun modulo e nessun invio reale è attivo.
+Esito Fase A: completata. Fase 2: vertical slice WordPress 0.2.0 installata, attiva e collaudata. Sono stati verificati homepage, pagina Santiago, pannello eventi, salvataggio delle bozze, caricamento condizionale degli asset, preset dei dati e migrazione compatibile della tabella partecipanti. I dati estesi usano allowlist e validazione server; la bozza 2027 mantiene il profilo Minimo. Le prime bozze di attività ed evento esistono nel pannello, ma non è stato pubblicato alcun modulo e nessun invio reale è attivo.
 
 ## Artefatti della Fase A
 
