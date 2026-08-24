@@ -1,0 +1,494 @@
+{
+  "schema_version": "1.1.0",
+  "document_type": "EXAMPLE_EVENT_REVISION",
+  "fixture": {
+    "demo_only": true,
+    "publication_blocked": true
+  },
+  "revision": {
+    "event_revision_id": "evrev_demo_summer_2030_0001",
+    "number": 1,
+    "published_at": "2030-01-15T10:00:00Z",
+    "published_by_actor_ref": "wp_user_demo_7",
+    "config_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "dependencies": {
+      "organization_revision": 3,
+      "activity_revision": 5
+    }
+  },
+  "organization": {
+    "organization_id": "org_demo_parish",
+    "type": "PARISH",
+    "revision": 3,
+    "slug": "parrocchia-demo",
+    "legal_name": "Parrocchia Demo",
+    "display_name": "Parrocchia Demo",
+    "status": "ACTIVE",
+    "public_contacts": {
+      "email": "info@example.invalid",
+      "phone": "+39 000 0000000",
+      "website_url": "https://parish.example.invalid"
+    },
+    "legal": {
+      "privacy_url": "https://parish.example.invalid/privacy",
+      "terms_url": "https://parish.example.invalid/terms",
+      "data_controller_name": "Parrocchia Demo"
+    },
+    "branding": {
+      "logo": {
+        "asset_id": "wp_media_demo_1001",
+        "source": "WORDPRESS_MEDIA",
+        "attachment_id": 1001,
+        "url": "https://media.example.invalid/uploads/2030/01/parish-logo.png",
+        "mime_type": "image/png",
+        "alt": "Parrocchia Demo",
+        "width": 512,
+        "height": 512
+      },
+      "primary_color": "#315B7D",
+      "secondary_color": "#17324D"
+    }
+  },
+  "activity": {
+    "activity_id": "act_demo_youth",
+    "organization_id": "org_demo_parish",
+    "revision": 5,
+    "slug": "attivita-giovani-demo",
+    "name": "Attività Giovani Demo",
+    "description": "Attività dimostrativa dedicata ai giovani della parrocchia.",
+    "status": "ACTIVE",
+    "public_contacts": {
+      "email": "youth@example.invalid",
+      "phone": "+39 000 0000001"
+    },
+    "branding": {
+      "logo": {
+        "asset_id": "wp_media_demo_1101",
+        "source": "WORDPRESS_MEDIA",
+        "attachment_id": 1101,
+        "url": "https://media.example.invalid/uploads/2030/01/youth-activity-logo.webp",
+        "mime_type": "image/webp",
+        "alt": "Attività Giovani Demo",
+        "width": 640,
+        "height": 320
+      },
+      "primary_color": "#176B5B"
+    }
+  },
+  "event": {
+    "event_id": "evt_demo_summer_2030",
+    "activity_id": "act_demo_youth",
+    "slug": "campo-estivo-demo-2030",
+    "title": "Campo estivo dimostrativo 2030",
+    "short_description": "Un evento fittizio usato per documentare la configurazione.",
+    "status": "PUBLISHED",
+    "wordpress_page_url": "https://parish.example.invalid/events/campo-estivo-demo-2030",
+    "starts_at": "2030-07-15T08:00:00+02:00",
+    "ends_at": "2030-07-18T18:00:00+02:00",
+    "time_zone": "Europe/Rome",
+    "location": {
+      "name": "Centro Demo",
+      "address": "Via di Esempio 1",
+      "city": "Città Demo",
+      "country": "IT"
+    },
+    "public_contacts": {
+      "email": "registrations@example.invalid",
+      "phone": "+39 000 0000002"
+    },
+    "hero_image": {
+      "asset_id": "wp_media_demo_1201",
+      "source": "WORDPRESS_MEDIA",
+      "attachment_id": 1201,
+      "url": "https://media.example.invalid/uploads/2030/01/summer-event-hero.jpg",
+      "mime_type": "image/jpeg",
+      "alt": "Gruppo dimostrativo all'aperto",
+      "width": 1600,
+      "height": 900
+    },
+    "branding_overrides": {
+      "secondary_color": "#5A3E85"
+    }
+  },
+  "resolved_branding": {
+    "logo": {
+      "asset_id": "wp_media_demo_1101",
+      "source": "WORDPRESS_MEDIA",
+      "attachment_id": 1101,
+      "url": "https://media.example.invalid/uploads/2030/01/youth-activity-logo.webp",
+      "mime_type": "image/webp",
+      "alt": "Attività Giovani Demo",
+      "width": 640,
+      "height": 320
+    },
+    "primary_color": "#176B5B",
+    "secondary_color": "#5A3E85",
+    "sources": {
+      "logo": "activity",
+      "primary_color": "activity",
+      "secondary_color": "event"
+    }
+  },
+  "resolved_public_contacts": {
+    "email": "registrations@example.invalid",
+    "phone": "+39 000 0000002",
+    "sources": {
+      "email": "event",
+      "phone": "event"
+    }
+  },
+  "resolved_email_settings": {
+    "sender_display_name": "Attività Giovani Demo",
+    "reply_to": "registrations@example.invalid",
+    "sources": {
+      "sender_display_name": "activity",
+      "reply_to": "event"
+    }
+  },
+  "resolved_payment_profile": {
+    "payment_profile_id": "payprof_demo_external_card",
+    "revision": 1,
+    "source": "event",
+    "status": "DEMO_ONLY",
+    "publication_blocked": true,
+    "type": "EXTERNAL_CARD_LINK"
+  },
+  "registration": {
+    "opens_at": "2030-02-01T08:00:00+01:00",
+    "closes_at": "2030-06-30T23:59:59+02:00",
+    "capacity": 80,
+    "min_tickets_per_order": 1,
+    "max_tickets_per_order": 5,
+    "sold_out_behavior": "WAITLIST",
+    "waitlist": {
+      "enabled": true,
+      "capacity": 20
+    },
+    "unpaid_order_expiry_minutes": 4320,
+    "unpaid_order_expiry_mode": "MANUAL",
+    "buyer_participation_default": true
+  },
+  "buyer_fields": [
+    {
+      "key": "first_name",
+      "type": "TEXT",
+      "label": "Nome",
+      "required": true,
+      "max_length": 80
+    },
+    {
+      "key": "last_name",
+      "type": "TEXT",
+      "label": "Cognome",
+      "required": true,
+      "max_length": 80
+    },
+    {
+      "key": "email",
+      "type": "EMAIL",
+      "label": "Email",
+      "required": true,
+      "max_length": 254
+    },
+    {
+      "key": "mobile_phone",
+      "type": "PHONE",
+      "label": "Cellulare",
+      "required": true,
+      "max_length": 32
+    }
+  ],
+  "ticket_fields": [
+    {
+      "key": "first_name",
+      "type": "TEXT",
+      "label": "Nome",
+      "required": true,
+      "max_length": 80
+    },
+    {
+      "key": "last_name",
+      "type": "TEXT",
+      "label": "Cognome",
+      "required": true,
+      "max_length": 80
+    },
+    {
+      "key": "email",
+      "type": "EMAIL",
+      "label": "Email",
+      "required": false,
+      "max_length": 254,
+      "help": "Compila se il partecipante può ricevere comunicazioni dirette."
+    },
+    {
+      "key": "mobile_phone",
+      "type": "PHONE",
+      "label": "Cellulare",
+      "required": false,
+      "max_length": 32
+    },
+    {
+      "key": "shirt_size",
+      "type": "SELECT",
+      "label": "Taglia maglietta",
+      "required": false,
+      "choices": ["S", "M", "L", "XL"]
+    }
+  ],
+  "ticket_types": [
+    {
+      "ticket_type_id": "tt_demo_participant",
+      "name": "Partecipante",
+      "description": "Quota individuale dimostrativa.",
+      "price_cents": 7500,
+      "currency": "EUR",
+      "capacity": 70,
+      "min_per_order": 0,
+      "max_per_order": 5,
+      "sort_order": 10,
+      "status": "ACTIVE"
+    },
+    {
+      "ticket_type_id": "tt_demo_companion",
+      "name": "Accompagnatore",
+      "description": "Quota accompagnatore dimostrativa.",
+      "price_cents": 5000,
+      "currency": "EUR",
+      "capacity": 10,
+      "min_per_order": 0,
+      "max_per_order": 2,
+      "sort_order": 20,
+      "status": "ACTIVE"
+    }
+  ],
+  "option_groups": [
+    {
+      "option_group_id": "og_demo_meal",
+      "name": "Pranzo aggiuntivo",
+      "scope": "per_ticket",
+      "control": "single_choice",
+      "required": true,
+      "sort_order": 10,
+      "choices": [
+        {
+          "option_choice_id": "oc_demo_meal_none",
+          "label": "Nessun pranzo aggiuntivo",
+          "price_cents": 0,
+          "currency": "EUR",
+          "status": "ACTIVE"
+        },
+        {
+          "option_choice_id": "oc_demo_meal_standard",
+          "label": "Pranzo standard",
+          "price_cents": 1800,
+          "currency": "EUR",
+          "status": "ACTIVE"
+        }
+      ]
+    },
+    {
+      "option_group_id": "og_demo_transport",
+      "name": "Trasporto dell'ordine",
+      "scope": "per_order",
+      "control": "checkbox",
+      "required": false,
+      "sort_order": 20,
+      "choices": [
+        {
+          "option_choice_id": "oc_demo_transport_bus",
+          "label": "Navetta dimostrativa",
+          "price_cents": 1200,
+          "currency": "EUR",
+          "price_mode": "per_ticket",
+          "status": "ACTIVE"
+        }
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "step": "EVENT_SUMMARY",
+      "title": "Dettagli dell'evento",
+      "intro": "Controlla date, luogo e disponibilità.",
+      "cta_label": "Iscriviti",
+      "show_hero_image": true
+    },
+    {
+      "step": "TICKETS",
+      "title": "Scegli i posti",
+      "intro": "Indica quantità e tipi di biglietto.",
+      "cta_label": "Continua",
+      "show_hero_image": false
+    },
+    {
+      "step": "BUYER",
+      "title": "Dati del referente",
+      "intro": "Inserisci i recapiti della persona che gestisce l'ordine.",
+      "cta_label": "Continua",
+      "show_hero_image": false
+    },
+    {
+      "step": "PARTICIPANTS",
+      "title": "Dati dei partecipanti",
+      "intro": "Completa una scheda per ogni biglietto.",
+      "cta_label": "Continua",
+      "show_hero_image": false
+    },
+    {
+      "step": "REVIEW",
+      "title": "Riepilogo e consensi",
+      "intro": "Verifica i dati prima di inviare.",
+      "cta_label": "Concludi la prenotazione",
+      "show_hero_image": false
+    },
+    {
+      "step": "CONFIRMATION",
+      "title": "Prenotazione registrata",
+      "intro": "Conserva il codice ordine e completa il pagamento.",
+      "cta_label": "Vai al pagamento",
+      "show_hero_image": false
+    }
+  ],
+  "messages": [
+    {
+      "message_id": "msg_demo_preliminary",
+      "placement": "EVENT_SUMMARY",
+      "kind": "INFO",
+      "text": "Questo evento e tutti i relativi dati sono fittizi.",
+      "requires_acceptance": false
+    },
+    {
+      "message_id": "msg_demo_confirmation",
+      "placement": "CONFIRMATION",
+      "kind": "SUCCESS",
+      "text": "La prenotazione è registrata; il pagamento non è ancora confermato.",
+      "requires_acceptance": false
+    }
+  ],
+  "consents": [
+    {
+      "consent_id": "consent_demo_privacy_v1",
+      "kind": "PRIVACY",
+      "version": "1.0",
+      "label": "Dichiaro di aver letto l'informativa privacy.",
+      "document_url": "https://parish.example.invalid/privacy",
+      "required": true,
+      "preselected": false
+    },
+    {
+      "consent_id": "consent_demo_marketing_v1",
+      "kind": "MARKETING",
+      "version": "1.0",
+      "label": "Desidero ricevere comunicazioni facoltative.",
+      "document_url": "https://parish.example.invalid/marketing",
+      "required": false,
+      "preselected": false
+    }
+  ],
+  "payment": {
+    "payment_profile_id": "payprof_demo_external_card",
+    "currency": "EUR",
+    "mode": "FULL_AMOUNT",
+    "amount_due_rule": "ORDER_TOTAL",
+    "manual_recording": {
+      "enabled": true,
+      "intake_sheet": "PaymentIntake",
+      "canonical_sheet": "Payments",
+      "recording_channel": "MANUAL_SHEET",
+      "validation_mode": "EXPLICIT_OR_INSTALLABLE_TRIGGER",
+      "allowed_sources": [
+        "EXTERNAL_CARD",
+        "CASH"
+      ]
+    },
+    "methods": [
+      {
+        "payment_method_id": "pm_demo_external_card",
+        "type": "EXTERNAL_CARD_LINK",
+        "enabled": true,
+        "url": "https://payments.example.invalid/demo-checkout",
+        "reference_template": "{{order.code}}",
+        "manual_reconciliation": true,
+        "open_in_new_tab": true
+      },
+      {
+        "payment_method_id": "pm_demo_cash",
+        "type": "CASH",
+        "enabled": true,
+        "instructions": "Pagamento dimostrativo di persona; nessun incasso viene effettuato da questa fixture.",
+        "manual_reconciliation": true,
+        "open_in_new_tab": false
+      }
+    ]
+  },
+  "email_templates": [
+    {
+      "email_template_id": "email_demo_order_received_v1",
+      "type": "ORDER_RECEIVED",
+      "version": 1,
+      "enabled": true,
+      "sender_display_name": "Attività Giovani Demo",
+      "reply_to": "registrations@example.invalid",
+      "subject": "Prenotazione ricevuta — {{event.title}}",
+      "preheader": "Codice {{order.code}}",
+      "body_html": "<h1>{{event.title}}</h1><p>{{event.start_date}} · {{event.location}}</p><p>La prenotazione <strong>{{order.code}}</strong> è stata registrata con stato {{order.status}} per il referente {{buyer.full_name}}.</p>{{order.summary_table}}<p>Totale: {{order.total}}. Importo dovuto: {{payment.amount_due}}.</p>{{payment.instructions_html}}<p>Scadenza: {{payment.deadline}}. Causale/riferimento: {{payment.reference}}.</p>{{event.final_notices_html}}<p>Contatti: {{event.public_contact}}.</p><p><a href=\"{{legal.privacy_url}}\">Privacy</a> · <a href=\"{{legal.terms_url}}\">Condizioni</a></p>",
+      "body_text": "{{event.title}} — {{event.start_date}}, {{event.location}}. Prenotazione {{order.code}}, stato {{order.status}}, referente {{buyer.full_name}}. {{order.summary_text}} Totale: {{order.total}}. Importo dovuto: {{payment.amount_due}}. Istruzioni: {{payment.instructions_text}}. Scadenza: {{payment.deadline}}. Causale/riferimento: {{payment.reference}}. {{event.final_notices_text}} Contatti: {{event.public_contact}}. Privacy: {{legal.privacy_url}}. Condizioni: {{legal.terms_url}}."
+    },
+    {
+      "email_template_id": "email_demo_internal_v1",
+      "type": "INTERNAL_NOTIFICATION",
+      "version": 1,
+      "enabled": true,
+      "sender_display_name": "Attività Giovani Demo",
+      "reply_to": "registrations@example.invalid",
+      "subject": "Nuova prenotazione — {{event.title}}",
+      "preheader": "Ordine {{order.code}}",
+      "body_html": "<p>È stato registrato l'ordine <strong>{{order.code}}</strong>.</p>",
+      "body_text": "È stato registrato l'ordine {{order.code}}."
+    }
+  ],
+  "internal_notifications": {
+    "enabled": true,
+    "recipients": ["staff@example.invalid"],
+    "template_id": "email_demo_internal_v1"
+  },
+  "public_projection": {
+    "strategy": "ALLOWLIST",
+    "include": [
+      "schema_version",
+      "revision.event_revision_id",
+      "revision.number",
+      "organization.organization_id",
+      "organization.display_name",
+      "activity.activity_id",
+      "activity.name",
+      "event.event_id",
+      "event.activity_id",
+      "event.slug",
+      "event.title",
+      "event.short_description",
+      "event.status",
+      "event.wordpress_page_url",
+      "event.starts_at",
+      "event.ends_at",
+      "event.time_zone",
+      "event.location",
+      "event.hero_image",
+      "resolved_branding",
+      "resolved_public_contacts",
+      "registration",
+      "buyer_fields",
+      "ticket_fields",
+      "ticket_types",
+      "option_groups",
+      "screens",
+      "messages",
+      "consents",
+      "payment.currency",
+      "payment.mode",
+      "payment.amount_due_rule",
+      "payment.methods"
+    ]
+  }
+}

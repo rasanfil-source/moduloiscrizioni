@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="120" viewBox="0 0 420 120" role="img" aria-labelledby="title description">
+  <title id="title">Logo dimostrativo di Pellegrinaggi e Cammini</title>
+  <desc id="description">Un sentiero blu tra due colline accanto al nome dell'attività.</desc>
+  <rect width="420" height="120" rx="18" fill="#f7fbff"/>
+  <circle cx="58" cy="39" r="16" fill="#f4bb55"/>
+  <path d="M12 84c24-39 49-39 73 0 16-24 34-30 55 0" fill="#dceefa" stroke="#337ab7" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M76 106c-4-19 0-39 15-59" fill="none" stroke="#285f8f" stroke-width="7" stroke-linecap="round"/>
+  <text x="164" y="51" fill="#285f8f" font-family="Georgia, serif" font-size="24" font-weight="700">Pellegrinaggi</text>
+  <text x="164" y="83" fill="#337ab7" font-family="Arial, sans-serif" font-size="24" font-weight="700">e Cammini</text>
+</svg>

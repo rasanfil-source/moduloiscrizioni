@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Prototipo iscrizioni multi-attività</title>
+  <link rel="stylesheet" href="assets/css/demo-shell.css">
+  <link rel="stylesheet" href="assets/css/wizard.css">
+  <script defer src="assets/js/demo-config.js"></script>
+  <script defer src="assets/js/app.js"></script>
+</head>
+<body>
+  <header class="se-demo-header">
+    <div class="se-demo-header__inner">
+      <div>
+        <p class="se-demo-header__title">Prototipo Fase A · Modulo iscrizioni</p>
+        <p class="se-demo-header__note">Dati, loghi, disponibilità e pagamenti sono simulati.</p>
+      </div>
+
+      <div class="se-demo-control">
+        <label for="demoBrandMode">Scenario tecnico del logo</label>
+        <select id="demoBrandMode" aria-describedby="demoBrandDescription">
+          <option value="activity">Logo attività (ereditato)</option>
+          <option value="event">Logo evento (override)</option>
+          <option value="parish">Logo parrocchia (fallback)</option>
+        </select>
+        <span id="demoBrandDescription" class="se-demo-header__note">L'evento usa il logo dell'attività.</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="se-demo-main">
+    <p class="se-demo-disclaimer">
+      <strong>Solo prototipo:</strong> nessun dato viene inviato o salvato e nessun pagamento viene avviato.
+    </p>
+
+    <noscript>
+      <p class="se-demo-disclaimer">Per navigare il prototipo è necessario attivare JavaScript.</p>
+    </noscript>
+
+    <div id="seBooking" class="se-booking" data-current-step="1">
+      <div class="se-booking__surface">
+        <header class="se-booking__brand-bar">
+          <div class="se-booking__brand-lockup">
+            <img
+              id="brandLogo"
+              class="se-booking__brand-logo"
+              src="assets/img/logo-attivita.svg"
+              alt="Logo dimostrativo di Pellegrinaggi e Cammini"
+              width="420"
+              height="120"
+            >
+            <div class="se-booking__brand-copy">
+              <p id="brandName" class="se-booking__brand-name">Pellegrinaggi e Cammini</p>
+              <p id="brandSource" class="se-booking__brand-source">Logo ereditato dall'attività</p>
+            </div>
+          </div>
+
+          <p class="se-booking__organizer">
+            Organizzato da <strong id="organizerActivity">Pellegrinaggi e Cammini</strong>
+            · <strong id="organizerParish">Parrocchia Sant'Eugenio</strong>
+          </p>
+        </header>
+
+        <nav class="se-booking__progress-wrap" aria-label="Avanzamento dell'iscrizione">
+          <p id="mobileProgressText" class="se-booking__progress-mobile">Passaggio 1 di 6 — Evento</p>
+          <div
+            class="se-booking__progress-track"
+            role="progressbar"
+            aria-label="Avanzamento"
+            aria-valuemin="1"
+            aria-valuemax="6"
+            aria-valuenow="1"
+            aria-valuetext="Passaggio 1 di 6: Evento"
+          >
+            <span class="se-booking__progress-value"></span>
+          </div>
+
+          <ol class="se-booking__stepper">
+            <li class="se-booking__stepper-item" data-stepper-item="1" aria-current="step">
+              <span class="se-booking__stepper-number">1</span>
+              <span class="se-booking__stepper-label">Evento</span>
+            </li>
+            <li class="se-booking__stepper-item" data-stepper-item="2">
+              <span class="se-booking__stepper-number">2</span>
+              <span class="se-booking__stepper-label">Biglietti</span>
+            </li>
+            <li class="se-booking__stepper-item" data-stepper-item="3">
+              <span class="se-booking__stepper-number">3</span>
+              <span class="se-booking__stepper-label">Referente</span>
+            </li>
+            <li class="se-booking__stepper-item" data-stepper-item="4">
+              <span class="se-booking__stepper-number">4</span>
+              <span class="se-booking__stepper-label">Partecipanti</span>
+            </li>
+            <li class="se-booking__stepper-item" data-stepper-item="5">
+              <span class="se-booking__stepper-number">5</span>
+              <span class="se-booking__stepper-label">Riepilogo</span>
+            </li>
+            <li class="se-booking__stepper-item" data-stepper-item="6">
+              <span class="se-booking__stepper-number">6</span>
+              <span class="se-booking__stepper-label">Conferma</span>
+            </li>
+          </ol>
+        </nav>
+
+        <form id="bookingForm" class="se-booking__form" novalidate>
+          <div id="bookingLayout" class="se-booking__layout">
+            <div class="se-booking__main">
+              <div id="errorSummary" class="se-booking__error-summary" role="alert" tabindex="-1" hidden>
+                <p class="se-booking__error-summary-title">Controlla i campi indicati.</p>
+                <ul id="errorSummaryList" class="se-booking__error-summary-list"></ul>
+              </div>
+
+              <section class="se-booking__step" data-step="1" aria-labelledby="step1Title">
+                <div class="se-booking__hero">
+                  <div class="se-booking__hero-media">
+                    <img
+                      id="eventHero"
+                      class="se-booking__hero-image"
+                      src="assets/img/hero-cammino.svg"
+                      alt="Illustrazione dimostrativa di un sentiero tra colline diretto verso Santiago"
+                      width="1600"
+                      height="900"
+                    >
+                  </div>
+                  <div class="se-booking__hero-copy">
+                    <p class="se-booking__eyebrow">Iscrizione all'evento</p>
+                    <h1 id="step1Title" class="se-booking__title" data-step-title tabindex="-1">Cammino di Santiago 2027</h1>
+                    <p id="eventSubtitle" class="se-booking__event-subtitle">Cammino Portoghese da Tui a Santiago</p>
+                    <ul class="se-booking__meta-list">
+                      <li class="se-booking__meta-item">
+                        <span class="se-booking__meta-icon" aria-hidden="true">▣</span>
+                        <span id="eventDates">23–30 maggio 2027</span>
+                      </li>
+                      <li class="se-booking__meta-item">
+                        <span class="se-booking__meta-icon" aria-hidden="true">◇</span>
+                        <span id="eventLocation">Tui → Santiago de Compostela, Spagna</span>
+                      </li>
+                    </ul>
+                    <span id="eventAvailability" class="se-booking__status-pill">
+                      <span aria-hidden="true">✓</span>
+                      Iscrizioni aperte · 12 posti disponibili
+                    </span>
+                  </div>
+                </div>
+
+                <p id="eventDescription" class="se-booking__lead">
+                  Otto giorni di cammino, fraternità e scoperta lungo gli ultimi chilometri del Cammino Portoghese.
+                </p>
+                <p id="eventNotice" class="se-booking__notice">
+                  Porta con te un documento valido per l'espatrio. Programma, prezzi e disponibilità di questo prototipo sono puramente dimostrativi.
+                </p>
+
+                <div class="se-booking__actions">
+                  <button class="se-booking__button se-booking__button--secondary" type="button" data-demo-return>
+                    Torna all'evento
+                  </button>
+                  <button class="se-booking__button se-booking__button--primary" type="button" data-next-step>
+                    Iscriviti
+                  </button>
+                </div>
+              </section>
+
+              <section class="se-booking__step" data-step="2" aria-labelledby="step2Title" hidden>
+                <p class="se-booking__eyebrow">Posti e quote</p>
+                <h2 id="step2Title" class="se-booking__section-title" data-step-title tabindex="-1">Quante persone vuoi iscrivere?</h2>
+                <p class="se-booking__lead">Scegli una quota per ogni posto. Puoi iscrivere da 1 a 6 persone nello stesso ordine.</p>
+
+                <div id="ticketList" class="se-booking__ticket-list"></div>
+                <p id="ticketGroupError" class="se-booking__field-error" data-visible="false"></p>
+
+                <div class="se-booking__actions">
+                  <button class="se-booking__button se-booking__button--ghost" type="button" data-previous-step>Indietro</button>
+                  <button class="se-booking__button se-booking__button--primary" type="button" data-next-step>Continua</button>
+                </div>
+              </section>
+
+              <section class="se-booking__step" data-step="3" aria-labelledby="step3Title" hidden>
+                <p class="se-booking__eyebrow">Referente dell'ordine</p>
+                <h2 id="step3Title" class="se-booking__section-title" data-step-title tabindex="-1">Chi gestisce la prenotazione?</h2>
+                <p class="se-booking__lead">Invieremo a questa persona il riepilogo completo e le comunicazioni sull'ordine.</p>
+
+                <div class="se-booking__form-grid">
+                  <div class="se-booking__field">
+                    <label class="se-booking__label" for="buyerFirstName">Nome <span class="se-booking__required-note">(obbligatorio)</span></label>
+                    <input class="se-booking__input" id="buyerFirstName" name="buyerFirstName" type="text" autocomplete="given-name" maxlength="80" required>
+                    <p id="buyerFirstNameError" class="se-booking__field-error" data-visible="false"></p>
+                  </div>
+                  <div class="se-booking__field">
+                    <label class="se-booking__label" for="buyerLastName">Cognome <span class="se-booking__required-note">(obbligatorio)</span></label>
+                    <input class="se-booking__input" id="buyerLastName" name="buyerLastName" type="text" autocomplete="family-name" maxlength="80" required>
+                    <p id="buyerLastNameError" class="se-booking__field-error" data-visible="false"></p>
+                  </div>
+                  <div class="se-booking__field">
+                    <label class="se-booking__label" for="buyerEmail">Email <span class="se-booking__required-note">(obbligatoria)</span></label>
+                    <input class="se-booking__input" id="buyerEmail" name="buyerEmail" type="email" autocomplete="email" inputmode="email" maxlength="160" aria-describedby="buyerEmailHelp" required>
+                    <p id="buyerEmailHelp" class="se-booking__field-help">Useremo questo indirizzo per il riepilogo dell'ordine.</p>
+                    <p id="buyerEmailError" class="se-booking__field-error" data-visible="false"></p>
+                  </div>
+                  <div class="se-booking__field">
+                    <label class="se-booking__label" for="buyerPhone">Cellulare <span class="se-booking__required-note">(obbligatorio)</span></label>
+                    <input class="se-booking__input" id="buyerPhone" name="buyerPhone" type="tel" autocomplete="tel" inputmode="tel" maxlength="30" placeholder="+39 333 123 4567" aria-describedby="buyerPhoneHelp" required>
+                    <p id="buyerPhoneHelp" class="se-booking__field-help">Includi il prefisso internazionale, per esempio +39.</p>
+                    <p id="buyerPhoneError" class="se-booking__field-error" data-visible="false"></p>
+                  </div>
+                  <div class="se-booking__field se-booking__field--wide">
+                    <label class="se-booking__check-row" for="buyerParticipates">
+                      <input id="buyerParticipates" name="buyerParticipates" type="checkbox" checked>
+                      <span class="se-booking__check-copy">
+                        <span class="se-booking__check-title">Il referente partecipa</span>
+                        <span class="se-booking__field-help">Precompileremo il primo biglietto, che resterà comunque separato dal referente.</span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="se-booking__actions">
+                  <button class="se-booking__button se-booking__button--ghost" type="button" data-previous-step>Indietro</button>
+                  <button class="se-booking__button se-booking__button--primary" type="button" data-next-step>Continua</button>
+                </div>
+              </section>
+
+              <section class="se-booking__step" data-step="4" aria-labelledby="step4Title" hidden>
+                <p class="se-booking__eyebrow">Dati dei biglietti</p>
+                <h2 id="step4Title" class="se-booking__section-title" data-step-title tabindex="-1">Chi parteciperà?</h2>
+                <p class="se-booking__lead">Nome e cognome sono obbligatori. I contatti individuali sono facoltativi.</p>
+
+                <div id="participantList" class="se-booking__participant-list"></div>
+
+                <div class="se-booking__actions">
+                  <button class="se-booking__button se-booking__button--ghost" type="button" data-previous-step>Indietro</button>
+                  <button class="se-booking__button se-booking__button--primary" type="button" data-next-step>Continua</button>
+                </div>
+              </section>
+
+              <section class="se-booking__step" data-step="5" aria-labelledby="step5Title" hidden>
+                <p class="se-booking__eyebrow">Opzioni e consensi</p>
+                <h2 id="step5Title" class="se-booking__section-title" data-step-title tabindex="-1">Controlla e concludi</h2>
+                <p class="se-booking__lead">Aggiungi eventuali opzioni, verifica il riepilogo e conferma le accettazioni obbligatorie.</p>
+
+                <div id="optionGroups" class="se-booking__option-groups"></div>
+                <div id="reviewGrid" class="se-booking__review-grid"></div>
+
+                <div class="se-booking__consents">
+                  <div class="se-booking__field">
+                    <label class="se-booking__check-row" for="privacyConsent">
+                      <input id="privacyConsent" name="privacyConsent" type="checkbox" required>
+                      <span class="se-booking__check-copy">
+                        <span class="se-booking__check-title">Accetto l'informativa privacy e le condizioni dell'evento <span class="se-booking__required-note">(obbligatorio)</span></span>
+                        <span class="se-booking__field-help">Consulta la <a class="se-booking__consent-link" href="#informativaDemo">sintesi dimostrativa</a>.</span>
+                      </span>
+                    </label>
+                    <p id="privacyConsentError" class="se-booking__field-error" data-visible="false"></p>
+                  </div>
+
+                  <div class="se-booking__field">
+                    <label class="se-booking__check-row" for="marketingConsent">
+                      <input id="marketingConsent" name="marketingConsent" type="checkbox">
+                      <span class="se-booking__check-copy">
+                        <span class="se-booking__check-title">Desidero ricevere notizie sulle prossime attività <span class="se-booking__required-note">(facoltativo)</span></span>
+                        <span class="se-booking__field-help">Questa scelta è separata e non è preselezionata.</span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                <p id="informativaDemo" class="se-booking__notice">
+                  Sintesi dimostrativa: in produzione qui saranno disponibili informativa, condizioni e relative versioni pubblicate.
+                </p>
+
+                <div class="se-booking__actions">
+                  <button class="se-booking__button se-booking__button--ghost" type="button" data-previous-step>Indietro</button>
+                  <button id="submitBooking" class="se-booking__button se-booking__button--primary" type="submit">
+                    Concludi la prenotazione
+                  </button>
+                </div>
+              </section>
+
+              <section class="se-booking__step se-booking__confirmation" data-step="6" aria-labelledby="step6Title" hidden>
+                <span class="se-booking__confirmation-mark" aria-hidden="true">✓</span>
+                <p class="se-booking__eyebrow">Passaggio completato</p>
+                <h2 id="step6Title" class="se-booking__section-title" data-step-title tabindex="-1">Prenotazione registrata</h2>
+                <p class="se-booking__lead">La registrazione e il pagamento hanno stati distinti. Conserva il codice per ogni comunicazione.</p>
+
+                <div class="se-booking__status-grid">
+                  <div class="se-booking__state-card se-booking__state-card--booking">
+                    <span class="se-booking__state-label">Prenotazione</span>
+                    <span id="confirmationBookingStatus" class="se-booking__state-value">Registrata</span>
+                  </div>
+                  <div class="se-booking__state-card se-booking__state-card--payment">
+                    <span class="se-booking__state-label">Pagamento</span>
+                    <span id="confirmationPaymentStatus" class="se-booking__state-value">In attesa di verifica</span>
+                  </div>
+                </div>
+
+                <div class="se-booking__booking-code">
+                  <div>
+                    <span class="se-booking__booking-code-label">Codice prenotazione</span>
+                    <strong id="confirmationCode" class="se-booking__booking-code-value">CS27-K4M8Q2</strong>
+                  </div>
+                  <button id="copyBookingCode" class="se-booking__button se-booking__button--secondary" type="button">Copia codice</button>
+                </div>
+
+                <div class="se-booking__confirmation-summary">
+                  <h3 class="se-booking__card-title">Importi dimostrativi</h3>
+                  <ul class="se-booking__confirmation-list">
+                    <li><span>Totale ordine</span><strong id="confirmationTotal">€ 0,00</strong></li>
+                    <li><span>Da versare ora</span><strong id="confirmationDue">€ 0,00</strong></li>
+                    <li><span>Saldo successivo</span><strong id="confirmationBalance">€ 0,00</strong></li>
+                  </ul>
+                </div>
+
+                <div id="confirmationDetails" class="se-booking__review-grid" aria-label="Dettagli della prenotazione"></div>
+
+                <div class="se-booking__payment-grid">
+                  <article class="se-booking__payment-card">
+                    <h3 class="se-booking__card-title">Bonifico</h3>
+                    <p>Le coordinate reali non sono incluse nella demo. In produzione proverranno dalla configurazione protetta dell'evento.</p>
+                    <button class="se-booking__button se-booking__button--secondary" type="button" data-demo-payment="bank">Mostra istruzioni demo</button>
+                  </article>
+                  <article class="se-booking__payment-card">
+                    <h3 class="se-booking__card-title">Carta su pagina esterna</h3>
+                    <p>L'apertura della pagina non rende il pagamento automaticamente confermato.</p>
+                    <button class="se-booking__button se-booking__button--primary" type="button" data-demo-payment="card">Simula apertura carta</button>
+                  </article>
+                  <article class="se-booking__payment-card">
+                    <h3 class="se-booking__card-title">Contanti</h3>
+                    <p>La consegna viene registrata manualmente da un operatore e resta separata dalla prenotazione.</p>
+                    <button class="se-booking__button se-booking__button--secondary" type="button" data-demo-payment="cash">Mostra procedura demo</button>
+                  </article>
+                </div>
+
+                <p id="paymentDemoMessage" class="se-booking__notice" tabindex="-1" hidden></p>
+
+                <p class="se-booking__email-state"><strong>Email riepilogativa:</strong> simulata; nessun messaggio è stato inviato.</p>
+
+                <div class="se-booking__actions">
+                  <button class="se-booking__button se-booking__button--secondary" type="button" data-restart-demo>Ricomincia la demo</button>
+                </div>
+              </section>
+            </div>
+
+            <aside id="orderSummary" class="se-booking__summary" aria-labelledby="summaryTitle">
+              <div id="summaryPanel" class="se-booking__summary-panel">
+                <h2 id="summaryTitle" class="se-booking__summary-title">Riepilogo ordine</h2>
+                <ul id="summaryLines" class="se-booking__summary-lines"></ul>
+                <div class="se-booking__summary-total">
+                  <span>Totale</span>
+                  <span id="summaryTotal">€ 0,00</span>
+                </div>
+                <div class="se-booking__summary-due">
+                  <span>Da versare ora</span>
+                  <span id="summaryDue">€ 0,00</span>
+                </div>
+                <p class="se-booking__summary-note">Anteprima dimostrativa: in produzione il server ricalcolerà sempre prezzi e disponibilità.</p>
+              </div>
+            </aside>
+          </div>
+
+          <div id="mobileBar" class="se-booking__mobile-bar" hidden>
+            <button
+              id="mobileSummaryToggle"
+              class="se-booking__mobile-total-button"
+              type="button"
+              aria-expanded="false"
+              aria-controls="summaryPanel"
+            >
+              <span class="se-booking__mobile-total-label">Totale · apri riepilogo</span>
+              <span id="mobileTotal" class="se-booking__mobile-total-value">€ 0,00</span>
+            </button>
+            <button id="mobileNextButton" class="se-booking__button se-booking__button--primary se-booking__mobile-next" type="button">Iscriviti</button>
+          </div>
+        </form>
+
+        <div id="bookingLiveRegion" class="se-booking__live-region se-booking__sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,111 @@
+/*
+ * Solo involucro della demo standalone.
+ * Questo file non fa parte degli stili incorporabili nel plugin WordPress.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  color: #1f2937;
+  background: #eef2f6;
+  font-family: "Open Sans", Arial, sans-serif;
+}
+
+body.se-demo-is-locked {
+  overflow: hidden;
+}
+
+.se-demo-header {
+  padding: 14px clamp(12px, 3vw, 32px);
+  color: #263442;
+  background: #ffffff;
+  border-bottom: 1px solid #d7dee7;
+}
+
+.se-demo-header__inner {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  justify-content: space-between;
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
+
+.se-demo-header__title {
+  margin: 0;
+  font-family: "Roboto Slab", Georgia, serif;
+  font-size: clamp(1rem, 2vw, 1.25rem);
+}
+
+.se-demo-header__note {
+  margin: 3px 0 0;
+  color: #586575;
+  font-size: 0.83rem;
+}
+
+.se-demo-control {
+  display: grid;
+  min-width: min(330px, 100%);
+  gap: 4px;
+}
+
+.se-demo-control label {
+  color: #3c4857;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.se-demo-control select {
+  min-height: 44px;
+  padding: 8px 36px 8px 12px;
+  color: #1f2937;
+  background: #ffffff;
+  border: 1px solid #98a5b5;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.se-demo-control select:focus-visible {
+  outline: 3px solid #0b67b2;
+  outline-offset: 2px;
+}
+
+.se-demo-main {
+  padding: clamp(12px, 3vw, 32px);
+}
+
+.se-demo-disclaimer {
+  width: min(1160px, 100%);
+  margin: 0 auto 12px;
+  padding: 10px 14px;
+  color: #5f3d00;
+  background: #fff6dd;
+  border: 1px solid #e6c778;
+  border-radius: 10px;
+  font-size: 0.88rem;
+}
+
+@media (max-width: 700px) {
+  .se-demo-header__inner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .se-demo-control {
+    min-width: 0;
+  }
+
+  .se-demo-main {
+    padding-inline: 8px;
+    padding-bottom: 110px;
+  }
+}
