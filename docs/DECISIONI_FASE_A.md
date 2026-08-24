@@ -323,3 +323,14 @@ La Fase A può procedere con:
 - pannello soltanto in `wp-admin`.
 
 Il passaggio in produzione richiede la chiusura esplicita delle conferme elencate nella sezione 5 e il superamento dei test di sicurezza, concorrenza, accessibilità e isolamento dal resto del sito.
+
+## 8. Autorizzazione all'avvio della Fase 2
+
+La Fase 2 può iniziare. Sono disponibili:
+
+- una bozza WordPress vuota e non pubblicata destinata alla console dimostrativa;
+- un account amministrativo capace di installare plugin, da usare soltanto dopo collaudo locale e conferma immediata prima dell'installazione;
+- un account Google Workspace organizzativo con esperienza GAS preesistente;
+- un primo scenario approvato: evento fittizio, 30 posti, waitlist attiva, sola iscrizione, profilo `MINIMAL` ed email simulate.
+
+Il repository pubblico non conserva URL amministrativi, ID WordPress, indirizzi operativi, deployment GAS o identificativi di Workspace. Il primo incremento viene sviluppato localmente e usa soltanto fixture sintetiche.

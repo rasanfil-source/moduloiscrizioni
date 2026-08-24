@@ -3,6 +3,8 @@
 Stato: bozza funzionale e tecnica 0.7  
 Data: 24 agosto 2026
 
+Esito Fase A: completata. La Fase 2 può iniziare con una vertical slice dimostrativa, senza dati o invii reali.
+
 ## Artefatti della Fase A
 
 - [Decisioni operative](docs/DECISIONI_FASE_A.md)
@@ -821,5 +823,5 @@ Il nuovo ordine viene prima registrato in modo autorevole e riceve un codice uni
 2. Quali eventi reali useranno ciascun profilo economico, quali saranno importi e scadenze e chi potrà approvare una rettifica prima del saldo?
 3. Sono previste iscrizioni di minori o raccolta di dati sensibili, come salute, allergie o disabilità?
 4. Il dimensionamento è confermato: massimo ordinario di tre attività contemporanee da circa 100, 50 e 30 partecipanti, con margine di collaudo fino a 300 persone complessive e 10 invii simultanei.
-5. È disponibile un account Google Workspace organizzativo? Quale indirizzo deve inviare le email e quali alias sono già verificati?
+5. È disponibile un account Google Workspace organizzativo con progetti GAS già attivi. Indirizzo tecnico, alias e destinatari restano in configurazione privata; prima degli invii reali devono essere verificati identità mittente e quote.
 6. Quali profili bancari reali sono approvati e quali attività o eventi sono autorizzati a usarli?
