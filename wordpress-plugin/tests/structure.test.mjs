@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.4\.0/);
+  assert.match(source, /Version:\s+0\.4\.1/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -178,4 +178,15 @@ test('la gestione economica distingue i quattro casi senza attivare riscossioni'
   assert.match(eventType, /CASH/);
   assert.match(service, /deposit_percentage/);
   assert.doesNotMatch(eventType, /IBAN|numero della carta|payment_url/i);
+});
+
+test('la pubblicazione richiede una configurazione economica coerente', async () => {
+  const admin = await read('includes/class-mi-admin.php');
+  const script = await read('assets/admin.js');
+  assert.match(admin, /valid_economic/);
+  assert.match(admin, /CALCULATED/);
+  assert.match(admin, /payment_methods/);
+  assert.match(script, /aggiornaConfigurazioneEconomica/);
+  assert.match(script, /setCustomValidity/);
+  assert.match(script, /data-mi-economic-payments/);
 });

@@ -271,7 +271,14 @@ final class MI_Admin {
 		$closes = isset( $_POST['mi_registration_closes_at'] ) ? sanitize_text_field( wp_unslash( $_POST['mi_registration_closes_at'] ) ) : '';
 		$valid_dates = preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $opens ) && preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $closes ) && $closes > $opens;
 		$has_ticket = ! empty( $_POST['mi_ticket_code'][0] ) && ! empty( $_POST['mi_ticket_name'][0] );
-		if ( ! $activity_id || MI_Event_Post_Type::ACTIVITY_TYPE !== get_post_type( $activity_id ) || ! $valid_dates || ! $has_ticket ) {
+		$economic_mode = isset( $_POST['mi_economic_mode'] ) ? strtoupper( sanitize_key( wp_unslash( $_POST['mi_economic_mode'] ) ) ) : 'REGISTRATION_ONLY';
+		$pricing_mode = isset( $_POST['mi_pricing_mode'] ) ? strtoupper( sanitize_key( wp_unslash( $_POST['mi_pricing_mode'] ) ) ) : 'NONE';
+		$prices = isset( $_POST['mi_ticket_price'] ) ? array_map( 'floatval', (array) wp_unslash( $_POST['mi_ticket_price'] ) ) : array();
+		$payment_methods = isset( $_POST['mi_payment_methods'] ) ? (array) wp_unslash( $_POST['mi_payment_methods'] ) : array();
+		$uses_price = in_array( $economic_mode, array( 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
+		$collects_payment = in_array( $economic_mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
+		$valid_economic = ( ! $uses_price || ( 'CALCULATED' === $pricing_mode && max( array_merge( array( 0 ), $prices ) ) > 0 ) ) && ( ! $collects_payment || ! empty( $payment_methods ) );
+		if ( ! $activity_id || MI_Event_Post_Type::ACTIVITY_TYPE !== get_post_type( $activity_id ) || ! $valid_dates || ! $has_ticket || ! $valid_economic ) {
 			$data['post_status'] = 'draft';
 			set_transient( 'mi_publication_error_' . get_current_user_id(), '1', MINUTE_IN_SECONDS );
 		}
@@ -282,7 +289,7 @@ final class MI_Admin {
 		$key = 'mi_publication_error_' . get_current_user_id();
 		if ( get_transient( $key ) ) {
 			delete_transient( $key );
-			echo '<div class="notice notice-error"><p>Evento mantenuto in bozza: completa attività, date valide e almeno una tipologia di iscrizione.</p></div>';
+			echo '<div class="notice notice-error"><p>Evento mantenuto in bozza: completa attività, date, tipologie e configurazione economica coerente.</p></div>';
 		}
 		$screen = get_current_screen();
 		if ( $screen && in_array( $screen->post_type, array( MI_Event_Post_Type::EVENT_TYPE, MI_Event_Post_Type::ACTIVITY_TYPE ), true ) ) {

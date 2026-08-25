@@ -75,6 +75,27 @@
     aggiornaAnteprimaEmail();
   }
 
+  const modalitaEconomica = document.getElementById('mi_economic_mode');
+  const modalitaPrezzo = document.getElementById('mi_pricing_mode');
+  const riquadroCaparra = document.querySelector('[data-mi-economic-deposit]');
+  const riquadroPagamenti = document.querySelector('[data-mi-economic-payments]');
+  const aiutoEconomico = document.querySelector('[data-mi-economic-help]');
+  if (modalitaEconomica && modalitaPrezzo && riquadroCaparra && riquadroPagamenti && aiutoEconomico) {
+    const aggiornaConfigurazioneEconomica = () => {
+      const modalita = modalitaEconomica.value;
+      const usaPrezzo = ['PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(modalita);
+      const incassa = ['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(modalita);
+      riquadroCaparra.hidden = modalita !== 'DEPOSIT_BALANCE';
+      riquadroPagamenti.hidden = !incassa;
+      Array.from(riquadroPagamenti.querySelectorAll('input')).forEach((campo) => { campo.disabled = !incassa; });
+      modalitaPrezzo.setCustomValidity(usaPrezzo && modalitaPrezzo.value !== 'CALCULATED' ? 'Seleziona “Calcolato dalle quote” per questa modalità economica.' : '');
+      aiutoEconomico.textContent = modalita === 'REGISTRATION_ONLY' ? 'Il modulo raccoglie soltanto le iscrizioni.' : modalita === 'PRICE_ONLY' ? 'Il prezzo viene mostrato, ma non vengono richieste fonti di pagamento.' : modalita === 'FULL_PAYMENT' ? 'È richiesto il versamento dell’intero importo tramite almeno una fonte ammessa.' : 'Sono previsti una caparra percentuale e il successivo saldo.';
+    };
+    modalitaEconomica.addEventListener('change', aggiornaConfigurazioneEconomica);
+    modalitaPrezzo.addEventListener('change', aggiornaConfigurazioneEconomica);
+    aggiornaConfigurazioneEconomica();
+  }
+
   const table = document.getElementById('mi-ticket-types');
   const addButton = document.getElementById('mi-add-ticket');
   if (!table || !addButton) return;
