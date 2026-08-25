@@ -237,6 +237,10 @@
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       errorBox.hidden = true;
+	  if (config.preview) {
+		showError('Questa è un’anteprima riservata: nessuna iscrizione è stata inviata.');
+		return;
+	  }
       if (totalQuantity() < 1) {
         showError('Seleziona almeno una iscrizione.');
         return;

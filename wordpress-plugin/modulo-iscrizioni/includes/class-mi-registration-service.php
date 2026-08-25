@@ -3,9 +3,10 @@
 defined( 'ABSPATH' ) || exit;
 
 final class MI_Registration_Service {
-	public static function public_event( $event_id ) {
+	public static function public_event( $event_id, $allow_unpublished = false ) {
 		$event = get_post( $event_id );
-		if ( ! $event || MI_Event_Post_Type::EVENT_TYPE !== $event->post_type || 'publish' !== $event->post_status ) {
+		$allowed_status = $allow_unpublished ? array( 'publish', 'draft', 'private' ) : array( 'publish' );
+		if ( ! $event || MI_Event_Post_Type::EVENT_TYPE !== $event->post_type || ! in_array( $event->post_status, $allowed_status, true ) ) {
 			return new WP_Error( 'mi_event_not_found', 'Evento non disponibile.', array( 'status' => 404 ) );
 		}
 

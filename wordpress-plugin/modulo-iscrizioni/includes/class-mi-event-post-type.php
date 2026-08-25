@@ -181,6 +181,8 @@ final class MI_Event_Post_Type {
 	public static function render_shortcode_box( $post ) {
 		echo '<p>Inserisci questo shortcode nella bozza destinata al modulo:</p>';
 		echo '<code>[modulo_iscrizioni event=&quot;' . esc_html( $post->ID ) . '&quot;]</code>';
+		$preview_url = wp_nonce_url( add_query_arg( array( 'action' => 'mi_anteprima_evento', 'event' => $post->ID ), admin_url( 'admin-post.php' ) ), 'mi_anteprima_evento_' . $post->ID );
+		echo '<p><a class="button button-primary" href="' . esc_url( $preview_url ) . '" target="_blank" rel="noopener">Apri anteprima riservata</a></p>';
 		echo '<p><strong>Pagina consigliata:</strong> scegli il modello “Iscrizione — modalità concentrata” negli attributi della pagina. Il modello nasconde soltanto in quella pagina menu, intestazione, barra laterale e piè di pagina del tema.</p>';
 		echo '<p>Per completare la testata pubblica imposta data, ora e luogo e usa l’immagine in evidenza come copertina.</p>';
 	}
