@@ -5,7 +5,7 @@ Data: 24 agosto 2026
 
 Esito Fase A: completata. Fase 2: vertical slice WordPress 0.2.0 installata, attiva e collaudata. Sono stati verificati homepage, pagina Santiago, pannello eventi, salvataggio delle bozze, caricamento condizionale degli asset, preset dei dati e migrazione compatibile della tabella partecipanti. I dati estesi usano allowlist e validazione server; la bozza 2027 mantiene il profilo Minimo. Le prime bozze di attività ed evento esistono nel pannello, ma non è stato pubblicato alcun modulo e nessun invio reale è attivo.
 
-Backend Workspace: candidato Apps Script predisposto, testato localmente e installato nel foglio di collaudo. Il setup è stato eseguito con successo e ha creato le otto schede `Config`, `Events`, `Registrations`, `Participants`, `PaymentIntake`, `Payments`, `EmailOutbox` e `AuditLog`. L'outbox resta in `PREVIEW`; il progetto non è ancora distribuito come Web App e ogni futura scrittura proveniente da WordPress richiederà HMAC con anti-replay. L'installazione corrente usa temporaneamente un account diverso dall'account Workspace organizzativo definitivo e dovrà essere trasferita prima della produzione.
+Backend Workspace: candidato Apps Script predisposto, testato localmente e installato nel foglio di collaudo. Il setup è stato eseguito con successo e ha creato otto schede operative, denominate in italiano: `Configurazione`, `Eventi`, `Iscrizioni`, `Partecipanti`, `Inserimento pagamenti`, `Pagamenti`, `Coda email` e `Registro controlli`. L'outbox resta in `PREVIEW`; il progetto non è ancora distribuito come Web App e ogni futura scrittura proveniente da WordPress richiederà HMAC con anti-replay. L'installazione corrente usa temporaneamente un account diverso dall'account Workspace organizzativo definitivo e dovrà essere trasferita prima della produzione.
 
 ## Artefatti della Fase A
 
@@ -796,6 +796,7 @@ Il nuovo ordine viene prima registrato in modo autorevole e riceve un codice uni
 
 ## 14. Decisioni confermate
 
+- La lingua operativa e di manutenzione del progetto è l'italiano. Etichette dell'interfaccia, nomi e intestazioni delle schede Google, messaggi, commenti e funzioni del codice applicativo devono essere in italiano. Sono ammesse eccezioni soltanto per nomi riservati o contratti tecnici imposti dalle piattaforme e dai protocolli esterni, per esempio `onOpen`, `doGet`, `doPost`, hook WordPress, chiavi JSON di API già pubblicate o codici standard; ogni eccezione deve restare circoscritta e documentata. I controlli automatici devono impedire la reintroduzione dei precedenti nomi inglesi nelle parti visibili e nelle funzioni Apps Script non riservate.
 - I riferimenti stilistici pubblici approvati sono elencati separatamente in `docs/RIFERIMENTI_E_LINEE_GUIDA.md` e non vengono usati come fonte di dati o configurazioni operative.
 - WordPress consente il caricamento di plugin ZIP dal computer: il prodotto verrà quindi consegnato come plugin personalizzato installabile.
 - La pagina pubblicata conferma l'approccio precedente: HTML e JavaScript sono inseriti direttamente in WordPress e chiamano un endpoint GAS con `fetch`; il modulo non è ospitato in un iframe GAS.

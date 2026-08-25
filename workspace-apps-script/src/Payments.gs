@@ -1,33 +1,33 @@
-function validateSelectedPayments() {
+function convalidaPagamentiSelezionati() {
   const sheet = SpreadsheetApp.getActiveSheet();
-  if (!sheet || sheet.getName() !== MI_SHEETS.PAYMENT_INTAKE) throw new Error('Apri PaymentIntake e seleziona le righe da convalidare.');
+  if (!sheet || sheet.getName() !== MI_SHEETS.PAYMENT_INTAKE) throw new Error('Apri Inserimento pagamenti e seleziona le righe da convalidare.');
   const range = sheet.getActiveRange();
   const start = Math.max(2, range.getRow());
-  validatePaymentRows_(start, range.getNumRows());
+  convalidaRighePagamento_(start, range.getNumRows());
 }
 
-function validatePendingPayments() {
-  const sheet = getRequiredSheet_(MI_SHEETS.PAYMENT_INTAKE);
+function convalidaPagamentiInAttesa() {
+  const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENT_INTAKE);
   if (sheet.getLastRow() < 2) return;
-  validatePaymentRows_(2, sheet.getLastRow() - 1, true);
+  convalidaRighePagamento_(2, sheet.getLastRow() - 1, true);
 }
 
-function validatePaymentRows_(startRow, rowCount, pendingOnly) {
+function convalidaRighePagamento_(startRow, rowCount, pendingOnly) {
   const lock = LockService.getDocumentLock();
   lock.waitLock(30000);
   try {
-    const intake = getRequiredSheet_(MI_SHEETS.PAYMENT_INTAKE);
-    const index = headerIndex_(intake);
+    const intake = ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENT_INTAKE);
+    const index = creaIndiceIntestazioni_(intake);
     const rows = intake.getRange(startRow, 1, rowCount, intake.getLastColumn()).getValues();
     rows.forEach(function (row, offset) {
       const rowNumber = startRow + offset;
-      const currentStatus = normalizeEnum_(row[index.validation_status], ['PENDING', 'VALIDATED', 'REJECTED', 'REVIEW_REQUIRED']);
-      if (pendingOnly && currentStatus && currentStatus !== 'PENDING') return;
-      const result = validatePaymentRow_(row, index);
-      intake.getRange(rowNumber, index.intake_id + 1).setValue(result.intakeId || row[index.intake_id]);
-      intake.getRange(rowNumber, index.validation_status + 1).setValue(result.status);
-      intake.getRange(rowNumber, index.validation_message + 1).setValue(result.message);
-      intake.getRange(rowNumber, index.validated_at + 1).setValue(new Date());
+      const currentStatus = normalizzaValoreElenco_(row[index.stato_convalida], ['IN_ATTESA', 'CONVALIDATO', 'RIFIUTATO', 'DA_VERIFICARE']);
+      if (pendingOnly && currentStatus && currentStatus !== 'IN_ATTESA') return;
+      const result = convalidaRigaPagamento_(row, index);
+      intake.getRange(rowNumber, index.id_inserimento + 1).setValue(result.intakeId || row[index.id_inserimento]);
+      intake.getRange(rowNumber, index.stato_convalida + 1).setValue(result.status);
+      intake.getRange(rowNumber, index.messaggio_convalida + 1).setValue(result.message);
+      intake.getRange(rowNumber, index.data_convalida + 1).setValue(new Date());
     });
     SpreadsheetApp.flush();
   } finally {
@@ -35,21 +35,21 @@ function validatePaymentRows_(startRow, rowCount, pendingOnly) {
   }
 }
 
-function validatePaymentRow_(row, index) {
-  const intakeId = normalizeText_(row[index.intake_id], 64) || makeOpaqueId_('pin');
-  const orderCode = normalizeText_(row[index.order_code], 64);
-  const transactionKind = normalizeEnum_(row[index.transaction_kind], MI_PAYMENT_ENUMS.transactionKinds);
-  const installmentKind = normalizeEnum_(row[index.installment_kind], MI_PAYMENT_ENUMS.installmentKinds);
-  const paymentSource = normalizeEnum_(row[index.payment_source], MI_PAYMENT_ENUMS.paymentSources);
-  const amountCents = euroToCents_(row[index.amount]);
-  const effectiveAt = row[index.effective_at];
-  const operatorLabel = neutralizeFormula_(row[index.operator_label], 100);
-	const externalReference = row[index.external_reference];
-	const administrativeNote = row[index.administrative_note];
+function convalidaRigaPagamento_(row, index) {
+  const intakeId = normalizzaTesto_(row[index.id_inserimento], 64) || creaIdentificativoOpaco_('pin');
+  const orderCode = normalizzaTesto_(row[index.codice_ordine], 64);
+  const transactionKind = normalizzaValoreElenco_(row[index.tipo_movimento], MI_PAYMENT_ENUMS.transactionKinds);
+  const installmentKind = normalizzaValoreElenco_(row[index.tipo_rata], MI_PAYMENT_ENUMS.installmentKinds);
+  const paymentSource = normalizzaValoreElenco_(row[index.fonte_pagamento], MI_PAYMENT_ENUMS.paymentSources);
+  const amountCents = convertiEuroInCentesimi_(row[index.importo]);
+  const effectiveAt = row[index.data_effettiva];
+  const operatorLabel = neutralizzaFormula_(row[index.etichetta_operatore], 100);
+	const externalReference = row[index.riferimento_esterno];
+	const administrativeNote = row[index.nota_amministrativa];
 
   const reject = function (code, message, status) {
-    appendAudit_('VALIDATE_PAYMENT', 'PAYMENT_INTAKE', intakeId, 'REJECTED', operatorLabel, code, 'MANUAL_SHEET');
-    return { intakeId: intakeId, status: status || 'REJECTED', message: message };
+    aggiungiControllo_('VALIDATE_PAYMENT', 'PAYMENT_INTAKE', intakeId, 'REJECTED', operatorLabel, code, 'MANUAL_SHEET');
+    return { intakeId: intakeId, status: status || 'RIFIUTATO', message: message };
   };
 
   if (!orderCode) return reject('ORDER_REQUIRED', 'Codice ordine obbligatorio.');
@@ -58,35 +58,35 @@ function validatePaymentRow_(row, index) {
   if (!paymentSource) return reject('PAYMENT_SOURCE', 'Fonte pagamento non valida.');
   if (amountCents === null) return reject('AMOUNT', 'Importo non valido o non positivo.');
   if (!(effectiveAt instanceof Date) || isNaN(effectiveAt.getTime())) return reject('EFFECTIVE_AT', 'Data effettiva non valida.');
-  if (paymentSource === 'CASH' && !operatorLabel) return reject('CASH_OPERATOR', 'Operatore obbligatorio per i contanti.');
-	if (containsCardNumberLike_(externalReference) || containsCardNumberLike_(administrativeNote)) return reject('CARD_DATA', 'Non inserire numeri completi di carta.');
+  if (paymentSource === 'CONTANTE' && !operatorLabel) return reject('CASH_OPERATOR', 'Operatore obbligatorio per i contanti.');
+	if (contienePossibileNumeroCarta_(externalReference) || contienePossibileNumeroCarta_(administrativeNote)) return reject('CARD_DATA', 'Non inserire numeri completi di carta.');
 
-  const registrations = rowsAsObjects_(getRequiredSheet_(MI_SHEETS.REGISTRATIONS));
-  const registration = registrations.find(function (item) { return String(item.order_code) === orderCode; });
+  const registrations = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS));
+  const registration = registrations.find(function (item) { return String(item.codice_ordine) === orderCode; });
   if (!registration) return reject('ORDER_NOT_FOUND', 'Ordine non trovato.');
-  if (['CANCELLED', 'EXPIRED'].indexOf(String(registration.status).toUpperCase()) >= 0) return reject('ORDER_REVIEW', 'Ordine da verificare manualmente.', 'REVIEW_REQUIRED');
+  if (['ANNULLATO', 'SCADUTO', 'CANCELLED', 'EXPIRED'].indexOf(String(registration.stato).toUpperCase()) >= 0) return reject('ORDER_REVIEW', 'Ordine da verificare manualmente.', 'DA_VERIFICARE');
 
-  const payments = rowsAsObjects_(getRequiredSheet_(MI_SHEETS.PAYMENTS));
-  if (payments.some(function (item) { return String(item.source_intake_id) === intakeId; })) {
-    return { intakeId: intakeId, status: 'VALIDATED', message: 'Movimento già acquisito.' };
+  const payments = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS));
+  if (payments.some(function (item) { return String(item.id_inserimento_origine) === intakeId; })) {
+    return { intakeId: intakeId, status: 'CONVALIDATO', message: 'Movimento già acquisito.' };
   }
 
-  const paymentId = makeOpaqueId_('pay');
-  getRequiredSheet_(MI_SHEETS.PAYMENTS).appendRow([
+  const paymentId = creaIdentificativoOpaco_('pay');
+  ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS).appendRow([
     paymentId,
-    neutralizeFormula_(orderCode, 64),
+    neutralizzaFormula_(orderCode, 64),
     transactionKind,
     installmentKind,
     effectiveAt,
     amountCents,
     'EUR',
     paymentSource,
-		neutralizeFormula_(externalReference, 120),
+		neutralizzaFormula_(externalReference, 120),
     operatorLabel,
     'MANUAL_SHEET',
     intakeId,
     new Date()
   ]);
-  appendAudit_('VALIDATE_PAYMENT', 'PAYMENT', paymentId, 'SUCCESS', operatorLabel, 'PAYMENT_RECORDED', 'MANUAL_SHEET');
-  return { intakeId: intakeId, status: 'VALIDATED', message: 'Movimento acquisito.' };
+  aggiungiControllo_('VALIDATE_PAYMENT', 'PAYMENT', paymentId, 'SUCCESS', operatorLabel, 'PAYMENT_RECORDED', 'MANUAL_SHEET');
+  return { intakeId: intakeId, status: 'CONVALIDATO', message: 'Movimento acquisito.' };
 }

@@ -1,27 +1,27 @@
-function normalizeEnum_(value, allowed) {
+function normalizzaValoreElenco_(value, allowed) {
   const normalized = String(value || '').trim().toUpperCase();
   return allowed.indexOf(normalized) >= 0 ? normalized : '';
 }
 
-function normalizeText_(value, maxLength) {
+function normalizzaTesto_(value, maxLength) {
   let text = String(value == null ? '' : value).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
   if (text.length > maxLength) text = text.slice(0, maxLength);
   return text;
 }
 
-function neutralizeFormula_(value, maxLength) {
-  const text = normalizeText_(value, maxLength);
+function neutralizzaFormula_(value, maxLength) {
+  const text = normalizzaTesto_(value, maxLength);
   return /^[=+\-@]/.test(text) ? "'" + text : text;
 }
 
-function euroToCents_(value) {
+function convertiEuroInCentesimi_(value) {
   if (typeof value === 'string') value = value.replace(',', '.').trim();
   const amount = Number(value);
   if (!Number.isFinite(amount) || amount <= 0 || amount > 1000000) return null;
   return Math.round(amount * 100);
 }
 
-function containsCardNumberLike_(value) {
+function contienePossibileNumeroCarta_(value) {
   const groups = String(value || '').match(/(?:\d[ -]?){13,19}/g) || [];
   return groups.some(function (group) {
     const digits = group.replace(/\D/g, '');
@@ -41,37 +41,37 @@ function containsCardNumberLike_(value) {
   });
 }
 
-function stableStringify_(value) {
+function serializzaInModoStabile_(value) {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return '[' + value.map(stableStringify_).join(',') + ']';
+  if (Array.isArray(value)) return '[' + value.map(serializzaInModoStabile_).join(',') + ']';
   return '{' + Object.keys(value).sort().map(function (key) {
-    return JSON.stringify(key) + ':' + stableStringify_(value[key]);
+    return JSON.stringify(key) + ':' + serializzaInModoStabile_(value[key]);
   }).join(',') + '}';
 }
 
-function makeOpaqueId_(prefix) {
+function creaIdentificativoOpaco_(prefix) {
   return prefix + '_' + Utilities.getUuid().replace(/-/g, '').slice(0, 24);
 }
 
-function jsonResponse_(payload) {
+function creaRispostaJson_(payload) {
   return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function appendAudit_(action, entityType, entityRef, outcome, actorLabel, detailCode, channel) {
-  getRequiredSheet_(MI_SHEETS.AUDIT_LOG).appendRow([
-    makeOpaqueId_('aud'),
+function aggiungiControllo_(action, entityType, entityRef, outcome, actorLabel, detailCode, channel) {
+  ottieniSchedaObbligatoria_(MI_SHEETS.AUDIT_LOG).appendRow([
+    creaIdentificativoOpaco_('aud'),
     new Date(),
-    normalizeText_(channel || 'WORKSPACE', 30),
-    normalizeText_(action, 60),
-    normalizeText_(entityType, 40),
-    neutralizeFormula_(entityRef, 100),
-    normalizeEnum_(outcome, ['SUCCESS', 'REJECTED', 'ERROR']) || 'ERROR',
-    neutralizeFormula_(actorLabel || 'UNVERIFIED', 100),
-    normalizeText_(detailCode || '', 100)
+    normalizzaTesto_(channel || 'WORKSPACE', 30),
+    normalizzaTesto_(action, 60),
+    normalizzaTesto_(entityType, 40),
+    neutralizzaFormula_(entityRef, 100),
+    normalizzaValoreElenco_(outcome, ['SUCCESS', 'REJECTED', 'ERROR']) || 'ERROR',
+    neutralizzaFormula_(actorLabel || 'UNVERIFIED', 100),
+    normalizzaTesto_(detailCode || '', 100)
   ]);
 }
 
-function headerIndex_(sheet) {
+function creaIndiceIntestazioni_(sheet) {
   const lastColumn = sheet.getLastColumn();
   if (lastColumn < 1) return {};
   const headers = sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0];
@@ -81,7 +81,7 @@ function headerIndex_(sheet) {
   }, {});
 }
 
-function rowsAsObjects_(sheet) {
+function convertiRigheInOggetti_(sheet) {
   if (sheet.getLastRow() < 2) return [];
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
   return sheet.getRange(2, 1, sheet.getLastRow() - 1, headers.length).getValues().map(function (row, offset) {

@@ -13,8 +13,9 @@ test('tutti i file Apps Script hanno sintassi valida', () => {
 });
 
 test('il setup dichiara tutte le schede operative', () => {
-  for (const name of ['Config', 'Events', 'Registrations', 'Participants', 'PaymentIntake', 'Payments', 'EmailOutbox', 'AuditLog']) assert.match(combined, new RegExp(name));
-  assert.match(sources['Setup.gs'], /setupWorkbook/);
+  for (const name of ['Configurazione', 'Eventi', 'Iscrizioni', 'Partecipanti', 'Inserimento pagamenti', 'Pagamenti', 'Coda email', 'Registro controlli']) assert.match(combined, new RegExp(name));
+  assert.match(sources['Setup.gs'], /configuraCartellaDiLavoro/);
+  assert.match(sources['Setup.gs'], /rinominaSchedePrecedenti_/);
   assert.match(sources['Setup.gs'], /requireValueInList/);
 });
 
@@ -33,9 +34,19 @@ test('il sorgente non incorpora destinazioni o coordinate operative', () => {
 });
 
 test('i pagamenti ammettono solo bonifico carta e contanti senza dati carta', () => {
-  assert.match(sources['Config.gs'], /BANK_TRANSFER/);
-  assert.match(sources['Config.gs'], /CARD/);
-  assert.match(sources['Config.gs'], /CASH/);
-  assert.match(sources['Payments.gs'], /containsCardNumberLike_/);
-  assert.match(sources['Payments.gs'], /source_intake_id/);
+  assert.match(sources['Config.gs'], /BONIFICO/);
+  assert.match(sources['Config.gs'], /CARTA/);
+  assert.match(sources['Config.gs'], /CONTANTE/);
+  assert.match(sources['Payments.gs'], /contienePossibileNumeroCarta_/);
+  assert.match(sources['Payments.gs'], /id_inserimento_origine/);
+});
+
+test('le funzioni Apps Script applicative hanno nomi italiani', () => {
+  const allowedPlatformFunctions = new Set(['onOpen', 'doGet', 'doPost']);
+  const forbiddenNames = new Set(['setupWorkbook', 'validateSelectedPayments', 'validatePendingPayments', 'normalizeEnum_', 'normalizeText_', 'neutralizeFormula_', 'euroToCents_', 'containsCardNumberLike_', 'stableStringify_', 'makeOpaqueId_', 'jsonResponse_', 'appendAudit_', 'headerIndex_', 'rowsAsObjects_', 'getBoundSpreadsheet_', 'getRequiredSheet_', 'getScriptSecret_', 'initializeSheet_', 'initializeConfig_', 'initializePaymentValidation_', 'applySoftProtections_', 'verifyEnvelope_', 'constantTimeEquals_', 'appendRegistration_']);
+  const names = [...combined.matchAll(/^function\s+([A-Za-z0-9_]+)\s*\(/gm)].map((match) => match[1]);
+  for (const name of names) {
+    if (allowedPlatformFunctions.has(name)) continue;
+    assert.equal(forbiddenNames.has(name), false, `Nome inglese non ammesso: ${name}`);
+  }
 });

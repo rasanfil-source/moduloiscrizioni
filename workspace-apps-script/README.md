@@ -4,9 +4,9 @@ Progetto Google Apps Script associato a uno spreadsheet dedicato. Il repository 
 
 ## Funzioni disponibili
 
-- `setupWorkbook()` crea o aggiorna in modo idempotente le schede tecniche;
-- `validateSelectedPayments()` convalida le righe selezionate in `PaymentIntake`;
-- `validatePendingPayments()` elabora tutte le righe nuove;
+- `configuraCartellaDiLavoro()` crea o aggiorna in modo idempotente le schede tecniche con etichette italiane;
+- `convalidaPagamentiSelezionati()` convalida le righe selezionate in `Inserimento pagamenti`;
+- `convalidaPagamentiInAttesa()` elabora tutte le righe nuove;
 - `doPost()` accetta soltanto richieste firmate provenienti dal proxy WordPress;
 - l'azione firmata `PING` verifica firma e anti-replay senza leggere o scrivere dati personali;
 - l'outbox email resta sempre nello stato `PREVIEW`.
@@ -16,7 +16,7 @@ Progetto Google Apps Script associato a uno spreadsheet dedicato. Il repository 
 1. Aprire lo spreadsheet dedicato con un account proprietario.
 2. Usare **Estensioni → Apps Script** per creare un progetto associato al foglio.
 3. Copiare i file di `src/` nel progetto e sostituire il manifest con `appsscript.json`.
-4. Eseguire `setupWorkbook()` e concedere esclusivamente le autorizzazioni richieste da Sheets.
+4. Eseguire `configuraCartellaDiLavoro()` e concedere esclusivamente le autorizzazioni richieste da Sheets.
 5. Nelle proprietà dello script creare `MI_SHARED_SECRET` con almeno 32 caratteri casuali. Non copiarlo nel repository o nel browser pubblico.
 6. Mantenere lo spreadsheet privato e concedere l'accesso soltanto agli operatori autorizzati.
 
@@ -24,4 +24,4 @@ La Web App non deve ricevere iscrizioni finché non è stato completato prima il
 
 ## Pagamenti manuali
 
-Gli operatori modificano soltanto `PaymentIntake`. Le fonti ammesse sono `BANK_TRANSFER`, `CARD` e `CASH`; non devono mai essere inseriti numero completo della carta, scadenza o CVV. I movimenti convalidati vengono copiati in `Payments` e non vengono sovrascritti.
+Gli operatori modificano soltanto `Inserimento pagamenti`. Le fonti ammesse e mostrate nel foglio sono `BONIFICO`, `CARTA` e `CONTANTE`; non devono mai essere inseriti numero completo della carta, scadenza o CVV. I movimenti convalidati vengono copiati in `Pagamenti` e non vengono sovrascritti.
