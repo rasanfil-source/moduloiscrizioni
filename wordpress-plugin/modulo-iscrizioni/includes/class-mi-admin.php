@@ -65,7 +65,7 @@ final class MI_Admin {
 		if ( $parameters ) {
 			$where = $wpdb->prepare( $where, $parameters );
 		}
-		$rows = $wpdb->get_results( "SELECT id, order_code, event_id, status, workspace_status, buyer_first_name, buyer_last_name, buyer_email, total_qty, created_at FROM {$table} {$where} ORDER BY id DESC LIMIT {$per_page} OFFSET {$offset}", ARRAY_A );
+		$rows = $wpdb->get_results( "SELECT id, order_code, event_id, status, workspace_status, buyer_first_name, buyer_last_name, buyer_email, total_qty, economic_mode, total_cents, initial_due_cents, balance_cents, created_at FROM {$table} {$where} ORDER BY id DESC LIMIT {$per_page} OFFSET {$offset}", ARRAY_A );
 		$visible_events = 'ALL' === $scope ? get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) ) : get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'post__in' => $allowed_events ?: array( 0 ), 'orderby' => 'title', 'order' => 'ASC' ) );
 		$detail = null;
 		$participants = array();
@@ -92,11 +92,11 @@ final class MI_Admin {
 		<?php $export_url = wp_nonce_url( add_query_arg( array( 'action' => 'mi_export_registrations', 'event_id' => $event_id, 'mi_search' => $search ), admin_url( 'admin-post.php' ) ), 'mi_export_registrations' ); ?>
 		<a class="button button-secondary" href="<?php echo esc_url( $export_url ); ?>">Esporta CSV filtrato</a>
 		</form>
-		<table class="widefat striped"><thead><tr><th>Codice</th><th>Evento</th><th>Stato</th><th>Workspace</th><th>Referente</th><th>Email</th><th>Persone</th><th>Data UTC</th><th></th></tr></thead><tbody>
-		<?php if ( ! $rows ) : ?><tr><td colspan="9">Nessuna iscrizione.</td></tr><?php endif; ?>
+		<table class="widefat striped"><thead><tr><th>Codice</th><th>Evento</th><th>Stato</th><th>Workspace</th><th>Referente</th><th>Email</th><th>Persone</th><th>Totale</th><th>Primo versamento</th><th>Saldo</th><th>Data UTC</th><th></th></tr></thead><tbody>
+		<?php if ( ! $rows ) : ?><tr><td colspan="12">Nessuna iscrizione.</td></tr><?php endif; ?>
 		<?php foreach ( $rows as $row ) : ?>
 		<?php $detail_url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-registrations', 'registration_id' => (int) $row['id'] ), admin_url( 'edit.php' ) ); ?>
-		<tr><td><code><?php echo esc_html( $row['order_code'] ); ?></code></td><td><?php echo esc_html( get_the_title( (int) $row['event_id'] ) ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['workspace_status'] ); ?></td><td><?php echo esc_html( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ); ?></td><td><?php echo esc_html( $row['buyer_email'] ); ?></td><td><?php echo esc_html( $row['total_qty'] ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $detail_url ); ?>">Dettagli</a></td></tr>
+		<tr><td><code><?php echo esc_html( $row['order_code'] ); ?></code></td><td><?php echo esc_html( get_the_title( (int) $row['event_id'] ) ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['workspace_status'] ); ?></td><td><?php echo esc_html( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ); ?></td><td><?php echo esc_html( $row['buyer_email'] ); ?></td><td><?php echo esc_html( $row['total_qty'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['total_cents'] ) ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['initial_due_cents'] ) ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['balance_cents'] ) ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $detail_url ); ?>">Dettagli</a></td></tr>
 		<?php endforeach; ?>
 		</tbody></table>
 		<?php if ( $detail ) : ?>
@@ -108,6 +108,10 @@ final class MI_Admin {
 		<tr><th scope="row">Referente</th><td><?php echo esc_html( $detail['buyer_first_name'] . ' ' . $detail['buyer_last_name'] ); ?></td></tr>
 		<tr><th scope="row">Email</th><td><?php echo esc_html( $detail['buyer_email'] ); ?></td></tr>
 		<tr><th scope="row">Cellulare</th><td><?php echo esc_html( $detail['buyer_phone'] ); ?></td></tr>
+		<tr><th scope="row">Gestione economica</th><td><?php echo esc_html( self::etichetta_modalita_economica( $detail['economic_mode'] ) ); ?></td></tr>
+		<tr><th scope="row">Totale</th><td><?php echo esc_html( self::formatta_importo( $detail['total_cents'] ) ); ?></td></tr>
+		<tr><th scope="row">Primo versamento</th><td><?php echo esc_html( self::formatta_importo( $detail['initial_due_cents'] ) ); ?></td></tr>
+		<tr><th scope="row">Saldo successivo</th><td><?php echo esc_html( self::formatta_importo( $detail['balance_cents'] ) ); ?></td></tr>
 		</tbody></table>
 		<h3>Partecipanti</h3>
 		<?php if ( ! $participants ) : ?><p>Nessun partecipante associato.</p><?php endif; ?>
@@ -161,7 +165,7 @@ final class MI_Admin {
 		}
 		$registrations = $wpdb->prefix . 'mi_registrations';
 		$participants = $wpdb->prefix . 'mi_participants';
-		$rows = $wpdb->get_results( "SELECT r.order_code, r.event_id, r.status, r.workspace_status, r.buyer_first_name, r.buyer_last_name, r.buyer_email, r.buyer_phone, r.created_at, p.first_name, p.last_name, p.extra_json FROM {$registrations} r LEFT JOIN {$participants} p ON p.registration_id = r.id {$where} ORDER BY r.id DESC, p.id ASC", ARRAY_A );
+		$rows = $wpdb->get_results( "SELECT r.order_code, r.event_id, r.status, r.workspace_status, r.buyer_first_name, r.buyer_last_name, r.buyer_email, r.buyer_phone, r.economic_mode, r.total_cents, r.initial_due_cents, r.balance_cents, r.created_at, p.first_name, p.last_name, p.extra_json FROM {$registrations} r LEFT JOIN {$participants} p ON p.registration_id = r.id {$where} ORDER BY r.id DESC, p.id ASC", ARRAY_A );
 		header( 'Content-Type: text/csv; charset=UTF-8' );
 		header( 'Content-Disposition: attachment; filename="iscrizioni-' . gmdate( 'Y-m-d' ) . '.csv"' );
 		$output = fopen( 'php://output', 'w' );
@@ -174,7 +178,7 @@ final class MI_Admin {
 				$extra_keys = array_values( array_unique( array_merge( $extra_keys, array_keys( $answers ) ) ) );
 			}
 		}
-		$headers = array( 'Codice iscrizione', 'Evento', 'Stato', 'Stato Workspace', 'Nome referente', 'Cognome referente', 'Email referente', 'Cellulare referente', 'Data UTC', 'Nome partecipante', 'Cognome partecipante' );
+		$headers = array( 'Codice iscrizione', 'Evento', 'Stato', 'Stato Workspace', 'Nome referente', 'Cognome referente', 'Email referente', 'Cellulare referente', 'Gestione economica', 'Totale centesimi', 'Primo versamento centesimi', 'Saldo centesimi', 'Data UTC', 'Nome partecipante', 'Cognome partecipante' );
 		foreach ( $extra_keys as $key ) {
 			$headers[] = isset( $catalog[ $key ]['label'] ) ? $catalog[ $key ]['label'] : 'Dato aggiuntivo';
 		}
@@ -182,7 +186,7 @@ final class MI_Admin {
 		foreach ( $rows as $row ) {
 			$answers = json_decode( (string) $row['extra_json'], true );
 			$answers = is_array( $answers ) ? $answers : array();
-			$line = array( $row['order_code'], get_the_title( (int) $row['event_id'] ), $row['status'], $row['workspace_status'], $row['buyer_first_name'], $row['buyer_last_name'], $row['buyer_email'], $row['buyer_phone'], $row['created_at'], $row['first_name'], $row['last_name'] );
+			$line = array( $row['order_code'], get_the_title( (int) $row['event_id'] ), $row['status'], $row['workspace_status'], $row['buyer_first_name'], $row['buyer_last_name'], $row['buyer_email'], $row['buyer_phone'], self::etichetta_modalita_economica( $row['economic_mode'] ), $row['total_cents'], $row['initial_due_cents'], $row['balance_cents'], $row['created_at'], $row['first_name'], $row['last_name'] );
 			foreach ( $extra_keys as $key ) {
 				$line[] = isset( $answers[ $key ] ) ? $answers[ $key ] : '';
 			}
@@ -195,6 +199,15 @@ final class MI_Admin {
 	private static function safe_csv_value( $value ) {
 		$value = (string) $value;
 		return preg_match( '/^[=+\-@]/', $value ) ? "'" . $value : $value;
+	}
+
+	private static function formatta_importo( $cents ) {
+		return number_format_i18n( max( 0, (int) $cents ) / 100, 2 ) . ' €';
+	}
+
+	private static function etichetta_modalita_economica( $mode ) {
+		$labels = array( 'REGISTRATION_ONLY' => 'Solo iscrizione', 'PRICE_ONLY' => 'Prezzo informativo', 'FULL_PAYMENT' => 'Versamento completo', 'DEPOSIT_BALANCE' => 'Caparra e saldo' );
+		return $labels[ $mode ] ?? 'Solo iscrizione';
 	}
 
 	public static function outbox_page() {

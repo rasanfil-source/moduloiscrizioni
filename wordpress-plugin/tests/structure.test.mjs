@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.4\.2/);
+  assert.match(source, /Version:\s+0\.4\.3/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -201,4 +201,13 @@ test('l’iscrizione conserva totale, primo versamento e saldo', async () => {
   assert.match(service, /economic_summary/);
   assert.match(service, /'WAITLISTED'/);
   assert.match(admin, /Riepilogo economico conservato/);
+});
+
+test('il pannello e il CSV espongono gli importi economici', async () => {
+  const admin = await read('includes/class-mi-admin.php');
+  assert.match(admin, /Primo versamento/);
+  assert.match(admin, /Saldo successivo/);
+  assert.match(admin, /Totale centesimi/);
+  assert.match(admin, /formatta_importo/);
+  assert.match(admin, /etichetta_modalita_economica/);
 });
