@@ -307,7 +307,11 @@ final class MI_Event_Post_Type {
 		} elseif ( 'mi_window' === $column ) {
 			echo esc_html( get_post_meta( $post_id, '_mi_registration_opens_at', true ) . ' → ' . get_post_meta( $post_id, '_mi_registration_closes_at', true ) );
 		} elseif ( 'mi_capacity' === $column ) {
-			echo esc_html( (string) absint( get_post_meta( $post_id, '_mi_capacity', true ) ) );
+			$availability = MI_Registration_Service::availability( array( 'id' => $post_id, 'capacity' => absint( get_post_meta( $post_id, '_mi_capacity', true ) ) ) );
+			echo esc_html( $availability['confirmed'] . '/' . $availability['capacity'] . ' confermati' );
+			if ( $availability['waitlisted'] ) {
+				echo '<br><small>' . esc_html( $availability['waitlisted'] . ' in attesa' ) . '</small>';
+			}
 		}
 	}
 

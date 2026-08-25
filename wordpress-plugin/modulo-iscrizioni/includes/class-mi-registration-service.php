@@ -20,7 +20,7 @@ final class MI_Registration_Service {
 		$field_configuration = MI_Field_Schema::event_configuration( $event_id );
 		$activity_thumbnail_id = $activity ? get_post_thumbnail_id( $activity ) : 0;
 		$event_thumbnail_id = get_post_thumbnail_id( $event_id );
-		return array(
+		$public_event = array(
 			'id'               => $event_id,
 			'title'            => get_the_title( $event_id ),
 			'description'      => wp_strip_all_tags( $event->post_content ),
@@ -44,9 +44,20 @@ final class MI_Registration_Service {
 			'data_profile'     => $field_configuration['profile'],
 			'participant_fields'=> MI_Field_Schema::public_fields( $field_configuration ),
 		);
+		$public_event['availability'] = self::availability( $public_event );
+		return $public_event;
 	}
 
 	public static function registration_state( $event ) {
+		$time_state = self::registration_time_state( $event );
+		if ( 'OPEN' !== $time_state ) {
+			return $time_state;
+		}
+		$availability = isset( $event['availability'] ) && is_array( $event['availability'] ) ? $event['availability'] : self::availability( $event );
+		return $availability['full'] && empty( $event['waitlist_enabled'] ) ? 'SOLD_OUT' : 'OPEN';
+	}
+
+	public static function registration_time_state( $event ) {
 		$now = new DateTimeImmutable( 'now', wp_timezone() );
 		$opens = self::local_datetime( $event['opens_at'] );
 		$closes = self::local_datetime( $event['closes_at'] );
@@ -60,6 +71,22 @@ final class MI_Registration_Service {
 			return 'CLOSED';
 		}
 		return 'OPEN';
+	}
+
+	public static function availability( $event ) {
+		global $wpdb;
+		$event_id = absint( $event['id'] ?? 0 );
+		$capacity = max( 1, absint( $event['capacity'] ?? 1 ) );
+		$confirmed = 0;
+		$waitlisted = 0;
+		if ( $event_id ) {
+			$table = $wpdb->prefix . 'mi_event_counters';
+			$counter = $wpdb->get_row( $wpdb->prepare( "SELECT confirmed_count, waitlisted_count FROM {$table} WHERE event_id = %d", $event_id ), ARRAY_A );
+			$confirmed = max( 0, (int) ( $counter['confirmed_count'] ?? 0 ) );
+			$waitlisted = max( 0, (int) ( $counter['waitlisted_count'] ?? 0 ) );
+		}
+		$remaining = max( 0, $capacity - $confirmed );
+		return array( 'capacity' => $capacity, 'confirmed' => $confirmed, 'waitlisted' => $waitlisted, 'remaining' => $remaining, 'full' => 0 === $remaining );
 	}
 
 	public static function create( $event_id, $payload, $idempotency_key ) {
@@ -129,6 +156,10 @@ final class MI_Registration_Service {
 			$counter = $wpdb->get_row( $wpdb->prepare( "SELECT confirmed_count, waitlisted_count FROM {$counters_table} WHERE event_id = %d FOR UPDATE", $event_id ), ARRAY_A );
 			if ( ! $counter ) {
 				throw new RuntimeException( 'Contatore non disponibile.' );
+			}
+			if ( 'OPEN' !== self::registration_time_state( $event ) ) {
+				$wpdb->query( 'ROLLBACK' );
+				return new WP_Error( 'mi_registration_closed', 'Le iscrizioni sono state chiuse. Aggiorna la pagina.', array( 'status' => 409 ) );
 			}
 			$remaining = max( 0, (int) $event['capacity'] - (int) $counter['confirmed_count'] );
 			if ( $selection['quantity'] <= $remaining ) {
