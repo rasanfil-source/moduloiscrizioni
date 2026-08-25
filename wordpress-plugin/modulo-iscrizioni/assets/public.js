@@ -13,6 +13,11 @@
     const successBox = root.querySelector('[data-mi-success]');
     const submitButton = root.querySelector('.mi-registration__submit');
     const economicSummary = root.querySelector('[data-mi-economic-summary]');
+	const steps = Array.from(root.querySelectorAll('[data-mi-step]'));
+	const nextButton = root.querySelector('[data-mi-next]');
+	const backButton = root.querySelector('[data-mi-back]');
+	const stickySummary = root.querySelector('[data-mi-sticky-summary]');
+	let currentStep = 1;
     let requestKey = makeRequestKey();
     let participantValues = [];
 
@@ -73,6 +78,38 @@
       }
     }
 
+	function updateStickySummary() {
+	  const quantity = totalQuantity();
+	  if (!stickySummary) return;
+	  const quantityLabel = quantity === 1 ? '1 iscrizione' : `${quantity} iscrizioni`;
+	  stickySummary.textContent = quantity ? `${quantityLabel}${config.event.pricing_mode === 'CALCULATED' ? ` · ${formatCurrency(totalCents())}` : ''}` : 'Nessuna iscrizione';
+	}
+
+	function showStep(step, focusHeading = true) {
+	  currentStep = Math.min(3, Math.max(1, step));
+	  steps.forEach((section) => { section.hidden = Number(section.dataset.miStep) !== currentStep; });
+	  root.querySelectorAll('[data-mi-progress]').forEach((item) => {
+		if (Number(item.dataset.miProgress) === currentStep) item.setAttribute('aria-current', 'step');
+		else item.removeAttribute('aria-current');
+	  });
+	  backButton.hidden = currentStep === 1;
+	  nextButton.hidden = currentStep === 3;
+	  submitButton.hidden = currentStep !== 3;
+	  if (focusHeading) steps[currentStep - 1]?.querySelector('h2')?.focus();
+	}
+
+	function currentStepIsValid() {
+	  errorBox.hidden = true;
+	  if (currentStep === 1 && totalQuantity() < 1) {
+		showError('Seleziona almeno una iscrizione per continuare.');
+		return false;
+	  }
+	  const fields = Array.from(steps[currentStep - 1].querySelectorAll('input, select, textarea'));
+	  const invalid = fields.find((field) => !field.checkValidity());
+	  if (invalid) { invalid.reportValidity(); return false; }
+	  return true;
+	}
+
     function captureParticipants() {
       participantValues = Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).map((row) => ({
         firstName: row.querySelector('[data-mi-first-name]')?.value || '',
@@ -85,6 +122,7 @@
       captureParticipants();
       const quantity = totalQuantity();
       renderEconomicSummary();
+	  updateStickySummary();
       participantsRoot.replaceChildren();
       if (!quantity) {
         const hint = document.createElement('p');
@@ -183,6 +221,13 @@
       input.addEventListener('input', renderParticipants);
     });
 
+	nextButton.addEventListener('click', () => {
+	  if (!currentStepIsValid()) return;
+	  if (currentStep === 1) renderParticipants();
+	  showStep(currentStep + 1);
+	});
+	backButton.addEventListener('click', () => showStep(currentStep - 1));
+
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       errorBox.hidden = true;
@@ -239,5 +284,6 @@
     });
 
     renderParticipants();
+	showStep(1, false);
   });
 }());
