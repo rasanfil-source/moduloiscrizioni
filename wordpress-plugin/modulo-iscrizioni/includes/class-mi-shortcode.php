@@ -24,7 +24,7 @@ final class MI_Shortcode {
 
 	public static function maybe_enqueue_assets() {
 		global $post;
-		if ( is_singular() && $post instanceof WP_Post && has_shortcode( $post->post_content, 'modulo_iscrizioni' ) ) self::enqueue_assets();
+		if ( is_singular() && $post instanceof WP_Post && ( has_shortcode( $post->post_content, 'modulo_iscrizioni' ) || has_shortcode( $post->post_content, 'mi_divi_modulo_iscrizioni' ) ) ) self::enqueue_assets();
 	}
 
 	private static function enqueue_assets() {

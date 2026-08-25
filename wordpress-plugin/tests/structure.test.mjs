@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.6\.2/);
+  assert.match(source, /Version:\s+0\.7\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -83,6 +83,19 @@ test('il percorso pubblico è progressivo e dispone di un modello concentrato', 
   assert.match(script, /showStep/);
   assert.match(template, /wp_head/);
   assert.doesNotMatch(template, /get_header|get_sidebar/);
+});
+
+test('l’integrazione Divi è facoltativa e riusa il motore dello shortcode', async () => {
+  const integration = await read('includes/class-mi-integrazione-divi.php');
+  const module = await read('includes/class-mi-divi-modulo-iscrizioni.php');
+  assert.match(integration, /et_builder_ready/);
+  assert.match(integration, /class_exists\( 'ET_Builder_Module' \)/);
+  assert.match(module, /extends ET_Builder_Module/);
+  assert.match(module, /vb_support = 'partial'/);
+  assert.match(module, /MI_Shortcode::render/);
+  assert.match(module, /MI_Access::can_access_event/);
+	const shortcode = await read('includes/class-mi-shortcode.php');
+	assert.match(shortcode, /has_shortcode\( \$post->post_content, 'mi_divi_modulo_iscrizioni' \)/);
 });
 
 test('i campi partecipante usano profili, allowlist e validazione server', async () => {
