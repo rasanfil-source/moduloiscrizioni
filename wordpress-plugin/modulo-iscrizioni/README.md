@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — vertical slice 0.3.3
+# Modulo Iscrizioni — vertical slice 0.3.4
 
 Plugin WordPress dimostrativo per la Fase 2. Implementa:
 
@@ -15,12 +15,13 @@ Plugin WordPress dimostrativo per la Fase 2. Implementa:
 - istantanea immutabile del modello risolto nell'outbox e consultazione protetta dal pannello;
 - identità storica dell'attività nell'anteprima, con nome, logo e testo alternativo;
 - anteprima testuale aggiornata durante la digitazione e blocco dei segnaposto sconosciuti nel browser e sul server;
+- identità email per evento con nome mittente, indirizzo per le risposte e fino a dieci destinatari interni validati;
 - ruolo `Gestore iscrizioni` limitabile alle attività assegnate;
 - shortcode `[modulo_iscrizioni event="ID"]`.
 
 ## Limiti intenzionali
 
-Questa versione non invia email, non gestisce pagamenti e non genera QR/barcode. L'editor per evento salva oggetto, preheader, corpo HTML limitato, testo semplice e footer e ne mostra un'anteprima con dati esclusivamente sintetici. Oggetto, preheader, testo semplice e footer si aggiornano durante la digitazione; i segnaposto sconosciuti vengono bloccati nel browser e sul server. Ogni nuova voce locale della coda conserva il modello già risolto, l'identità dell'attività e una revisione crittografica, così modifiche successive all'evento o al logo non cambiano l'anteprima storica. Replica le nuove iscrizioni nel registro Workspace mediante HMAC, anti-replay e chiave di idempotenza; un errore remoto non annulla il salvataggio autorevole WordPress e lascia la replica in stato `PENDING` per un nuovo tentativo. Il pacchetto 0.3.3 è destinato al collaudo sul sito autorizzato.
+Questa versione non invia email, non gestisce pagamenti e non genera QR/barcode. L'editor per evento salva oggetto, preheader, corpo HTML limitato, testo semplice e footer e ne mostra un'anteprima con dati esclusivamente sintetici. Oggetto, preheader, testo semplice e footer si aggiornano durante la digitazione; i segnaposto sconosciuti vengono bloccati nel browser e sul server. Nome mittente, indirizzo per le risposte e fino a dieci destinatari interni vengono validati e restano vuoti per impostazione predefinita. Ogni nuova voce locale della coda conserva il modello già risolto, l'identità dell'attività e una revisione crittografica. Il pacchetto 0.3.4 è destinato al collaudo sul sito autorizzato.
 
 ## Installazione di prova
 

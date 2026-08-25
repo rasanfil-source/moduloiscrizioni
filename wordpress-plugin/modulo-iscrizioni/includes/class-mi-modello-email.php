@@ -20,6 +20,9 @@ final class MI_Modello_Email {
 	public static function impostazioni( $event_id ) {
 		$defaults = array(
 			'enabled'   => '1',
+			'sender_name' => '',
+			'reply_to'    => '',
+			'internal_recipients' => array(),
 			'subject'   => 'Iscrizione a {{evento.titolo}} — {{ordine.codice}}',
 			'preheader' => 'Riepilogo della tua iscrizione.',
 			'html'      => '<p>Gentile {{referente.nome_completo}},</p><p>la tua iscrizione a <strong>{{evento.titolo}}</strong> è stata registrata.</p><p>Codice: <strong>{{ordine.codice}}</strong><br>Stato: {{ordine.stato}}<br>Partecipanti: {{ordine.partecipanti}}</p>',
@@ -43,6 +46,12 @@ final class MI_Modello_Email {
 		);
 		?>
 		<p><label><input type="checkbox" name="mi_email_enabled" value="1" <?php checked( '1', $settings['enabled'] ); ?>> Modello attivo per la futura email di conferma</label></p>
+		<div class="mi-admin-grid">
+		<p><label for="mi_email_sender_name"><strong>Nome visualizzato del mittente</strong></label><br><input class="widefat" id="mi_email_sender_name" name="mi_email_sender_name" maxlength="120" value="<?php echo esc_attr( $settings['sender_name'] ); ?>" placeholder="Lascia vuoto per usare il valore organizzativo"></p>
+		<p><label for="mi_email_reply_to"><strong>Indirizzo per le risposte</strong></label><br><input class="widefat" id="mi_email_reply_to" name="mi_email_reply_to" type="email" value="<?php echo esc_attr( $settings['reply_to'] ); ?>" placeholder="Lascia vuoto per usare il valore organizzativo"></p>
+		</div>
+		<p><label for="mi_email_internal_recipients"><strong>Destinatari interni in anteprima</strong></label><br><textarea class="widefat" id="mi_email_internal_recipients" name="mi_email_internal_recipients" rows="2" placeholder="Un indirizzo per riga, massimo 10"><?php echo esc_textarea( implode( "\n", (array) $settings['internal_recipients'] ) ); ?></textarea></p>
+		<p class="description">Questi indirizzi vengono soltanto validati e conservati nella configurazione riservata. Nessun messaggio viene inviato.</p>
 		<p><label for="mi_email_subject"><strong>Oggetto</strong></label><br><input class="widefat" id="mi_email_subject" name="mi_email_subject" maxlength="180" value="<?php echo esc_attr( $settings['subject'] ); ?>"></p>
 		<p><label for="mi_email_preheader"><strong>Preheader</strong></label><br><input class="widefat" id="mi_email_preheader" name="mi_email_preheader" maxlength="240" value="<?php echo esc_attr( $settings['preheader'] ); ?>"></p>
 		<p><label for="mi_email_html"><strong>Corpo HTML</strong></label><br><textarea class="widefat" id="mi_email_html" name="mi_email_html" rows="8"><?php echo esc_textarea( $settings['html'] ); ?></textarea></p>
@@ -67,6 +76,11 @@ final class MI_Modello_Email {
 			'logo_url'      => $thumbnail_id ? (string) wp_get_attachment_image_url( $thumbnail_id, 'medium' ) : '',
 			'logo_alt'      => $thumbnail_id ? (string) get_post_meta( $thumbnail_id, '_wp_attachment_image_alt', true ) : '',
 		);
+		$snapshot['identita_email'] = array(
+			'nome_mittente'        => $settings['sender_name'],
+			'indirizzo_risposte'   => $settings['reply_to'],
+			'destinatari_interni'  => array_values( (array) $settings['internal_recipients'] ),
+		);
 		$snapshot['revisione'] = hash( 'sha256', wp_json_encode( $settings ) );
 		return $snapshot;
 	}
@@ -78,8 +92,19 @@ final class MI_Modello_Email {
 		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) || ! current_user_can( 'mi_manage_events' ) || ! MI_Access::can_access_event( $post_id ) ) {
 			return;
 		}
+		$raw_reply_to = sanitize_text_field( wp_unslash( $_POST['mi_email_reply_to'] ?? '' ) );
+		$raw_recipients = sanitize_textarea_field( wp_unslash( $_POST['mi_email_internal_recipients'] ?? '' ) );
+		$recipient_candidates = array_values( array_filter( array_map( 'trim', preg_split( '/[\r\n,;]+/', $raw_recipients ) ) ) );
+		$recipients = array_values( array_filter( array_map( 'sanitize_email', $recipient_candidates ), 'is_email' ) );
+		if ( ( $raw_reply_to && ! is_email( $raw_reply_to ) ) || count( $recipient_candidates ) !== count( $recipients ) || count( $recipients ) > 10 ) {
+			set_transient( 'mi_email_identity_error_' . get_current_user_id(), '1', MINUTE_IN_SECONDS );
+			return;
+		}
 		$settings = array(
 			'enabled'   => isset( $_POST['mi_email_enabled'] ) ? '1' : '0',
+			'sender_name' => self::pulisci_riga( $_POST['mi_email_sender_name'] ?? '', 120 ),
+			'reply_to'    => $raw_reply_to ? sanitize_email( $raw_reply_to ) : '',
+			'internal_recipients' => $recipients,
 			'subject'   => self::pulisci_riga( $_POST['mi_email_subject'] ?? '', 180 ),
 			'preheader' => self::pulisci_riga( $_POST['mi_email_preheader'] ?? '', 240 ),
 			'html'      => wp_kses_post( wp_unslash( $_POST['mi_email_html'] ?? '' ) ),
@@ -95,6 +120,11 @@ final class MI_Modello_Email {
 	}
 
 	public static function mostra_avviso() {
+		$identity_key = 'mi_email_identity_error_' . get_current_user_id();
+		if ( get_transient( $identity_key ) ) {
+			delete_transient( $identity_key );
+			echo '<div class="notice notice-error"><p>Identità email non aggiornata: controlla l’indirizzo per le risposte e i destinatari interni, fino a un massimo di 10 indirizzi validi.</p></div>';
+		}
 		$key = 'mi_email_placeholder_error_' . get_current_user_id();
 		$unknown = get_transient( $key );
 		if ( ! $unknown ) {

@@ -12,7 +12,7 @@ La parrocchia è l'ente base. Ogni attività può avere logo, colori e contatti 
 
 ## Stato
 
-La versione `0.3.3` è pronta per il collaudo sul sito; la 0.3.2 è installata, attiva e verificata. La nuova versione aggiorna durante la digitazione oggetto, preheader, testo semplice e footer dell'anteprima e rifiuta i segnaposto sconosciuti sia nel browser sia sul server. L'outbox storica conserva modello risolto, impronta della revisione, nome dell'attività, logo e testo alternativo. Non esiste alcuna funzione di spedizione e la coda resta `PREVIEW`. Pagamenti e invii reali restano non operativi.
+La versione `0.3.4` è pronta per il collaudo sul sito; la 0.3.3 è installata, attiva e verificata. La nuova versione configura per evento nome visualizzato del mittente, indirizzo per le risposte e fino a dieci destinatari interni validati. Tutti i recapiti restano vuoti per impostazione predefinita e vengono conservati soltanto nella configurazione WordPress riservata e nell'istantanea locale. Non esiste alcuna funzione di spedizione e la coda resta `PREVIEW`. Pagamenti e invii reali restano non operativi.
 
 Il backend Google Workspace in `workspace-apps-script/` è installato come progetto `MODULI` sullo spreadsheet riservato `DB_MODULI`: crea le schede operative, convalida i pagamenti manuali, conserva audit e outbox in anteprima e accetta soltanto richieste WordPress firmate. Il controllo `PING` e una registrazione sintetica end-to-end sono stati verificati, compreso il replay idempotente senza duplicati. L'evento di prova è tornato in bozza e nessuna email è stata inviata. Il repository resta sanitizzato e non contiene ID del foglio, URL di distribuzione, segreti, codici di collaudo o destinatari reali.
 
