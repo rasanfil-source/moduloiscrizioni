@@ -36,7 +36,7 @@ final class MI_Admin {
 	}
 
 	public static function add_payment() {
-		if ( ! current_user_can( 'mi_view_registrations' ) ) { wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) ); }
+		if ( ! current_user_can( 'mi_manage_payments' ) ) { wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) ); }
 		$registration_id = isset( $_POST['registration_id'] ) ? absint( $_POST['registration_id'] ) : 0;
 		check_admin_referer( 'mi_add_payment_' . $registration_id );
 		global $wpdb;

@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — versione 3.0.0
+# Modulo Iscrizioni — versione 3.1.0
 
 Plugin WordPress dimostrativo per la Fase 2. Implementa:
 

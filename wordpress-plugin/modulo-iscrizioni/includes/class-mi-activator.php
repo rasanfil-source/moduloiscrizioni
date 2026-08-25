@@ -140,6 +140,7 @@ final class MI_Activator {
 			'mi_manage_events'      => true,
 			'mi_publish_events'     => true,
 			'mi_view_registrations' => true,
+			'mi_manage_payments'   => true,
 		);
 
 		add_role( 'mi_event_manager', 'Gestore iscrizioni', $capabilities );
