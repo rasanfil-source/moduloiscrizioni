@@ -12,6 +12,7 @@ final class MI_Spedizione_Email {
 		add_action( 'admin_menu', array( __CLASS__, 'aggiungi_pagina' ) );
 		add_action( 'admin_post_mi_salva_spedizione_email', array( __CLASS__, 'salva_impostazioni' ) );
 		add_action( 'admin_post_mi_invia_email_prova', array( __CLASS__, 'invia_prova' ) );
+		add_action( 'admin_post_mi_riaccoda_email', array( __CLASS__, 'riaccoda_email' ) );
 		add_action( 'mi_spedisci_email_in_coda', array( __CLASS__, 'spedisci_coda' ) );
 	}
 
@@ -99,6 +100,17 @@ final class MI_Spedizione_Email {
 			self::torna_alla_pagina( 'prova_ok' );
 		}
 		self::torna_alla_pagina( 'prova_ko' );
+	}
+
+	public static function riaccoda_email() {
+		self::verifica_amministratore( 'mi_riaccoda_email' );
+		$id = absint( $_POST['email_id'] ?? 0 );
+		global $wpdb;
+		$table = $wpdb->prefix . 'mi_email_outbox';
+		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'PENDING', attempts = 0, last_error = NULL, sent_at = NULL WHERE id = %d AND status IN ('FAILED', 'SENDING')", $id ) );
+		self::pianifica_spedizione();
+		wp_safe_redirect( add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox', 'email_id' => $id, 'mi_esito' => 'riaccodata' ), admin_url( 'edit.php' ) ) );
+		exit;
 	}
 
 	public static function spedisci_coda() {
