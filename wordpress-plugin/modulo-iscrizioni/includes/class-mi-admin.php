@@ -144,11 +144,11 @@ final class MI_Admin {
 		<?php $export_url = wp_nonce_url( add_query_arg( array( 'action' => 'mi_export_registrations', 'event_id' => $event_id, 'mi_search' => $search ), admin_url( 'admin-post.php' ) ), 'mi_export_registrations' ); ?>
 		<a class="button button-secondary" href="<?php echo esc_url( $export_url ); ?>">Esporta CSV filtrato</a>
 		</form>
-		<table class="widefat striped"><thead><tr><th>Codice</th><th>Evento</th><th>Stato</th><th>Workspace</th><th>Referente</th><th>Email</th><th>Persone</th><th>Totale</th><th>Primo versamento</th><th>Saldo</th><th>Data UTC</th><th></th></tr></thead><tbody>
+		<table class="widefat striped"><thead><tr><th>Codice</th><th>Evento</th><th>Stato</th><th>Workspace</th><th>Referente</th><th>Email</th><th>Persone</th><th>Totale</th><th>Versato</th><th>Residuo</th><th>Data UTC</th><th></th></tr></thead><tbody>
 		<?php if ( ! $rows ) : ?><tr><td colspan="12">Nessuna iscrizione.</td></tr><?php endif; ?>
 		<?php foreach ( $rows as $row ) : ?>
 		<?php $detail_url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-registrations', 'registration_id' => (int) $row['id'] ), admin_url( 'edit.php' ) ); ?>
-		<tr><td><code><?php echo esc_html( $row['order_code'] ); ?></code></td><td><?php echo esc_html( get_the_title( (int) $row['event_id'] ) ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['workspace_status'] ); ?><?php if ( (int) $row['workspace_attempts'] > 0 ) : ?><br><small><?php echo esc_html( 'Tentativi: ' . (int) $row['workspace_attempts'] ); ?></small><?php endif; ?></td><td><?php echo esc_html( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ); ?></td><td><?php echo esc_html( $row['buyer_email'] ); ?></td><td><?php echo esc_html( $row['total_qty'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['total_cents'] ) ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['initial_due_cents'] ) ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['balance_cents'] ) ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $detail_url ); ?>">Dettagli</a></td></tr>
+		<?php $paid_cents = self::totale_pagamenti( (int) $row['id'] ); ?><tr><td><code><?php echo esc_html( $row['order_code'] ); ?></code></td><td><?php echo esc_html( get_the_title( (int) $row['event_id'] ) ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['workspace_status'] ); ?><?php if ( (int) $row['workspace_attempts'] > 0 ) : ?><br><small><?php echo esc_html( 'Tentativi: ' . (int) $row['workspace_attempts'] ); ?></small><?php endif; ?></td><td><?php echo esc_html( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ); ?></td><td><?php echo esc_html( $row['buyer_email'] ); ?></td><td><?php echo esc_html( $row['total_qty'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['total_cents'] ) ); ?></td><td><?php echo esc_html( self::formatta_importo( $paid_cents ) ); ?></td><td><?php echo esc_html( self::formatta_importo( max( 0, (int) $row['total_cents'] - $paid_cents ) ) ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $detail_url ); ?>">Dettagli</a></td></tr>
 		<?php endforeach; ?>
 		</tbody></table>
 		<?php if ( $detail ) : ?>
@@ -166,7 +166,8 @@ final class MI_Admin {
 		<tr><th scope="row">Gestione economica</th><td><?php echo esc_html( self::etichetta_modalita_economica( $detail['economic_mode'] ) ); ?></td></tr>
 		<tr><th scope="row">Totale</th><td><?php echo esc_html( self::formatta_importo( $detail['total_cents'] ) ); ?></td></tr>
 		<tr><th scope="row">Primo versamento</th><td><?php echo esc_html( self::formatta_importo( $detail['initial_due_cents'] ) ); ?></td></tr>
-		<tr><th scope="row">Saldo successivo</th><td><?php echo esc_html( self::formatta_importo( $detail['balance_cents'] ) ); ?></td></tr>
+		<tr><th scope="row">Saldo successivo previsto</th><td><?php echo esc_html( self::formatta_importo( $detail['balance_cents'] ) ); ?></td></tr>
+		<?php $detail_paid_cents = self::totale_pagamenti( $detail_id ); ?><tr><th scope="row">Versato manualmente</th><td><?php echo esc_html( self::formatta_importo( $detail_paid_cents ) ); ?></td></tr><tr><th scope="row">Residuo calcolato</th><td><strong><?php echo esc_html( self::formatta_importo( max( 0, (int) $detail['total_cents'] - $detail_paid_cents ) ) ); ?></strong></td></tr>
 		</tbody></table>
 		<?php $payment_rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_payments WHERE registration_id = %d ORDER BY effective_at", $detail_id ), ARRAY_A ); ?>
 		<h3>Versamenti registrati</h3><?php if ( ! $payment_rows ) : ?><p>Nessun versamento registrato.</p><?php else : ?><table class="widefat striped" style="max-width:900px"><thead><tr><th>Data</th><th>Rata</th><th>Importo</th><th>Fonte</th><th>Riferimento</th><th>Nota</th></tr></thead><tbody><?php $payment_labels = array( 'BANK_TRANSFER' => 'Bonifico', 'CARD' => 'Carta', 'CASH' => 'Contante' ); foreach ( $payment_rows as $payment ) : ?><tr><td><?php echo esc_html( $payment['effective_at'] ); ?></td><td><?php echo esc_html( $payment['installment_kind'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $payment['amount_cents'] ) ); ?></td><td><?php echo esc_html( $payment_labels[ $payment['payment_source'] ] ?? $payment['payment_source'] ); ?></td><td><?php echo esc_html( $payment['external_reference'] ?: '—' ); ?></td><td><?php echo esc_html( $payment['administrative_note'] ?: '—' ); ?></td></tr><?php endforeach; ?></tbody></table><?php endif; ?>
@@ -295,6 +296,11 @@ final class MI_Admin {
 
 	private static function formatta_importo( $cents ) {
 		return number_format_i18n( max( 0, (int) $cents ) / 100, 2 ) . ' €';
+	}
+
+	private static function totale_pagamenti( $registration_id ) {
+		global $wpdb;
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(CASE WHEN transaction_kind = 'REFUND' THEN -amount_cents ELSE amount_cents END), 0) FROM {$wpdb->prefix}mi_payments WHERE registration_id = %d", $registration_id ) );
 	}
 
 	private static function etichetta_modalita_economica( $mode ) {
