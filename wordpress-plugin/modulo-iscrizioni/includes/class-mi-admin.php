@@ -58,9 +58,12 @@ final class MI_Admin {
 		$administrative_note = sanitize_textarea_field( wp_unslash( $_POST['administrative_note'] ?? '' ) );
 		if ( self::contiene_numero_carta( $external_reference ) || self::contiene_numero_carta( $administrative_note ) ) { wp_die( esc_html__( 'Non inserire numeri completi di carta.', 'modulo-iscrizioni' ) ); }
 		if ( 'REFUND' === $transaction && $amount > self::totale_pagamenti( $registration_id ) ) { wp_die( esc_html__( 'Il rimborso non può superare il totale già versato.', 'modulo-iscrizioni' ) ); }
+		$wpdb->query( 'START TRANSACTION' );
 		$inserted = $wpdb->insert( $wpdb->prefix . 'mi_payments', array( 'registration_id' => $registration_id, 'transaction_kind' => $transaction, 'installment_kind' => $kind, 'effective_at' => $effective_at, 'amount_cents' => $amount, 'payment_source' => $source, 'external_reference' => $external_reference, 'operator_label' => wp_get_current_user()->display_name, 'administrative_note' => $administrative_note, 'created_at' => current_time( 'mysql', true ) ), array( '%d', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s' ) );
-		if ( false === $inserted ) { wp_die( esc_html__( 'Il movimento non è stato salvato. Riprova.', 'modulo-iscrizioni' ) ); }
-		$wpdb->update( $wpdb->prefix . 'mi_registrations', array( 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_changed' ), array( 'id' => $registration_id ), array( '%s', '%s' ), array( '%d' ) );
+		if ( false === $inserted ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Il movimento non è stato salvato. Riprova.', 'modulo-iscrizioni' ) ); }
+		$marked_pending = $wpdb->update( $wpdb->prefix . 'mi_registrations', array( 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_changed' ), array( 'id' => $registration_id ), array( '%s', '%s' ), array( '%d' ) );
+		if ( false === $marked_pending ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Il movimento non è stato accodato per Workspace. Riprova.', 'modulo-iscrizioni' ) ); }
+		$wpdb->query( 'COMMIT' );
 		MI_Registration_Service::accoda_iscrizione_workspace( $registration_id );
 		$url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-registrations', 'registration_id' => $registration_id, 'mi_payment_added' => '1' ), admin_url( 'edit.php' ) );
 		wp_safe_redirect( $url ); exit;

@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.3\.9/);
+  assert.match(source, /Version:\s+3\.4\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -401,6 +401,14 @@ test('il pannello non conferma pagamenti non salvati', async () => {
   assert.match(admin, /\$inserted\s*=\s*\$wpdb->insert/);
   assert.match(admin, /false === \$inserted/);
   assert.match(admin, /Il movimento non è stato salvato/);
+});
+
+test('il pagamento manuale e la replica Workspace restano atomici', async () => {
+  const admin = await read('includes/class-mi-admin.php');
+  assert.match(admin, /START TRANSACTION/);
+  assert.match(admin, /ROLLBACK/);
+  assert.match(admin, /marked_pending/);
+  assert.match(admin, /COMMIT/);
 });
 
 test('l’iscrizione conserva totale, primo versamento e saldo', async () => {
