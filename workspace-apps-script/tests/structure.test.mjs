@@ -50,3 +50,12 @@ test('le funzioni Apps Script applicative hanno nomi italiani', () => {
     assert.equal(forbiddenNames.has(name), false, `Nome inglese non ammesso: ${name}`);
   }
 });
+
+test('la migrazione aggiunge il riepilogo economico alle iscrizioni', () => {
+  assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.1\.0'/);
+  assert.match(sources['Config.gs'], /modalita_economica/);
+  assert.match(sources['Config.gs'], /primo_versamento_centesimi/);
+  assert.match(sources['Config.gs'], /saldo_centesimi/);
+  assert.match(sources['Setup.gs'], /MI_INTESTAZIONI_PRECEDENTI/);
+  assert.match(sources['WebApp.gs'], /payment_methods/);
+});

@@ -1,4 +1,4 @@
-const MI_SCHEMA_VERSION = '1.0.0';
+const MI_SCHEMA_VERSION = '1.1.0';
 const MI_SHEETS = Object.freeze({
   CONFIG: 'Configurazione',
   EVENTS: 'Eventi',
@@ -13,7 +13,7 @@ const MI_SHEETS = Object.freeze({
 const MI_HEADERS = Object.freeze({
   'Configurazione': ['chiave', 'valore', 'descrizione'],
   'Eventi': ['id_evento', 'id_attivita', 'titolo', 'stato', 'capienza', 'apertura_iscrizioni', 'chiusura_iscrizioni', 'modalita_prezzo', 'data_aggiornamento'],
-  'Iscrizioni': ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione'],
+  'Iscrizioni': ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json'],
   'Partecipanti': ['codice_ordine', 'numero_partecipante', 'nome', 'cognome', 'dati_aggiuntivi_json'],
   'Inserimento pagamenti': ['id_inserimento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'nota_amministrativa', 'stato_convalida', 'messaggio_convalida', 'data_convalida'],
   'Pagamenti': ['id_pagamento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo_centesimi', 'valuta', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'canale_registrazione', 'id_inserimento_origine', 'data_creazione'],
@@ -30,6 +30,10 @@ const MI_LEGACY_SHEET_NAMES = Object.freeze({
   Payments: MI_SHEETS.PAYMENTS,
   EmailOutbox: MI_SHEETS.EMAIL_OUTBOX,
   AuditLog: MI_SHEETS.AUDIT_LOG
+});
+
+const MI_INTESTAZIONI_PRECEDENTI = Object.freeze({
+  'Iscrizioni': ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione']
 });
 
 const MI_LEGACY_HEADERS = Object.freeze({
