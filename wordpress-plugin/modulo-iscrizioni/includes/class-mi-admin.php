@@ -7,6 +7,7 @@ final class MI_Admin {
 		add_action( 'admin_menu', array( __CLASS__, 'menu' ) );
 		add_action( 'admin_post_mi_archive_event', array( __CLASS__, 'archive_event' ) );
 		add_action( 'admin_post_mi_export_registrations', array( __CLASS__, 'export_registrations' ) );
+		add_action( 'admin_post_mi_retry_workspace', array( __CLASS__, 'riaccoda_workspace' ) );
 		add_filter( 'post_row_actions', array( __CLASS__, 'event_row_actions' ), 10, 2 );
 		add_filter( 'wp_insert_post_data', array( __CLASS__, 'guard_publication' ), 20, 2 );
 		add_action( 'admin_notices', array( __CLASS__, 'publication_notice' ) );
@@ -65,7 +66,7 @@ final class MI_Admin {
 		if ( $parameters ) {
 			$where = $wpdb->prepare( $where, $parameters );
 		}
-		$rows = $wpdb->get_results( "SELECT id, order_code, event_id, status, workspace_status, buyer_first_name, buyer_last_name, buyer_email, total_qty, economic_mode, total_cents, initial_due_cents, balance_cents, created_at FROM {$table} {$where} ORDER BY id DESC LIMIT {$per_page} OFFSET {$offset}", ARRAY_A );
+		$rows = $wpdb->get_results( "SELECT id, order_code, event_id, status, workspace_status, workspace_attempts, buyer_first_name, buyer_last_name, buyer_email, total_qty, economic_mode, total_cents, initial_due_cents, balance_cents, created_at FROM {$table} {$where} ORDER BY id DESC LIMIT {$per_page} OFFSET {$offset}", ARRAY_A );
 		$visible_events = 'ALL' === $scope ? get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) ) : get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'post__in' => $allowed_events ?: array( 0 ), 'orderby' => 'title', 'order' => 'ASC' ) );
 		$detail = null;
 		$participants = array();
@@ -80,6 +81,10 @@ final class MI_Admin {
 		?>
 		<div class="wrap"><h1>Iscrizioni</h1>
 		<p>Registro locale con replica firmata sul registro Workspace. Le email restano soltanto in anteprima.</p>
+		<?php if ( isset( $_GET['mi_workspace_retry'] ) ) : ?>
+		<?php $retry_result = sanitize_key( wp_unslash( $_GET['mi_workspace_retry'] ) ); ?>
+		<div class="notice notice-success"><p><?php echo esc_html( 'synced' === $retry_result ? 'La replica era già sincronizzata.' : 'Replica Workspace riaccodata. Il registro locale resta autorevole durante il nuovo tentativo.' ); ?></p></div>
+		<?php endif; ?>
 		<form method="get" style="margin:16px 0">
 		<input type="hidden" name="post_type" value="<?php echo esc_attr( MI_Event_Post_Type::EVENT_TYPE ); ?>">
 		<input type="hidden" name="page" value="mi-registrations">
@@ -96,7 +101,7 @@ final class MI_Admin {
 		<?php if ( ! $rows ) : ?><tr><td colspan="12">Nessuna iscrizione.</td></tr><?php endif; ?>
 		<?php foreach ( $rows as $row ) : ?>
 		<?php $detail_url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-registrations', 'registration_id' => (int) $row['id'] ), admin_url( 'edit.php' ) ); ?>
-		<tr><td><code><?php echo esc_html( $row['order_code'] ); ?></code></td><td><?php echo esc_html( get_the_title( (int) $row['event_id'] ) ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['workspace_status'] ); ?></td><td><?php echo esc_html( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ); ?></td><td><?php echo esc_html( $row['buyer_email'] ); ?></td><td><?php echo esc_html( $row['total_qty'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['total_cents'] ) ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['initial_due_cents'] ) ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['balance_cents'] ) ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $detail_url ); ?>">Dettagli</a></td></tr>
+		<tr><td><code><?php echo esc_html( $row['order_code'] ); ?></code></td><td><?php echo esc_html( get_the_title( (int) $row['event_id'] ) ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['workspace_status'] ); ?><?php if ( (int) $row['workspace_attempts'] > 0 ) : ?><br><small><?php echo esc_html( 'Tentativi: ' . (int) $row['workspace_attempts'] ); ?></small><?php endif; ?></td><td><?php echo esc_html( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ); ?></td><td><?php echo esc_html( $row['buyer_email'] ); ?></td><td><?php echo esc_html( $row['total_qty'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['total_cents'] ) ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['initial_due_cents'] ) ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['balance_cents'] ) ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $detail_url ); ?>">Dettagli</a></td></tr>
 		<?php endforeach; ?>
 		</tbody></table>
 		<?php if ( $detail ) : ?>
@@ -105,6 +110,9 @@ final class MI_Admin {
 		<tr><th scope="row">Evento</th><td><?php echo esc_html( get_the_title( (int) $detail['event_id'] ) ); ?></td></tr>
 		<tr><th scope="row">Stato</th><td><?php echo esc_html( $detail['status'] ); ?></td></tr>
 		<tr><th scope="row">Workspace</th><td><?php echo esc_html( $detail['workspace_status'] ); ?></td></tr>
+		<tr><th scope="row">Tentativi Workspace</th><td><?php echo esc_html( (string) (int) $detail['workspace_attempts'] ); ?></td></tr>
+		<tr><th scope="row">Ultimo errore Workspace</th><td><?php echo esc_html( $detail['workspace_last_error'] ?: 'Nessuno' ); ?></td></tr>
+		<tr><th scope="row">Sincronizzata il</th><td><?php echo esc_html( $detail['workspace_synced_at'] ?: 'Non ancora sincronizzata' ); ?></td></tr>
 		<tr><th scope="row">Referente</th><td><?php echo esc_html( $detail['buyer_first_name'] . ' ' . $detail['buyer_last_name'] ); ?></td></tr>
 		<tr><th scope="row">Email</th><td><?php echo esc_html( $detail['buyer_email'] ); ?></td></tr>
 		<tr><th scope="row">Cellulare</th><td><?php echo esc_html( $detail['buyer_phone'] ); ?></td></tr>
@@ -113,6 +121,14 @@ final class MI_Admin {
 		<tr><th scope="row">Primo versamento</th><td><?php echo esc_html( self::formatta_importo( $detail['initial_due_cents'] ) ); ?></td></tr>
 		<tr><th scope="row">Saldo successivo</th><td><?php echo esc_html( self::formatta_importo( $detail['balance_cents'] ) ); ?></td></tr>
 		</tbody></table>
+		<?php if ( 'SYNCED' !== $detail['workspace_status'] ) : ?>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin:16px 0">
+		<input type="hidden" name="action" value="mi_retry_workspace">
+		<input type="hidden" name="registration_id" value="<?php echo esc_attr( $detail_id ); ?>">
+		<?php wp_nonce_field( 'mi_retry_workspace_' . $detail_id ); ?>
+		<button class="button button-secondary">Riaccoda replica Workspace</button>
+		</form>
+		<?php endif; ?>
 		<h3>Partecipanti</h3>
 		<?php if ( ! $participants ) : ?><p>Nessun partecipante associato.</p><?php endif; ?>
 		<?php $catalog = MI_Field_Schema::catalog(); ?>
@@ -131,6 +147,32 @@ final class MI_Admin {
 		<?php endif; ?>
 		</div>
 		<?php
+	}
+
+	public static function riaccoda_workspace() {
+		if ( ! current_user_can( 'mi_view_registrations' ) ) {
+			wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) );
+		}
+		$registration_id = isset( $_POST['registration_id'] ) ? absint( $_POST['registration_id'] ) : 0;
+		check_admin_referer( 'mi_retry_workspace_' . $registration_id );
+		global $wpdb;
+		$table = $wpdb->prefix . 'mi_registrations';
+		$registration = $wpdb->get_row( $wpdb->prepare( "SELECT event_id, workspace_status FROM {$table} WHERE id = %d", $registration_id ), ARRAY_A );
+		if ( ! $registration || ! MI_Access::can_access_event( (int) $registration['event_id'] ) ) {
+			wp_die( esc_html__( 'Iscrizione non accessibile.', 'modulo-iscrizioni' ) );
+		}
+		$result = MI_Registration_Service::accoda_iscrizione_workspace( $registration_id );
+		$url = add_query_arg(
+			array(
+				'post_type'          => MI_Event_Post_Type::EVENT_TYPE,
+				'page'               => 'mi-registrations',
+				'registration_id'    => $registration_id,
+				'mi_workspace_retry' => 'SYNCED' === $result ? 'synced' : 'queued',
+			),
+			admin_url( 'edit.php' )
+		);
+		wp_safe_redirect( $url );
+		exit;
 	}
 
 	public static function export_registrations() {

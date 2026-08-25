@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — vertical slice 0.5.2
+# Modulo Iscrizioni — vertical slice 0.5.3
 
 Plugin WordPress dimostrativo per la Fase 2. Implementa:
 
@@ -30,7 +30,7 @@ Plugin WordPress dimostrativo per la Fase 2. Implementa:
 
 ## Limiti intenzionali
 
-Questa versione non invia email, non riscuote pagamenti e non genera QR/barcode. L'editor per evento salva oggetto, preheader, corpo HTML limitato, testo semplice e footer e ne mostra un'anteprima con dati esclusivamente sintetici. I valori dei segnaposto vengono puliti per i contesti testuali e sottoposti a escaping nel corpo HTML. Ogni nuova voce locale conserva il modello risolto e il riepilogo economico. La modalità `ZERO` dichiara esplicitamente un evento gratuito e viene mostrata come “Gratuito”; è compatibile soltanto con “Solo iscrizione”. Modalità, primo versamento, saldo e fonti ammesse vengono replicate a Workspace in modo asincrono dopo il salvataggio locale, senza rallentare la risposta del modulo e senza IBAN, collegamenti carta o altre coordinate operative. Il pacchetto 0.5.2 è destinato al collaudo sul sito autorizzato.
+Questa versione non invia email, non riscuote pagamenti e non genera QR/barcode. L'editor per evento salva oggetto, preheader, corpo HTML limitato, testo semplice e footer e ne mostra un'anteprima con dati esclusivamente sintetici. I valori dei segnaposto vengono puliti per i contesti testuali e sottoposti a escaping nel corpo HTML. Ogni nuova voce locale conserva il modello risolto e il riepilogo economico. La modalità `ZERO` dichiara esplicitamente un evento gratuito e viene mostrata come “Gratuito”; è compatibile soltanto con “Solo iscrizione”. Modalità, primo versamento, saldo e fonti ammesse vengono replicate a Workspace in modo asincrono dopo il salvataggio locale. Il dettaglio dell’iscrizione mostra tentativi, ultimo errore e data di sincronizzazione e consente di riaccodare in modo protetto una replica in attesa, senza ripetere l’iscrizione. Il pacchetto 0.5.3 non contiene IBAN, collegamenti carta o altre coordinate operative ed è destinato al collaudo sul sito autorizzato.
 
 ## Installazione di prova
 
