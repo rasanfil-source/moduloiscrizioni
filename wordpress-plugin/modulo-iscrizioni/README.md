@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — vertical slice 0.2.3
+# Modulo Iscrizioni — vertical slice 0.2.4
 
 Plugin WordPress dimostrativo per la Fase 2. Implementa:
 

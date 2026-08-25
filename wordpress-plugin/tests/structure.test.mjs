@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.2\.3/);
+  assert.match(source, /Version:\s+0\.2\.4/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -18,6 +18,7 @@ test('la configurazione Workspace è riservata e non mostra il segreto salvato',
   assert.match(settings, /type="password"/);
   assert.doesNotMatch(settings, /get_option\(\s*'mi_workspace_shared_secret'.*value=/s);
   assert.match(settings, /MI_Workspace_Client::ping/);
+  assert.match(settings, /get_error_code/);
 });
 
 test('il client Workspace firma le richieste e non contiene configurazione privata', async () => {

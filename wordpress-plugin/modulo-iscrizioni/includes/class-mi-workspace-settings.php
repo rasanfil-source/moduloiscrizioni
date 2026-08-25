@@ -27,12 +27,13 @@ final class MI_Workspace_Settings {
 		$url = (string) get_option( 'mi_workspace_webapp_url', '' );
 		$configured = MI_Workspace_Client::is_configured();
 		$notice = isset( $_GET['mi_esito'] ) ? sanitize_key( wp_unslash( $_GET['mi_esito'] ) ) : '';
+		$error_code = isset( $_GET['mi_codice'] ) ? sanitize_key( wp_unslash( $_GET['mi_codice'] ) ) : '';
 		?>
 		<div class="wrap">
 			<h1>Collegamento Google Workspace</h1>
 			<?php if ( 'salvato' === $notice ) : ?><div class="notice notice-success"><p>Configurazione salvata.</p></div><?php endif; ?>
 			<?php if ( 'ping_ok' === $notice ) : ?><div class="notice notice-success"><p>Collegamento firmato verificato. Workspace è in modalità ANTEPRIMA.</p></div><?php endif; ?>
-			<?php if ( 'ping_errore' === $notice ) : ?><div class="notice notice-error"><p>Collegamento non riuscito. Controlla URL, distribuzione e segreto condiviso.</p></div><?php endif; ?>
+			<?php if ( 'ping_errore' === $notice ) : ?><div class="notice notice-error"><p>Collegamento non riuscito. Codice diagnostico: <code><?php echo esc_html( $error_code ?: 'non_disponibile' ); ?></code>.</p></div><?php endif; ?>
 			<p>Il segreto salvato non viene mai mostrato. Inseriscilo nuovamente soltanto per sostituirlo.</p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<input type="hidden" name="action" value="mi_save_workspace">
@@ -75,7 +76,9 @@ final class MI_Workspace_Settings {
 	public static function test_connection() {
 		self::authorize( 'mi_test_workspace' );
 		$result = MI_Workspace_Client::ping();
-		wp_safe_redirect( self::page_url( is_wp_error( $result ) ? 'ping_errore' : 'ping_ok' ) );
+		$url = self::page_url( is_wp_error( $result ) ? 'ping_errore' : 'ping_ok' );
+		if ( is_wp_error( $result ) ) $url = add_query_arg( 'mi_codice', sanitize_key( $result->get_error_code() ), $url );
+		wp_safe_redirect( $url );
 		exit;
 	}
 
