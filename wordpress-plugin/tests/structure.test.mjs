@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.2\.0/);
+  assert.match(source, /Version:\s+3\.3\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -40,6 +40,8 @@ test('le iscrizioni vengono replicate con idempotenza senza perdere il salvatagg
   assert.match(service, /'COMMIT'[\s\S]+sync_workspace/);
   assert.match(service, /sync_pending_workspace/);
   assert.match(service, /LIMIT 10/);
+  assert.match(service, /\$payments_table\s*=\s*\$wpdb->prefix\s*\.\s*'mi_payments'/);
+  assert.match(service, /administrative_note FROM \{\$payments_table\}/);
   assert.match(activator, /workspace_status varchar\(24\)/);
   assert.match(activator, /workspace_attempts/);
   assert.match(activator, /wp_schedule_event/);
@@ -331,6 +333,8 @@ test('i valori dei segnaposto email sono protetti in base al contesto', async ()
   assert.match(model, /esc_html\(\s*sanitize_text_field/);
   assert.match(model, /'html' === \$source/);
   assert.match(model, /sanitize_text_field\(\s*\(string\) \$value\s*\)/);
+  const service = await read('includes/class-mi-registration-service.php');
+  assert.match(service, /crea_istantanea\(\s*\$event_id,\s*array_map\(\s*'esc_html'/);
 });
 
 test('la replica Workspace è accodata dopo il commit senza bloccare la risposta', async () => {
