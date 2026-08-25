@@ -44,7 +44,7 @@ final class MI_Shortcode {
 		$config = array( 'event' => $event, 'state' => MI_Registration_Service::registration_state( $event ), 'endpoint' => esc_url_raw( rest_url( MI_REST_Controller::NAMESPACE . '/events/' . $event_id . '/registrations' ) ), 'instanceId' => $instance_id, 'startedAt' => time(), 'privacyUrl' => get_privacy_policy_url() );
 		$formatted_date = self::formatted_event_date( $event['event_starts_at'] );
 		ob_start(); ?>
-		<section id="<?php echo esc_attr( $instance_id ); ?>" class="mi-registration" data-mi-config="<?php echo esc_attr( wp_json_encode( $config ) ); ?>">
+		<section id="<?php echo esc_attr( $instance_id ); ?>" class="mi-registration" style="--mi-primary:<?php echo esc_attr( $event['accent_color'] ); ?>;--mi-primary-dark:<?php echo esc_attr( self::darken_color( $event['accent_color'] ) ); ?>" data-mi-config="<?php echo esc_attr( wp_json_encode( $config ) ); ?>">
 			<header class="mi-registration__hero<?php echo $event['cover_image'] ? ' mi-registration__hero--with-image' : ''; ?>">
 				<?php if ( $event['cover_image'] ) : ?><img class="mi-registration__cover" src="<?php echo esc_url( $event['cover_image'] ); ?>" alt="<?php echo esc_attr( $event['cover_image_alt'] ?: $event['title'] ); ?>"><?php endif; ?>
 				<div class="mi-registration__hero-content">
@@ -73,6 +73,14 @@ final class MI_Shortcode {
 		if ( ! $value ) return '';
 		$date = DateTimeImmutable::createFromFormat( 'Y-m-d\TH:i', $value, wp_timezone() );
 		return $date ? wp_date( 'l j F Y, H:i', $date->getTimestamp(), wp_timezone() ) : '';
+	}
+
+	private static function darken_color( $color ) {
+		$color = sanitize_hex_color( $color ) ?: '#c43b2f';
+		$red = max( 0, (int) round( hexdec( substr( $color, 1, 2 ) ) * .72 ) );
+		$green = max( 0, (int) round( hexdec( substr( $color, 3, 2 ) ) * .72 ) );
+		$blue = max( 0, (int) round( hexdec( substr( $color, 5, 2 ) ) * .72 ) );
+		return sprintf( '#%02x%02x%02x', $red, $green, $blue );
 	}
 
 	private static function state_message( $state ) {

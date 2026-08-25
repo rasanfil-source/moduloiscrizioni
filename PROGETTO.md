@@ -229,6 +229,13 @@ Componenti visivi di base:
 - modali soltanto per conferme brevi, non per interi passaggi del form;
 - schermata finale con codice prenotazione, stato e prossima azione.
 
+Integrazione con l’editor del sito:
+
+- Divi deve offrire nel Visual Builder un elemento nativo “Modulo iscrizioni”, affiancato agli elementi testo, immagine, video e codice;
+- l’elemento permette di scegliere un evento accessibile da un elenco e riutilizza il medesimo motore dello shortcode, senza duplicare logica, salvataggi o controlli;
+- lo shortcode resta disponibile come alternativa compatibile e come formato persistente di base;
+- se Divi non è attivo, l’integrazione non carica file né produce errori e il plugin continua a funzionare normalmente.
+
 Prima dello sviluppo definitivo verranno preparati e approvati almeno quattro wireframe: riepilogo evento, selezione posti, partecipanti/riepilogo e conferma-pagamento, ciascuno in versione mobile e desktop. Successivamente verrà definito un piccolo design system con colori, tipografia, spaziature, raggi, ombre, icone e stati dei componenti.
 
 ## 5. Configurazione dell'evento

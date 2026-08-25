@@ -10,6 +10,7 @@ final class MI_Event_Post_Type {
 		add_action( 'init', array( __CLASS__, 'register_types' ) );
 		add_action( 'add_meta_boxes', array( __CLASS__, 'add_meta_boxes' ) );
 		add_action( 'save_post_' . self::EVENT_TYPE, array( __CLASS__, 'save_event' ), 10, 2 );
+		add_action( 'save_post_' . self::ACTIVITY_TYPE, array( __CLASS__, 'save_activity' ), 10, 2 );
 		add_filter( 'manage_' . self::EVENT_TYPE . '_posts_columns', array( __CLASS__, 'event_columns' ) );
 		add_action( 'manage_' . self::EVENT_TYPE . '_posts_custom_column', array( __CLASS__, 'render_event_column' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'admin_assets' ) );
@@ -185,7 +186,18 @@ final class MI_Event_Post_Type {
 	}
 
 	public static function render_activity_box( $post ) {
-		echo '<p>Usa l’immagine in evidenza come logo dell’attività. Il singolo evento potrà applicare un override in una fase successiva.</p>';
+		wp_nonce_field( 'mi_save_activity', 'mi_activity_nonce' );
+		$accent_color = sanitize_hex_color( get_post_meta( $post->ID, '_mi_accent_color', true ) ) ?: '#c43b2f';
+		echo '<p>Usa l’immagine in evidenza come logo dell’attività. Logo e colore vengono ereditati dai suoi eventi.</p>';
+		echo '<p><label for="mi_accent_color"><strong>Colore principale dei moduli</strong></label><br><input id="mi_accent_color" name="mi_accent_color" type="color" value="' . esc_attr( $accent_color ) . '"></p>';
+		echo '<p class="description">Il colore viene applicato soltanto a pulsanti, focus e stati attivi del modulo.</p>';
+	}
+
+	public static function save_activity( $post_id, $post ) {
+		if ( ! isset( $_POST['mi_activity_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['mi_activity_nonce'] ) ), 'mi_save_activity' ) ) return;
+		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) || ! current_user_can( 'manage_options' ) ) return;
+		$accent_color = isset( $_POST['mi_accent_color'] ) ? sanitize_hex_color( wp_unslash( $_POST['mi_accent_color'] ) ) : '';
+		update_post_meta( $post_id, '_mi_accent_color', $accent_color ?: '#c43b2f' );
 	}
 
 	public static function save_event( $post_id, $post ) {
