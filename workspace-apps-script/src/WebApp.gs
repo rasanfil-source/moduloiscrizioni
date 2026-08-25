@@ -113,10 +113,12 @@ function sincronizzaPagamenti_(orderCode, payments) {
     const amount = Math.max(0, Math.round(Number(payment.amount_cents) || 0));
     if (!kind || !source || amount < 1) return;
     const effective = normalizzaTesto_(payment.effective_at, 40);
+    const effectiveDate = effective ? new Date(effective) : new Date();
+    if (isNaN(effectiveDate.getTime())) return;
     const reference = normalizzaTesto_(payment.external_reference, 120);
     const origin = 'WP|' + orderCode + '|' + kind + '|' + effective + '|' + amount + '|' + source + '|' + reference;
     if (existing.some(function (row) { return String(row.id_inserimento_origine) === origin; })) return;
-    sheet.appendRow([creaIdentificativoOpaco_('pay'), neutralizzaFormula_(orderCode, 64), kind, installment, effective ? new Date(effective) : new Date(), amount, 'EUR', source, neutralizzaFormula_(reference, 120), neutralizzaFormula_(payment.operator_label, 100), 'WORDPRESS', origin, new Date()]);
+    sheet.appendRow([creaIdentificativoOpaco_('pay'), neutralizzaFormula_(orderCode, 64), kind, installment, effectiveDate, amount, 'EUR', source, neutralizzaFormula_(reference, 120), neutralizzaFormula_(payment.operator_label, 100), 'WORDPRESS', origin, new Date()]);
     existing.push({ id_inserimento_origine: origin });
   });
 }
