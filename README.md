@@ -12,9 +12,9 @@ La parrocchia è l'ente base. Ogni attività può avere logo, colori e contatti 
 
 ## Stato
 
-La versione `0.2.6` è installata e attiva sul sito. Il collaudo ha verificato homepage, pagina Santiago, pannello eventi, migrazione compatibile, preset Minimo/Standard/Viaggio, anteprima amministrativa, caricamento condizionale degli asset e collegamento firmato a Workspace. La bozza 2027 conserva il profilo Minimo; attività ed evento non sono pubblicati. Email, pagamenti e sincronizzazione delle iscrizioni restano non operativi.
+La versione `0.2.7` è installata e attiva sul sito. Il collaudo ha verificato homepage, pagina Santiago, pannello eventi, migrazione compatibile, preset Minimo/Standard/Viaggio, anteprima amministrativa, caricamento condizionale degli asset e collegamento firmato a Workspace. Le iscrizioni vengono prima conservate localmente e poi replicate con idempotenza; gli errori temporanei restano `PENDING` e sono ritentati a piccoli lotti. La bozza 2027 conserva il profilo Minimo; attività ed evento non sono pubblicati. Email e pagamenti restano non operativi.
 
-Il backend Google Workspace in `workspace-apps-script/` è installato come progetto `MODULI` sullo spreadsheet riservato `DB_MODULI`: crea le schede operative, convalida i pagamenti manuali, conserva audit e outbox in anteprima e accetta soltanto richieste WordPress firmate. Il controllo `PING` è stato verificato. Il repository resta sanitizzato e non contiene ID del foglio, URL di distribuzione, segreti o destinatari reali.
+Il backend Google Workspace in `workspace-apps-script/` è installato come progetto `MODULI` sullo spreadsheet riservato `DB_MODULI`: crea le schede operative, convalida i pagamenti manuali, conserva audit e outbox in anteprima e accetta soltanto richieste WordPress firmate. Il controllo `PING` è stato verificato; la registrazione end-to-end sarà collaudata con un evento dimostrativo separato. Il repository resta sanitizzato e non contiene ID del foglio, URL di distribuzione, segreti o destinatari reali.
 
 - [Progetto funzionale e tecnico](PROGETTO.md)
 - [Decisioni della Fase A](docs/DECISIONI_FASE_A.md)

@@ -23,6 +23,7 @@ final class MI_Plugin {
 		MI_Workspace_Settings::boot();
 		MI_REST_Controller::boot();
 		MI_Shortcode::boot();
+		add_action( 'mi_sync_workspace_pending', array( 'MI_Registration_Service', 'sync_pending_workspace' ) );
 	}
 
 	public function load_textdomain() {

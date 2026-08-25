@@ -6,14 +6,24 @@ final class MI_Activator {
 	public static function activate() {
 		self::create_tables();
 		self::add_roles_and_capabilities();
+		self::ensure_schedule();
 	}
 
-	public static function deactivate() {}
+	public static function deactivate() {
+		wp_clear_scheduled_hook( 'mi_sync_workspace_pending' );
+	}
 
 	public static function maybe_upgrade() {
 		if ( MI_VERSION !== get_option( 'mi_db_version' ) ) {
 			self::create_tables();
 			self::add_roles_and_capabilities();
+		}
+		self::ensure_schedule();
+	}
+
+	private static function ensure_schedule() {
+		if ( ! wp_next_scheduled( 'mi_sync_workspace_pending' ) ) {
+			wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', 'mi_sync_workspace_pending' );
 		}
 	}
 
@@ -39,11 +49,16 @@ final class MI_Activator {
 			buyer_phone varchar(32) NOT NULL,
 			total_qty smallint(5) unsigned NOT NULL,
 			idempotency_key varchar(64) NOT NULL,
+			workspace_status varchar(24) NOT NULL DEFAULT 'PENDING',
+			workspace_attempts smallint(5) unsigned NOT NULL DEFAULT 0,
+			workspace_last_error varchar(80) NULL,
+			workspace_synced_at datetime NULL,
 			created_at datetime NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY order_code (order_code),
 			UNIQUE KEY idempotency_key (event_id,idempotency_key),
-			KEY event_status (event_id,status)
+			KEY event_status (event_id,status),
+			KEY workspace_status (workspace_status)
 		) ENGINE=InnoDB {$charset};" );
 
 		dbDelta( "CREATE TABLE {$items} (

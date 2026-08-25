@@ -52,14 +52,14 @@ final class MI_Admin {
 		} else {
 			$where = '';
 		}
-		$rows = $wpdb->get_results( "SELECT id, order_code, event_id, status, buyer_first_name, buyer_last_name, buyer_email, total_qty, created_at FROM {$table} {$where} ORDER BY id DESC LIMIT {$per_page} OFFSET {$offset}", ARRAY_A );
+		$rows = $wpdb->get_results( "SELECT id, order_code, event_id, status, workspace_status, buyer_first_name, buyer_last_name, buyer_email, total_qty, created_at FROM {$table} {$where} ORDER BY id DESC LIMIT {$per_page} OFFSET {$offset}", ARRAY_A );
 		?>
 		<div class="wrap"><h1>Iscrizioni</h1>
-		<p>Registro locale della vertical slice. L’esportazione e la sincronizzazione Workspace non sono ancora attive.</p>
-		<table class="widefat striped"><thead><tr><th>Codice</th><th>Evento</th><th>Stato</th><th>Referente</th><th>Email</th><th>Persone</th><th>Data UTC</th></tr></thead><tbody>
-		<?php if ( ! $rows ) : ?><tr><td colspan="7">Nessuna iscrizione.</td></tr><?php endif; ?>
+		<p>Registro locale con replica firmata sul registro Workspace. Le email restano soltanto in anteprima.</p>
+		<table class="widefat striped"><thead><tr><th>Codice</th><th>Evento</th><th>Stato</th><th>Workspace</th><th>Referente</th><th>Email</th><th>Persone</th><th>Data UTC</th></tr></thead><tbody>
+		<?php if ( ! $rows ) : ?><tr><td colspan="8">Nessuna iscrizione.</td></tr><?php endif; ?>
 		<?php foreach ( $rows as $row ) : ?>
-		<tr><td><code><?php echo esc_html( $row['order_code'] ); ?></code></td><td><?php echo esc_html( get_the_title( (int) $row['event_id'] ) ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ); ?></td><td><?php echo esc_html( $row['buyer_email'] ); ?></td><td><?php echo esc_html( $row['total_qty'] ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td></tr>
+		<tr><td><code><?php echo esc_html( $row['order_code'] ); ?></code></td><td><?php echo esc_html( get_the_title( (int) $row['event_id'] ) ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['workspace_status'] ); ?></td><td><?php echo esc_html( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ); ?></td><td><?php echo esc_html( $row['buyer_email'] ); ?></td><td><?php echo esc_html( $row['total_qty'] ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td></tr>
 		<?php endforeach; ?>
 		</tbody></table></div>
 		<?php

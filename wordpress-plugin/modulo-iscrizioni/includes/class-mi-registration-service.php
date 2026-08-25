@@ -100,9 +100,10 @@ final class MI_Registration_Service {
 		}
 
 		$registrations_table = $wpdb->prefix . 'mi_registrations';
-		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT order_code, status FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
+		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
 		if ( $existing ) {
-			return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'replayed' => true );
+			$workspace_status = self::sync_workspace_safely( (int) $existing['id'] );
+			return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'workspace_status' => $workspace_status, 'replayed' => true );
 		}
 
 		$counters_table = $wpdb->prefix . 'mi_event_counters';
@@ -149,9 +150,10 @@ final class MI_Registration_Service {
 			);
 			if ( ! $inserted ) {
 				$wpdb->query( 'ROLLBACK' );
-				$existing = $wpdb->get_row( $wpdb->prepare( "SELECT order_code, status FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
+				$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
 				if ( $existing ) {
-					return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'replayed' => true );
+					$workspace_status = self::sync_workspace_safely( (int) $existing['id'] );
+					return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'workspace_status' => $workspace_status, 'replayed' => true );
 				}
 				throw new RuntimeException( 'Registrazione non salvata.' );
 			}
@@ -175,10 +177,83 @@ final class MI_Registration_Service {
 				throw new RuntimeException( 'Outbox non salvata.' );
 			}
 			$wpdb->query( 'COMMIT' );
-			return array( 'order_code' => $order_code, 'status' => $status, 'replayed' => false );
+			$workspace_status = self::sync_workspace_safely( $registration_id );
+			return array( 'order_code' => $order_code, 'status' => $status, 'workspace_status' => $workspace_status, 'replayed' => false );
 		} catch ( Throwable $error ) {
 			$wpdb->query( 'ROLLBACK' );
 			return new WP_Error( 'mi_storage_error', 'Non è stato possibile completare l’iscrizione.', array( 'status' => 500 ) );
+		}
+	}
+
+	public static function sync_workspace( $registration_id ) {
+		global $wpdb;
+		$registration_id = absint( $registration_id );
+		$registrations_table = $wpdb->prefix . 'mi_registrations';
+		$items_table = $wpdb->prefix . 'mi_registration_items';
+		$participants_table = $wpdb->prefix . 'mi_participants';
+		$registration = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$registrations_table} WHERE id = %d", $registration_id ), ARRAY_A );
+		if ( ! $registration ) {
+			return 'UNAVAILABLE';
+		}
+		if ( 'SYNCED' === $registration['workspace_status'] ) {
+			return 'SYNCED';
+		}
+		$items = $wpdb->get_results( $wpdb->prepare( "SELECT quantity, unit_price_cents FROM {$items_table} WHERE registration_id = %d ORDER BY id", $registration_id ), ARRAY_A );
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT first_name, last_name, extra_json FROM {$participants_table} WHERE registration_id = %d ORDER BY id", $registration_id ), ARRAY_A );
+		$participants = array_map(
+			static function ( $row ) {
+				$fields = json_decode( (string) $row['extra_json'], true );
+				return array(
+					'first_name' => $row['first_name'],
+					'last_name'  => $row['last_name'],
+					'fields'     => is_array( $fields ) ? $fields : array(),
+				);
+			},
+			$rows
+		);
+		$total_cents = 0;
+		foreach ( $items as $item ) {
+			$total_cents += (int) $item['quantity'] * (int) $item['unit_price_cents'];
+		}
+		$result = MI_Workspace_Client::request(
+			'APPEND_REGISTRATION',
+			array(
+				'order_code'     => $registration['order_code'],
+				'event_id'       => (string) $registration['event_id'],
+				'idempotency_key'=> $registration['idempotency_key'],
+				'status'         => $registration['status'],
+				'buyer'          => array(
+					'first_name' => $registration['buyer_first_name'],
+					'last_name'  => $registration['buyer_last_name'],
+					'email'      => $registration['buyer_email'],
+					'phone'      => $registration['buyer_phone'],
+				),
+				'participants'   => $participants,
+				'total_cents'    => $total_cents,
+			)
+		);
+		if ( is_wp_error( $result ) ) {
+			$wpdb->query( $wpdb->prepare( "UPDATE {$registrations_table} SET workspace_status = 'PENDING', workspace_attempts = workspace_attempts + 1, workspace_last_error = %s WHERE id = %d", sanitize_key( $result->get_error_code() ), $registration_id ) );
+			return 'PENDING';
+		}
+		$wpdb->query( $wpdb->prepare( "UPDATE {$registrations_table} SET workspace_status = 'SYNCED', workspace_attempts = workspace_attempts + 1, workspace_last_error = NULL, workspace_synced_at = %s WHERE id = %d", current_time( 'mysql', true ), $registration_id ) );
+		return 'SYNCED';
+	}
+
+	public static function sync_pending_workspace() {
+		global $wpdb;
+		$table = $wpdb->prefix . 'mi_registrations';
+		$ids = $wpdb->get_col( "SELECT id FROM {$table} WHERE workspace_status = 'PENDING' AND workspace_attempts < 10 ORDER BY id LIMIT 10" );
+		foreach ( $ids as $registration_id ) {
+			self::sync_workspace_safely( (int) $registration_id );
+		}
+	}
+
+	private static function sync_workspace_safely( $registration_id ) {
+		try {
+			return self::sync_workspace( $registration_id );
+		} catch ( Throwable $sync_error ) {
+			return 'PENDING';
 		}
 	}
 

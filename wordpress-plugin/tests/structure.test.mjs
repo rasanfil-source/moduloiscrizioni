@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.2\.6/);
+  assert.match(source, /Version:\s+0\.2\.7/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -29,6 +29,20 @@ test('il client Workspace firma le richieste e non contiene configurazione priva
   assert.match(source, /MI_WORKSPACE_SHARED_SECRET/);
   assert.match(source, /stable_json/);
   assert.doesNotMatch(source, /script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+/);
+});
+
+test('le iscrizioni vengono replicate con idempotenza senza perdere il salvataggio locale', async () => {
+  const service = await read('includes/class-mi-registration-service.php');
+  const activator = await read('includes/class-mi-activator.php');
+  assert.match(service, /APPEND_REGISTRATION/);
+  assert.match(service, /sync_workspace/);
+  assert.match(service, /workspace_status/);
+  assert.match(service, /'COMMIT'[\s\S]+sync_workspace/);
+  assert.match(service, /sync_pending_workspace/);
+  assert.match(service, /LIMIT 10/);
+  assert.match(activator, /workspace_status varchar\(24\)/);
+  assert.match(activator, /workspace_attempts/);
+  assert.match(activator, /wp_schedule_event/);
 });
 
 test('le bozze incomplete possono essere salvate senza aggirare il controllo di pubblicazione', async () => {
