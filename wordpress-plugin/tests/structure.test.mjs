@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.3\.4/);
+  assert.match(source, /Version:\s+3\.3\.6/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -380,6 +380,12 @@ test('il registro pagamenti filtra l’intero archivio senza troncare ai primi c
   assert.doesNotMatch(admin, /ORDER BY p\.id DESC LIMIT 100/);
   assert.match(admin, /payment_from/);
   assert.match(admin, /payment_to/);
+});
+
+test('il registro pagamenti rifiuta date effettive normalizzate silenziosamente', async () => {
+  const admin = await read('includes/class-mi-admin.php');
+  assert.match(admin, /Data effettiva non valida/);
+  assert.match(admin, /format\( 'Y-m-d\\\\TH:i' \) !== \$effective_raw/);
 });
 
 test('l’iscrizione conserva totale, primo versamento e saldo', async () => {

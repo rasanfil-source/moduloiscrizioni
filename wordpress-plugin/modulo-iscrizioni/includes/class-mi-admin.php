@@ -48,7 +48,11 @@ final class MI_Admin {
 		$amount = round( max( 0, (float) str_replace( ',', '.', sanitize_text_field( wp_unslash( $_POST['amount'] ?? '0' ) ) ) ) * 100 );
 		$effective_raw = sanitize_text_field( wp_unslash( $_POST['effective_at'] ?? '' ) );
 		$effective_at = current_time( 'mysql' );
-		if ( $effective_raw ) { $effective_date = DateTimeImmutable::createFromFormat( 'Y-m-d\\TH:i', $effective_raw, wp_timezone() ); if ( $effective_date ) { $effective_at = $effective_date->format( 'Y-m-d H:i:s' ); } }
+		if ( $effective_raw ) {
+			$effective_date = DateTimeImmutable::createFromFormat( 'Y-m-d\\TH:i', $effective_raw, wp_timezone() );
+			if ( ! $effective_date || $effective_date->format( 'Y-m-d\\TH:i' ) !== $effective_raw ) { wp_die( esc_html__( 'Data effettiva non valida.', 'modulo-iscrizioni' ) ); }
+			$effective_at = $effective_date->format( 'Y-m-d H:i:s' );
+		}
 		if ( ! in_array( $source, array( 'BANK_TRANSFER', 'CARD', 'CASH' ), true ) || ! in_array( $kind, array( 'DEPOSIT', 'BALANCE', 'FULL', 'OTHER' ), true ) || ! in_array( $transaction, array( 'PAYMENT', 'REFUND' ), true ) || $amount < 1 ) { wp_die( esc_html__( 'Dati del versamento non validi.', 'modulo-iscrizioni' ) ); }
 		if ( 'REFUND' === $transaction && $amount > self::totale_pagamenti( $registration_id ) ) { wp_die( esc_html__( 'Il rimborso non può superare il totale già versato.', 'modulo-iscrizioni' ) ); }
 		$wpdb->insert( $wpdb->prefix . 'mi_payments', array( 'registration_id' => $registration_id, 'transaction_kind' => $transaction, 'installment_kind' => $kind, 'effective_at' => $effective_at, 'amount_cents' => $amount, 'payment_source' => $source, 'external_reference' => sanitize_text_field( wp_unslash( $_POST['external_reference'] ?? '' ) ), 'operator_label' => wp_get_current_user()->display_name, 'administrative_note' => sanitize_textarea_field( wp_unslash( $_POST['administrative_note'] ?? '' ) ), 'created_at' => current_time( 'mysql', true ) ), array( '%d', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s' ) );
