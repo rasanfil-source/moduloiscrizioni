@@ -22,6 +22,9 @@
 .mi-registration__step { margin: 1.5rem 0; padding: 1.25rem; border: 1px solid var(--mi-border); border-radius: 12px; }
 .mi-registration__step h3, .mi-registration__step legend { margin: 0 0 1rem; padding: 0 .25rem; color: var(--mi-ink); font-size: 1.15rem; font-weight: 700; }
 .mi-registration__tickets { display: grid; gap: .75rem; }
+.mi-registration__economic-summary { margin: 1rem 0; padding: .875rem 1rem; border: 1px solid #d8dee6; border-radius: .5rem; background: #f8fafc; }
+.mi-registration__economic-summary p { display: flex; justify-content: space-between; gap: 1.25rem; margin: .25rem 0; }
+.mi-registration__economic-summary small { display: block; margin-top: .5rem; color: #4b5563; }
 .mi-registration__ticket { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .9rem; border: 1px solid var(--mi-border); border-radius: 10px; }
 .mi-registration__ticket span { display: grid; gap: .15rem; }
 .mi-registration__ticket small { color: #52697a; }

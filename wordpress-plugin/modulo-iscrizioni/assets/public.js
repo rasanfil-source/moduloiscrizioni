@@ -12,6 +12,7 @@
     const errorBox = root.querySelector('[data-mi-error]');
     const successBox = root.querySelector('[data-mi-success]');
     const submitButton = root.querySelector('.mi-registration__submit');
+    const economicSummary = root.querySelector('[data-mi-economic-summary]');
     let requestKey = makeRequestKey();
     let participantValues = [];
 
@@ -34,6 +35,39 @@
       return core.sumQuantities(ticketSelection());
     }
 
+    function formatCurrency(cents) {
+      return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(Math.max(0, cents) / 100);
+    }
+
+    function totalCents() {
+      const prices = Object.fromEntries((config.event.ticket_types || []).map((ticket) => [ticket.code, Number(ticket.price_cents) || 0]));
+      return Object.entries(ticketSelection()).reduce((total, [code, quantity]) => total + (prices[code] || 0) * quantity, 0);
+    }
+
+    function renderEconomicSummary() {
+      if (!economicSummary) return;
+      const total = totalCents();
+      const mode = config.event.economic_mode;
+      const initialRow = economicSummary.querySelector('[data-mi-initial-row]');
+      const balanceRow = economicSummary.querySelector('[data-mi-balance-row]');
+      economicSummary.querySelector('[data-mi-total]').textContent = formatCurrency(total);
+      initialRow.hidden = !['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(mode);
+      balanceRow.hidden = mode !== 'DEPOSIT_BALANCE';
+      if (mode === 'FULL_PAYMENT') {
+        economicSummary.querySelector('[data-mi-initial-label]').textContent = 'Versamento previsto:';
+        economicSummary.querySelector('[data-mi-initial]').textContent = formatCurrency(total);
+        economicSummary.querySelector('[data-mi-economic-note]').textContent = 'Il modulo registra l’iscrizione; non effettua pagamenti online.';
+      } else if (mode === 'DEPOSIT_BALANCE') {
+        const initial = Math.round(total * Number(config.event.deposit_percentage || 30) / 100);
+        economicSummary.querySelector('[data-mi-initial-label]').textContent = `Caparra (${config.event.deposit_percentage}%):`;
+        economicSummary.querySelector('[data-mi-initial]').textContent = formatCurrency(initial);
+        economicSummary.querySelector('[data-mi-balance]').textContent = formatCurrency(total - initial);
+        economicSummary.querySelector('[data-mi-economic-note]').textContent = 'Il modulo registra gli importi previsti; non effettua pagamenti online.';
+      } else {
+        economicSummary.querySelector('[data-mi-economic-note]').textContent = 'Importo informativo: nessun versamento viene richiesto dal modulo.';
+      }
+    }
+
     function captureParticipants() {
       participantValues = Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).map((row) => ({
         firstName: row.querySelector('[data-mi-first-name]')?.value || '',
@@ -45,6 +79,7 @@
     function renderParticipants() {
       captureParticipants();
       const quantity = totalQuantity();
+      renderEconomicSummary();
       participantsRoot.replaceChildren();
       if (!quantity) {
         const hint = document.createElement('p');
@@ -189,7 +224,7 @@
         successBox.hidden = false;
         successBox.textContent = result.status === 'WAITLISTED'
           ? `Richiesta inserita in lista d’attesa. Codice: ${result.order_code}`
-          : `Iscrizione registrata. Codice: ${result.order_code}`;
+          : `Iscrizione registrata. Codice: ${result.order_code}${result.economic_summary?.initial_due_cents > 0 ? `. Primo versamento previsto: ${formatCurrency(result.economic_summary.initial_due_cents)}` : ''}`;
         successBox.focus();
       } catch (error) {
         showError(error.message || 'Invio non riuscito. Riprova.');

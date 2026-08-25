@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.4\.3/);
+  assert.match(source, /Version:\s+0\.4\.4/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -210,4 +210,15 @@ test('il pannello e il CSV espongono gli importi economici', async () => {
   assert.match(admin, /Totale centesimi/);
   assert.match(admin, /formatta_importo/);
   assert.match(admin, /etichetta_modalita_economica/);
+});
+
+test('il modulo mostra totale, caparra e saldo senza pagamenti online', async () => {
+  const shortcode = await read('includes/class-mi-shortcode.php');
+  const script = await read('assets/public.js');
+  assert.match(shortcode, /data-mi-economic-summary/);
+  assert.match(script, /renderEconomicSummary/);
+  assert.match(script, /deposit_percentage/);
+  assert.match(script, /Primo versamento previsto/);
+  assert.match(script, /non effettua pagamenti online/);
+  assert.doesNotMatch(script, /stripe|paypal|checkout/i);
 });
