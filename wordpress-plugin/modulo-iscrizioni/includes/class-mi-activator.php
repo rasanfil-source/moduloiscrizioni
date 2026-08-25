@@ -39,6 +39,7 @@ final class MI_Activator {
 		$participants = $wpdb->prefix . 'mi_participants';
 		$counters = $wpdb->prefix . 'mi_event_counters';
 		$outbox = $wpdb->prefix . 'mi_email_outbox';
+		$payments = $wpdb->prefix . 'mi_payments';
 
 		dbDelta( "CREATE TABLE {$registrations} (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -111,6 +112,23 @@ final class MI_Activator {
 			PRIMARY KEY  (id),
 			KEY registration_id (registration_id),
 			KEY status (status)
+		) ENGINE=InnoDB {$charset};" );
+
+		dbDelta( "CREATE TABLE {$payments} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			registration_id bigint(20) unsigned NOT NULL,
+			transaction_kind varchar(24) NOT NULL DEFAULT 'PAYMENT',
+			installment_kind varchar(24) NOT NULL DEFAULT 'FULL',
+			effective_at datetime NOT NULL,
+			amount_cents int(10) unsigned NOT NULL DEFAULT 0,
+			payment_source varchar(24) NOT NULL,
+			external_reference varchar(120) NULL,
+			operator_label varchar(120) NULL,
+			administrative_note text NULL,
+			created_at datetime NOT NULL,
+			PRIMARY KEY (id),
+			KEY registration_id (registration_id),
+			KEY effective_at (effective_at)
 		) ENGINE=InnoDB {$charset};" );
 
 		update_option( 'mi_db_version', MI_VERSION, false );

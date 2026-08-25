@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+1\.3\.0/);
+  assert.match(source, /Version:\s+1\.4\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -430,3 +430,4 @@ test('il pannello verifica lo schema economico senza creare iscrizioni', async (
   assert.match(settings, /schema_version/);
   assert.match(client, /STATO_SCHEMA/);
 });
+
