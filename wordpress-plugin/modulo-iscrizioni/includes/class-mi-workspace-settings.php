@@ -7,6 +7,7 @@ final class MI_Workspace_Settings {
 		add_action( 'admin_menu', array( __CLASS__, 'menu' ) );
 		add_action( 'admin_post_mi_save_workspace', array( __CLASS__, 'save' ) );
 		add_action( 'admin_post_mi_test_workspace', array( __CLASS__, 'test_connection' ) );
+		add_action( 'admin_post_mi_test_workspace_schema', array( __CLASS__, 'test_schema' ) );
 	}
 
 	public static function menu() {
@@ -34,6 +35,8 @@ final class MI_Workspace_Settings {
 			<?php if ( 'salvato' === $notice ) : ?><div class="notice notice-success"><p>Configurazione salvata.</p></div><?php endif; ?>
 			<?php if ( 'ping_ok' === $notice ) : ?><div class="notice notice-success"><p>Collegamento firmato verificato. Workspace è in modalità ANTEPRIMA.</p></div><?php endif; ?>
 			<?php if ( 'ping_errore' === $notice ) : ?><div class="notice notice-error"><p>Collegamento non riuscito. Codice diagnostico: <code><?php echo esc_html( $error_code ?: 'non_disponibile' ); ?></code>.</p></div><?php endif; ?>
+			<?php if ( 'schema_ok' === $notice ) : ?><div class="notice notice-success"><p>Schema Workspace 1.1.0 verificato: le colonne economiche italiane sono disponibili.</p></div><?php endif; ?>
+			<?php if ( 'schema_errore' === $notice ) : ?><div class="notice notice-error"><p>Schema Workspace non allineato. Aggiorna il deployment e la struttura del foglio.</p></div><?php endif; ?>
 			<p>Il segreto salvato non viene mai mostrato. Inseriscilo nuovamente soltanto per sostituirlo.</p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<input type="hidden" name="action" value="mi_save_workspace">
@@ -49,6 +52,11 @@ final class MI_Workspace_Settings {
 				<input type="hidden" name="action" value="mi_test_workspace">
 				<?php wp_nonce_field( 'mi_test_workspace' ); ?>
 				<?php submit_button( 'Verifica collegamento firmato', 'secondary' ); ?>
+			</form>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+				<input type="hidden" name="action" value="mi_test_workspace_schema">
+				<?php wp_nonce_field( 'mi_test_workspace_schema' ); ?>
+				<?php submit_button( 'Verifica schema economico', 'secondary' ); ?>
 			</form>
 			<?php endif; ?>
 		</div>
@@ -79,6 +87,16 @@ final class MI_Workspace_Settings {
 		$url = self::page_url( is_wp_error( $result ) ? 'ping_errore' : 'ping_ok' );
 		if ( is_wp_error( $result ) ) $url = add_query_arg( 'mi_codice', sanitize_key( $result->get_error_code() ), $url );
 		wp_safe_redirect( $url );
+		exit;
+	}
+
+	public static function test_schema() {
+		self::authorize( 'mi_test_workspace_schema' );
+		$result = MI_Workspace_Client::stato_schema();
+		$required = array( 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json' );
+		$headers = is_wp_error( $result ) ? array() : (array) ( $result['registration_headers'] ?? array() );
+		$valid = ! is_wp_error( $result ) && '1.1.0' === ( $result['schema_version'] ?? '' ) && ! array_diff( $required, $headers );
+		wp_safe_redirect( self::page_url( $valid ? 'schema_ok' : 'schema_errore' ) );
 		exit;
 	}
 

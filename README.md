@@ -12,7 +12,7 @@ La parrocchia è l'ente base. Ogni attività può avere logo, colori e contatti 
 
 ## Stato
 
-La versione WordPress `0.5.0` e Apps Script `1.1.0` sono installate e collegate. La struttura Workspace è stata aggiornata per aggiungere in coda alla scheda `Iscrizioni` modalità economica, primo versamento, saldo e fonti ammesse senza spostare i dati esistenti. Il nuovo deployment ha superato il controllo firmato e resta in modalità `ANTEPRIMA`. Non vengono memorizzati IBAN o collegamenti carta, non esiste alcuna riscossione e la coda email resta `PREVIEW`.
+La versione WordPress `0.5.0` e Apps Script `1.1.0` sono installate e collegate. La `0.5.1` è pronta per il collaudo coordinato e aggiunge nel pannello un controllo firmato non invasivo di versione e intestazioni economiche Workspace, senza creare iscrizioni. Il deployment resta in modalità `ANTEPRIMA`; non vengono memorizzati IBAN o collegamenti carta, non esiste alcuna riscossione e la coda email resta `PREVIEW`.
 
 Il backend Google Workspace in `workspace-apps-script/` è installato come progetto `MODULI` sullo spreadsheet riservato `DB_MODULI`: crea le schede operative, convalida i pagamenti manuali, conserva audit e outbox in anteprima e accetta soltanto richieste WordPress firmate. Il controllo `PING` e una registrazione sintetica end-to-end sono stati verificati, compreso il replay idempotente senza duplicati. L'evento di prova è tornato in bozza e nessuna email è stata inviata. Il repository resta sanitizzato e non contiene ID del foglio, URL di distribuzione, segreti, codici di collaudo o destinatari reali.
 

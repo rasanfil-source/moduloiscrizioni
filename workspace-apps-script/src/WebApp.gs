@@ -9,6 +9,7 @@ function doPost(event) {
     const verified = verificaBusta_(envelope);
     if (!verified.ok) return creaRispostaJson_({ ok: false, error: verified.error });
     if (envelope.action === 'PING') return creaRispostaJson_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, mode: 'PREVIEW' });
+	if (envelope.action === 'STATO_SCHEMA') return creaRispostaJson_({ ok: true, schema_version: MI_SCHEMA_VERSION, registration_headers: MI_HEADERS[MI_SHEETS.REGISTRATIONS], mode: 'PREVIEW' });
     if (envelope.action !== 'APPEND_REGISTRATION') return creaRispostaJson_({ ok: false, error: 'ACTION_NOT_ALLOWED' });
     return creaRispostaJson_(aggiungiIscrizione_(envelope.payload));
   } catch (error) {

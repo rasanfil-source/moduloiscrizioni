@@ -13,6 +13,10 @@ final class MI_Workspace_Client {
 		return self::request( 'PING', array( 'source' => 'WORDPRESS' ) );
 	}
 
+	public static function stato_schema() {
+		return self::request( 'STATO_SCHEMA', array( 'source' => 'WORDPRESS' ) );
+	}
+
 	public static function request( $action, array $payload ) {
 		if ( ! self::is_configured() ) {
 			return new WP_Error( 'mi_workspace_not_configured', 'Collegamento Workspace non configurato.' );

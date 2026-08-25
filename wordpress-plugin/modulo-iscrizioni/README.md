@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — vertical slice 0.5.0
+# Modulo Iscrizioni — vertical slice 0.5.1
 
 Plugin WordPress dimostrativo per la Fase 2. Implementa:
 
@@ -24,12 +24,13 @@ Plugin WordPress dimostrativo per la Fase 2. Implementa:
 - totale, caparra e saldo calcolati in tempo reale nel modulo pubblico;
 - fonti ammesse mostrate in italiano con registrazione manuale esplicitata;
 - replica Workspace del riepilogo economico storico;
+- controllo firmato non invasivo dello schema economico Workspace;
 - ruolo `Gestore iscrizioni` limitabile alle attività assegnate;
 - shortcode `[modulo_iscrizioni event="ID"]`.
 
 ## Limiti intenzionali
 
-Questa versione non invia email, non riscuote pagamenti e non genera QR/barcode. L'editor per evento salva oggetto, preheader, corpo HTML limitato, testo semplice e footer e ne mostra un'anteprima con dati esclusivamente sintetici. Ogni nuova voce locale conserva il modello risolto e il riepilogo economico. Modalità, primo versamento, saldo e fonti ammesse vengono replicati anche a Workspace dopo l’aggiornamento coordinato dello script e della struttura del foglio, senza IBAN, collegamenti carta o altre coordinate operative. Il pacchetto 0.5.0 è destinato al collaudo sul sito autorizzato.
+Questa versione non invia email, non riscuote pagamenti e non genera QR/barcode. L'editor per evento salva oggetto, preheader, corpo HTML limitato, testo semplice e footer e ne mostra un'anteprima con dati esclusivamente sintetici. Ogni nuova voce locale conserva il modello risolto e il riepilogo economico. Modalità, primo versamento, saldo e fonti ammesse vengono replicati anche a Workspace dopo l’aggiornamento coordinato dello script e della struttura del foglio, senza IBAN, collegamenti carta o altre coordinate operative. Il pacchetto 0.5.1 è destinato al collaudo sul sito autorizzato.
 
 ## Installazione di prova
 
