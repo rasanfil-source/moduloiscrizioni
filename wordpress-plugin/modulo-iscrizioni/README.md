@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — vertical slice 0.2.4
+# Modulo Iscrizioni — vertical slice 0.2.6
 
 Plugin WordPress dimostrativo per la Fase 2. Implementa:
 
@@ -16,7 +16,7 @@ Plugin WordPress dimostrativo per la Fase 2. Implementa:
 
 ## Limiti intenzionali
 
-Questa versione non invia email, non sincronizza ancora le iscrizioni, non gestisce pagamenti e non genera QR/barcode. Include il client HMAC e il controllo `PING` firmato necessari al successivo collaudo Workspace. Le costanti private `MI_WORKSPACE_WEBAPP_URL` e `MI_WORKSPACE_SHARED_SECRET` devono essere definite fuori dal repository, per esempio in `wp-config.php`; il segreto deve contenere almeno 32 caratteri. Il pacchetto 0.2.0 è installato e collaudato sul sito autorizzato; attività ed evento di prova restano in bozza.
+Questa versione non invia email, non sincronizza ancora le iscrizioni, non gestisce pagamenti e non genera QR/barcode. Include il client HMAC e il controllo `PING` firmato, collaudati con la Web App Workspace in modalità `PREVIEW`. URL e segreto possono essere definiti come costanti private fuori dal repository oppure salvati nella schermata amministrativa riservata; il segreto deve contenere almeno 32 caratteri e non viene mai mostrato. Il pacchetto 0.2.6 è installato e collaudato sul sito autorizzato; attività ed evento di prova restano in bozza.
 
 ## Installazione di prova
 

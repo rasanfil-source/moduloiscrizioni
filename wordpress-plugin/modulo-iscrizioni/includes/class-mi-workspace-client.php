@@ -37,7 +37,7 @@ final class MI_Workspace_Client {
 			self::webapp_url(),
 			array(
 				'timeout'     => 15,
-				'redirection' => 5,
+				'redirection' => 0,
 				'headers'     => array( 'Content-Type' => 'application/json; charset=utf-8' ),
 				'body'        => $body,
 			)
@@ -45,8 +45,23 @@ final class MI_Workspace_Client {
 		if ( is_wp_error( $response ) ) {
 			return new WP_Error( 'mi_workspace_unreachable', 'Workspace non raggiungibile.' );
 		}
-		if ( 200 !== wp_remote_retrieve_response_code( $response ) ) {
-			return new WP_Error( 'mi_workspace_http', 'Workspace ha restituito una risposta HTTP inattesa.' );
+		$http_status = (int) wp_remote_retrieve_response_code( $response );
+		if ( in_array( $http_status, array( 301, 302, 303, 307, 308 ), true ) ) {
+			$location = (string) wp_remote_retrieve_header( $response, 'location' );
+			$host = strtolower( (string) wp_parse_url( $location, PHP_URL_HOST ) );
+			$scheme = strtolower( (string) wp_parse_url( $location, PHP_URL_SCHEME ) );
+			$host_google = 'script.googleusercontent.com' === $host || '.googleusercontent.com' === substr( $host, -22 );
+			if ( 'https' !== $scheme || ! $host_google ) {
+				return new WP_Error( 'mi_workspace_redirect_invalid', 'Workspace ha restituito un reindirizzamento non valido.' );
+			}
+			$response = wp_remote_get( $location, array( 'timeout' => 15, 'redirection' => 3 ) );
+			if ( is_wp_error( $response ) ) {
+				return new WP_Error( 'mi_workspace_unreachable', 'Workspace non raggiungibile.' );
+			}
+			$http_status = (int) wp_remote_retrieve_response_code( $response );
+		}
+		if ( 200 !== $http_status ) {
+			return new WP_Error( 'mi_workspace_http_' . $http_status, 'Workspace ha restituito una risposta HTTP inattesa.' );
 		}
 		$decoded = json_decode( wp_remote_retrieve_body( $response ), true );
 		if ( ! is_array( $decoded ) || empty( $decoded['ok'] ) ) {
