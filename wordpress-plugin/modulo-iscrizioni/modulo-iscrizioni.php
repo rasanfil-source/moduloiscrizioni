@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Modulo Iscrizioni
  * Description: Gestione essenziale di attività, eventi, capienza e iscrizioni.
- * Version: 0.6.2
+ * Version: 0.7.0
  * Requires at least: 6.4
  * Requires PHP: 7.4
  * Author: Parrocchia Demo
@@ -11,7 +11,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'MI_VERSION', '0.6.2' );
+define( 'MI_VERSION', '0.7.0' );
 define( 'MI_PLUGIN_FILE', __FILE__ );
 define( 'MI_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MI_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -27,6 +27,7 @@ require_once MI_PLUGIN_DIR . 'includes/class-mi-workspace-settings.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-registration-service.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-rest-controller.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-shortcode.php';
+require_once MI_PLUGIN_DIR . 'includes/class-mi-integrazione-divi.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-plugin.php';
 
 register_activation_hook( __FILE__, array( 'MI_Activator', 'activate' ) );
