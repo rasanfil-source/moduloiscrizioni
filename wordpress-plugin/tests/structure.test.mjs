@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.2\.7/);
+  assert.match(source, /Version:\s+0\.2\.8/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -82,10 +82,19 @@ test('i campi partecipante usano profili, allowlist e validazione server', async
   assert.match(schema, /'STANDARD'/);
   assert.match(schema, /'TRAVEL'/);
   assert.match(schema, /validate_answers/);
+  assert.match(schema, /-120 years/);
   assert.match(service, /MI_Field_Schema::validate_answers/);
   assert.match(publicScript, /data-mi-participant-field/);
   assert.match(activator, /extra_json longtext/);
   assert.match(activator, /maybe_upgrade/);
+});
+
+test('il pannello mostra partecipanti e dati aggiuntivi con etichette leggibili', async () => {
+  const source = await read('includes/class-mi-admin.php');
+  assert.match(source, /Dettaglio iscrizione/);
+  assert.match(source, /MI_Field_Schema::catalog/);
+  assert.match(source, /extra_json/);
+  assert.match(source, /Nessun dato aggiuntivo raccolto/);
 });
 
 test('la coda email rimane in anteprima', async () => {

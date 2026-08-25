@@ -37,6 +37,7 @@ final class MI_Admin {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mi_registrations';
 		$event_id = isset( $_GET['event_id'] ) ? absint( $_GET['event_id'] ) : 0;
+		$detail_id = isset( $_GET['registration_id'] ) ? absint( $_GET['registration_id'] ) : 0;
 		$page = max( 1, isset( $_GET['paged'] ) ? absint( $_GET['paged'] ) : 1 );
 		$per_page = 50;
 		$offset = ( $page - 1 ) * $per_page;
@@ -53,15 +54,53 @@ final class MI_Admin {
 			$where = '';
 		}
 		$rows = $wpdb->get_results( "SELECT id, order_code, event_id, status, workspace_status, buyer_first_name, buyer_last_name, buyer_email, total_qty, created_at FROM {$table} {$where} ORDER BY id DESC LIMIT {$per_page} OFFSET {$offset}", ARRAY_A );
+		$detail = null;
+		$participants = array();
+		if ( $detail_id ) {
+			$detail = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $detail_id ), ARRAY_A );
+			if ( ! $detail || ! MI_Access::can_access_event( (int) $detail['event_id'] ) ) {
+				wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) );
+			}
+			$participants_table = $wpdb->prefix . 'mi_participants';
+			$participants = $wpdb->get_results( $wpdb->prepare( "SELECT id, first_name, last_name, extra_json FROM {$participants_table} WHERE registration_id = %d ORDER BY id", $detail_id ), ARRAY_A );
+		}
 		?>
 		<div class="wrap"><h1>Iscrizioni</h1>
 		<p>Registro locale con replica firmata sul registro Workspace. Le email restano soltanto in anteprima.</p>
-		<table class="widefat striped"><thead><tr><th>Codice</th><th>Evento</th><th>Stato</th><th>Workspace</th><th>Referente</th><th>Email</th><th>Persone</th><th>Data UTC</th></tr></thead><tbody>
-		<?php if ( ! $rows ) : ?><tr><td colspan="8">Nessuna iscrizione.</td></tr><?php endif; ?>
+		<table class="widefat striped"><thead><tr><th>Codice</th><th>Evento</th><th>Stato</th><th>Workspace</th><th>Referente</th><th>Email</th><th>Persone</th><th>Data UTC</th><th></th></tr></thead><tbody>
+		<?php if ( ! $rows ) : ?><tr><td colspan="9">Nessuna iscrizione.</td></tr><?php endif; ?>
 		<?php foreach ( $rows as $row ) : ?>
-		<tr><td><code><?php echo esc_html( $row['order_code'] ); ?></code></td><td><?php echo esc_html( get_the_title( (int) $row['event_id'] ) ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['workspace_status'] ); ?></td><td><?php echo esc_html( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ); ?></td><td><?php echo esc_html( $row['buyer_email'] ); ?></td><td><?php echo esc_html( $row['total_qty'] ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td></tr>
+		<?php $detail_url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-registrations', 'registration_id' => (int) $row['id'] ), admin_url( 'edit.php' ) ); ?>
+		<tr><td><code><?php echo esc_html( $row['order_code'] ); ?></code></td><td><?php echo esc_html( get_the_title( (int) $row['event_id'] ) ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['workspace_status'] ); ?></td><td><?php echo esc_html( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ); ?></td><td><?php echo esc_html( $row['buyer_email'] ); ?></td><td><?php echo esc_html( $row['total_qty'] ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $detail_url ); ?>">Dettagli</a></td></tr>
 		<?php endforeach; ?>
-		</tbody></table></div>
+		</tbody></table>
+		<?php if ( $detail ) : ?>
+		<hr><h2>Dettaglio iscrizione <code><?php echo esc_html( $detail['order_code'] ); ?></code></h2>
+		<table class="widefat striped" style="max-width:900px"><tbody>
+		<tr><th scope="row">Evento</th><td><?php echo esc_html( get_the_title( (int) $detail['event_id'] ) ); ?></td></tr>
+		<tr><th scope="row">Stato</th><td><?php echo esc_html( $detail['status'] ); ?></td></tr>
+		<tr><th scope="row">Workspace</th><td><?php echo esc_html( $detail['workspace_status'] ); ?></td></tr>
+		<tr><th scope="row">Referente</th><td><?php echo esc_html( $detail['buyer_first_name'] . ' ' . $detail['buyer_last_name'] ); ?></td></tr>
+		<tr><th scope="row">Email</th><td><?php echo esc_html( $detail['buyer_email'] ); ?></td></tr>
+		<tr><th scope="row">Cellulare</th><td><?php echo esc_html( $detail['buyer_phone'] ); ?></td></tr>
+		</tbody></table>
+		<h3>Partecipanti</h3>
+		<?php if ( ! $participants ) : ?><p>Nessun partecipante associato.</p><?php endif; ?>
+		<?php $catalog = MI_Field_Schema::catalog(); ?>
+		<?php foreach ( $participants as $position => $participant ) : ?>
+		<?php $answers = json_decode( (string) $participant['extra_json'], true ); $answers = is_array( $answers ) ? $answers : array(); ?>
+		<h4><?php echo esc_html( ( $position + 1 ) . '. ' . $participant['first_name'] . ' ' . $participant['last_name'] ); ?></h4>
+		<?php if ( ! $answers ) : ?><p>Nessun dato aggiuntivo raccolto.</p><?php else : ?>
+		<table class="widefat striped" style="max-width:900px"><tbody>
+		<?php foreach ( $answers as $key => $value ) : ?>
+		<?php $label = isset( $catalog[ $key ]['label'] ) ? $catalog[ $key ]['label'] : 'Dato aggiuntivo'; ?>
+		<tr><th scope="row"><?php echo esc_html( $label ); ?></th><td><?php echo nl2br( esc_html( (string) $value ) ); ?></td></tr>
+		<?php endforeach; ?>
+		</tbody></table>
+		<?php endif; ?>
+		<?php endforeach; ?>
+		<?php endif; ?>
+		</div>
 		<?php
 	}
 

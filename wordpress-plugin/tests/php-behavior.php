@@ -61,6 +61,9 @@ expect( ! is_wp_error( $extended ) && ! isset( $extended[0]['fields']['ignored']
 $missing_required = invoke_private( 'validate_participants', array( array( array( 'first_name' => 'Persona', 'last_name' => 'Demo', 'fields' => array() ) ), 1, $extended_fields ) );
 expect( is_wp_error( $missing_required ), 'campo esteso obbligatorio non applicato' );
 
+$implausible_birth_date = invoke_private( 'validate_participants', array( array( array( 'first_name' => 'Persona', 'last_name' => 'Demo', 'fields' => array( 'birth_date' => '1800-01-01' ) ) ), 1, $extended_fields ) );
+expect( is_wp_error( $implausible_birth_date ), 'data di nascita anteriore a 120 anni accettata' );
+
 $buyer = invoke_private( 'validate_buyer', array( array( 'first_name' => 'Referente', 'last_name' => 'Demo', 'email' => 'referente@example.invalid', 'phone' => '+39 000 0000000' ) ) );
 expect( ! is_wp_error( $buyer ), 'referente dimostrativo valido rifiutato' );
 

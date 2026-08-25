@@ -137,7 +137,9 @@ final class MI_Field_Schema {
 			}
 			if ( 'date' === $field['type'] ) {
 				$date = DateTimeImmutable::createFromFormat( '!Y-m-d', $value );
-				if ( ! $date || $date->format( 'Y-m-d' ) !== $value || $date > new DateTimeImmutable( 'today' ) ) {
+				$today = new DateTimeImmutable( 'today' );
+				$oldest = $today->modify( '-120 years' );
+				if ( ! $date || $date->format( 'Y-m-d' ) !== $value || $date > $today || $date < $oldest ) {
 					return new WP_Error( 'mi_participant_date_invalid', 'Controlla le date dei partecipanti.', array( 'status' => 400 ) );
 				}
 				$answers[ $key ] = $value;
