@@ -288,7 +288,7 @@ final class MI_Admin {
 			$allowed_events = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids', 'meta_query' => array( array( 'key' => '_mi_activity_id', 'value' => $scope ?: array( 0 ), 'compare' => 'IN', 'type' => 'NUMERIC' ) ) ) );
 			$where = 'WHERE r.event_id IN (' . implode( ',', array_map( 'absint', $allowed_events ?: array( 0 ) ) ) . ')';
 		}
-		$rows = $wpdb->get_results( "SELECT o.id, o.registration_id, o.recipient, o.template_type, o.status, o.created_at FROM {$table} o INNER JOIN {$registrations} r ON r.id = o.registration_id {$where} ORDER BY o.id DESC LIMIT 100", ARRAY_A );
+		$rows = $wpdb->get_results( "SELECT o.id, o.registration_id, o.recipient, o.template_type, o.status, o.attempts, o.last_error, o.sent_at, o.created_at FROM {$table} o INNER JOIN {$registrations} r ON r.id = o.registration_id {$where} ORDER BY o.id DESC LIMIT 100", ARRAY_A );
 		$detail = null;
 		if ( $detail_id ) {
 			$detail = $wpdb->get_row( $wpdb->prepare( "SELECT o.*, r.event_id FROM {$table} o INNER JOIN {$registrations} r ON r.id = o.registration_id WHERE o.id = %d", $detail_id ), ARRAY_A );
@@ -298,9 +298,9 @@ final class MI_Admin {
 		}
 		?>
 		<div class="wrap"><h1>Coda email</h1><p>Lo stato <code>PREVIEW</code> non viene spedito; <code>PENDING</code> indica una conferma operativa in attesa.</p>
-		<table class="widefat striped"><thead><tr><th>ID</th><th>Iscrizione</th><th>Destinatario</th><th>Modello</th><th>Stato</th><th>Data UTC</th><th></th></tr></thead><tbody>
-		<?php if ( ! $rows ) : ?><tr><td colspan="7">Coda vuota.</td></tr><?php endif; ?>
-		<?php foreach ( $rows as $row ) : ?><?php $preview_url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox', 'email_id' => (int) $row['id'] ), admin_url( 'edit.php' ) ); ?><tr><td><?php echo esc_html( $row['id'] ); ?></td><td><?php echo esc_html( $row['registration_id'] ); ?></td><td><?php echo esc_html( $row['recipient'] ); ?></td><td><?php echo esc_html( $row['template_type'] ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $preview_url ); ?>">Apri anteprima</a></td></tr><?php endforeach; ?>
+		<table class="widefat striped"><thead><tr><th>ID</th><th>Iscrizione</th><th>Destinatario</th><th>Modello</th><th>Stato</th><th>Tentativi</th><th>Ultimo errore</th><th>Inviata il</th><th>Data UTC</th><th></th></tr></thead><tbody>
+		<?php if ( ! $rows ) : ?><tr><td colspan="10">Coda vuota.</td></tr><?php endif; ?>
+		<?php foreach ( $rows as $row ) : ?><?php $preview_url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox', 'email_id' => (int) $row['id'] ), admin_url( 'edit.php' ) ); ?><tr><td><?php echo esc_html( $row['id'] ); ?></td><td><?php echo esc_html( $row['registration_id'] ); ?></td><td><?php echo esc_html( $row['recipient'] ); ?></td><td><?php echo esc_html( $row['template_type'] ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['attempts'] ); ?></td><td><?php echo esc_html( $row['last_error'] ?: 'Nessuno' ); ?></td><td><?php echo esc_html( $row['sent_at'] ?: 'Non inviata' ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $preview_url ); ?>">Apri dettaglio</a></td></tr><?php endforeach; ?>
 		</tbody></table>
 		<?php if ( $detail ) : ?><?php $payload = json_decode( (string) $detail['payload_json'], true ); $preview = is_array( $payload ) && isset( $payload['email_preview'] ) && is_array( $payload['email_preview'] ) ? $payload['email_preview'] : array(); ?>
 		<hr><h2>Anteprima email conservata</h2>

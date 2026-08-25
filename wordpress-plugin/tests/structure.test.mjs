@@ -177,6 +177,15 @@ test('la spedizione usa una coda acquisita atomicamente e tentativi limitati', a
   assert.match(activator, /sent_at datetime/);
 });
 
+test('il pannello email mostra lo stato della consegna', async () => {
+  const admin = await read('includes/class-mi-admin.php');
+  assert.match(admin, /o\.attempts/);
+  assert.match(admin, /o\.last_error/);
+  assert.match(admin, /o\.sent_at/);
+  assert.match(admin, /Ultimo errore/);
+  assert.match(admin, /Non inviata/);
+});
+
 test('l’editor email usa segnaposto controllati e non invia messaggi', async () => {
   const source = await read('includes/class-mi-modello-email.php');
   assert.match(source, /Email di conferma — anteprima/);
