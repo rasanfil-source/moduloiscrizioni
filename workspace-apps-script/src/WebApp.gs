@@ -114,7 +114,10 @@ function sincronizzaPagamenti_(orderCode, payments) {
     if (!kind || !source || amount < 1) return;
     const effective = normalizzaTesto_(payment.effective_at, 40);
     const effectiveDate = effective ? new Date(effective) : new Date();
-    if (isNaN(effectiveDate.getTime())) return;
+    if (isNaN(effectiveDate.getTime())) {
+      aggiungiControllo_('SYNC_PAYMENT', 'PAYMENT', orderCode, 'REJECTED', 'WORDPRESS', 'INVALID_EFFECTIVE_AT', 'WORDPRESS_PROXY');
+      return;
+    }
     const reference = normalizzaTesto_(payment.external_reference, 120);
     const origin = 'WP|' + orderCode + '|' + kind + '|' + installment + '|' + effective + '|' + amount + '|' + source + '|' + reference;
     if (existing.some(function (row) { return String(row.id_inserimento_origine) === origin; })) return;
