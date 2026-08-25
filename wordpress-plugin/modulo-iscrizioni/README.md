@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — vertical slice 0.2.8
+# Modulo Iscrizioni — vertical slice 0.2.9
 
 Plugin WordPress dimostrativo per la Fase 2. Implementa:
 
@@ -16,7 +16,7 @@ Plugin WordPress dimostrativo per la Fase 2. Implementa:
 
 ## Limiti intenzionali
 
-Questa versione non invia email, non gestisce pagamenti e non genera QR/barcode. Replica le nuove iscrizioni nel registro Workspace mediante HMAC, anti-replay e chiave di idempotenza; un errore remoto non annulla il salvataggio autorevole WordPress e lascia la replica in stato `PENDING` per un nuovo tentativo. Il pannello mostra il dettaglio dei partecipanti e le risposte aggiuntive con etichette italiane; le date di nascita future o anteriori a 120 anni vengono rifiutate. URL e segreto possono essere definiti come costanti private fuori dal repository oppure salvati nella schermata amministrativa riservata; il segreto deve contenere almeno 32 caratteri e non viene mai mostrato. Il pacchetto 0.2.8 è destinato al collaudo sul sito autorizzato; attività ed evento di prova restano in bozza.
+Questa versione non invia email, non gestisce pagamenti e non genera QR/barcode. Replica le nuove iscrizioni nel registro Workspace mediante HMAC, anti-replay e chiave di idempotenza; un errore remoto non annulla il salvataggio autorevole WordPress e lascia la replica in stato `PENDING` per un nuovo tentativo. Il pannello mostra il dettaglio dei partecipanti e le risposte aggiuntive con etichette italiane; l'elenco può essere filtrato per evento o ricercato per codice, referente ed email e l'esportazione CSV rispetta gli stessi filtri e l'ambito delle attività assegnate. Le date di nascita future o anteriori a 120 anni vengono rifiutate. URL e segreto possono essere definiti come costanti private fuori dal repository oppure salvati nella schermata amministrativa riservata; il segreto deve contenere almeno 32 caratteri e non viene mai mostrato. Il pacchetto 0.2.9 è destinato al collaudo sul sito autorizzato; attività ed evento di prova restano in bozza.
 
 ## Installazione di prova
 

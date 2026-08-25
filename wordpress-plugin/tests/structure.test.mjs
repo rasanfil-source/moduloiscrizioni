@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.2\.8/);
+  assert.match(source, /Version:\s+0\.2\.9/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -95,6 +95,15 @@ test('il pannello mostra partecipanti e dati aggiuntivi con etichette leggibili'
   assert.match(source, /MI_Field_Schema::catalog/);
   assert.match(source, /extra_json/);
   assert.match(source, /Nessun dato aggiuntivo raccolto/);
+});
+
+test('filtri ed esportazione rispettano accessi e neutralizzano formule CSV', async () => {
+  const source = await read('includes/class-mi-admin.php');
+  assert.match(source, /mi_export_registrations/);
+  assert.match(source, /check_admin_referer/);
+  assert.match(source, /MI_Access::can_access_event/);
+  assert.match(source, /safe_csv_value/);
+  assert.match(source, /Esporta CSV filtrato/);
 });
 
 test('la coda email rimane in anteprima', async () => {
