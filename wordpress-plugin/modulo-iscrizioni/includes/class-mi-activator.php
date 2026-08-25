@@ -52,6 +52,7 @@ final class MI_Activator {
 			total_cents int(10) unsigned NOT NULL DEFAULT 0,
 			initial_due_cents int(10) unsigned NOT NULL DEFAULT 0,
 			balance_cents int(10) unsigned NOT NULL DEFAULT 0,
+			payment_methods_json longtext NULL,
 			idempotency_key varchar(64) NOT NULL,
 			workspace_status varchar(24) NOT NULL DEFAULT 'PENDING',
 			workspace_attempts smallint(5) unsigned NOT NULL DEFAULT 0,

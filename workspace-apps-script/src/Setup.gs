@@ -48,7 +48,9 @@ function inizializzaScheda_(sheet, headers) {
   const hasData = sheet.getLastRow() > 1;
   const previous = MI_LEGACY_HEADERS[sheet.getName()] || [];
   const usesPreviousHeaders = current.join('|') === previous.join('|');
-  if (hasData && current.join('|') !== headers.join('|') && !usesPreviousHeaders) {
+	const italianPrevious = MI_INTESTAZIONI_PRECEDENTI[sheet.getName()] || [];
+	const usesItalianPrevious = italianPrevious.length > 0 && current.slice(0, italianPrevious.length).join('|') === italianPrevious.join('|') && current.slice(italianPrevious.length).every(function (value) { return value === ''; });
+  if (hasData && current.join('|') !== headers.join('|') && !usesPreviousHeaders && !usesItalianPrevious) {
     throw new Error('Intestazioni inattese nel foglio ' + sheet.getName() + '. Intervento manuale richiesto.');
   }
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
@@ -65,7 +67,12 @@ function inizializzaScheda_(sheet, headers) {
 
 function inizializzaConfigurazione_() {
   const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.CONFIG);
-  if (sheet.getLastRow() > 1 && String(sheet.getRange(2, 1).getValue()) !== 'schema_version') return;
+	if (sheet.getLastRow() > 1) {
+		const keys = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getDisplayValues().map(function (row) { return String(row[0]); });
+		const versionIndex = keys.indexOf('versione_schema');
+		if (versionIndex >= 0) sheet.getRange(versionIndex + 2, 2).setValue(MI_SCHEMA_VERSION);
+		return;
+	}
   sheet.getRange(2, 1, 5, 3).setValues([
     ['versione_schema', MI_SCHEMA_VERSION, 'Versione della struttura Workspace'],
     ['ambiente', 'ANTEPRIMA', 'Anteprima finché il collaudo non è concluso'],

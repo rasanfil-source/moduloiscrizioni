@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.4\.5/);
+  assert.match(source, /Version:\s+0\.5\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -231,4 +231,14 @@ test('il modulo presenta in italiano le fonti registrate manualmente', async () 
   assert.match(script, /CARD:\s*'Carta'/);
   assert.match(script, /CASH:\s*'Contante'/);
   assert.match(script, /registrat[oi] manualmente dall’organizzazione/);
+});
+
+test('la replica Workspace include il riepilogo economico storico', async () => {
+  const activator = await read('includes/class-mi-activator.php');
+  const service = await read('includes/class-mi-registration-service.php');
+  assert.match(activator, /payment_methods_json/);
+  assert.match(service, /economic_mode/);
+  assert.match(service, /initial_due_cents/);
+  assert.match(service, /balance_cents/);
+  assert.match(service, /payment_methods/);
 });

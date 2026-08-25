@@ -72,7 +72,11 @@ function aggiungiIscrizione_(payload) {
       participants.length,
       Math.max(0, Math.round(Number(payload.total_cents) || 0)),
       neutralizzaFormula_(idempotencyKey, 64),
-      new Date()
+	  new Date(),
+	  normalizzaValoreElenco_(payload.economic_mode, ['REGISTRATION_ONLY', 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE']) || 'REGISTRATION_ONLY',
+	  Math.max(0, Math.round(Number(payload.initial_due_cents) || 0)),
+	  Math.max(0, Math.round(Number(payload.balance_cents) || 0)),
+	  JSON.stringify((Array.isArray(payload.payment_methods) ? payload.payment_methods : []).filter(function (method) { return ['BANK_TRANSFER', 'CARD', 'CASH'].indexOf(method) >= 0; }))
     ]);
 
     const participantRows = participants.map(function (participant, index) {

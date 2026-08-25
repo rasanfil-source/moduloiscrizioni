@@ -103,7 +103,7 @@ final class MI_Registration_Service {
 		}
 
 		$registrations_table = $wpdb->prefix . 'mi_registrations';
-		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, economic_mode, total_cents, initial_due_cents, balance_cents FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
+		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, economic_mode, total_cents, initial_due_cents, balance_cents, payment_methods_json FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
 		if ( $existing ) {
 			$workspace_status = self::sync_workspace_safely( (int) $existing['id'] );
 			return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'workspace_status' => $workspace_status, 'economic_summary' => self::riepilogo_salvato( $existing ), 'replayed' => true );
@@ -151,14 +151,15 @@ final class MI_Registration_Service {
 					'total_cents'     => $economic_summary['total_cents'],
 					'initial_due_cents'=> $economic_summary['initial_due_cents'],
 					'balance_cents'   => $economic_summary['balance_cents'],
+					'payment_methods_json' => wp_json_encode( $economic_summary['payment_methods'] ),
 					'idempotency_key' => $idempotency_key,
 					'created_at'      => $now,
 				),
-				array( '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%d', '%s', '%s' )
+				array( '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%d', '%s', '%s', '%s' )
 			);
 			if ( ! $inserted ) {
 				$wpdb->query( 'ROLLBACK' );
-				$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, economic_mode, total_cents, initial_due_cents, balance_cents FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
+				$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, economic_mode, total_cents, initial_due_cents, balance_cents, payment_methods_json FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
 				if ( $existing ) {
 					$workspace_status = self::sync_workspace_safely( (int) $existing['id'] );
 					return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'workspace_status' => $workspace_status, 'economic_summary' => self::riepilogo_salvato( $existing ), 'replayed' => true );
@@ -217,7 +218,8 @@ final class MI_Registration_Service {
 	}
 
 	private static function riepilogo_salvato( $registration ) {
-		return array( 'mode' => (string) $registration['economic_mode'], 'total_cents' => (int) $registration['total_cents'], 'initial_due_cents' => (int) $registration['initial_due_cents'], 'balance_cents' => (int) $registration['balance_cents'] );
+		$payment_methods = json_decode( (string) ( $registration['payment_methods_json'] ?? '' ), true );
+		return array( 'mode' => (string) $registration['economic_mode'], 'total_cents' => (int) $registration['total_cents'], 'initial_due_cents' => (int) $registration['initial_due_cents'], 'balance_cents' => (int) $registration['balance_cents'], 'payment_methods' => is_array( $payment_methods ) ? $payment_methods : array() );
 	}
 
 	public static function sync_workspace( $registration_id ) {
@@ -265,6 +267,10 @@ final class MI_Registration_Service {
 				),
 				'participants'   => $participants,
 				'total_cents'    => $total_cents,
+				'economic_mode'  => (string) $registration['economic_mode'],
+				'initial_due_cents' => (int) $registration['initial_due_cents'],
+				'balance_cents'  => (int) $registration['balance_cents'],
+				'payment_methods'=> (array) json_decode( (string) $registration['payment_methods_json'], true ),
 			)
 		);
 		if ( is_wp_error( $result ) ) {
