@@ -50,19 +50,24 @@
       const mode = config.event.economic_mode;
       const initialRow = economicSummary.querySelector('[data-mi-initial-row]');
       const balanceRow = economicSummary.querySelector('[data-mi-balance-row]');
+      const paymentMethodsRow = economicSummary.querySelector('[data-mi-payment-methods-row]');
+      const paymentLabels = { BANK_TRANSFER: 'Bonifico', CARD: 'Carta', CASH: 'Contante' };
+      const paymentMethods = (config.event.payment_methods || []).map((method) => paymentLabels[method]).filter(Boolean);
       economicSummary.querySelector('[data-mi-total]').textContent = formatCurrency(total);
       initialRow.hidden = !['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(mode);
       balanceRow.hidden = mode !== 'DEPOSIT_BALANCE';
+      paymentMethodsRow.hidden = !['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(mode) || paymentMethods.length === 0;
+      economicSummary.querySelector('[data-mi-payment-methods]').textContent = paymentMethods.join(', ');
       if (mode === 'FULL_PAYMENT') {
         economicSummary.querySelector('[data-mi-initial-label]').textContent = 'Versamento previsto:';
         economicSummary.querySelector('[data-mi-initial]').textContent = formatCurrency(total);
-        economicSummary.querySelector('[data-mi-economic-note]').textContent = 'Il modulo registra l’iscrizione; non effettua pagamenti online.';
+        economicSummary.querySelector('[data-mi-economic-note]').textContent = 'Il modulo registra l’iscrizione; il versamento sarà registrato manualmente dall’organizzazione.';
       } else if (mode === 'DEPOSIT_BALANCE') {
         const initial = Math.round(total * Number(config.event.deposit_percentage || 30) / 100);
         economicSummary.querySelector('[data-mi-initial-label]').textContent = `Caparra (${config.event.deposit_percentage}%):`;
         economicSummary.querySelector('[data-mi-initial]').textContent = formatCurrency(initial);
         economicSummary.querySelector('[data-mi-balance]').textContent = formatCurrency(total - initial);
-        economicSummary.querySelector('[data-mi-economic-note]').textContent = 'Il modulo registra gli importi previsti; non effettua pagamenti online.';
+        economicSummary.querySelector('[data-mi-economic-note]').textContent = 'Il modulo registra gli importi previsti; i versamenti saranno registrati manualmente dall’organizzazione.';
       } else {
         economicSummary.querySelector('[data-mi-economic-note]').textContent = 'Importo informativo: nessun versamento viene richiesto dal modulo.';
       }
