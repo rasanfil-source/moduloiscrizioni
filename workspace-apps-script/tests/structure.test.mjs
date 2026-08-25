@@ -64,4 +64,6 @@ test('APPEND_REGISTRATION replica i movimenti pagamento senza duplicarli', () =>
   assert.match(sources['WebApp.gs'], /sincronizzaPagamenti_\(orderCode, payload\.payments\)/);
   assert.match(sources['WebApp.gs'], /id_inserimento_origine/);
   assert.match(sources['WebApp.gs'], /WP\|/);
+  assert.match(sources['WebApp.gs'], /effectiveDate/);
+  assert.match(sources['WebApp.gs'], /isNaN\(effectiveDate\.getTime\(\)\)/);
 });
