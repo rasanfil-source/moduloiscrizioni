@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.7\.0/);
+  assert.match(source, /Version:\s+0\.7\.1/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -96,6 +96,17 @@ test('l’integrazione Divi è facoltativa e riusa il motore dello shortcode', a
   assert.match(module, /MI_Access::can_access_event/);
 	const shortcode = await read('includes/class-mi-shortcode.php');
 	assert.match(shortcode, /has_shortcode\( \$post->post_content, 'mi_divi_modulo_iscrizioni' \)/);
+});
+
+test('l’anteprima riservata non invia iscrizioni e accetta le bozze autorizzate', async () => {
+  const shortcode = await read('includes/class-mi-shortcode.php');
+  const service = await read('includes/class-mi-registration-service.php');
+  const script = await read('assets/public.js');
+  assert.match(shortcode, /admin_post_mi_anteprima_evento/);
+  assert.match(shortcode, /check_admin_referer/);
+  assert.match(shortcode, /MI_Access::can_access_event/);
+  assert.match(service, /\$allow_unpublished/);
+  assert.match(script, /if \(config\.preview\)/);
 });
 
 test('i campi partecipante usano profili, allowlist e validazione server', async () => {

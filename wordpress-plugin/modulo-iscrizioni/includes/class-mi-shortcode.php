@@ -10,6 +10,7 @@ final class MI_Shortcode {
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'maybe_enqueue_assets' ) );
 		add_filter( 'theme_page_templates', array( __CLASS__, 'register_focused_template' ) );
 		add_filter( 'template_include', array( __CLASS__, 'use_focused_template' ) );
+		add_action( 'admin_post_mi_anteprima_evento', array( __CLASS__, 'mostra_anteprima_riservata' ) );
 	}
 
 	public static function register_focused_template( $templates ) {
@@ -34,17 +35,19 @@ final class MI_Shortcode {
 	}
 
 	public static function render( $attributes ) {
-		$attributes = shortcode_atts( array( 'event' => 0 ), $attributes, 'modulo_iscrizioni' );
+		$attributes = shortcode_atts( array( 'event' => 0, 'anteprima' => 0 ), $attributes, 'modulo_iscrizioni' );
 		$event_id = absint( $attributes['event'] );
-		$event = MI_Registration_Service::public_event( $event_id );
+		$is_preview = ! empty( $attributes['anteprima'] ) && current_user_can( 'mi_manage_events' ) && MI_Access::can_access_event( $event_id );
+		$event = MI_Registration_Service::public_event( $event_id, $is_preview );
 		if ( is_wp_error( $event ) ) return current_user_can( 'mi_manage_events' ) ? '<p class="mi-registration__notice">Evento non pubblicato o configurazione incompleta.</p>' : '';
 		self::$rendered++;
 		$instance_id = 'mi-registration-' . self::$rendered . '-' . $event_id;
 		self::enqueue_assets();
-		$config = array( 'event' => $event, 'state' => MI_Registration_Service::registration_state( $event ), 'endpoint' => esc_url_raw( rest_url( MI_REST_Controller::NAMESPACE . '/events/' . $event_id . '/registrations' ) ), 'instanceId' => $instance_id, 'startedAt' => time(), 'privacyUrl' => get_privacy_policy_url() );
+		$config = array( 'event' => $event, 'state' => $is_preview ? 'OPEN' : MI_Registration_Service::registration_state( $event ), 'preview' => $is_preview, 'endpoint' => esc_url_raw( rest_url( MI_REST_Controller::NAMESPACE . '/events/' . $event_id . '/registrations' ) ), 'instanceId' => $instance_id, 'startedAt' => time(), 'privacyUrl' => get_privacy_policy_url() );
 		$formatted_date = self::formatted_event_date( $event['event_starts_at'] );
 		ob_start(); ?>
 		<section id="<?php echo esc_attr( $instance_id ); ?>" class="mi-registration" style="--mi-primary:<?php echo esc_attr( $event['accent_color'] ); ?>;--mi-primary-dark:<?php echo esc_attr( self::darken_color( $event['accent_color'] ) ); ?>" data-mi-config="<?php echo esc_attr( wp_json_encode( $config ) ); ?>">
+			<?php if ( $is_preview ) : ?><p class="mi-registration__preview-notice" role="status">Anteprima riservata: puoi provare tutti i passaggi, ma nessuna iscrizione verrà inviata.</p><?php endif; ?>
 			<header class="mi-registration__hero<?php echo $event['cover_image'] ? ' mi-registration__hero--with-image' : ''; ?>">
 				<?php if ( $event['cover_image'] ) : ?><img class="mi-registration__cover" src="<?php echo esc_url( $event['cover_image'] ); ?>" alt="<?php echo esc_attr( $event['cover_image_alt'] ?: $event['title'] ); ?>"><?php endif; ?>
 				<div class="mi-registration__hero-content">
@@ -73,6 +76,16 @@ final class MI_Shortcode {
 		if ( ! $value ) return '';
 		$date = DateTimeImmutable::createFromFormat( 'Y-m-d\TH:i', $value, wp_timezone() );
 		return $date ? wp_date( 'l j F Y, H:i', $date->getTimestamp(), wp_timezone() ) : '';
+	}
+
+	public static function mostra_anteprima_riservata() {
+		$event_id = isset( $_GET['event'] ) ? absint( $_GET['event'] ) : 0;
+		if ( ! current_user_can( 'mi_manage_events' ) || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Non hai accesso a questo evento.', 'Accesso negato', array( 'response' => 403 ) );
+		check_admin_referer( 'mi_anteprima_evento_' . $event_id );
+		$content = self::render( array( 'event' => $event_id, 'anteprima' => 1 ) );
+		nocache_headers();
+		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width, initial-scale=1"><?php wp_head(); ?></head><body class="mi-focused-page"><main class="mi-focused-page__main"><?php echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- HTML già protetto dal renderer. ?></main><?php wp_footer(); ?></body></html><?php
+		exit;
 	}
 
 	private static function darken_color( $color ) {
