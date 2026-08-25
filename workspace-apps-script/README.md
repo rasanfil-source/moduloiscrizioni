@@ -8,6 +8,7 @@ Progetto Google Apps Script associato a uno spreadsheet dedicato. Il repository 
 - `validateSelectedPayments()` convalida le righe selezionate in `PaymentIntake`;
 - `validatePendingPayments()` elabora tutte le righe nuove;
 - `doPost()` accetta soltanto richieste firmate provenienti dal proxy WordPress;
+- l'azione firmata `PING` verifica firma e anti-replay senza leggere o scrivere dati personali;
 - l'outbox email resta sempre nello stato `PREVIEW`.
 
 ## Prima configurazione
@@ -19,7 +20,7 @@ Progetto Google Apps Script associato a uno spreadsheet dedicato. Il repository 
 5. Nelle proprietà dello script creare `MI_SHARED_SECRET` con almeno 32 caratteri casuali. Non copiarlo nel repository o nel browser pubblico.
 6. Mantenere lo spreadsheet privato e concedere l'accesso soltanto agli operatori autorizzati.
 
-La Web App non deve essere distribuita finché WordPress non implementa la stessa canonicalizzazione e firma HMAC e non è stato completato un collaudo con identità fittizie.
+La Web App non deve ricevere iscrizioni finché non è stato completato prima il collaudo `PING` firmato e poi un collaudo con identità fittizie.
 
 ## Pagamenti manuali
 

@@ -8,6 +8,7 @@ function doPost(event) {
     const envelope = JSON.parse(event.postData.contents);
     const verified = verifyEnvelope_(envelope);
     if (!verified.ok) return jsonResponse_({ ok: false, error: verified.error });
+    if (envelope.action === 'PING') return jsonResponse_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, mode: 'PREVIEW' });
     if (envelope.action !== 'APPEND_REGISTRATION') return jsonResponse_({ ok: false, error: 'ACTION_NOT_ALLOWED' });
     return jsonResponse_(appendRegistration_(envelope.payload));
   } catch (error) {

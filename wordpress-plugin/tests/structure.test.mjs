@@ -7,8 +7,18 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.2\.0/);
+  assert.match(source, /Version:\s+0\.2\.1/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
+});
+
+test('il client Workspace firma le richieste e non contiene configurazione privata', async () => {
+  const source = await read('includes/class-mi-workspace-client.php');
+  assert.match(source, /hash_hmac\(\s*'sha256'/);
+  assert.match(source, /random_bytes\(\s*16\s*\)/);
+  assert.match(source, /MI_WORKSPACE_WEBAPP_URL/);
+  assert.match(source, /MI_WORKSPACE_SHARED_SECRET/);
+  assert.match(source, /stable_json/);
+  assert.doesNotMatch(source, /script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+/);
 });
 
 test('le bozze incomplete possono essere salvate senza aggirare il controllo di pubblicazione', async () => {

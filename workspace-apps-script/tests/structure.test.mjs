@@ -22,6 +22,7 @@ test('il web endpoint fallisce chiuso e richiede HMAC e anti replay', () => {
   assert.match(sources['Config.gs'], /MI_SHARED_SECRET/);
   assert.match(sources['WebApp.gs'], /computeHmacSha256Signature/);
   assert.match(sources['WebApp.gs'], /REPLAYED_REQUEST/);
+  assert.match(sources['WebApp.gs'], /envelope\.action === 'PING'/);
   assert.doesNotMatch(combined, /API_KEY\s*=\s*['"]\s*['"]/);
 });
 
