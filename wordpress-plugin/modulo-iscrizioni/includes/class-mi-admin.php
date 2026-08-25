@@ -52,6 +52,7 @@ final class MI_Admin {
 		if ( ! in_array( $source, array( 'BANK_TRANSFER', 'CARD', 'CASH' ), true ) || ! in_array( $kind, array( 'DEPOSIT', 'BALANCE', 'FULL', 'OTHER' ), true ) || ! in_array( $transaction, array( 'PAYMENT', 'REFUND' ), true ) || $amount < 1 ) { wp_die( esc_html__( 'Dati del versamento non validi.', 'modulo-iscrizioni' ) ); }
 		if ( 'REFUND' === $transaction && $amount > self::totale_pagamenti( $registration_id ) ) { wp_die( esc_html__( 'Il rimborso non può superare il totale già versato.', 'modulo-iscrizioni' ) ); }
 		$wpdb->insert( $wpdb->prefix . 'mi_payments', array( 'registration_id' => $registration_id, 'transaction_kind' => $transaction, 'installment_kind' => $kind, 'effective_at' => $effective_at, 'amount_cents' => $amount, 'payment_source' => $source, 'external_reference' => sanitize_text_field( wp_unslash( $_POST['external_reference'] ?? '' ) ), 'operator_label' => wp_get_current_user()->display_name, 'administrative_note' => sanitize_textarea_field( wp_unslash( $_POST['administrative_note'] ?? '' ) ), 'created_at' => current_time( 'mysql', true ) ), array( '%d', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s' ) );
+		MI_Registration_Service::accoda_iscrizione_workspace( $registration_id );
 		$url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-registrations', 'registration_id' => $registration_id, 'mi_payment_added' => '1' ), admin_url( 'edit.php' ) );
 		wp_safe_redirect( $url ); exit;
 	}
