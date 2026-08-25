@@ -8,6 +8,7 @@ final class MI_Admin {
 		add_action( 'admin_post_mi_archive_event', array( __CLASS__, 'archive_event' ) );
 		add_action( 'admin_post_mi_export_registrations', array( __CLASS__, 'export_registrations' ) );
 		add_action( 'admin_post_mi_retry_workspace', array( __CLASS__, 'riaccoda_workspace' ) );
+		add_action( 'admin_post_mi_add_payment', array( __CLASS__, 'add_payment' ) );
 		add_filter( 'post_row_actions', array( __CLASS__, 'event_row_actions' ), 10, 2 );
 		add_filter( 'wp_insert_post_data', array( __CLASS__, 'guard_publication' ), 20, 2 );
 		add_action( 'admin_notices', array( __CLASS__, 'publication_notice' ) );
@@ -30,6 +31,31 @@ final class MI_Admin {
 			'mi-email-outbox',
 			array( __CLASS__, 'outbox_page' )
 		);
+		add_submenu_page( 'edit.php?post_type=' . MI_Event_Post_Type::EVENT_TYPE, 'Pagamenti', 'Pagamenti', 'mi_view_registrations', 'mi-payments', array( __CLASS__, 'payments_page' ) );
+	}
+
+	public static function add_payment() {
+		if ( ! current_user_can( 'mi_view_registrations' ) ) { wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) ); }
+		$registration_id = isset( $_POST['registration_id'] ) ? absint( $_POST['registration_id'] ) : 0;
+		check_admin_referer( 'mi_add_payment_' . $registration_id );
+		global $wpdb;
+		$registration = $wpdb->get_row( $wpdb->prepare( "SELECT event_id FROM {$wpdb->prefix}mi_registrations WHERE id = %d", $registration_id ), ARRAY_A );
+		if ( ! $registration || ! MI_Access::can_access_event( (int) $registration['event_id'] ) ) { wp_die( esc_html__( 'Iscrizione non accessibile.', 'modulo-iscrizioni' ) ); }
+		$source = strtoupper( sanitize_key( wp_unslash( $_POST['payment_source'] ?? '' ) ) );
+		$kind = strtoupper( sanitize_key( wp_unslash( $_POST['installment_kind'] ?? 'FULL' ) ) );
+		$amount = round( max( 0, (float) str_replace( ',', '.', sanitize_text_field( wp_unslash( $_POST['amount'] ?? '0' ) ) ) ) * 100 );
+		if ( ! in_array( $source, array( 'BANK_TRANSFER', 'CARD', 'CASH' ), true ) || ! in_array( $kind, array( 'DEPOSIT', 'BALANCE', 'FULL', 'OTHER' ), true ) || $amount < 1 ) { wp_die( esc_html__( 'Dati del versamento non validi.', 'modulo-iscrizioni' ) ); }
+		$wpdb->insert( $wpdb->prefix . 'mi_payments', array( 'registration_id' => $registration_id, 'transaction_kind' => 'PAYMENT', 'installment_kind' => $kind, 'effective_at' => current_time( 'mysql' ), 'amount_cents' => $amount, 'payment_source' => $source, 'external_reference' => sanitize_text_field( wp_unslash( $_POST['external_reference'] ?? '' ) ), 'operator_label' => wp_get_current_user()->display_name, 'administrative_note' => sanitize_textarea_field( wp_unslash( $_POST['administrative_note'] ?? '' ) ), 'created_at' => current_time( 'mysql', true ) ), array( '%d', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s' ) );
+		$url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-registrations', 'registration_id' => $registration_id, 'mi_payment_added' => '1' ), admin_url( 'edit.php' ) );
+		wp_safe_redirect( $url ); exit;
+	}
+
+	public static function payments_page() {
+		if ( ! current_user_can( 'mi_view_registrations' ) ) { wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) ); }
+		global $wpdb;
+		$rows = $wpdb->get_results( "SELECT p.*, r.order_code, r.event_id FROM {$wpdb->prefix}mi_payments p INNER JOIN {$wpdb->prefix}mi_registrations r ON r.id = p.registration_id ORDER BY p.id DESC LIMIT 100", ARRAY_A );
+		$labels = array( 'BANK_TRANSFER' => 'Bonifico', 'CARD' => 'Carta', 'CASH' => 'Contante' );
+		?><div class="wrap"><h1>Pagamenti registrati</h1><p>I versamenti sono inseriti manualmente e non cambiano automaticamente lo stato dell’iscrizione.</p><table class="widefat striped"><thead><tr><th>Data</th><th>Ordine</th><th>Evento</th><th>Rata</th><th>Importo</th><th>Fonte</th><th>Riferimento</th><th>Operatore</th></tr></thead><tbody><?php if ( ! $rows ) : ?><tr><td colspan="8">Nessun versamento registrato.</td></tr><?php endif; foreach ( $rows as $row ) : ?><tr><td><?php echo esc_html( $row['effective_at'] ); ?></td><td><code><?php echo esc_html( $row['order_code'] ); ?></code></td><td><?php echo esc_html( get_the_title( (int) $row['event_id'] ) ); ?></td><td><?php echo esc_html( $row['installment_kind'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['amount_cents'] ) ); ?></td><td><?php echo esc_html( $labels[ $row['payment_source'] ] ?? $row['payment_source'] ); ?></td><td><?php echo esc_html( $row['external_reference'] ?: '—' ); ?></td><td><?php echo esc_html( $row['operator_label'] ?: '—' ); ?></td></tr><?php endforeach; ?></tbody></table></div><?php
 	}
 
 	public static function registrations_page() {
@@ -142,6 +168,9 @@ final class MI_Admin {
 		<tr><th scope="row">Primo versamento</th><td><?php echo esc_html( self::formatta_importo( $detail['initial_due_cents'] ) ); ?></td></tr>
 		<tr><th scope="row">Saldo successivo</th><td><?php echo esc_html( self::formatta_importo( $detail['balance_cents'] ) ); ?></td></tr>
 		</tbody></table>
+		<?php $payment_rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_payments WHERE registration_id = %d ORDER BY effective_at", $detail_id ), ARRAY_A ); ?>
+		<h3>Versamenti registrati</h3><?php if ( ! $payment_rows ) : ?><p>Nessun versamento registrato.</p><?php else : ?><table class="widefat striped" style="max-width:900px"><thead><tr><th>Data</th><th>Rata</th><th>Importo</th><th>Fonte</th><th>Riferimento</th><th>Nota</th></tr></thead><tbody><?php $payment_labels = array( 'BANK_TRANSFER' => 'Bonifico', 'CARD' => 'Carta', 'CASH' => 'Contante' ); foreach ( $payment_rows as $payment ) : ?><tr><td><?php echo esc_html( $payment['effective_at'] ); ?></td><td><?php echo esc_html( $payment['installment_kind'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $payment['amount_cents'] ) ); ?></td><td><?php echo esc_html( $payment_labels[ $payment['payment_source'] ] ?? $payment['payment_source'] ); ?></td><td><?php echo esc_html( $payment['external_reference'] ?: '—' ); ?></td><td><?php echo esc_html( $payment['administrative_note'] ?: '—' ); ?></td></tr><?php endforeach; ?></tbody></table><?php endif; ?>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="max-width:900px;margin:16px 0"><input type="hidden" name="action" value="mi_add_payment"><input type="hidden" name="registration_id" value="<?php echo esc_attr( $detail_id ); ?>"><?php wp_nonce_field( 'mi_add_payment_' . $detail_id ); ?><fieldset><legend><strong>Registra nuovo versamento</strong></legend><label>Importo (€) <input required type="number" min="0.01" step="0.01" name="amount"></label> <label>Rata <select name="installment_kind"><option value="DEPOSIT">Caparra</option><option value="BALANCE">Saldo</option><option value="FULL">Completo</option><option value="OTHER">Altro</option></select></label> <label>Fonte <select required name="payment_source"><option value="BANK_TRANSFER">Bonifico</option><option value="CARD">Carta</option><option value="CASH">Contante</option></select></label><br><label>Riferimento esterno <input type="text" name="external_reference" maxlength="120"></label> <label>Nota amministrativa <input type="text" name="administrative_note" maxlength="500"></label> <button class="button button-primary">Registra versamento</button></fieldset></form>
 		<?php if ( 'SYNCED' !== $detail['workspace_status'] ) : ?>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin:16px 0">
 		<input type="hidden" name="action" value="mi_retry_workspace">
