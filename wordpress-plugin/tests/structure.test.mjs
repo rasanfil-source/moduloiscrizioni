@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.5\.3/);
+  assert.match(source, /Version:\s+0\.5\.4/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -241,6 +241,18 @@ test('il pannello espone e riaccoda in sicurezza una replica Workspace', async (
   assert.match(admin, /Riaccoda replica Workspace/);
   assert.match(service, /accoda_iscrizione_workspace/);
   assert.match(service, /wp_schedule_single_event/);
+});
+
+test('il pannello riepiloga e filtra le repliche nel perimetro accessibile', async () => {
+  const admin = await read('includes/class-mi-admin.php');
+  assert.match(admin, /mi_workspace_status/);
+  assert.match(admin, /workspace_filter/);
+  assert.match(admin, /GROUP BY workspace_status/);
+  assert.match(admin, /Riepilogo repliche Workspace/);
+  assert.match(admin, /Sincronizzate:/);
+  assert.match(admin, /In attesa:/);
+  assert.match(admin, /scope_conditions/);
+  assert.match(admin, /MI_Access::activity_ids/);
 });
 
 test('l’iscrizione conserva totale, primo versamento e saldo', async () => {
