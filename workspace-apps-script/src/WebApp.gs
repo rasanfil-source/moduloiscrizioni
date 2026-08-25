@@ -60,7 +60,7 @@ function aggiungiIscrizione_(payload) {
   try {
     const registrations = ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS);
     const existing = convertiRigheInOggetti_(registrations).find(function (item) { return String(item.chiave_idempotenza) === idempotencyKey || String(item.codice_ordine) === orderCode; });
-    if (existing) return { ok: true, replayed: true, order_code: orderCode };
+    if (existing) { sincronizzaPagamenti_(orderCode, payload.payments); return { ok: true, replayed: true, order_code: orderCode }; }
 
     registrations.appendRow([
       neutralizzaFormula_(orderCode, 64),
@@ -91,9 +91,30 @@ function aggiungiIscrizione_(payload) {
     });
     ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS).getRange(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS).getLastRow() + 1, 1, participantRows.length, participantRows[0].length).setValues(participantRows);
     ottieniSchedaObbligatoria_(MI_SHEETS.EMAIL_OUTBOX).appendRow([creaIdentificativoOpaco_('msg'), neutralizzaFormula_(orderCode, 64), neutralizzaFormula_(buyer.email, 254), 'REGISTRATION_CONFIRMATION', JSON.stringify({ order_code: orderCode, status: payload.status }), 'PREVIEW', new Date()]);
+    sincronizzaPagamenti_(orderCode, payload.payments);
     aggiungiControllo_('APPEND_REGISTRATION', 'REGISTRATION', orderCode, 'SUCCESS', 'WORDPRESS', 'REGISTRATION_RECORDED', 'WORDPRESS_PROXY');
     return { ok: true, replayed: false, order_code: orderCode };
   } finally {
     lock.releaseLock();
   }
+}
+
+function sincronizzaPagamenti_(orderCode, payments) {
+  if (!Array.isArray(payments) || payments.length === 0) return;
+  const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS);
+  const existing = convertiRigheInOggetti_(sheet);
+  const kindMap = { PAYMENT: 'INCASSO', REFUND: 'RIMBORSO', INCASSO: 'INCASSO', RIMBORSO: 'RIMBORSO', STORNO: 'STORNO' };
+  const sourceMap = { BANK_TRANSFER: 'BONIFICO', CARD: 'CARTA', CASH: 'CONTANTE', BONIFICO: 'BONIFICO', CARTA: 'CARTA', CONTANTE: 'CONTANTE' };
+  payments.slice(0, 100).forEach(function (payment) {
+    const kind = kindMap[String(payment.transaction_kind || '').toUpperCase()];
+    const source = sourceMap[String(payment.payment_source || '').toUpperCase()];
+    const amount = Math.max(0, Math.round(Number(payment.amount_cents) || 0));
+    if (!kind || !source || amount < 1) return;
+    const effective = normalizzaTesto_(payment.effective_at, 40);
+    const reference = normalizzaTesto_(payment.external_reference, 120);
+    const origin = 'WP|' + orderCode + '|' + kind + '|' + effective + '|' + amount + '|' + source + '|' + reference;
+    if (existing.some(function (row) { return String(row.id_inserimento_origine) === origin; })) return;
+    sheet.appendRow([creaIdentificativoOpaco_('pay'), neutralizzaFormula_(orderCode, 64), kind, normalizzaValoreElenco_(payment.installment_kind, MI_PAYMENT_ENUMS.installmentKinds) || 'NON_ASSEGNATO', effective ? new Date(effective) : new Date(), amount, 'EUR', source, neutralizzaFormula_(reference, 120), neutralizzaFormula_(payment.operator_label, 100), 'WORDPRESS', origin, new Date()]);
+    existing.push({ id_inserimento_origine: origin });
+  });
 }
