@@ -46,6 +46,11 @@ expect( ! is_wp_error( $selection ), 'selezione valida rifiutata' );
 expect( 3 === $selection['quantity'], 'quantità totale errata' );
 expect( 2400 === $selection['total_cents'], 'totale server-side errato' );
 
+$free_event = $event;
+$free_event['pricing_mode'] = 'ZERO';
+$free_selection = invoke_private( 'validate_selection', array( $free_event, array( 'intero' => 2 ) ) );
+expect( ! is_wp_error( $free_selection ) && 0 === $free_selection['total_cents'], 'evento gratuito con totale diverso da zero' );
+
 $too_many = invoke_private( 'validate_selection', array( $event, array( 'intero' => 5 ) ) );
 expect( is_wp_error( $too_many ) && 'mi_ticket_limit' === $too_many->code, 'limite quota non applicato' );
 

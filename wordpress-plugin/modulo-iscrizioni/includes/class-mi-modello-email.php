@@ -58,7 +58,7 @@ final class MI_Modello_Email {
 		<p><label for="mi_email_text"><strong>Testo semplice</strong></label><br><textarea class="widefat" id="mi_email_text" name="mi_email_text" rows="7"><?php echo esc_textarea( $settings['text'] ); ?></textarea></p>
 		<p><label for="mi_email_footer"><strong>Footer</strong></label><br><textarea class="widefat" id="mi_email_footer" name="mi_email_footer" rows="3"><?php echo esc_textarea( $settings['footer'] ); ?></textarea></p>
 		<p class="description"><strong>Segnaposto ammessi:</strong> <code>{{evento.titolo}}</code>, <code>{{attivita.nome}}</code>, <code>{{ordine.codice}}</code>, <code>{{ordine.stato}}</code>, <code>{{ordine.partecipanti}}</code>, <code>{{referente.nome_completo}}</code>.</p>
-		<div class="mi-field-preview" data-mi-email-preview data-mi-email-values="<?php echo esc_attr( wp_json_encode( $example ) ); ?>"><strong>Anteprima con dati sintetici</strong><p><strong data-mi-email-preview-subject><?php echo esc_html( self::renderizza( $settings['subject'], $example ) ); ?></strong></p><p data-mi-email-preview-preheader><?php echo esc_html( self::renderizza( $settings['preheader'], $example ) ); ?></p><div><?php echo wp_kses_post( self::renderizza( $settings['html'], $example ) ); ?></div><h4>Testo semplice</h4><pre data-mi-email-preview-text style="white-space:pre-wrap"><?php echo esc_html( self::renderizza( $settings['text'], $example ) ); ?></pre><hr><p data-mi-email-preview-footer><?php echo nl2br( esc_html( self::renderizza( $settings['footer'], $example ) ) ); ?></p><p class="notice-inline notice-error" data-mi-email-placeholder-error hidden></p></div>
+		<div class="mi-field-preview" data-mi-email-preview data-mi-email-values="<?php echo esc_attr( wp_json_encode( $example ) ); ?>"><strong>Anteprima con dati sintetici</strong><p><strong data-mi-email-preview-subject><?php echo esc_html( self::renderizza( $settings['subject'], $example ) ); ?></strong></p><p data-mi-email-preview-preheader><?php echo esc_html( self::renderizza( $settings['preheader'], $example ) ); ?></p><div><?php echo wp_kses_post( self::renderizza_html( $settings['html'], $example ) ); ?></div><h4>Testo semplice</h4><pre data-mi-email-preview-text style="white-space:pre-wrap"><?php echo esc_html( self::renderizza( $settings['text'], $example ) ); ?></pre><hr><p data-mi-email-preview-footer><?php echo nl2br( esc_html( self::renderizza( $settings['footer'], $example ) ) ); ?></p><p class="notice-inline notice-error" data-mi-email-placeholder-error hidden></p></div>
 		<p class="description">Questa schermata non invia email e usa esclusivamente dati di esempio.</p>
 		<?php
 	}
@@ -67,7 +67,7 @@ final class MI_Modello_Email {
 		$settings = self::impostazioni( $event_id );
 		$snapshot = array( 'attivo' => '1' === $settings['enabled'] );
 		foreach ( array( 'subject' => 'oggetto', 'preheader' => 'preheader', 'html' => 'html', 'text' => 'testo', 'footer' => 'footer' ) as $source => $destination ) {
-			$snapshot[ $destination ] = self::renderizza( $settings[ $source ], $values );
+			$snapshot[ $destination ] = 'html' === $source ? self::renderizza_html( $settings[ $source ], $values ) : self::renderizza( $settings[ $source ], $values );
 		}
 		$activity_id = absint( get_post_meta( $event_id, '_mi_activity_id', true ) );
 		$thumbnail_id = $activity_id ? get_post_thumbnail_id( $activity_id ) : 0;
@@ -150,6 +150,22 @@ final class MI_Modello_Email {
 	}
 
 	private static function renderizza( $template, $values ) {
-		return strtr( (string) $template, $values );
+		$clean_values = array_map(
+			static function ( $value ) {
+				return sanitize_text_field( (string) $value );
+			},
+			$values
+		);
+		return strtr( (string) $template, $clean_values );
+	}
+
+	private static function renderizza_html( $template, $values ) {
+		$escaped_values = array_map(
+			static function ( $value ) {
+				return esc_html( sanitize_text_field( (string) $value ) );
+			},
+			$values
+		);
+		return strtr( (string) $template, $escaped_values );
 	}
 }

@@ -103,9 +103,9 @@ final class MI_Registration_Service {
 		}
 
 		$registrations_table = $wpdb->prefix . 'mi_registrations';
-		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, economic_mode, total_cents, initial_due_cents, balance_cents, payment_methods_json FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
+		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, workspace_status, economic_mode, total_cents, initial_due_cents, balance_cents, payment_methods_json FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
 		if ( $existing ) {
-			$workspace_status = self::sync_workspace_safely( (int) $existing['id'] );
+			$workspace_status = self::accoda_sincronizzazione_workspace( (int) $existing['id'], $existing['workspace_status'] );
 			return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'workspace_status' => $workspace_status, 'economic_summary' => self::riepilogo_salvato( $existing ), 'replayed' => true );
 		}
 
@@ -159,9 +159,9 @@ final class MI_Registration_Service {
 			);
 			if ( ! $inserted ) {
 				$wpdb->query( 'ROLLBACK' );
-				$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, economic_mode, total_cents, initial_due_cents, balance_cents, payment_methods_json FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
+				$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, workspace_status, economic_mode, total_cents, initial_due_cents, balance_cents, payment_methods_json FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
 				if ( $existing ) {
-					$workspace_status = self::sync_workspace_safely( (int) $existing['id'] );
+					$workspace_status = self::accoda_sincronizzazione_workspace( (int) $existing['id'], $existing['workspace_status'] );
 					return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'workspace_status' => $workspace_status, 'economic_summary' => self::riepilogo_salvato( $existing ), 'replayed' => true );
 				}
 				throw new RuntimeException( 'Registrazione non salvata.' );
@@ -194,7 +194,7 @@ final class MI_Registration_Service {
 				throw new RuntimeException( 'Outbox non salvata.' );
 			}
 			$wpdb->query( 'COMMIT' );
-			$workspace_status = self::sync_workspace_safely( $registration_id );
+			$workspace_status = self::accoda_sincronizzazione_workspace( $registration_id, 'PENDING' );
 			return array( 'order_code' => $order_code, 'status' => $status, 'workspace_status' => $workspace_status, 'economic_summary' => $economic_summary, 'replayed' => false );
 		} catch ( Throwable $error ) {
 			$wpdb->query( 'ROLLBACK' );
@@ -288,6 +288,22 @@ final class MI_Registration_Service {
 		foreach ( $ids as $registration_id ) {
 			self::sync_workspace_safely( (int) $registration_id );
 		}
+	}
+
+	public static function sincronizza_iscrizione_workspace( $registration_id ) {
+		return self::sync_workspace_safely( absint( $registration_id ) );
+	}
+
+	private static function accoda_sincronizzazione_workspace( $registration_id, $current_status ) {
+		if ( 'SYNCED' === $current_status ) {
+			return 'SYNCED';
+		}
+		$registration_id = absint( $registration_id );
+		$args = array( $registration_id );
+		if ( $registration_id && ! wp_next_scheduled( 'mi_sync_workspace_registration', $args ) ) {
+			wp_schedule_single_event( time() + 1, 'mi_sync_workspace_registration', $args );
+		}
+		return 'PENDING';
 	}
 
 	private static function sync_workspace_safely( $registration_id ) {

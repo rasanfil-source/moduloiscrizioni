@@ -292,19 +292,26 @@ final class MI_Admin {
 		$payment_methods = isset( $_POST['mi_payment_methods'] ) ? (array) wp_unslash( $_POST['mi_payment_methods'] ) : array();
 		$uses_price = in_array( $economic_mode, array( 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 		$collects_payment = in_array( $economic_mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
-		$valid_economic = ( ! $uses_price || ( 'CALCULATED' === $pricing_mode && max( array_merge( array( 0 ), $prices ) ) > 0 ) ) && ( ! $collects_payment || ! empty( $payment_methods ) );
+		$registration_only_price = 'REGISTRATION_ONLY' === $economic_mode && in_array( $pricing_mode, array( 'NONE', 'ZERO' ), true );
+		$calculated_price = $uses_price && 'CALCULATED' === $pricing_mode && max( array_merge( array( 0 ), $prices ) ) > 0;
+		$valid_economic = ( $registration_only_price || $calculated_price ) && ( ! $collects_payment || ! empty( $payment_methods ) );
 		if ( ! $activity_id || MI_Event_Post_Type::ACTIVITY_TYPE !== get_post_type( $activity_id ) || ! $valid_dates || ! $has_ticket || ! $valid_economic ) {
 			$data['post_status'] = 'draft';
-			set_transient( 'mi_publication_error_' . get_current_user_id(), '1', MINUTE_IN_SECONDS );
+			$message = 'Evento mantenuto in bozza: completa attività, date e tipologie.';
+			if ( ! $valid_economic ) {
+				$message = 'Evento mantenuto in bozza: “Gratuito esplicito” richiede “Solo iscrizione”; le altre modalità economiche richiedono prezzi calcolati positivi e, quando previsto, almeno una fonte di pagamento.';
+			}
+			set_transient( 'mi_publication_error_' . get_current_user_id(), $message, MINUTE_IN_SECONDS );
 		}
 		return $data;
 	}
 
 	public static function publication_notice() {
 		$key = 'mi_publication_error_' . get_current_user_id();
-		if ( get_transient( $key ) ) {
+		$message = get_transient( $key );
+		if ( $message ) {
 			delete_transient( $key );
-			echo '<div class="notice notice-error"><p>Evento mantenuto in bozza: completa attività, date, tipologie e configurazione economica coerente.</p></div>';
+			echo '<div class="notice notice-error"><p>' . esc_html( $message ) . '</p></div>';
 		}
 		$screen = get_current_screen();
 		if ( $screen && in_array( $screen->post_type, array( MI_Event_Post_Type::EVENT_TYPE, MI_Event_Post_Type::ACTIVITY_TYPE ), true ) ) {
