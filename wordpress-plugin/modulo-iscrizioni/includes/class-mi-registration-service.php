@@ -294,6 +294,17 @@ final class MI_Registration_Service {
 		return self::sync_workspace_safely( absint( $registration_id ) );
 	}
 
+	public static function accoda_iscrizione_workspace( $registration_id ) {
+		global $wpdb;
+		$registration_id = absint( $registration_id );
+		$table = $wpdb->prefix . 'mi_registrations';
+		$current_status = $wpdb->get_var( $wpdb->prepare( "SELECT workspace_status FROM {$table} WHERE id = %d", $registration_id ) );
+		if ( ! $current_status ) {
+			return 'UNAVAILABLE';
+		}
+		return self::accoda_sincronizzazione_workspace( $registration_id, $current_status );
+	}
+
 	private static function accoda_sincronizzazione_workspace( $registration_id, $current_status ) {
 		if ( 'SYNCED' === $current_status ) {
 			return 'SYNCED';

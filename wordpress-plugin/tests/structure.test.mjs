@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.5\.2/);
+  assert.match(source, /Version:\s+0\.5\.3/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -227,6 +227,20 @@ test('la replica Workspace è accodata dopo il commit senza bloccare la risposta
   assert.match(service, /sincronizza_iscrizione_workspace/);
   assert.match(plugin, /mi_sync_workspace_registration/);
   assert.match(activator, /wp_clear_scheduled_hook\(\s*'mi_sync_workspace_registration'/);
+});
+
+test('il pannello espone e riaccoda in sicurezza una replica Workspace', async () => {
+  const admin = await read('includes/class-mi-admin.php');
+  const service = await read('includes/class-mi-registration-service.php');
+  assert.match(admin, /admin_post_mi_retry_workspace/);
+  assert.match(admin, /check_admin_referer\(\s*'mi_retry_workspace_'/);
+  assert.match(admin, /MI_Access::can_access_event/);
+  assert.match(admin, /Tentativi Workspace/);
+  assert.match(admin, /Ultimo errore Workspace/);
+  assert.match(admin, /Sincronizzata il/);
+  assert.match(admin, /Riaccoda replica Workspace/);
+  assert.match(service, /accoda_iscrizione_workspace/);
+  assert.match(service, /wp_schedule_single_event/);
 });
 
 test('l’iscrizione conserva totale, primo versamento e saldo', async () => {
