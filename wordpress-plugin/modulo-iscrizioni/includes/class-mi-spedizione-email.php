@@ -152,6 +152,9 @@ final class MI_Spedizione_Email {
 		}
 		$preheader = ! empty( $istantanea['preheader'] ) ? '<div style="display:none;max-height:0;overflow:hidden">' . esc_html( $istantanea['preheader'] ) . '</div>' : '';
 		$corpo = $preheader . wp_kses_post( $istantanea['html'] ?? '' ) . '<hr><p>' . nl2br( esc_html( $istantanea['footer'] ?? '' ) ) . '</p>';
+		if ( isset( $istantanea['identificativo'] ) && is_array( $istantanea['identificativo'] ) && in_array( $istantanea['identificativo']['modalita'] ?? 'NONE', array( 'TEXT', 'QR', 'BARCODE' ), true ) ) {
+			$corpo .= '<p><strong>Codice:</strong> <code>' . esc_html( $istantanea['identificativo']['codice'] ?? '' ) . '</code></p>';
+		}
 		self::$nome_mittente = sanitize_text_field( $identita['nome_mittente'] ?? '' );
 		if ( self::$nome_mittente ) {
 			add_filter( 'wp_mail_from_name', array( __CLASS__, 'filtra_nome_mittente' ) );

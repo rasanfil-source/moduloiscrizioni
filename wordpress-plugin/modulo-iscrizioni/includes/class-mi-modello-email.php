@@ -81,6 +81,12 @@ final class MI_Modello_Email {
 			'indirizzo_risposte'   => $settings['reply_to'],
 			'destinatari_interni'  => array_values( (array) $settings['internal_recipients'] ),
 		);
+		$identifier_mode = strtoupper( (string) get_post_meta( $event_id, '_mi_identifier_display', true ) );
+		$snapshot['identificativo'] = array(
+			'modalita' => in_array( $identifier_mode, array( 'NONE', 'TEXT', 'QR', 'BARCODE' ), true ) ? $identifier_mode : 'TEXT',
+			'codice'   => (string) ( $values['{{ordine.codice}}'] ?? '' ),
+			'payload_qr' => 'modulo-iscrizioni|evento:' . absint( $event_id ) . '|ordine:' . sanitize_text_field( (string) ( $values['{{ordine.codice}}'] ?? '' ) ),
+		);
 		$snapshot['revisione'] = hash( 'sha256', wp_json_encode( $settings ) );
 		return $snapshot;
 	}

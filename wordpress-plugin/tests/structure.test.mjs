@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+1\.1\.0/);
+  assert.match(source, /Version:\s+1\.2\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -254,6 +254,17 @@ test('l’identità email valida reply-to e destinatari senza spedire', async ()
   assert.match(model, /count\(\s*\$recipients\s*\) > 10/);
   assert.match(model, /identita_email/);
   assert.doesNotMatch(model, /wp_mail\s*\(/);
+});
+
+test('l’identificativo QR è facoltativo e non contiene dati personali', async () => {
+  const model = await read('includes/class-mi-modello-email.php');
+  const postType = await read('includes/class-mi-event-post-type.php');
+  const sender = await read('includes/class-mi-spedizione-email.php');
+  assert.match(postType, /QR facoltativo/);
+  assert.match(model, /payload_qr/);
+  assert.match(model, /_mi_identifier_display/);
+  assert.match(sender, /identificativo/);
+  assert.doesNotMatch(model, /buyer_email/);
 });
 
 test('la gestione economica distingue i quattro casi senza attivare riscossioni', async () => {
