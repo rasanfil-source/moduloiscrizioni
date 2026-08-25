@@ -231,7 +231,7 @@ final class MI_Admin {
 		<?php if ( ! $preview ) : ?><p>Questa voce precede l’introduzione delle anteprime complete.</p><?php else : ?>
 		<p><strong>Oggetto:</strong> <?php echo esc_html( $preview['oggetto'] ?? '' ); ?></p>
 		<p><strong>Preheader:</strong> <?php echo esc_html( $preview['preheader'] ?? '' ); ?></p>
-		<div class="card" style="max-width:900px"><div><?php echo wp_kses_post( $preview['html'] ?? '' ); ?></div><hr><p><?php echo nl2br( esc_html( $preview['footer'] ?? '' ) ); ?></p></div>
+		<div class="card" style="max-width:900px"><?php $identity = isset( $preview['identita'] ) && is_array( $preview['identita'] ) ? $preview['identita'] : array(); ?><?php if ( ! empty( $identity['logo_url'] ) ) : ?><p><img src="<?php echo esc_url( $identity['logo_url'] ); ?>" alt="<?php echo esc_attr( $identity['logo_alt'] ?: $identity['nome_attivita'] ); ?>" style="max-width:180px;height:auto"></p><?php endif; ?><?php if ( ! empty( $identity['nome_attivita'] ) ) : ?><p><strong><?php echo esc_html( $identity['nome_attivita'] ); ?></strong></p><?php endif; ?><div><?php echo wp_kses_post( $preview['html'] ?? '' ); ?></div><hr><p><?php echo nl2br( esc_html( $preview['footer'] ?? '' ) ); ?></p></div>
 		<h3>Versione testo semplice</h3><pre style="white-space:pre-wrap;max-width:900px"><?php echo esc_html( $preview['testo'] ?? '' ); ?></pre>
 		<p><small>Revisione: <code><?php echo esc_html( substr( (string) ( $preview['revisione'] ?? '' ), 0, 12 ) ); ?></code></small></p>
 		<?php endif; ?><?php endif; ?>

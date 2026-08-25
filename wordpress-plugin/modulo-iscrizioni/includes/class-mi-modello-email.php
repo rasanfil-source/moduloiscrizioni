@@ -55,6 +55,13 @@ final class MI_Modello_Email {
 		foreach ( array( 'subject' => 'oggetto', 'preheader' => 'preheader', 'html' => 'html', 'text' => 'testo', 'footer' => 'footer' ) as $source => $destination ) {
 			$snapshot[ $destination ] = self::renderizza( $settings[ $source ], $values );
 		}
+		$activity_id = absint( get_post_meta( $event_id, '_mi_activity_id', true ) );
+		$thumbnail_id = $activity_id ? get_post_thumbnail_id( $activity_id ) : 0;
+		$snapshot['identita'] = array(
+			'nome_attivita' => $activity_id ? get_the_title( $activity_id ) : '',
+			'logo_url'      => $thumbnail_id ? (string) wp_get_attachment_image_url( $thumbnail_id, 'medium' ) : '',
+			'logo_alt'      => $thumbnail_id ? (string) get_post_meta( $thumbnail_id, '_wp_attachment_image_alt', true ) : '',
+		);
 		$snapshot['revisione'] = hash( 'sha256', wp_json_encode( $settings ) );
 		return $snapshot;
 	}

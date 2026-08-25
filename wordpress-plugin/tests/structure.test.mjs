@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.3\.1/);
+  assert.match(source, /Version:\s+0\.3\.2/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -133,4 +133,14 @@ test('l’outbox conserva e mostra una revisione immutabile dell’anteprima', a
   assert.match(service, /email_preview/);
   assert.match(admin, /Anteprima email conservata/);
   assert.match(admin, /wp_kses_post/);
+});
+
+test('l’anteprima storica conserva il branding dell’attività', async () => {
+  const model = await read('includes/class-mi-modello-email.php');
+  const admin = await read('includes/class-mi-admin.php');
+  assert.match(model, /nome_attivita/);
+  assert.match(model, /wp_get_attachment_image_url/);
+  assert.match(model, /logo_alt/);
+  assert.match(admin, /identity\['logo_url'\]/);
+  assert.match(admin, /identity\['logo_alt'\]/);
 });

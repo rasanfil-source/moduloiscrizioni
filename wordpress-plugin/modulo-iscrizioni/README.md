@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — vertical slice 0.3.1
+# Modulo Iscrizioni — vertical slice 0.3.2
 
 Plugin WordPress dimostrativo per la Fase 2. Implementa:
 
@@ -13,12 +13,13 @@ Plugin WordPress dimostrativo per la Fase 2. Implementa:
 - email registrate soltanto nell'outbox `PREVIEW`;
 - editor dell'email di conferma con segnaposto italiani e anteprima sintetica, senza invio;
 - istantanea immutabile del modello risolto nell'outbox e consultazione protetta dal pannello;
+- identità storica dell'attività nell'anteprima, con nome, logo e testo alternativo;
 - ruolo `Gestore iscrizioni` limitabile alle attività assegnate;
 - shortcode `[modulo_iscrizioni event="ID"]`.
 
 ## Limiti intenzionali
 
-Questa versione non invia email, non gestisce pagamenti e non genera QR/barcode. L'editor per evento salva oggetto, preheader, corpo HTML limitato, testo semplice e footer e ne mostra un'anteprima con dati esclusivamente sintetici. Ogni nuova voce locale della coda conserva il modello già risolto e una revisione crittografica, così modifiche successive all'evento non cambiano l'anteprima storica. Replica le nuove iscrizioni nel registro Workspace mediante HMAC, anti-replay e chiave di idempotenza; un errore remoto non annulla il salvataggio autorevole WordPress e lascia la replica in stato `PENDING` per un nuovo tentativo. Il pannello mostra il dettaglio dei partecipanti e le risposte aggiuntive con etichette italiane; l'elenco può essere filtrato per evento o ricercato per codice, referente ed email e l'esportazione CSV rispetta gli stessi filtri e l'ambito delle attività assegnate. Le date di nascita future o anteriori a 120 anni vengono rifiutate. URL e segreto possono essere definiti come costanti private fuori dal repository oppure salvati nella schermata amministrativa riservata; il segreto deve contenere almeno 32 caratteri e non viene mai mostrato. Il pacchetto 0.3.1 è destinato al collaudo sul sito autorizzato.
+Questa versione non invia email, non gestisce pagamenti e non genera QR/barcode. L'editor per evento salva oggetto, preheader, corpo HTML limitato, testo semplice e footer e ne mostra un'anteprima con dati esclusivamente sintetici. Ogni nuova voce locale della coda conserva il modello già risolto, l'identità dell'attività e una revisione crittografica, così modifiche successive all'evento o al logo non cambiano l'anteprima storica. Replica le nuove iscrizioni nel registro Workspace mediante HMAC, anti-replay e chiave di idempotenza; un errore remoto non annulla il salvataggio autorevole WordPress e lascia la replica in stato `PENDING` per un nuovo tentativo. Il pannello mostra il dettaglio dei partecipanti e le risposte aggiuntive con etichette italiane; l'elenco può essere filtrato per evento o ricercato per codice, referente ed email e l'esportazione CSV rispetta gli stessi filtri e l'ambito delle attività assegnate. Le date di nascita future o anteriori a 120 anni vengono rifiutate. URL e segreto possono essere definiti come costanti private fuori dal repository oppure salvati nella schermata amministrativa riservata; il segreto deve contenere almeno 32 caratteri e non viene mai mostrato. Il pacchetto 0.3.2 è destinato al collaudo sul sito autorizzato.
 
 ## Installazione di prova
 
