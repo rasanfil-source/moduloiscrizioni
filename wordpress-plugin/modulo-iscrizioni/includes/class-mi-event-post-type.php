@@ -180,6 +180,8 @@ final class MI_Event_Post_Type {
 	public static function render_shortcode_box( $post ) {
 		echo '<p>Inserisci questo shortcode nella bozza destinata al modulo:</p>';
 		echo '<code>[modulo_iscrizioni event=&quot;' . esc_html( $post->ID ) . '&quot;]</code>';
+		echo '<p><strong>Pagina consigliata:</strong> scegli il modello “Iscrizione — modalità concentrata” negli attributi della pagina. Il modello nasconde soltanto in quella pagina menu, intestazione, barra laterale e piè di pagina del tema.</p>';
+		echo '<p>Per completare la testata pubblica imposta data, ora e luogo e usa l’immagine in evidenza come copertina.</p>';
 	}
 
 	public static function render_activity_box( $post ) {

@@ -83,18 +83,24 @@
 	  if (!stickySummary) return;
 	  const quantityLabel = quantity === 1 ? '1 iscrizione' : `${quantity} iscrizioni`;
 	  stickySummary.textContent = quantity ? `${quantityLabel}${config.event.pricing_mode === 'CALCULATED' ? ` · ${formatCurrency(totalCents())}` : ''}` : 'Nessuna iscrizione';
+	  root.querySelectorAll('[data-mi-ticket]').forEach((input) => {
+		input.closest('.mi-registration__ticket')?.classList.toggle('is-selected', Number(input.value) > 0);
+	  });
 	}
 
 	function showStep(step, focusHeading = true) {
 	  currentStep = Math.min(3, Math.max(1, step));
 	  steps.forEach((section) => { section.hidden = Number(section.dataset.miStep) !== currentStep; });
 	  root.querySelectorAll('[data-mi-progress]').forEach((item) => {
-		if (Number(item.dataset.miProgress) === currentStep) item.setAttribute('aria-current', 'step');
+		const itemStep = Number(item.dataset.miProgress);
+		if (itemStep === currentStep) item.setAttribute('aria-current', 'step');
 		else item.removeAttribute('aria-current');
+		item.classList.toggle('is-complete', itemStep < currentStep);
 	  });
 	  backButton.hidden = currentStep === 1;
 	  nextButton.hidden = currentStep === 3;
 	  submitButton.hidden = currentStep !== 3;
+	  nextButton.textContent = currentStep === 2 ? 'Vai alla conferma' : 'Continua';
 	  if (focusHeading) steps[currentStep - 1]?.querySelector('h2')?.focus();
 	}
 
