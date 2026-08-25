@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.3\.4/);
+  assert.match(source, /Version:\s+0\.4\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -164,4 +164,18 @@ test('l’identità email valida reply-to e destinatari senza spedire', async ()
   assert.match(model, /count\(\s*\$recipients\s*\) > 10/);
   assert.match(model, /identita_email/);
   assert.doesNotMatch(model, /wp_mail\s*\(/);
+});
+
+test('la gestione economica distingue i quattro casi senza attivare riscossioni', async () => {
+  const eventType = await read('includes/class-mi-event-post-type.php');
+  const service = await read('includes/class-mi-registration-service.php');
+  assert.match(eventType, /Solo iscrizione/);
+  assert.match(eventType, /Prezzo informativo/);
+  assert.match(eventType, /Versamento completo/);
+  assert.match(eventType, /Caparra e saldo/);
+  assert.match(eventType, /BANK_TRANSFER/);
+  assert.match(eventType, /CARD/);
+  assert.match(eventType, /CASH/);
+  assert.match(service, /deposit_percentage/);
+  assert.doesNotMatch(eventType, /IBAN|numero della carta|payment_url/i);
 });
