@@ -60,6 +60,7 @@ final class MI_Admin {
 		if ( ! current_user_can( 'mi_view_registrations' ) ) { wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) ); }
 		global $wpdb;
 		$rows = $wpdb->get_results( "SELECT p.*, r.order_code, r.event_id FROM {$wpdb->prefix}mi_payments p INNER JOIN {$wpdb->prefix}mi_registrations r ON r.id = p.registration_id ORDER BY p.id DESC LIMIT 100", ARRAY_A );
+		$rows = array_values( array_filter( $rows, static function ( $row ) { return MI_Access::can_access_event( (int) $row['event_id'] ); } ) );
 		$filter_event = isset( $_GET['payment_event_id'] ) ? absint( $_GET['payment_event_id'] ) : 0;
 		$filter_source = strtoupper( sanitize_key( wp_unslash( $_GET['payment_source'] ?? '' ) ) );
 		$filter_transaction = strtoupper( sanitize_key( wp_unslash( $_GET['transaction_kind'] ?? '' ) ) );
@@ -75,6 +76,7 @@ final class MI_Admin {
 		check_admin_referer( 'mi_export_payments' );
 		global $wpdb;
 		$rows = $wpdb->get_results( "SELECT p.*, r.order_code, r.event_id FROM {$wpdb->prefix}mi_payments p INNER JOIN {$wpdb->prefix}mi_registrations r ON r.id = p.registration_id ORDER BY p.effective_at, p.id", ARRAY_A );
+		$rows = array_values( array_filter( $rows, static function ( $row ) { return MI_Access::can_access_event( (int) $row['event_id'] ); } ) );
 		$labels = array( 'BANK_TRANSFER' => 'Bonifico', 'CARD' => 'Carta', 'CASH' => 'Contante' );
 		header( 'Content-Type: text/csv; charset=UTF-8' ); header( 'Content-Disposition: attachment; filename="pagamenti-' . gmdate( 'Y-m-d' ) . '.csv"' );
 		$output = fopen( 'php://output', 'w' ); fwrite( $output, "\xEF\xBB\xBF" );
