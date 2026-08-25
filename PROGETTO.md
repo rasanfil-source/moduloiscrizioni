@@ -5,7 +5,7 @@ Data: 24 agosto 2026
 
 Esito Fase A: completata. Fase 2: vertical slice WordPress 0.2.0 installata, attiva e collaudata. Sono stati verificati homepage, pagina Santiago, pannello eventi, salvataggio delle bozze, caricamento condizionale degli asset, preset dei dati e migrazione compatibile della tabella partecipanti. I dati estesi usano allowlist e validazione server; la bozza 2027 mantiene il profilo Minimo. Le prime bozze di attività ed evento esistono nel pannello, ma non è stato pubblicato alcun modulo e nessun invio reale è attivo.
 
-Backend Workspace: candidato Apps Script predisposto e testato localmente, non ancora installato. Il setup è associabile a un foglio senza incorporarne l'ID, crea registri separati per iscrizioni, partecipanti, pagamenti, intake, email e audit, mantiene l'outbox in `PREVIEW` e richiede HMAC con anti-replay per ogni futura scrittura proveniente da WordPress.
+Backend Workspace: candidato Apps Script predisposto, testato localmente e installato nel foglio di collaudo. Il setup è stato eseguito con successo e ha creato le otto schede `Config`, `Events`, `Registrations`, `Participants`, `PaymentIntake`, `Payments`, `EmailOutbox` e `AuditLog`. L'outbox resta in `PREVIEW`; il progetto non è ancora distribuito come Web App e ogni futura scrittura proveniente da WordPress richiederà HMAC con anti-replay. L'installazione corrente usa temporaneamente un account diverso dall'account Workspace organizzativo definitivo e dovrà essere trasferita prima della produzione.
 
 ## Artefatti della Fase A
 
@@ -772,7 +772,9 @@ Il nuovo ordine viene prima registrato in modo autorevole e riceve un codice uni
 - editor eventi e schermate;
 - editor e anteprima email;
 - coda, retry e notifiche interne;
-- elenco ordini ed esportazione.
+- elenco ordini ed esportazione;
+- dettaglio dei partecipanti nel pannello, incluse le risposte configurabili oggi conservate in `mi_participants.extra_json`, con etichette leggibili, filtri ed esportazione coerenti con le capability e l'ambito attività;
+- validazione ragionevole delle date di nascita: oltre a vietare date future, rifiutare valori anteriori a 120 anni rispetto alla data corrente, lasciando eventuali eccezioni motivate a una regola configurabile.
 
 ### Fase E: pagamenti
 
