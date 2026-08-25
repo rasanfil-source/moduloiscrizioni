@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+1\.2\.0/);
+  assert.match(source, /Version:\s+1\.3\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -265,6 +265,21 @@ test('l’identificativo QR è facoltativo e non contiene dati personali', async
   assert.match(model, /_mi_identifier_display/);
   assert.match(sender, /identificativo/);
   assert.doesNotMatch(model, /buyer_email/);
+});
+
+test('il QR grafico usa una libreria locale MIT senza servizi esterni', async () => {
+  const shortcode = await read('includes/class-mi-shortcode.php');
+  const service = await read('includes/class-mi-registration-service.php');
+  const script = await read('assets/public.js');
+  const library = await read('assets/qrcode-generator-2.0.4.js');
+  const licence = await read('assets/qrcode-generator-LICENZA-MIT.txt');
+  assert.match(shortcode, /qrcode-generator-2\.0\.4\.js/);
+  assert.match(service, /identifier_display/);
+  assert.match(script, /createSvgTag/);
+  assert.match(script, /window\.qrcode/);
+  assert.match(library, /qrcode/);
+  assert.match(licence, /MIT/i);
+  assert.doesNotMatch(script, /https?:\/\//);
 });
 
 test('la gestione economica distingue i quattro casi senza attivare riscossioni', async () => {
