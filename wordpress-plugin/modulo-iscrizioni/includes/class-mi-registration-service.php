@@ -172,7 +172,15 @@ final class MI_Registration_Service {
 			if ( 1 !== $counter_updated ) {
 				throw new RuntimeException( 'Contatore non aggiornato.' );
 			}
-			$payload_json = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $order_code, 'status' => $status, 'quantity' => $selection['quantity'], 'total_cents' => $selection['total_cents'] ) );
+			$email_values = array(
+				'{{evento.titolo}}'           => $event['title'],
+				'{{attivita.nome}}'           => $event['activity'],
+				'{{ordine.codice}}'           => $order_code,
+				'{{ordine.stato}}'            => 'CONFIRMED' === $status ? 'Confermata' : 'Lista d’attesa',
+				'{{ordine.partecipanti}}'     => (string) $selection['quantity'],
+				'{{referente.nome_completo}}' => $buyer['first_name'] . ' ' . $buyer['last_name'],
+			);
+			$payload_json = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $order_code, 'status' => $status, 'quantity' => $selection['quantity'], 'total_cents' => $selection['total_cents'], 'email_preview' => MI_Modello_Email::crea_istantanea( $event_id, $email_values ) ) );
 			if ( false === $wpdb->insert( $outbox_table, array( 'registration_id' => $registration_id, 'recipient' => $buyer['email'], 'template_type' => 'REGISTRATION_CONFIRMATION', 'payload_json' => $payload_json, 'status' => 'PREVIEW', 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) {
 				throw new RuntimeException( 'Outbox non salvata.' );
 			}

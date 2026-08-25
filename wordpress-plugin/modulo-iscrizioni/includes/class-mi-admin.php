@@ -204,6 +204,7 @@ final class MI_Admin {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mi_email_outbox';
 		$registrations = $wpdb->prefix . 'mi_registrations';
+		$detail_id = isset( $_GET['email_id'] ) ? absint( $_GET['email_id'] ) : 0;
 		$scope = MI_Access::activity_ids();
 		if ( 'ALL' === $scope ) {
 			$where = '';
@@ -212,12 +213,29 @@ final class MI_Admin {
 			$where = 'WHERE r.event_id IN (' . implode( ',', array_map( 'absint', $allowed_events ?: array( 0 ) ) ) . ')';
 		}
 		$rows = $wpdb->get_results( "SELECT o.id, o.registration_id, o.recipient, o.template_type, o.status, o.created_at FROM {$table} o INNER JOIN {$registrations} r ON r.id = o.registration_id {$where} ORDER BY o.id DESC LIMIT 100", ARRAY_A );
+		$detail = null;
+		if ( $detail_id ) {
+			$detail = $wpdb->get_row( $wpdb->prepare( "SELECT o.*, r.event_id FROM {$table} o INNER JOIN {$registrations} r ON r.id = o.registration_id WHERE o.id = %d", $detail_id ), ARRAY_A );
+			if ( ! $detail || ! MI_Access::can_access_event( (int) $detail['event_id'] ) ) {
+				wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) );
+			}
+		}
 		?>
 		<div class="wrap"><h1>Email in anteprima</h1><p>Nessuna email viene spedita in questa fase.</p>
-		<table class="widefat striped"><thead><tr><th>ID</th><th>Iscrizione</th><th>Destinatario</th><th>Template</th><th>Stato</th><th>Data UTC</th></tr></thead><tbody>
-		<?php if ( ! $rows ) : ?><tr><td colspan="6">Outbox vuota.</td></tr><?php endif; ?>
-		<?php foreach ( $rows as $row ) : ?><tr><td><?php echo esc_html( $row['id'] ); ?></td><td><?php echo esc_html( $row['registration_id'] ); ?></td><td><?php echo esc_html( $row['recipient'] ); ?></td><td><?php echo esc_html( $row['template_type'] ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td></tr><?php endforeach; ?>
-		</tbody></table></div>
+		<table class="widefat striped"><thead><tr><th>ID</th><th>Iscrizione</th><th>Destinatario</th><th>Modello</th><th>Stato</th><th>Data UTC</th><th></th></tr></thead><tbody>
+		<?php if ( ! $rows ) : ?><tr><td colspan="7">Coda vuota.</td></tr><?php endif; ?>
+		<?php foreach ( $rows as $row ) : ?><?php $preview_url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox', 'email_id' => (int) $row['id'] ), admin_url( 'edit.php' ) ); ?><tr><td><?php echo esc_html( $row['id'] ); ?></td><td><?php echo esc_html( $row['registration_id'] ); ?></td><td><?php echo esc_html( $row['recipient'] ); ?></td><td><?php echo esc_html( $row['template_type'] ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $preview_url ); ?>">Apri anteprima</a></td></tr><?php endforeach; ?>
+		</tbody></table>
+		<?php if ( $detail ) : ?><?php $payload = json_decode( (string) $detail['payload_json'], true ); $preview = is_array( $payload ) && isset( $payload['email_preview'] ) && is_array( $payload['email_preview'] ) ? $payload['email_preview'] : array(); ?>
+		<hr><h2>Anteprima email conservata</h2>
+		<?php if ( ! $preview ) : ?><p>Questa voce precede l’introduzione delle anteprime complete.</p><?php else : ?>
+		<p><strong>Oggetto:</strong> <?php echo esc_html( $preview['oggetto'] ?? '' ); ?></p>
+		<p><strong>Preheader:</strong> <?php echo esc_html( $preview['preheader'] ?? '' ); ?></p>
+		<div class="card" style="max-width:900px"><div><?php echo wp_kses_post( $preview['html'] ?? '' ); ?></div><hr><p><?php echo nl2br( esc_html( $preview['footer'] ?? '' ) ); ?></p></div>
+		<h3>Versione testo semplice</h3><pre style="white-space:pre-wrap;max-width:900px"><?php echo esc_html( $preview['testo'] ?? '' ); ?></pre>
+		<p><small>Revisione: <code><?php echo esc_html( substr( (string) ( $preview['revisione'] ?? '' ), 0, 12 ) ); ?></code></small></p>
+		<?php endif; ?><?php endif; ?>
+		</div>
 		<?php
 	}
 

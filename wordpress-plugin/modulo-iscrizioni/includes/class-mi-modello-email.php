@@ -49,6 +49,16 @@ final class MI_Modello_Email {
 		<?php
 	}
 
+	public static function crea_istantanea( $event_id, $values ) {
+		$settings = self::impostazioni( $event_id );
+		$snapshot = array( 'attivo' => '1' === $settings['enabled'] );
+		foreach ( array( 'subject' => 'oggetto', 'preheader' => 'preheader', 'html' => 'html', 'text' => 'testo', 'footer' => 'footer' ) as $source => $destination ) {
+			$snapshot[ $destination ] = self::renderizza( $settings[ $source ], $values );
+		}
+		$snapshot['revisione'] = hash( 'sha256', wp_json_encode( $settings ) );
+		return $snapshot;
+	}
+
 	public static function salva( $post_id, $post ) {
 		if ( ! isset( $_POST['mi_modello_email_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['mi_modello_email_nonce'] ) ), 'mi_salva_modello_email' ) ) {
 			return;
