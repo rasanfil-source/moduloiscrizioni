@@ -26,6 +26,7 @@ final class MI_Registration_Service {
 			'activity'         => $activity ? $activity->post_title : '',
 			'activity_logo'    => $activity ? get_the_post_thumbnail_url( $activity, 'medium' ) : '',
 			'activity_logo_alt'=> $activity_thumbnail_id ? (string) get_post_meta( $activity_thumbnail_id, '_wp_attachment_image_alt', true ) : '',
+			'accent_color'     => $activity ? ( sanitize_hex_color( get_post_meta( $activity_id, '_mi_accent_color', true ) ) ?: '#c43b2f' ) : '#c43b2f',
 			'cover_image'      => $event_thumbnail_id ? get_the_post_thumbnail_url( $event_id, 'large' ) : '',
 			'cover_image_alt'  => $event_thumbnail_id ? (string) get_post_meta( $event_thumbnail_id, '_wp_attachment_image_alt', true ) : '',
 			'event_starts_at'  => (string) get_post_meta( $event_id, '_mi_event_starts_at', true ),
