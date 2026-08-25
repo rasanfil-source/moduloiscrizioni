@@ -4,10 +4,9 @@ defined( 'ABSPATH' ) || exit;
 
 final class MI_Workspace_Client {
 	public static function is_configured() {
-		return defined( 'MI_WORKSPACE_WEBAPP_URL' )
-			&& defined( 'MI_WORKSPACE_SHARED_SECRET' )
-			&& 0 === strpos( MI_WORKSPACE_WEBAPP_URL, 'https://script.google.com/' )
-			&& strlen( MI_WORKSPACE_SHARED_SECRET ) >= 32;
+		$url = self::webapp_url();
+		$secret = self::shared_secret();
+		return 0 === strpos( $url, 'https://script.google.com/macros/s/' ) && strlen( $secret ) >= 32;
 	}
 
 	public static function ping() {
@@ -23,7 +22,7 @@ final class MI_Workspace_Client {
 		$timestamp = (int) floor( microtime( true ) * 1000 );
 		$nonce = bin2hex( random_bytes( 16 ) );
 		$message = $timestamp . "\n" . $nonce . "\n" . $action . "\n" . self::stable_json( $payload );
-		$signature = rtrim( strtr( base64_encode( hash_hmac( 'sha256', $message, MI_WORKSPACE_SHARED_SECRET, true ) ), '+/', '-_' ), '=' );
+		$signature = rtrim( strtr( base64_encode( hash_hmac( 'sha256', $message, self::shared_secret(), true ) ), '+/', '-_' ), '=' );
 		$body = wp_json_encode(
 			array(
 				'timestamp' => $timestamp,
@@ -35,10 +34,10 @@ final class MI_Workspace_Client {
 			JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 		);
 		$response = wp_remote_post(
-			MI_WORKSPACE_WEBAPP_URL,
+			self::webapp_url(),
 			array(
 				'timeout'     => 15,
-				'redirection' => 0,
+				'redirection' => 5,
 				'headers'     => array( 'Content-Type' => 'application/json; charset=utf-8' ),
 				'body'        => $body,
 			)
@@ -54,6 +53,14 @@ final class MI_Workspace_Client {
 			return new WP_Error( 'mi_workspace_rejected', 'Workspace ha rifiutato la richiesta.' );
 		}
 		return $decoded;
+	}
+
+	private static function webapp_url() {
+		return defined( 'MI_WORKSPACE_WEBAPP_URL' ) ? (string) MI_WORKSPACE_WEBAPP_URL : (string) get_option( 'mi_workspace_webapp_url', '' );
+	}
+
+	private static function shared_secret() {
+		return defined( 'MI_WORKSPACE_SHARED_SECRET' ) ? (string) MI_WORKSPACE_SHARED_SECRET : (string) get_option( 'mi_workspace_shared_secret', '' );
 	}
 
 	public static function stable_json( $value ) {
