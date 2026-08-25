@@ -103,10 +103,10 @@ final class MI_Registration_Service {
 		}
 
 		$registrations_table = $wpdb->prefix . 'mi_registrations';
-		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
+		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, economic_mode, total_cents, initial_due_cents, balance_cents FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
 		if ( $existing ) {
 			$workspace_status = self::sync_workspace_safely( (int) $existing['id'] );
-			return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'workspace_status' => $workspace_status, 'replayed' => true );
+			return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'workspace_status' => $workspace_status, 'economic_summary' => self::riepilogo_salvato( $existing ), 'replayed' => true );
 		}
 
 		$counters_table = $wpdb->prefix . 'mi_event_counters';
@@ -134,6 +134,7 @@ final class MI_Registration_Service {
 				$wpdb->query( 'ROLLBACK' );
 				return new WP_Error( 'mi_sold_out', 'Posti esauriti.', array( 'status' => 409 ) );
 			}
+			$economic_summary = self::riepilogo_economico( $event, $selection['total_cents'], $status );
 
 			$inserted = $wpdb->insert(
 				$registrations_table,
@@ -146,17 +147,21 @@ final class MI_Registration_Service {
 					'buyer_email'     => $buyer['email'],
 					'buyer_phone'     => $buyer['phone'],
 					'total_qty'       => $selection['quantity'],
+					'economic_mode'   => $economic_summary['mode'],
+					'total_cents'     => $economic_summary['total_cents'],
+					'initial_due_cents'=> $economic_summary['initial_due_cents'],
+					'balance_cents'   => $economic_summary['balance_cents'],
 					'idempotency_key' => $idempotency_key,
 					'created_at'      => $now,
 				),
-				array( '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s' )
+				array( '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%d', '%s', '%s' )
 			);
 			if ( ! $inserted ) {
 				$wpdb->query( 'ROLLBACK' );
-				$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
+				$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, economic_mode, total_cents, initial_due_cents, balance_cents FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
 				if ( $existing ) {
 					$workspace_status = self::sync_workspace_safely( (int) $existing['id'] );
-					return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'workspace_status' => $workspace_status, 'replayed' => true );
+					return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'workspace_status' => $workspace_status, 'economic_summary' => self::riepilogo_salvato( $existing ), 'replayed' => true );
 				}
 				throw new RuntimeException( 'Registrazione non salvata.' );
 			}
@@ -183,17 +188,36 @@ final class MI_Registration_Service {
 				'{{ordine.partecipanti}}'     => (string) $selection['quantity'],
 				'{{referente.nome_completo}}' => $buyer['first_name'] . ' ' . $buyer['last_name'],
 			);
-			$payload_json = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $order_code, 'status' => $status, 'quantity' => $selection['quantity'], 'total_cents' => $selection['total_cents'], 'email_preview' => MI_Modello_Email::crea_istantanea( $event_id, $email_values ) ) );
+			$payload_json = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $order_code, 'status' => $status, 'quantity' => $selection['quantity'], 'total_cents' => $selection['total_cents'], 'economic_summary' => $economic_summary, 'email_preview' => MI_Modello_Email::crea_istantanea( $event_id, $email_values ) ) );
 			if ( false === $wpdb->insert( $outbox_table, array( 'registration_id' => $registration_id, 'recipient' => $buyer['email'], 'template_type' => 'REGISTRATION_CONFIRMATION', 'payload_json' => $payload_json, 'status' => 'PREVIEW', 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) {
 				throw new RuntimeException( 'Outbox non salvata.' );
 			}
 			$wpdb->query( 'COMMIT' );
 			$workspace_status = self::sync_workspace_safely( $registration_id );
-			return array( 'order_code' => $order_code, 'status' => $status, 'workspace_status' => $workspace_status, 'replayed' => false );
+			return array( 'order_code' => $order_code, 'status' => $status, 'workspace_status' => $workspace_status, 'economic_summary' => $economic_summary, 'replayed' => false );
 		} catch ( Throwable $error ) {
 			$wpdb->query( 'ROLLBACK' );
 			return new WP_Error( 'mi_storage_error', 'Non è stato possibile completare l’iscrizione.', array( 'status' => 500 ) );
 		}
+	}
+
+	public static function riepilogo_economico( $event, $total_cents, $status ) {
+		$total_cents = max( 0, (int) $total_cents );
+		$mode = in_array( $event['economic_mode'] ?? '', array( 'REGISTRATION_ONLY', 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ? $event['economic_mode'] : 'REGISTRATION_ONLY';
+		$initial_due = 0;
+		$balance = 0;
+		if ( 'CONFIRMED' === $status && 'FULL_PAYMENT' === $mode ) {
+			$initial_due = $total_cents;
+		} elseif ( 'CONFIRMED' === $status && 'DEPOSIT_BALANCE' === $mode ) {
+			$percentage = min( 99, max( 1, absint( $event['deposit_percentage'] ?? 30 ) ) );
+			$initial_due = (int) round( $total_cents * $percentage / 100 );
+			$balance = max( 0, $total_cents - $initial_due );
+		}
+		return array( 'mode' => $mode, 'total_cents' => $total_cents, 'initial_due_cents' => $initial_due, 'balance_cents' => $balance, 'payment_methods' => in_array( $mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ? array_values( (array) ( $event['payment_methods'] ?? array() ) ) : array() );
+	}
+
+	private static function riepilogo_salvato( $registration ) {
+		return array( 'mode' => (string) $registration['economic_mode'], 'total_cents' => (int) $registration['total_cents'], 'initial_due_cents' => (int) $registration['initial_due_cents'], 'balance_cents' => (int) $registration['balance_cents'] );
 	}
 
 	public static function sync_workspace( $registration_id ) {

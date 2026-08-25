@@ -228,6 +228,8 @@ final class MI_Admin {
 		</tbody></table>
 		<?php if ( $detail ) : ?><?php $payload = json_decode( (string) $detail['payload_json'], true ); $preview = is_array( $payload ) && isset( $payload['email_preview'] ) && is_array( $payload['email_preview'] ) ? $payload['email_preview'] : array(); ?>
 		<hr><h2>Anteprima email conservata</h2>
+		<?php $economic_summary = is_array( $payload ) && isset( $payload['economic_summary'] ) && is_array( $payload['economic_summary'] ) ? $payload['economic_summary'] : array(); ?>
+		<?php if ( $economic_summary ) : ?><div class="card" style="max-width:900px"><h3>Riepilogo economico conservato</h3><p><strong>Totale:</strong> <?php echo esc_html( number_format_i18n( (int) $economic_summary['total_cents'] / 100, 2 ) ); ?> €</p><p><strong>Primo versamento:</strong> <?php echo esc_html( number_format_i18n( (int) $economic_summary['initial_due_cents'] / 100, 2 ) ); ?> €</p><p><strong>Saldo successivo:</strong> <?php echo esc_html( number_format_i18n( (int) $economic_summary['balance_cents'] / 100, 2 ) ); ?> €</p></div><?php endif; ?>
 		<?php if ( ! $preview ) : ?><p>Questa voce precede l’introduzione delle anteprime complete.</p><?php else : ?>
 		<p><strong>Oggetto:</strong> <?php echo esc_html( $preview['oggetto'] ?? '' ); ?></p>
 		<p><strong>Preheader:</strong> <?php echo esc_html( $preview['preheader'] ?? '' ); ?></p>

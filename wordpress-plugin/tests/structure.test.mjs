@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.4\.1/);
+  assert.match(source, /Version:\s+0\.4\.2/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -189,4 +189,16 @@ test('la pubblicazione richiede una configurazione economica coerente', async ()
   assert.match(script, /aggiornaConfigurazioneEconomica/);
   assert.match(script, /setCustomValidity/);
   assert.match(script, /data-mi-economic-payments/);
+});
+
+test('l’iscrizione conserva totale, primo versamento e saldo', async () => {
+  const activator = await read('includes/class-mi-activator.php');
+  const service = await read('includes/class-mi-registration-service.php');
+  const admin = await read('includes/class-mi-admin.php');
+  assert.match(activator, /initial_due_cents/);
+  assert.match(activator, /balance_cents/);
+  assert.match(service, /riepilogo_economico/);
+  assert.match(service, /economic_summary/);
+  assert.match(service, /'WAITLISTED'/);
+  assert.match(admin, /Riepilogo economico conservato/);
 });
