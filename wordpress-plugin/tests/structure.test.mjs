@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.5\.1/);
+  assert.match(source, /Version:\s+0\.5\.2/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -189,6 +189,44 @@ test('la pubblicazione richiede una configurazione economica coerente', async ()
   assert.match(script, /aggiornaConfigurazioneEconomica/);
   assert.match(script, /setCustomValidity/);
   assert.match(script, /data-mi-economic-payments/);
+});
+
+test('la gratuità esplicita è visibile e compatibile soltanto con la sola iscrizione', async () => {
+  const shortcode = await read('includes/class-mi-shortcode.php');
+  const admin = await read('includes/class-mi-admin.php');
+  const script = await read('assets/admin.js');
+  assert.match(shortcode, /'ZERO'.+<small>Gratuito<\/small>/);
+  assert.match(admin, /registration_only_price/);
+  assert.match(admin, /array\(\s*'NONE',\s*'ZERO'\s*\)/);
+  assert.match(admin, /Gratuito esplicito.+Solo iscrizione/);
+  assert.match(script, /\['NONE', 'ZERO'\]\.includes/);
+});
+
+test('la configurazione economica viene normalizzata prima di ogni uso', async () => {
+  const eventType = await read('includes/class-mi-event-post-type.php');
+  assert.match(eventType, /\$pricing_mode\s*=\s*in_array[\s\S]+update_post_meta\(\s*\$post_id,\s*'_mi_pricing_mode',\s*\$pricing_mode\s*\)/);
+  assert.match(eventType, /\$economic_mode\s*=\s*in_array[\s\S]+update_post_meta\(\s*\$post_id,\s*'_mi_economic_mode',\s*\$economic_mode\s*\)/);
+  assert.match(eventType, /in_array\(\s*\$economic_mode,\s*array\(\s*'FULL_PAYMENT',\s*'DEPOSIT_BALANCE'/);
+});
+
+test('i valori dei segnaposto email sono protetti in base al contesto', async () => {
+  const model = await read('includes/class-mi-modello-email.php');
+  assert.match(model, /renderizza_html/);
+  assert.match(model, /esc_html\(\s*sanitize_text_field/);
+  assert.match(model, /'html' === \$source/);
+  assert.match(model, /sanitize_text_field\(\s*\(string\) \$value\s*\)/);
+});
+
+test('la replica Workspace è accodata dopo il commit senza bloccare la risposta', async () => {
+  const service = await read('includes/class-mi-registration-service.php');
+  const plugin = await read('includes/class-mi-plugin.php');
+  const activator = await read('includes/class-mi-activator.php');
+  assert.match(service, /'COMMIT'[\s\S]+accoda_sincronizzazione_workspace/);
+  assert.match(service, /wp_schedule_single_event/);
+  assert.match(service, /wp_next_scheduled/);
+  assert.match(service, /sincronizza_iscrizione_workspace/);
+  assert.match(plugin, /mi_sync_workspace_registration/);
+  assert.match(activator, /wp_clear_scheduled_hook\(\s*'mi_sync_workspace_registration'/);
 });
 
 test('l’iscrizione conserva totale, primo versamento e saldo', async () => {

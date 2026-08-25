@@ -11,6 +11,7 @@ final class MI_Activator {
 
 	public static function deactivate() {
 		wp_clear_scheduled_hook( 'mi_sync_workspace_pending' );
+		wp_clear_scheduled_hook( 'mi_sync_workspace_registration' );
 	}
 
 	public static function maybe_upgrade() {

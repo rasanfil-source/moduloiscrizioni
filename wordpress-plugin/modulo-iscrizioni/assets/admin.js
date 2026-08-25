@@ -83,13 +83,13 @@
   if (modalitaEconomica && modalitaPrezzo && riquadroCaparra && riquadroPagamenti && aiutoEconomico) {
     const aggiornaConfigurazioneEconomica = () => {
       const modalita = modalitaEconomica.value;
-      const usaPrezzo = ['PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(modalita);
       const incassa = ['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(modalita);
+      const prezzoCoerente = modalita === 'REGISTRATION_ONLY' ? ['NONE', 'ZERO'].includes(modalitaPrezzo.value) : modalitaPrezzo.value === 'CALCULATED';
       riquadroCaparra.hidden = modalita !== 'DEPOSIT_BALANCE';
       riquadroPagamenti.hidden = !incassa;
       Array.from(riquadroPagamenti.querySelectorAll('input')).forEach((campo) => { campo.disabled = !incassa; });
-      modalitaPrezzo.setCustomValidity(usaPrezzo && modalitaPrezzo.value !== 'CALCULATED' ? 'Seleziona “Calcolato dalle quote” per questa modalità economica.' : '');
-      aiutoEconomico.textContent = modalita === 'REGISTRATION_ONLY' ? 'Il modulo raccoglie soltanto le iscrizioni.' : modalita === 'PRICE_ONLY' ? 'Il prezzo viene mostrato, ma non vengono richieste fonti di pagamento.' : modalita === 'FULL_PAYMENT' ? 'È richiesto il versamento dell’intero importo tramite almeno una fonte ammessa.' : 'Sono previsti una caparra percentuale e il successivo saldo.';
+      modalitaPrezzo.setCustomValidity(prezzoCoerente ? '' : modalita === 'REGISTRATION_ONLY' ? 'Per la sola iscrizione scegli “Nessun prezzo” oppure “Gratuito esplicito”.' : 'Seleziona “Calcolato dalle quote” per questa modalità economica.');
+      aiutoEconomico.textContent = modalita === 'REGISTRATION_ONLY' ? (modalitaPrezzo.value === 'ZERO' ? 'L’evento è dichiarato esplicitamente gratuito.' : 'Il modulo raccoglie soltanto le iscrizioni senza dichiarare un prezzo.') : modalita === 'PRICE_ONLY' ? 'Il prezzo viene mostrato, ma non vengono richieste fonti di pagamento.' : modalita === 'FULL_PAYMENT' ? 'È richiesto il versamento dell’intero importo tramite almeno una fonte ammessa.' : 'Sono previsti una caparra percentuale e il successivo saldo.';
     };
     modalitaEconomica.addEventListener('change', aggiornaConfigurazioneEconomica);
     modalitaPrezzo.addEventListener('change', aggiornaConfigurazioneEconomica);

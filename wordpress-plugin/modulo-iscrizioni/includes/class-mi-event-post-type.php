@@ -212,11 +212,13 @@ final class MI_Event_Post_Type {
 
 		$pricing_mode = isset( $_POST['mi_pricing_mode'] ) ? sanitize_key( wp_unslash( $_POST['mi_pricing_mode'] ) ) : 'none';
 		$pricing_mode = strtoupper( $pricing_mode );
-		update_post_meta( $post_id, '_mi_pricing_mode', in_array( $pricing_mode, array( 'NONE', 'ZERO', 'CALCULATED' ), true ) ? $pricing_mode : 'NONE' );
+		$pricing_mode = in_array( $pricing_mode, array( 'NONE', 'ZERO', 'CALCULATED' ), true ) ? $pricing_mode : 'NONE';
+		update_post_meta( $post_id, '_mi_pricing_mode', $pricing_mode );
 
 		$economic_mode = isset( $_POST['mi_economic_mode'] ) ? strtoupper( sanitize_key( wp_unslash( $_POST['mi_economic_mode'] ) ) ) : 'REGISTRATION_ONLY';
 		$economic_modes = array( 'REGISTRATION_ONLY', 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE' );
-		update_post_meta( $post_id, '_mi_economic_mode', in_array( $economic_mode, $economic_modes, true ) ? $economic_mode : 'REGISTRATION_ONLY' );
+		$economic_mode = in_array( $economic_mode, $economic_modes, true ) ? $economic_mode : 'REGISTRATION_ONLY';
+		update_post_meta( $post_id, '_mi_economic_mode', $economic_mode );
 		$deposit_percentage = isset( $_POST['mi_deposit_percentage'] ) ? min( 99, max( 1, absint( $_POST['mi_deposit_percentage'] ) ) ) : 30;
 		update_post_meta( $post_id, '_mi_deposit_percentage', $deposit_percentage );
 		$raw_payment_methods = isset( $_POST['mi_payment_methods'] ) ? (array) wp_unslash( $_POST['mi_payment_methods'] ) : array();

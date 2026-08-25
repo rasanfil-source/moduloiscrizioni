@@ -25,6 +25,7 @@ final class MI_Plugin {
 		MI_REST_Controller::boot();
 		MI_Shortcode::boot();
 		add_action( 'mi_sync_workspace_pending', array( 'MI_Registration_Service', 'sync_pending_workspace' ) );
+		add_action( 'mi_sync_workspace_registration', array( 'MI_Registration_Service', 'sincronizza_iscrizione_workspace' ) );
 	}
 
 	public function load_textdomain() {
