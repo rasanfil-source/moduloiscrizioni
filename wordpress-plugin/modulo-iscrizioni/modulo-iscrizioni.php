@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Modulo Iscrizioni
  * Description: Gestione essenziale di attività, eventi, capienza e iscrizioni.
- * Version: 2.8.0
+ * Version: 2.9.0
  * Requires at least: 6.4
  * Requires PHP: 7.4
  * Author: Parrocchia Demo
@@ -11,7 +11,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'MI_VERSION', '2.8.0' );
+define( 'MI_VERSION', '2.9.0' );
 define( 'MI_PLUGIN_FILE', __FILE__ );
 define( 'MI_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MI_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
