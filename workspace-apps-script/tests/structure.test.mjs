@@ -59,3 +59,9 @@ test('la migrazione aggiunge il riepilogo economico alle iscrizioni', () => {
   assert.match(sources['Setup.gs'], /MI_INTESTAZIONI_PRECEDENTI/);
   assert.match(sources['WebApp.gs'], /payment_methods/);
 });
+
+test('APPEND_REGISTRATION replica i movimenti pagamento senza duplicarli', () => {
+  assert.match(sources['WebApp.gs'], /sincronizzaPagamenti_\(orderCode, payload\.payments\)/);
+  assert.match(sources['WebApp.gs'], /id_inserimento_origine/);
+  assert.match(sources['WebApp.gs'], /WP\|/);
+});
