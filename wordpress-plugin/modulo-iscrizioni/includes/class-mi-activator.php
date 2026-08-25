@@ -106,6 +106,7 @@ final class MI_Activator {
 			attempts smallint(5) unsigned NOT NULL DEFAULT 0,
 			last_error varchar(190) NULL,
 			sent_at datetime NULL,
+			processing_started_at datetime NULL,
 			created_at datetime NOT NULL,
 			PRIMARY KEY  (id),
 			KEY registration_id (registration_id),
