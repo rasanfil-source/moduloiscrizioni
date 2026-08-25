@@ -18,6 +18,7 @@ final class MI_Registration_Service {
 		$activity = get_post( $activity_id );
 		$field_configuration = MI_Field_Schema::event_configuration( $event_id );
 		$activity_thumbnail_id = $activity ? get_post_thumbnail_id( $activity ) : 0;
+		$event_thumbnail_id = get_post_thumbnail_id( $event_id );
 		return array(
 			'id'               => $event_id,
 			'title'            => get_the_title( $event_id ),
@@ -25,6 +26,10 @@ final class MI_Registration_Service {
 			'activity'         => $activity ? $activity->post_title : '',
 			'activity_logo'    => $activity ? get_the_post_thumbnail_url( $activity, 'medium' ) : '',
 			'activity_logo_alt'=> $activity_thumbnail_id ? (string) get_post_meta( $activity_thumbnail_id, '_wp_attachment_image_alt', true ) : '',
+			'cover_image'      => $event_thumbnail_id ? get_the_post_thumbnail_url( $event_id, 'large' ) : '',
+			'cover_image_alt'  => $event_thumbnail_id ? (string) get_post_meta( $event_thumbnail_id, '_wp_attachment_image_alt', true ) : '',
+			'event_starts_at'  => (string) get_post_meta( $event_id, '_mi_event_starts_at', true ),
+			'event_location'   => (string) get_post_meta( $event_id, '_mi_event_location', true ),
 			'capacity'         => max( 1, absint( get_post_meta( $event_id, '_mi_capacity', true ) ) ),
 			'waitlist_enabled' => '1' === get_post_meta( $event_id, '_mi_waitlist_enabled', true ),
 			'opens_at'         => (string) get_post_meta( $event_id, '_mi_registration_opens_at', true ),

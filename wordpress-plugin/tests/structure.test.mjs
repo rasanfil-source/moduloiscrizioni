@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.5\.4/);
+  assert.match(source, /Version:\s+0\.6\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -71,6 +71,18 @@ test('gli asset pubblici sono caricati soltanto in presenza dello shortcode', as
   const source = await read('includes/class-mi-shortcode.php');
   assert.match(source, /has_shortcode/);
   assert.match(source, /wp_enqueue_scripts/);
+});
+
+test('il percorso pubblico è progressivo e dispone di un modello concentrato', async () => {
+  const shortcode = await read('includes/class-mi-shortcode.php');
+  const script = await read('assets/public.js');
+  const template = await read('templates/pagina-iscrizione-concentrata.php');
+  assert.match(shortcode, /data-mi-step="1"/);
+  assert.match(shortcode, /data-mi-step="3"/);
+  assert.match(shortcode, /theme_page_templates/);
+  assert.match(script, /showStep/);
+  assert.match(template, /wp_head/);
+  assert.doesNotMatch(template, /get_header|get_sidebar/);
 });
 
 test('i campi partecipante usano profili, allowlist e validazione server', async () => {

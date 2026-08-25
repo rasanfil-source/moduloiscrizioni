@@ -59,7 +59,7 @@ final class MI_Event_Post_Type {
 				'show_ui'             => true,
 				'show_in_menu'        => true,
 				'menu_icon'           => 'dashicons-tickets-alt',
-				'supports'            => array( 'title', 'editor' ),
+				'supports'            => array( 'title', 'editor', 'thumbnail' ),
 				'capabilities'        => $event_caps,
 				'map_meta_cap'        => false,
 				'show_in_rest'        => false,
@@ -100,6 +100,8 @@ final class MI_Event_Post_Type {
 		$activity_id = absint( get_post_meta( $post->ID, '_mi_activity_id', true ) );
 		$opens_at = (string) get_post_meta( $post->ID, '_mi_registration_opens_at', true );
 		$closes_at = (string) get_post_meta( $post->ID, '_mi_registration_closes_at', true );
+		$event_starts_at = (string) get_post_meta( $post->ID, '_mi_event_starts_at', true );
+		$event_location = (string) get_post_meta( $post->ID, '_mi_event_location', true );
 		$capacity = max( 1, absint( get_post_meta( $post->ID, '_mi_capacity', true ) ?: 30 ) );
 		$waitlist = '1' === get_post_meta( $post->ID, '_mi_waitlist_enabled', true );
 		$pricing_mode = get_post_meta( $post->ID, '_mi_pricing_mode', true ) ?: 'NONE';
@@ -132,6 +134,8 @@ final class MI_Event_Post_Type {
 			<p><label for="mi_capacity"><strong>Posti disponibili</strong></label><br><input id="mi_capacity" name="mi_capacity" type="number" min="1" max="10000" value="<?php echo esc_attr( $capacity ); ?>" required></p>
 			<p><label for="mi_registration_opens_at"><strong>Apertura iscrizioni</strong></label><br><input id="mi_registration_opens_at" name="mi_registration_opens_at" type="datetime-local" value="<?php echo esc_attr( $opens_at ); ?>" required></p>
 			<p><label for="mi_registration_closes_at"><strong>Chiusura iscrizioni</strong></label><br><input id="mi_registration_closes_at" name="mi_registration_closes_at" type="datetime-local" value="<?php echo esc_attr( $closes_at ); ?>" required></p>
+			<p><label for="mi_event_starts_at"><strong>Data e ora dell’evento</strong></label><br><input id="mi_event_starts_at" name="mi_event_starts_at" type="datetime-local" value="<?php echo esc_attr( $event_starts_at ); ?>"></p>
+			<p><label for="mi_event_location"><strong>Luogo dell’evento</strong></label><br><input id="mi_event_location" name="mi_event_location" type="text" maxlength="180" value="<?php echo esc_attr( $event_location ); ?>" placeholder="Es. Piazza San Pietro, Roma"></p>
 			<p><label><input name="mi_waitlist_enabled" type="checkbox" value="1" <?php checked( $waitlist ); ?>> Attiva automaticamente la lista d’attesa a esaurimento posti</label></p>
 			<p><label for="mi_pricing_mode"><strong>Prezzo</strong></label><br><select id="mi_pricing_mode" name="mi_pricing_mode"><option value="NONE" <?php selected( $pricing_mode, 'NONE' ); ?>>Nessun prezzo</option><option value="ZERO" <?php selected( $pricing_mode, 'ZERO' ); ?>>Gratuito esplicito</option><option value="CALCULATED" <?php selected( $pricing_mode, 'CALCULATED' ); ?>>Calcolato dalle quote</option></select></p>
 			<p><label for="mi_economic_mode"><strong>Gestione economica</strong></label><br><select id="mi_economic_mode" name="mi_economic_mode"><option value="REGISTRATION_ONLY" <?php selected( $economic_mode, 'REGISTRATION_ONLY' ); ?>>Solo iscrizione</option><option value="PRICE_ONLY" <?php selected( $economic_mode, 'PRICE_ONLY' ); ?>>Prezzo informativo</option><option value="FULL_PAYMENT" <?php selected( $economic_mode, 'FULL_PAYMENT' ); ?>>Versamento completo</option><option value="DEPOSIT_BALANCE" <?php selected( $economic_mode, 'DEPOSIT_BALANCE' ); ?>>Caparra e saldo</option></select></p>
@@ -209,6 +213,12 @@ final class MI_Event_Post_Type {
 				update_post_meta( $post_id, '_mi_registration_' . $field, $value );
 			}
 		}
+		$event_starts_at = isset( $_POST['mi_event_starts_at'] ) ? sanitize_text_field( wp_unslash( $_POST['mi_event_starts_at'] ) ) : '';
+		if ( '' === $event_starts_at || preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $event_starts_at ) ) {
+			update_post_meta( $post_id, '_mi_event_starts_at', $event_starts_at );
+		}
+		$event_location = isset( $_POST['mi_event_location'] ) ? sanitize_text_field( wp_unslash( $_POST['mi_event_location'] ) ) : '';
+		update_post_meta( $post_id, '_mi_event_location', mb_substr( $event_location, 0, 180 ) );
 
 		$pricing_mode = isset( $_POST['mi_pricing_mode'] ) ? sanitize_key( wp_unslash( $_POST['mi_pricing_mode'] ) ) : 'none';
 		$pricing_mode = strtoupper( $pricing_mode );

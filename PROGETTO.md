@@ -3,7 +3,7 @@
 Stato: bozza funzionale e tecnica 0.7  
 Data: 24 agosto 2026
 
-Esito Fase A: completata. Fase 2: WordPress 0.5.3 e Apps Script 1.1.0 installati e collegati; la 0.5.4 è in preparazione con conteggi e filtro per stato Workspace limitati alle attività accessibili. Stato operativo e disponibilità condizionale del riaccodamento protetto sono stati collaudati nel dettaglio iscrizione; il collegamento firmato allo schema `1.1.0` resta valido. Nessuna iscrizione è stata creata nel collaudo. Il deployment resta in modalità `ANTEPRIMA`. Non contiene coordinate operative e non riscuote pagamenti. La coda email resta `PREVIEW`. Pagamenti e invii reali non sono operativi.
+Esito Fase A: completata. Fase 2: WordPress 0.5.3 e Apps Script 1.1.0 installati e collegati; la 0.6.0 è in preparazione e comprende anche i conteggi e il filtro Workspace della 0.5.4. Stato operativo e disponibilità condizionale del riaccodamento protetto sono stati collaudati nel dettaglio iscrizione; il collegamento firmato allo schema `1.1.0` resta valido. Nessuna iscrizione è stata creata nel collaudo. Il deployment resta in modalità `ANTEPRIMA`. Non contiene coordinate operative e non riscuote pagamenti. La coda email resta `PREVIEW`. Pagamenti e invii reali non sono operativi.
 
 Backend Workspace: il progetto Apps Script `MODULI` è installato nell'account Workspace organizzativo definitivo e collegato allo spreadsheet riservato `DB_MODULI`. Il setup e la migrazione linguistica hanno creato otto schede operative con nomi, intestazioni e valori in italiano: `Configurazione`, `Eventi`, `Iscrizioni`, `Partecipanti`, `Inserimento pagamenti`, `Pagamenti`, `Coda email` e `Registro controlli`. La Web App è distribuita dall'account organizzativo e il controllo `PING` firmato con HMAC e anti-replay è stato verificato da WordPress anche dopo l'installazione della replica delle iscrizioni. Una registrazione interamente sintetica ha collaudato salvataggio locale, replica in `Iscrizioni` e `Partecipanti`, outbox locale, `Coda email` in `PREVIEW` e replay idempotente senza duplicati. L'evento usato per la prova è stato subito riportato in bozza con finestra iscrizioni vuota; nessuna email è stata inviata. Il repository non contiene ID, URL di distribuzione, segreti, codici di collaudo o destinatari operativi.
 
@@ -201,6 +201,8 @@ La qualità visiva è un requisito funzionale del progetto. L'interfaccia predef
 Principi obbligatori:
 
 - una sola azione primaria evidente per schermata;
+- testata evento con immagine di copertina in evidenza, titolo, data, ora e luogo ad alto contrasto;
+- tipologie di iscrizione in schede orizzontali separate, con prezzo e quantità immediatamente confrontabili;
 - pochi campi visibili alla volta e informazioni secondarie mostrate progressivamente;
 - ampio spazio bianco, allineamenti coerenti e nessun elemento puramente decorativo che distragga;
 - caratteri leggibili, gerarchia tipografica netta e righe di testo non troppo lunghe;
@@ -213,6 +215,7 @@ Principi obbligatori:
 - stile coerente con il sito WordPress senza dipendere dal tema per la leggibilità;
 - tutti gli stili racchiusi nel contenitore del plugin, senza selettori globali come `body`, `h1`, `button` o `input` che possano modificare il resto della pagina WordPress;
 - immagini ottimizzate e mai prevalenti rispetto all'azione da compiere.
+- disponibilità di un modello pagina “modalità concentrata” privo di menu, intestazione, barra laterale e piè di pagina del tema durante la compilazione; l’isolamento è attivato soltanto sulla pagina scelta e non modifica il resto del sito.
 
 Componenti visivi di base:
 
