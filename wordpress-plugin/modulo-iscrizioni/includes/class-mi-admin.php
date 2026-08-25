@@ -66,7 +66,7 @@ final class MI_Admin {
 		$filter_transaction = strtoupper( sanitize_key( wp_unslash( $_GET['transaction_kind'] ?? '' ) ) );
 		$rows = array_values( array_filter( $rows, static function ( $row ) use ( $filter_event, $filter_source, $filter_transaction ) { return ( ! $filter_event || (int) $row['event_id'] === $filter_event ) && ( ! $filter_source || $row['payment_source'] === $filter_source ) && ( ! $filter_transaction || $row['transaction_kind'] === $filter_transaction ); } ) );
 		$labels = array( 'BANK_TRANSFER' => 'Bonifico', 'CARD' => 'Carta', 'CASH' => 'Contante' );
-		$export_url = wp_nonce_url( admin_url( 'admin-post.php?action=mi_export_payments' ), 'mi_export_payments' );
+		$export_url = wp_nonce_url( add_query_arg( array( 'action' => 'mi_export_payments', 'payment_event_id' => $filter_event, 'payment_source' => $filter_source, 'transaction_kind' => $filter_transaction ), admin_url( 'admin-post.php' ) ), 'mi_export_payments' );
 		$summary = array( 'PAYMENT' => 0, 'REFUND' => 0, 'BANK_TRANSFER' => 0, 'CARD' => 0, 'CASH' => 0 ); foreach ( $rows as $summary_row ) { $summary[ $summary_row['transaction_kind'] ] += (int) $summary_row['amount_cents']; $summary[ $summary_row['payment_source'] ] += (int) $summary_row['amount_cents']; }
 		echo '<p><strong>Riepilogo filtro:</strong> versamenti ' . esc_html( self::formatta_importo( $summary['PAYMENT'] ) ) . ' · rimborsi ' . esc_html( self::formatta_importo( $summary['REFUND'] ) ) . ' · bonifici ' . esc_html( self::formatta_importo( $summary['BANK_TRANSFER'] ) ) . ' · carte ' . esc_html( self::formatta_importo( $summary['CARD'] ) ) . ' · contanti ' . esc_html( self::formatta_importo( $summary['CASH'] ) ) . '</p>';
 		$events = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) );
@@ -79,6 +79,10 @@ final class MI_Admin {
 		global $wpdb;
 		$rows = $wpdb->get_results( "SELECT p.*, r.order_code, r.event_id FROM {$wpdb->prefix}mi_payments p INNER JOIN {$wpdb->prefix}mi_registrations r ON r.id = p.registration_id ORDER BY p.effective_at, p.id", ARRAY_A );
 		$rows = array_values( array_filter( $rows, static function ( $row ) { return MI_Access::can_access_event( (int) $row['event_id'] ); } ) );
+		$filter_event = isset( $_GET['payment_event_id'] ) ? absint( $_GET['payment_event_id'] ) : 0;
+		$filter_source = strtoupper( sanitize_key( wp_unslash( $_GET['payment_source'] ?? '' ) ) );
+		$filter_transaction = strtoupper( sanitize_key( wp_unslash( $_GET['transaction_kind'] ?? '' ) ) );
+		$rows = array_values( array_filter( $rows, static function ( $row ) use ( $filter_event, $filter_source, $filter_transaction ) { return ( ! $filter_event || (int) $row['event_id'] === $filter_event ) && ( ! $filter_source || $row['payment_source'] === $filter_source ) && ( ! $filter_transaction || $row['transaction_kind'] === $filter_transaction ); } ) );
 		$labels = array( 'BANK_TRANSFER' => 'Bonifico', 'CARD' => 'Carta', 'CASH' => 'Contante' );
 		header( 'Content-Type: text/csv; charset=UTF-8' ); header( 'Content-Disposition: attachment; filename="pagamenti-' . gmdate( 'Y-m-d' ) . '.csv"' );
 		$output = fopen( 'php://output', 'w' ); fwrite( $output, "\xEF\xBB\xBF" );
