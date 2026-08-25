@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.7\.2/);
+  assert.match(source, /Version:\s+0\.8\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -154,12 +154,27 @@ test('filtri ed esportazione rispettano accessi e neutralizzano formule CSV', as
   assert.match(source, /Esporta CSV filtrato/);
 });
 
-test('la coda email rimane in anteprima', async () => {
+test('la coda email resta sicura fino all’attivazione operativa', async () => {
   const service = await read('includes/class-mi-registration-service.php');
-  const admin = await read('includes/class-mi-admin.php');
-  assert.match(service, /'status'\s*=>\s*'PREVIEW'/);
+  const sender = await read('includes/class-mi-spedizione-email.php');
+  assert.match(service, /stato_nuova_email/);
   assert.doesNotMatch(service, /wp_mail\s*\(/);
-  assert.match(admin, /Nessuna email viene spedita/);
+  assert.match(sender, /get_option\( self::OPZIONE_MODALITA, 'ANTEPRIMA' \)/);
+  assert.match(sender, /'OPERATIVO' === self::modalita\(\)/);
+  assert.match(sender, /prova_verificata/);
+  assert.match(sender, /wp_mail\s*\(/);
+  assert.match(sender, /MI-PROVA-0001/);
+});
+
+test('la spedizione usa una coda acquisita atomicamente e tentativi limitati', async () => {
+  const sender = await read('includes/class-mi-spedizione-email.php');
+  const activator = await read('includes/class-mi-activator.php');
+  assert.match(sender, /status = 'SENDING'.*status = 'PENDING'/s);
+  assert.match(sender, /attempts < 5/);
+  assert.match(sender, /'SENT'/);
+  assert.match(sender, /'FAILED'/);
+  assert.match(activator, /last_error varchar/);
+  assert.match(activator, /sent_at datetime/);
 });
 
 test('l’editor email usa segnaposto controllati e non invia messaggi', async () => {

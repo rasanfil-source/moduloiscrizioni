@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — vertical slice 0.7.2
+# Modulo Iscrizioni — versione 0.8.0
 
 Plugin WordPress dimostrativo per la Fase 2. Implementa:
 
@@ -10,8 +10,8 @@ Plugin WordPress dimostrativo per la Fase 2. Implementa:
 - profili dati Minimo, Standard e Viaggio, con campi partecipante attivabili singolarmente;
 - anteprima amministrativa dei campi e validazione allowlist lato server;
 - codice ordine univoco;
-- email registrate soltanto nell'outbox `PREVIEW`;
-- editor dell'email di conferma con segnaposto italiani e anteprima sintetica, senza invio;
+- email conservate nell'outbox, con tentativi limitati e acquisizione atomica delle spedizioni;
+- editor dell'email di conferma con segnaposto italiani, anteprima sintetica e invio controllato;
 - istantanea immutabile del modello risolto nell'outbox e consultazione protetta dal pannello;
 - identità storica dell'attività nell'anteprima, con nome, logo e testo alternativo;
 - anteprima testuale aggiornata durante la digitazione e blocco dei segnaposto sconosciuti nel browser e sul server;
@@ -36,7 +36,7 @@ Plugin WordPress dimostrativo per la Fase 2. Implementa:
 
 Questa versione non invia email, non riscuote pagamenti e non genera QR/barcode. L'editor per evento salva oggetto, preheader, corpo HTML limitato, testo semplice e footer e ne mostra un'anteprima con dati esclusivamente sintetici. I valori dei segnaposto vengono puliti per i contesti testuali e sottoposti a escaping nel corpo HTML. Ogni nuova voce locale conserva il modello risolto e il riepilogo economico. La modalità `ZERO` dichiara esplicitamente un evento gratuito e viene mostrata come “Gratuito”; è compatibile soltanto con “Solo iscrizione”. Modalità, primo versamento, saldo e fonti ammesse vengono replicate a Workspace in modo asincrono dopo il salvataggio locale. Il pannello mostra conteggi e filtro per stato Workspace nel perimetro delle attività accessibili; il dettaglio espone tentativi, ultimo errore e data di sincronizzazione e consente di riaccodare una replica in attesa senza ripetere l’iscrizione. Il pacchetto 0.6.0 non contiene IBAN, collegamenti carta o altre coordinate operative ed è destinato al collaudo sul sito autorizzato.
 
-Il pacchetto descritto in questa pagina è la versione 0.7.2. Mostra i posti residui, segnala chiaramente il passaggio alla lista d’attesa, blocca il modulo quando i posti sono esauriti senza lista e ricontrolla la scadenza dentro la transazione degli ultimi posti.
+Il pacchetto descritto in questa pagina è la versione 0.8.0. Parte in modalità email `ANTEPRIMA`; la prova usa soltanto dati sintetici e la modalità `OPERATIVO` richiede prima una prova accettata dal sistema di posta. Mostra inoltre i posti residui, segnala chiaramente il passaggio alla lista d’attesa, blocca il modulo quando i posti sono esauriti senza lista e ricontrolla la scadenza dentro la transazione degli ultimi posti.
 
 ## Installazione di prova
 

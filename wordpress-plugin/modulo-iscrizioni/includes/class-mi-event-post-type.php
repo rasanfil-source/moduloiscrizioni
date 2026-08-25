@@ -174,7 +174,7 @@ final class MI_Event_Post_Type {
 		<?php endforeach; ?>
 		</tbody></table>
 		<p><button type="button" class="button" id="mi-add-ticket">Aggiungi tipologia</button></p>
-		<p class="description">Il totale sarà sempre ricalcolato sul server. In questa vertical slice le email restano in anteprima e non vengono spedite.</p>
+		<p class="description">Il totale sarà sempre ricalcolato sul server. La spedizione delle conferme dipende dalla modalità email scelta dall’amministratore.</p>
 		<?php
 	}
 

@@ -27,7 +27,7 @@ final class MI_Modello_Email {
 			'preheader' => 'Riepilogo della tua iscrizione.',
 			'html'      => '<p>Gentile {{referente.nome_completo}},</p><p>la tua iscrizione a <strong>{{evento.titolo}}</strong> è stata registrata.</p><p>Codice: <strong>{{ordine.codice}}</strong><br>Stato: {{ordine.stato}}<br>Partecipanti: {{ordine.partecipanti}}</p>',
 			'text'      => "Gentile {{referente.nome_completo}},\n\nla tua iscrizione a {{evento.titolo}} è stata registrata.\nCodice: {{ordine.codice}}\nStato: {{ordine.stato}}\nPartecipanti: {{ordine.partecipanti}}",
-			'footer'    => 'Messaggio automatico in anteprima. Nessuna email viene spedita in questa fase.',
+			'footer'    => 'Messaggio automatico del sistema di iscrizione.',
 		);
 		$saved = get_post_meta( $event_id, '_mi_email_template', true );
 		return array_merge( $defaults, is_array( $saved ) ? $saved : array() );
@@ -45,7 +45,7 @@ final class MI_Modello_Email {
 			'{{referente.nome_completo}}' => 'Persona Esempio',
 		);
 		?>
-		<p><label><input type="checkbox" name="mi_email_enabled" value="1" <?php checked( '1', $settings['enabled'] ); ?>> Modello attivo per la futura email di conferma</label></p>
+		<p><label><input type="checkbox" name="mi_email_enabled" value="1" <?php checked( '1', $settings['enabled'] ); ?>> Modello attivo per l’email di conferma</label></p>
 		<div class="mi-admin-grid">
 		<p><label for="mi_email_sender_name"><strong>Nome visualizzato del mittente</strong></label><br><input class="widefat" id="mi_email_sender_name" name="mi_email_sender_name" maxlength="120" value="<?php echo esc_attr( $settings['sender_name'] ); ?>" placeholder="Lascia vuoto per usare il valore organizzativo"></p>
 		<p><label for="mi_email_reply_to"><strong>Indirizzo per le risposte</strong></label><br><input class="widefat" id="mi_email_reply_to" name="mi_email_reply_to" type="email" value="<?php echo esc_attr( $settings['reply_to'] ); ?>" placeholder="Lascia vuoto per usare il valore organizzativo"></p>
