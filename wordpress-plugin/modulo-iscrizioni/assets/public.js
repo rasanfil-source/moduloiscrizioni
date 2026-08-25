@@ -282,9 +282,20 @@
         if (!response.ok) throw new Error(result.message || 'Invio non riuscito.');
         form.hidden = true;
         successBox.hidden = false;
-        successBox.textContent = result.status === 'WAITLISTED'
+        const successText = result.status === 'WAITLISTED'
           ? `Richiesta inserita in lista d’attesa. Codice: ${result.order_code}`
           : `Iscrizione registrata. Codice: ${result.order_code}${result.economic_summary?.initial_due_cents > 0 ? `. Primo versamento previsto: ${formatCurrency(result.economic_summary.initial_due_cents)}` : ''}`;
+        successBox.textContent = successText;
+        if (config.event.identifier_display === 'QR' && typeof window.qrcode === 'function') {
+          const qr = window.qrcode(0, 'M');
+          qr.addData(`modulo-iscrizioni|evento:${config.event.id}|ordine:${result.order_code}`);
+          qr.make();
+          const qrBox = document.createElement('div');
+          qrBox.className = 'mi-registration__qr';
+          qrBox.setAttribute('aria-label', 'Codice QR dell’iscrizione');
+          qrBox.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4 });
+          successBox.appendChild(qrBox);
+        }
         successBox.focus();
       } catch (error) {
         showError(error.message || 'Invio non riuscito. Riprova.');

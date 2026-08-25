@@ -40,6 +40,7 @@ final class MI_Registration_Service {
 			'economic_mode'    => (string) ( get_post_meta( $event_id, '_mi_economic_mode', true ) ?: 'REGISTRATION_ONLY' ),
 			'deposit_percentage' => min( 99, max( 1, absint( get_post_meta( $event_id, '_mi_deposit_percentage', true ) ?: 30 ) ) ),
 			'payment_methods'  => (array) get_post_meta( $event_id, '_mi_payment_methods', true ),
+			'identifier_display' => in_array( strtoupper( (string) get_post_meta( $event_id, '_mi_identifier_display', true ) ), array( 'NONE', 'TEXT', 'QR', 'BARCODE' ), true ) ? strtoupper( (string) get_post_meta( $event_id, '_mi_identifier_display', true ) ) : 'TEXT',
 			'ticket_types'     => array_values( $ticket_types ),
 			'data_profile'     => $field_configuration['profile'],
 			'participant_fields'=> MI_Field_Schema::public_fields( $field_configuration ),

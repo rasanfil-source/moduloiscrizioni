@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — versione 1.2.0
+# Modulo Iscrizioni — versione 1.3.0
 
 Plugin WordPress dimostrativo per la Fase 2. Implementa:
 
@@ -36,7 +36,7 @@ Plugin WordPress dimostrativo per la Fase 2. Implementa:
 
 Questa versione non invia email, non riscuote pagamenti e non genera QR/barcode. L'editor per evento salva oggetto, preheader, corpo HTML limitato, testo semplice e footer e ne mostra un'anteprima con dati esclusivamente sintetici. I valori dei segnaposto vengono puliti per i contesti testuali e sottoposti a escaping nel corpo HTML. Ogni nuova voce locale conserva il modello risolto e il riepilogo economico. La modalità `ZERO` dichiara esplicitamente un evento gratuito e viene mostrata come “Gratuito”; è compatibile soltanto con “Solo iscrizione”. Modalità, primo versamento, saldo e fonti ammesse vengono replicate a Workspace in modo asincrono dopo il salvataggio locale. Il pannello mostra conteggi e filtro per stato Workspace nel perimetro delle attività accessibili; il dettaglio espone tentativi, ultimo errore e data di sincronizzazione e consente di riaccodare una replica in attesa senza ripetere l’iscrizione. Il pacchetto 0.6.0 non contiene IBAN, collegamenti carta o altre coordinate operative ed è destinato al collaudo sul sito autorizzato.
 
-Il pacchetto descritto in questa pagina è la versione 1.2.0. Parte in modalità email `ANTEPRIMA`; la prova usa soltanto dati sintetici e la modalità `OPERATIVO` richiede prima una prova accettata dal sistema di posta. Le email fallite possono essere riaccodate manualmente dal pannello e quelle rimaste in elaborazione vengono recuperate automaticamente. L’organizzatore può scegliere `NONE`, `TEXT`, `QR` o `BARCODE`; per QR e barcode viene conservato un payload privo di dati personali e viene mostrato un fallback testuale finché non viene attivato un renderer grafico. Mostra inoltre i posti residui, segnala chiaramente il passaggio alla lista d’attesa, blocca il modulo quando i posti sono esauriti senza lista e ricontrolla la scadenza dentro la transazione degli ultimi posti.
+Il pacchetto descritto in questa pagina è la versione 1.3.0. Parte in modalità email `ANTEPRIMA`; la prova usa soltanto dati sintetici e la modalità `OPERATIVO` richiede prima una prova accettata dal sistema di posta. Le email fallite possono essere riaccodate manualmente dal pannello e quelle rimaste in elaborazione vengono recuperate automaticamente. L’organizzatore può scegliere `NONE`, `TEXT`, `QR` o `BARCODE`; il QR grafico viene generato nel browser con la libreria locale MIT `qrcode-generator` 2.0.4, senza servizi esterni, e contiene soltanto evento e codice ordine. Mostra inoltre i posti residui, segnala chiaramente il passaggio alla lista d’attesa, blocca il modulo quando i posti sono esauriti senza lista e ricontrolla la scadenza dentro la transazione degli ultimi posti.
 
 ## Installazione di prova
 

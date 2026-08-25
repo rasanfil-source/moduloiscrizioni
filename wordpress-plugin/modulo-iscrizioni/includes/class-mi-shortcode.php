@@ -31,7 +31,8 @@ final class MI_Shortcode {
 	private static function enqueue_assets() {
 		wp_enqueue_style( 'mi-public', MI_PLUGIN_URL . 'assets/public.css', array(), MI_VERSION );
 		wp_enqueue_script( 'mi-core', MI_PLUGIN_URL . 'assets/core.js', array(), MI_VERSION, true );
-		wp_enqueue_script( 'mi-public', MI_PLUGIN_URL . 'assets/public.js', array( 'mi-core' ), MI_VERSION, true );
+		wp_enqueue_script( 'mi-qrcode-generator', MI_PLUGIN_URL . 'assets/qrcode-generator-2.0.4.js', array(), '2.0.4', true );
+		wp_enqueue_script( 'mi-public', MI_PLUGIN_URL . 'assets/public.js', array( 'mi-core', 'mi-qrcode-generator' ), MI_VERSION, true );
 	}
 
 	public static function render( $attributes ) {
