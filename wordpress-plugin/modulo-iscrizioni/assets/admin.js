@@ -50,6 +50,31 @@
     refreshFields();
   }
 
+  const anteprimaEmail = document.querySelector('[data-mi-email-preview]');
+  if (anteprimaEmail) {
+    const valoriEsempio = JSON.parse(anteprimaEmail.dataset.miEmailValues || '{}');
+    const campiEmail = Array.from(document.querySelectorAll('#mi_email_subject, #mi_email_preheader, #mi_email_html, #mi_email_text, #mi_email_footer'));
+    const segnapostoAmmessi = Object.keys(valoriEsempio);
+    const risolviSegnaposto = (testo) => segnapostoAmmessi.reduce((risultato, segnaposto) => risultato.split(segnaposto).join(valoriEsempio[segnaposto]), testo);
+    const aggiornaAnteprimaEmail = () => {
+      const sconosciuti = new Set();
+      campiEmail.forEach((campo) => {
+        const trovati = campo.value.match(/{{[^{}]+}}/g) || [];
+        trovati.filter((voce) => !segnapostoAmmessi.includes(voce)).forEach((voce) => sconosciuti.add(voce));
+      });
+      campiEmail.forEach((campo) => campo.setCustomValidity(sconosciuti.size ? 'Rimuovi i segnaposto non ammessi.' : ''));
+      anteprimaEmail.querySelector('[data-mi-email-preview-subject]').textContent = risolviSegnaposto(document.getElementById('mi_email_subject').value);
+      anteprimaEmail.querySelector('[data-mi-email-preview-preheader]').textContent = risolviSegnaposto(document.getElementById('mi_email_preheader').value);
+      anteprimaEmail.querySelector('[data-mi-email-preview-text]').textContent = risolviSegnaposto(document.getElementById('mi_email_text').value);
+      anteprimaEmail.querySelector('[data-mi-email-preview-footer]').textContent = risolviSegnaposto(document.getElementById('mi_email_footer').value);
+      const errore = anteprimaEmail.querySelector('[data-mi-email-placeholder-error]');
+      errore.hidden = sconosciuti.size === 0;
+      errore.textContent = sconosciuti.size ? `Segnaposto non ammessi: ${Array.from(sconosciuti).join(', ')}` : '';
+    };
+    campiEmail.forEach((campo) => campo.addEventListener('input', aggiornaAnteprimaEmail));
+    aggiornaAnteprimaEmail();
+  }
+
   const table = document.getElementById('mi-ticket-types');
   const addButton = document.getElementById('mi-add-ticket');
   if (!table || !addButton) return;

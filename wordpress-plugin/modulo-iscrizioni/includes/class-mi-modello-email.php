@@ -6,6 +6,11 @@ final class MI_Modello_Email {
 	public static function avvia() {
 		add_action( 'add_meta_boxes', array( __CLASS__, 'aggiungi_riquadro' ) );
 		add_action( 'save_post_' . MI_Event_Post_Type::EVENT_TYPE, array( __CLASS__, 'salva' ), 20, 2 );
+		add_action( 'admin_notices', array( __CLASS__, 'mostra_avviso' ) );
+	}
+
+	public static function segnaposto_ammessi() {
+		return array( '{{evento.titolo}}', '{{attivita.nome}}', '{{ordine.codice}}', '{{ordine.stato}}', '{{ordine.partecipanti}}', '{{referente.nome_completo}}' );
 	}
 
 	public static function aggiungi_riquadro() {
@@ -44,7 +49,7 @@ final class MI_Modello_Email {
 		<p><label for="mi_email_text"><strong>Testo semplice</strong></label><br><textarea class="widefat" id="mi_email_text" name="mi_email_text" rows="7"><?php echo esc_textarea( $settings['text'] ); ?></textarea></p>
 		<p><label for="mi_email_footer"><strong>Footer</strong></label><br><textarea class="widefat" id="mi_email_footer" name="mi_email_footer" rows="3"><?php echo esc_textarea( $settings['footer'] ); ?></textarea></p>
 		<p class="description"><strong>Segnaposto ammessi:</strong> <code>{{evento.titolo}}</code>, <code>{{attivita.nome}}</code>, <code>{{ordine.codice}}</code>, <code>{{ordine.stato}}</code>, <code>{{ordine.partecipanti}}</code>, <code>{{referente.nome_completo}}</code>.</p>
-		<div class="mi-field-preview"><strong>Anteprima con dati sintetici</strong><p><strong><?php echo esc_html( self::renderizza( $settings['subject'], $example ) ); ?></strong></p><p><?php echo esc_html( self::renderizza( $settings['preheader'], $example ) ); ?></p><div><?php echo wp_kses_post( self::renderizza( $settings['html'], $example ) ); ?></div><hr><p><?php echo nl2br( esc_html( self::renderizza( $settings['footer'], $example ) ) ); ?></p></div>
+		<div class="mi-field-preview" data-mi-email-preview data-mi-email-values="<?php echo esc_attr( wp_json_encode( $example ) ); ?>"><strong>Anteprima con dati sintetici</strong><p><strong data-mi-email-preview-subject><?php echo esc_html( self::renderizza( $settings['subject'], $example ) ); ?></strong></p><p data-mi-email-preview-preheader><?php echo esc_html( self::renderizza( $settings['preheader'], $example ) ); ?></p><div><?php echo wp_kses_post( self::renderizza( $settings['html'], $example ) ); ?></div><h4>Testo semplice</h4><pre data-mi-email-preview-text style="white-space:pre-wrap"><?php echo esc_html( self::renderizza( $settings['text'], $example ) ); ?></pre><hr><p data-mi-email-preview-footer><?php echo nl2br( esc_html( self::renderizza( $settings['footer'], $example ) ) ); ?></p><p class="notice-inline notice-error" data-mi-email-placeholder-error hidden></p></div>
 		<p class="description">Questa schermata non invia email e usa esclusivamente dati di esempio.</p>
 		<?php
 	}
@@ -81,12 +86,37 @@ final class MI_Modello_Email {
 			'text'      => sanitize_textarea_field( wp_unslash( $_POST['mi_email_text'] ?? '' ) ),
 			'footer'    => sanitize_textarea_field( wp_unslash( $_POST['mi_email_footer'] ?? '' ) ),
 		);
+		$unknown = self::trova_segnaposto_non_ammessi( $settings );
+		if ( $unknown ) {
+			set_transient( 'mi_email_placeholder_error_' . get_current_user_id(), implode( ', ', $unknown ), MINUTE_IN_SECONDS );
+			return;
+		}
 		update_post_meta( $post_id, '_mi_email_template', $settings );
+	}
+
+	public static function mostra_avviso() {
+		$key = 'mi_email_placeholder_error_' . get_current_user_id();
+		$unknown = get_transient( $key );
+		if ( ! $unknown ) {
+			return;
+		}
+		delete_transient( $key );
+		echo '<div class="notice notice-error"><p>Modello email non aggiornato: segnaposto non ammessi: <code>' . esc_html( $unknown ) . '</code>.</p></div>';
 	}
 
 	private static function pulisci_riga( $value, $maximum ) {
 		$value = sanitize_text_field( wp_unslash( $value ) );
 		return function_exists( 'mb_substr' ) ? mb_substr( $value, 0, $maximum ) : substr( $value, 0, $maximum );
+	}
+
+	private static function trova_segnaposto_non_ammessi( $settings ) {
+		$found = array();
+		foreach ( $settings as $value ) {
+			if ( is_string( $value ) && preg_match_all( '/{{[^{}]+}}/', $value, $matches ) ) {
+				$found = array_merge( $found, $matches[0] );
+			}
+		}
+		return array_values( array_diff( array_unique( $found ), self::segnaposto_ammessi() ) );
 	}
 
 	private static function renderizza( $template, $values ) {

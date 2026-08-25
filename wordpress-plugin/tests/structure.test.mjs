@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.3\.2/);
+  assert.match(source, /Version:\s+0\.3\.3/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -143,4 +143,15 @@ test('l’anteprima storica conserva il branding dell’attività', async () => 
   assert.match(model, /logo_alt/);
   assert.match(admin, /identity\['logo_url'\]/);
   assert.match(admin, /identity\['logo_alt'\]/);
+});
+
+test('l’editor aggiorna l’anteprima e rifiuta segnaposto non ammessi', async () => {
+  const model = await read('includes/class-mi-modello-email.php');
+  const script = await read('assets/admin.js');
+  assert.match(model, /segnaposto_ammessi/);
+  assert.match(model, /trova_segnaposto_non_ammessi/);
+  assert.match(model, /Modello email non aggiornato/);
+  assert.match(script, /aggiornaAnteprimaEmail/);
+  assert.match(script, /setCustomValidity/);
+  assert.match(script, /Segnaposto non ammessi/);
 });
