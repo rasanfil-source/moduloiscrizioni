@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+1\.0\.0/);
+  assert.match(source, /Version:\s+1\.1\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -194,6 +194,14 @@ test('le email fallite possono essere riaccodate con protezione amministrativa',
   assert.match(sender, /attempts = 0/);
   assert.match(sender, /check_admin_referer/);
   assert.match(admin, /mi_riaccoda_email/);
+});
+
+test('la coda recupera le email rimaste in elaborazione', async () => {
+  const sender = await read('includes/class-mi-spedizione-email.php');
+  const activator = await read('includes/class-mi-activator.php');
+  assert.match(sender, /processing_started_at < %s/);
+  assert.match(sender, /processing_started_at = %s/);
+  assert.match(activator, /processing_started_at datetime/);
 });
 
 test('l’editor email usa segnaposto controllati e non invia messaggi', async () => {

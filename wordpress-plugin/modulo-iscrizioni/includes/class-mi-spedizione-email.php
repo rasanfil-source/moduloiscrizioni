@@ -119,19 +119,21 @@ final class MI_Spedizione_Email {
 		}
 		global $wpdb;
 		$table = $wpdb->prefix . 'mi_email_outbox';
+		$stale = gmdate( 'Y-m-d H:i:s', time() - 15 * MINUTE_IN_SECONDS );
+		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'PENDING', processing_started_at = NULL WHERE status = 'SENDING' AND processing_started_at < %s", $stale ) );
 		$righe = $wpdb->get_results( "SELECT id, recipient, payload_json, attempts FROM {$table} WHERE status = 'PENDING' AND attempts < 5 ORDER BY id ASC LIMIT 10", ARRAY_A );
 		foreach ( $righe as $riga ) {
 			$id = absint( $riga['id'] );
-			if ( 1 !== $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'SENDING', attempts = attempts + 1 WHERE id = %d AND status = 'PENDING'", $id ) ) ) {
+			if ( 1 !== $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'SENDING', attempts = attempts + 1, processing_started_at = %s WHERE id = %d AND status = 'PENDING'", gmdate( 'Y-m-d H:i:s' ), $id ) ) ) {
 				continue;
 			}
 			$payload = json_decode( (string) $riga['payload_json'], true );
 			$istantanea = is_array( $payload ) && isset( $payload['email_preview'] ) && is_array( $payload['email_preview'] ) ? $payload['email_preview'] : array();
 			if ( self::invia_istantanea( $riga['recipient'], $istantanea ) ) {
-				$wpdb->update( $table, array( 'status' => 'SENT', 'last_error' => null, 'sent_at' => current_time( 'mysql', true ) ), array( 'id' => $id ), array( '%s', '%s', '%s' ), array( '%d' ) );
+				$wpdb->update( $table, array( 'status' => 'SENT', 'last_error' => null, 'sent_at' => current_time( 'mysql', true ), 'processing_started_at' => null ), array( 'id' => $id ), array( '%s', '%s', '%s', '%s' ), array( '%d' ) );
 			} else {
 				$tentativi = (int) $riga['attempts'] + 1;
-				$wpdb->update( $table, array( 'status' => $tentativi >= 5 ? 'FAILED' : 'PENDING', 'last_error' => 'wp_mail non ha accettato il messaggio.' ), array( 'id' => $id ), array( '%s', '%s' ), array( '%d' ) );
+				$wpdb->update( $table, array( 'status' => $tentativi >= 5 ? 'FAILED' : 'PENDING', 'last_error' => 'wp_mail non ha accettato il messaggio.', 'processing_started_at' => null ), array( 'id' => $id ), array( '%s', '%s', '%s' ), array( '%d' ) );
 			}
 		}
 		if ( (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status = 'PENDING' AND attempts < 5" ) > 0 ) {
