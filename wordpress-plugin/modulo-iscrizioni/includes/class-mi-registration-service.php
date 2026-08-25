@@ -147,6 +147,7 @@ final class MI_Registration_Service {
 		$counters_table = $wpdb->prefix . 'mi_event_counters';
 		$items_table = $wpdb->prefix . 'mi_registration_items';
 		$participants_table = $wpdb->prefix . 'mi_participants';
+		$payments_table = $wpdb->prefix . 'mi_payments';
 		$outbox_table = $wpdb->prefix . 'mi_email_outbox';
 		$now = current_time( 'mysql', true );
 		$order_code = self::generate_order_code();
@@ -281,6 +282,7 @@ final class MI_Registration_Service {
 		}
 		$items = $wpdb->get_results( $wpdb->prepare( "SELECT quantity, unit_price_cents FROM {$items_table} WHERE registration_id = %d ORDER BY id", $registration_id ), ARRAY_A );
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT first_name, last_name, extra_json FROM {$participants_table} WHERE registration_id = %d ORDER BY id", $registration_id ), ARRAY_A );
+		$payments = $wpdb->get_results( $wpdb->prepare( "SELECT transaction_kind, installment_kind, effective_at, amount_cents, payment_source, external_reference, operator_label, administrative_note FROM {$payments_table} WHERE registration_id = %d ORDER BY effective_at, id", $registration_id ), ARRAY_A );
 		$participants = array_map(
 			static function ( $row ) {
 				$fields = json_decode( (string) $row['extra_json'], true );
@@ -315,6 +317,7 @@ final class MI_Registration_Service {
 				'initial_due_cents' => (int) $registration['initial_due_cents'],
 				'balance_cents'  => (int) $registration['balance_cents'],
 				'payment_methods'=> (array) json_decode( (string) $registration['payment_methods_json'], true ),
+				'payments'       => array_map( static function ( $payment ) { return array_map( 'sanitize_text_field', $payment ); }, $payments ),
 			)
 		);
 		if ( is_wp_error( $result ) ) {
