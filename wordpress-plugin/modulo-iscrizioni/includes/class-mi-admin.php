@@ -68,6 +68,7 @@ final class MI_Admin {
 		$filter_transaction = strtoupper( sanitize_key( wp_unslash( $_GET['transaction_kind'] ?? '' ) ) );
 		$filter_from = preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) ( $_GET['payment_from'] ?? '' ) ) ? sanitize_text_field( wp_unslash( $_GET['payment_from'] ) ) : '';
 		$filter_to = preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) ( $_GET['payment_to'] ?? '' ) ) ? sanitize_text_field( wp_unslash( $_GET['payment_to'] ) ) : '';
+		if ( $filter_from && $filter_to && $filter_from > $filter_to ) { $filter_from = ''; $filter_to = ''; }
 		$rows = array_values( array_filter( $rows, static function ( $row ) use ( $filter_event, $filter_source, $filter_transaction, $filter_from, $filter_to ) { $date = substr( (string) $row['effective_at'], 0, 10 ); return ( ! $filter_event || (int) $row['event_id'] === $filter_event ) && ( ! $filter_source || $row['payment_source'] === $filter_source ) && ( ! $filter_transaction || $row['transaction_kind'] === $filter_transaction ) && ( ! $filter_from || $date >= $filter_from ) && ( ! $filter_to || $date <= $filter_to ); } ) );
 		$labels = array( 'BANK_TRANSFER' => 'Bonifico', 'CARD' => 'Carta', 'CASH' => 'Contante' );
 		$export_url = wp_nonce_url( add_query_arg( array( 'action' => 'mi_export_payments', 'payment_event_id' => $filter_event, 'payment_source' => $filter_source, 'transaction_kind' => $filter_transaction, 'payment_from' => $filter_from, 'payment_to' => $filter_to ), admin_url( 'admin-post.php' ) ), 'mi_export_payments' );
@@ -90,6 +91,7 @@ final class MI_Admin {
 		$filter_transaction = strtoupper( sanitize_key( wp_unslash( $_GET['transaction_kind'] ?? '' ) ) );
 		$filter_from = preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) ( $_GET['payment_from'] ?? '' ) ) ? sanitize_text_field( wp_unslash( $_GET['payment_from'] ) ) : '';
 		$filter_to = preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) ( $_GET['payment_to'] ?? '' ) ) ? sanitize_text_field( wp_unslash( $_GET['payment_to'] ) ) : '';
+		if ( $filter_from && $filter_to && $filter_from > $filter_to ) { $filter_from = ''; $filter_to = ''; }
 		$rows = array_values( array_filter( $rows, static function ( $row ) use ( $filter_event, $filter_source, $filter_transaction, $filter_from, $filter_to ) { $date = substr( (string) $row['effective_at'], 0, 10 ); return ( ! $filter_event || (int) $row['event_id'] === $filter_event ) && ( ! $filter_source || $row['payment_source'] === $filter_source ) && ( ! $filter_transaction || $row['transaction_kind'] === $filter_transaction ) && ( ! $filter_from || $date >= $filter_from ) && ( ! $filter_to || $date <= $filter_to ); } ) );
 		$labels = array( 'BANK_TRANSFER' => 'Bonifico', 'CARD' => 'Carta', 'CASH' => 'Contante' );
 		header( 'Content-Type: text/csv; charset=UTF-8' ); header( 'Content-Disposition: attachment; filename="pagamenti-' . gmdate( 'Y-m-d' ) . '.csv"' );
