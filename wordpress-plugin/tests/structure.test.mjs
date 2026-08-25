@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.3\.0/);
+  assert.match(source, /Version:\s+3\.3\.4/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -373,6 +373,13 @@ test('il pannello riepiloga e filtra le repliche nel perimetro accessibile', asy
   assert.match(admin, /In attesa:/);
   assert.match(admin, /scope_conditions/);
   assert.match(admin, /MI_Access::activity_ids/);
+});
+
+test('il registro pagamenti filtra l’intero archivio senza troncare ai primi cento movimenti', async () => {
+  const admin = await read('includes/class-mi-admin.php');
+  assert.doesNotMatch(admin, /ORDER BY p\.id DESC LIMIT 100/);
+  assert.match(admin, /payment_from/);
+  assert.match(admin, /payment_to/);
 });
 
 test('l’iscrizione conserva totale, primo versamento e saldo', async () => {

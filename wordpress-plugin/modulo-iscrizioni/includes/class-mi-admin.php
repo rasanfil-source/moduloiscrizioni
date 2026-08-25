@@ -61,7 +61,7 @@ final class MI_Admin {
 	public static function payments_page() {
 		if ( ! current_user_can( 'mi_view_registrations' ) ) { wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) ); }
 		global $wpdb;
-		$rows = $wpdb->get_results( "SELECT p.*, r.order_code, r.event_id FROM {$wpdb->prefix}mi_payments p INNER JOIN {$wpdb->prefix}mi_registrations r ON r.id = p.registration_id ORDER BY p.id DESC LIMIT 100", ARRAY_A );
+		$rows = $wpdb->get_results( "SELECT p.*, r.order_code, r.event_id FROM {$wpdb->prefix}mi_payments p INNER JOIN {$wpdb->prefix}mi_registrations r ON r.id = p.registration_id ORDER BY p.id DESC", ARRAY_A );
 		$rows = array_values( array_filter( $rows, static function ( $row ) { return MI_Access::can_access_event( (int) $row['event_id'] ); } ) );
 		$filter_event = isset( $_GET['payment_event_id'] ) ? absint( $_GET['payment_event_id'] ) : 0;
 		$filter_source = strtoupper( sanitize_key( wp_unslash( $_GET['payment_source'] ?? '' ) ) );
