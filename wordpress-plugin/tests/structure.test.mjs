@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.3\.8/);
+  assert.match(source, /Version:\s+3\.3\.9/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -394,6 +394,13 @@ test('il pannello non conserva numeri completi di carta nei pagamenti', async ()
   assert.match(admin, /Non inserire numeri completi di carta/);
   assert.match(admin, /Luhn|alternate/);
   assert.doesNotMatch(admin, /'CARD' === \$source[\s\S]{0,200}contiene_numero_carta/);
+});
+
+test('il pannello non conferma pagamenti non salvati', async () => {
+  const admin = await read('includes/class-mi-admin.php');
+  assert.match(admin, /\$inserted\s*=\s*\$wpdb->insert/);
+  assert.match(admin, /false === \$inserted/);
+  assert.match(admin, /Il movimento non è stato salvato/);
 });
 
 test('l’iscrizione conserva totale, primo versamento e saldo', async () => {
