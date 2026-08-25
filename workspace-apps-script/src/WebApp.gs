@@ -116,7 +116,7 @@ function sincronizzaPagamenti_(orderCode, payments) {
     const effectiveDate = effective ? new Date(effective) : new Date();
     if (isNaN(effectiveDate.getTime())) return;
     const reference = normalizzaTesto_(payment.external_reference, 120);
-    const origin = 'WP|' + orderCode + '|' + kind + '|' + effective + '|' + amount + '|' + source + '|' + reference;
+    const origin = 'WP|' + orderCode + '|' + kind + '|' + installment + '|' + effective + '|' + amount + '|' + source + '|' + reference;
     if (existing.some(function (row) { return String(row.id_inserimento_origine) === origin; })) return;
     sheet.appendRow([creaIdentificativoOpaco_('pay'), neutralizzaFormula_(orderCode, 64), kind, installment, effectiveDate, amount, 'EUR', source, neutralizzaFormula_(reference, 120), neutralizzaFormula_(payment.operator_label, 100), 'WORDPRESS', origin, new Date()]);
     existing.push({ id_inserimento_origine: origin });
