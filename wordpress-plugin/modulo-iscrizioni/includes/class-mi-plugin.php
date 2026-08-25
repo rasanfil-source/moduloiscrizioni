@@ -20,6 +20,7 @@ final class MI_Plugin {
 		MI_Event_Post_Type::boot();
 		MI_Access::boot();
 		MI_Admin::boot();
+		MI_Modello_Email::avvia();
 		MI_Workspace_Settings::boot();
 		MI_REST_Controller::boot();
 		MI_Shortcode::boot();

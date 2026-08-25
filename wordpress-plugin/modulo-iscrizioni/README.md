@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — vertical slice 0.2.9
+# Modulo Iscrizioni — vertical slice 0.3.0
 
 Plugin WordPress dimostrativo per la Fase 2. Implementa:
 
@@ -11,12 +11,13 @@ Plugin WordPress dimostrativo per la Fase 2. Implementa:
 - anteprima amministrativa dei campi e validazione allowlist lato server;
 - codice ordine univoco;
 - email registrate soltanto nell'outbox `PREVIEW`;
+- editor dell'email di conferma con segnaposto italiani e anteprima sintetica, senza invio;
 - ruolo `Gestore iscrizioni` limitabile alle attività assegnate;
 - shortcode `[modulo_iscrizioni event="ID"]`.
 
 ## Limiti intenzionali
 
-Questa versione non invia email, non gestisce pagamenti e non genera QR/barcode. Replica le nuove iscrizioni nel registro Workspace mediante HMAC, anti-replay e chiave di idempotenza; un errore remoto non annulla il salvataggio autorevole WordPress e lascia la replica in stato `PENDING` per un nuovo tentativo. Il pannello mostra il dettaglio dei partecipanti e le risposte aggiuntive con etichette italiane; l'elenco può essere filtrato per evento o ricercato per codice, referente ed email e l'esportazione CSV rispetta gli stessi filtri e l'ambito delle attività assegnate. Le date di nascita future o anteriori a 120 anni vengono rifiutate. URL e segreto possono essere definiti come costanti private fuori dal repository oppure salvati nella schermata amministrativa riservata; il segreto deve contenere almeno 32 caratteri e non viene mai mostrato. Il pacchetto 0.2.9 è destinato al collaudo sul sito autorizzato; attività ed evento di prova restano in bozza.
+Questa versione non invia email, non gestisce pagamenti e non genera QR/barcode. L'editor per evento salva oggetto, preheader, corpo HTML limitato, testo semplice e footer e ne mostra un'anteprima con dati esclusivamente sintetici. Replica le nuove iscrizioni nel registro Workspace mediante HMAC, anti-replay e chiave di idempotenza; un errore remoto non annulla il salvataggio autorevole WordPress e lascia la replica in stato `PENDING` per un nuovo tentativo. Il pannello mostra il dettaglio dei partecipanti e le risposte aggiuntive con etichette italiane; l'elenco può essere filtrato per evento o ricercato per codice, referente ed email e l'esportazione CSV rispetta gli stessi filtri e l'ambito delle attività assegnate. Le date di nascita future o anteriori a 120 anni vengono rifiutate. URL e segreto possono essere definiti come costanti private fuori dal repository oppure salvati nella schermata amministrativa riservata; il segreto deve contenere almeno 32 caratteri e non viene mai mostrato. Il pacchetto 0.3.0 è destinato al collaudo sul sito autorizzato; attività ed evento di prova restano in bozza.
 
 ## Installazione di prova
 

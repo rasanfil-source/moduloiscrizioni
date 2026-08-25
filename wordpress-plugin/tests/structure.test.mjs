@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.2\.9/);
+  assert.match(source, /Version:\s+0\.3\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -112,4 +112,14 @@ test('la coda email rimane in anteprima', async () => {
   assert.match(service, /'status'\s*=>\s*'PREVIEW'/);
   assert.doesNotMatch(service, /wp_mail\s*\(/);
   assert.match(admin, /Nessuna email viene spedita/);
+});
+
+test('l’editor email usa segnaposto controllati e non invia messaggi', async () => {
+  const source = await read('includes/class-mi-modello-email.php');
+  assert.match(source, /Email di conferma — anteprima/);
+  assert.match(source, /\{\{evento\.titolo\}\}/);
+  assert.match(source, /\{\{ordine\.codice\}\}/);
+  assert.match(source, /wp_kses_post/);
+  assert.match(source, /MI_Access::can_access_event/);
+  assert.doesNotMatch(source, /wp_mail\s*\(/);
 });
