@@ -11,6 +11,16 @@ Progetto Google Apps Script associato a uno spreadsheet dedicato. Il repository 
 - l'azione firmata `PING` verifica firma e anti-replay senza leggere o scrivere dati personali;
 - l'outbox email resta sempre nello stato `PREVIEW`.
 
+## Replica dei pagamenti
+
+Le iscrizioni WordPress possono contenere movimenti manuali già registrati nel
+foglio `Pagamenti`. La Web App li replica soltanto dopo la verifica della busta
+firmata, usando una chiave origine deterministica che comprende ordine, tipo di
+movimento, tipologia rata, data, importo, fonte e riferimento. In questo modo
+caparra e saldo restano distinti e il replay della stessa iscrizione non crea
+righe duplicate. Le date non valide vengono ignorate senza interrompere la
+registrazione; la modalità resta sempre `PREVIEW`.
+
 ## Prima configurazione
 
 1. Aprire lo spreadsheet dedicato con un account proprietario.
