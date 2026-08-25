@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+0\.7\.1/);
+  assert.match(source, /Version:\s+0\.7\.2/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -107,6 +107,18 @@ test('l’anteprima riservata non invia iscrizioni e accetta le bozze autorizzat
   assert.match(shortcode, /MI_Access::can_access_event/);
   assert.match(service, /\$allow_unpublished/);
   assert.match(script, /if \(config\.preview\)/);
+});
+
+test('capienza, scadenze e lista d’attesa sono verificate anche nella transazione', async () => {
+  const service = await read('includes/class-mi-registration-service.php');
+  const shortcode = await read('includes/class-mi-shortcode.php');
+  const postType = await read('includes/class-mi-event-post-type.php');
+  assert.match(service, /registration_time_state/);
+  assert.match(service, /FOR UPDATE[\s\S]+registration_time_state/);
+  assert.match(service, /'SOLD_OUT'/);
+  assert.match(service, /'remaining'/);
+  assert.match(shortcode, /Posti ordinari esauriti/);
+  assert.match(postType, /confermati/);
 });
 
 test('i campi partecipante usano profili, allowlist e validazione server', async () => {

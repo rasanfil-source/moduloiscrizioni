@@ -45,6 +45,7 @@ final class MI_Shortcode {
 		self::enqueue_assets();
 		$config = array( 'event' => $event, 'state' => $is_preview ? 'OPEN' : MI_Registration_Service::registration_state( $event ), 'preview' => $is_preview, 'endpoint' => esc_url_raw( rest_url( MI_REST_Controller::NAMESPACE . '/events/' . $event_id . '/registrations' ) ), 'instanceId' => $instance_id, 'startedAt' => time(), 'privacyUrl' => get_privacy_policy_url() );
 		$formatted_date = self::formatted_event_date( $event['event_starts_at'] );
+		$formatted_closes = self::formatted_event_date( $event['closes_at'] );
 		ob_start(); ?>
 		<section id="<?php echo esc_attr( $instance_id ); ?>" class="mi-registration" style="--mi-primary:<?php echo esc_attr( $event['accent_color'] ); ?>;--mi-primary-dark:<?php echo esc_attr( self::darken_color( $event['accent_color'] ) ); ?>" data-mi-config="<?php echo esc_attr( wp_json_encode( $config ) ); ?>">
 			<?php if ( $is_preview ) : ?><p class="mi-registration__preview-notice" role="status">Anteprima riservata: puoi provare tutti i passaggi, ma nessuna iscrizione verrà inviata.</p><?php endif; ?>
@@ -58,6 +59,7 @@ final class MI_Shortcode {
 				</div>
 			</header>
 			<?php if ( 'OPEN' !== $config['state'] ) : ?><p class="mi-registration__notice" role="status"><?php echo esc_html( self::state_message( $config['state'] ) ); ?></p><?php else : ?>
+			<?php if ( $event['availability']['full'] && $event['waitlist_enabled'] ) : ?><p class="mi-registration__availability mi-registration__availability--waitlist" role="status"><strong>Posti ordinari esauriti.</strong> Puoi inviare la richiesta: sarà inserita in lista d’attesa.<?php if ( $formatted_closes ) : ?><small>Richieste aperte fino a <?php echo esc_html( $formatted_closes ); ?>.</small><?php endif; ?></p><?php else : ?><p class="mi-registration__availability" role="status"><strong><?php echo esc_html( (string) $event['availability']['remaining'] ); ?> posti disponibili</strong> su <?php echo esc_html( (string) $event['availability']['capacity'] ); ?>.<?php if ( $formatted_closes ) : ?><small>Iscrizioni aperte fino a <?php echo esc_html( $formatted_closes ); ?>.</small><?php endif; ?></p><?php endif; ?>
 			<nav class="mi-registration__progress" aria-label="Avanzamento iscrizione"><ol><li aria-current="step" data-mi-progress="1"><span>1</span> Biglietti</li><li data-mi-progress="2"><span>2</span> Partecipanti</li><li data-mi-progress="3"><span>3</span> Conferma</li></ol></nav>
 			<form class="mi-registration__form" novalidate>
 				<section class="mi-registration__step" data-mi-step="1" aria-labelledby="<?php echo esc_attr( $instance_id ); ?>-step-1"><h2 id="<?php echo esc_attr( $instance_id ); ?>-step-1" tabindex="-1">Scegli le iscrizioni</h2><p class="mi-registration__intro">Seleziona la quantità per ogni tipologia.</p>
@@ -97,7 +99,7 @@ final class MI_Shortcode {
 	}
 
 	private static function state_message( $state ) {
-		$messages = array( 'NOT_OPEN' => 'Le iscrizioni non sono ancora aperte.', 'CLOSED' => 'Le iscrizioni sono chiuse.', 'MISCONFIGURED' => 'Le iscrizioni non sono al momento disponibili.' );
+		$messages = array( 'NOT_OPEN' => 'Le iscrizioni non sono ancora aperte.', 'CLOSED' => 'Le iscrizioni sono chiuse.', 'SOLD_OUT' => 'I posti sono esauriti e la lista d’attesa non è attiva.', 'MISCONFIGURED' => 'Le iscrizioni non sono al momento disponibili.' );
 		return $messages[ $state ] ?? 'Le iscrizioni non sono disponibili.';
 	}
 }
