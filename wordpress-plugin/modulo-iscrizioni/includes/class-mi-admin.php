@@ -40,6 +40,8 @@ final class MI_Admin {
 		$table = $wpdb->prefix . 'mi_registrations';
 		$event_id = isset( $_GET['event_id'] ) ? absint( $_GET['event_id'] ) : 0;
 		$search = isset( $_GET['mi_search'] ) ? sanitize_text_field( wp_unslash( $_GET['mi_search'] ) ) : '';
+		$workspace_filter = isset( $_GET['mi_workspace_status'] ) ? strtoupper( sanitize_key( wp_unslash( $_GET['mi_workspace_status'] ) ) ) : '';
+		$workspace_filter = in_array( $workspace_filter, array( 'PENDING', 'SYNCED' ), true ) ? $workspace_filter : '';
 		$detail_id = isset( $_GET['registration_id'] ) ? absint( $_GET['registration_id'] ) : 0;
 		$page = max( 1, isset( $_GET['paged'] ) ? absint( $_GET['paged'] ) : 1 );
 		$per_page = 50;
@@ -49,22 +51,38 @@ final class MI_Admin {
 		if ( $event_id && ! MI_Access::can_access_event( $event_id ) ) {
 			wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) );
 		}
-		$conditions = array();
-		$parameters = array();
+		$scope_conditions = array();
+		$scope_parameters = array();
 		if ( $event_id ) {
-			$conditions[] = 'event_id = %d';
-			$parameters[] = $event_id;
+			$scope_conditions[] = 'event_id = %d';
+			$scope_parameters[] = $event_id;
 		} elseif ( 'ALL' !== $scope ) {
-			$conditions[] = 'event_id IN (' . implode( ',', array_map( 'absint', $allowed_events ?: array( 0 ) ) ) . ')';
+			$scope_conditions[] = 'event_id IN (' . implode( ',', array_map( 'absint', $allowed_events ?: array( 0 ) ) ) . ')';
 		}
+		$conditions = $scope_conditions;
+		$parameters = $scope_parameters;
 		if ( '' !== $search ) {
 			$like = '%' . $wpdb->esc_like( $search ) . '%';
 			$conditions[] = '(order_code LIKE %s OR buyer_first_name LIKE %s OR buyer_last_name LIKE %s OR buyer_email LIKE %s)';
 			$parameters = array_merge( $parameters, array( $like, $like, $like, $like ) );
 		}
+		if ( $workspace_filter ) {
+			$conditions[] = 'workspace_status = %s';
+			$parameters[] = $workspace_filter;
+		}
 		$where = $conditions ? 'WHERE ' . implode( ' AND ', $conditions ) : '';
 		if ( $parameters ) {
 			$where = $wpdb->prepare( $where, $parameters );
+		}
+		$scope_where = $scope_conditions ? 'WHERE ' . implode( ' AND ', $scope_conditions ) : '';
+		if ( $scope_parameters ) {
+			$scope_where = $wpdb->prepare( $scope_where, $scope_parameters );
+		}
+		$workspace_counts = array( 'PENDING' => 0, 'SYNCED' => 0 );
+		foreach ( $wpdb->get_results( "SELECT workspace_status, COUNT(*) AS totale FROM {$table} {$scope_where} GROUP BY workspace_status", ARRAY_A ) as $workspace_count ) {
+			if ( isset( $workspace_counts[ $workspace_count['workspace_status'] ] ) ) {
+				$workspace_counts[ $workspace_count['workspace_status'] ] = (int) $workspace_count['totale'];
+			}
 		}
 		$rows = $wpdb->get_results( "SELECT id, order_code, event_id, status, workspace_status, workspace_attempts, buyer_first_name, buyer_last_name, buyer_email, total_qty, economic_mode, total_cents, initial_due_cents, balance_cents, created_at FROM {$table} {$where} ORDER BY id DESC LIMIT {$per_page} OFFSET {$offset}", ARRAY_A );
 		$visible_events = 'ALL' === $scope ? get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) ) : get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'post__in' => $allowed_events ?: array( 0 ), 'orderby' => 'title', 'order' => 'ASC' ) );
@@ -81,6 +99,7 @@ final class MI_Admin {
 		?>
 		<div class="wrap"><h1>Iscrizioni</h1>
 		<p>Registro locale con replica firmata sul registro Workspace. Le email restano soltanto in anteprima.</p>
+		<ul class="subsubsub" aria-label="Riepilogo repliche Workspace"><li><strong><?php echo esc_html( 'Sincronizzate: ' . $workspace_counts['SYNCED'] ); ?></strong> | </li><li><strong><?php echo esc_html( 'In attesa: ' . $workspace_counts['PENDING'] ); ?></strong></li></ul><div class="clear"></div>
 		<?php if ( isset( $_GET['mi_workspace_retry'] ) ) : ?>
 		<?php $retry_result = sanitize_key( wp_unslash( $_GET['mi_workspace_retry'] ) ); ?>
 		<div class="notice notice-success"><p><?php echo esc_html( 'synced' === $retry_result ? 'La replica era già sincronizzata.' : 'Replica Workspace riaccodata. Il registro locale resta autorevole durante il nuovo tentativo.' ); ?></p></div>
@@ -92,6 +111,8 @@ final class MI_Admin {
 		<select id="mi-event-filter" name="event_id"><option value="0">Tutti gli eventi accessibili</option><?php foreach ( $visible_events as $visible_event ) : ?><option value="<?php echo esc_attr( $visible_event->ID ); ?>" <?php selected( $event_id, $visible_event->ID ); ?>><?php echo esc_html( $visible_event->post_title ); ?></option><?php endforeach; ?></select>
 		<label for="mi-search">Ricerca</label>
 		<input id="mi-search" type="search" name="mi_search" value="<?php echo esc_attr( $search ); ?>" placeholder="Codice, referente o email">
+		<label for="mi-workspace-filter">Workspace</label>
+		<select id="mi-workspace-filter" name="mi_workspace_status"><option value="">Tutti gli stati</option><option value="PENDING" <?php selected( $workspace_filter, 'PENDING' ); ?>>In attesa</option><option value="SYNCED" <?php selected( $workspace_filter, 'SYNCED' ); ?>>Sincronizzate</option></select>
 		<button class="button">Filtra</button>
 		<a class="button" href="<?php echo esc_url( admin_url( 'edit.php?post_type=' . MI_Event_Post_Type::EVENT_TYPE . '&page=mi-registrations' ) ); ?>">Azzera</a>
 		<?php $export_url = wp_nonce_url( add_query_arg( array( 'action' => 'mi_export_registrations', 'event_id' => $event_id, 'mi_search' => $search ), admin_url( 'admin-post.php' ) ), 'mi_export_registrations' ); ?>
