@@ -67,4 +67,5 @@ test('APPEND_REGISTRATION replica i movimenti pagamento senza duplicarli', () =>
   assert.match(sources['WebApp.gs'], /kind \+ '\\|' \+ installment \+ '\\|'/);
   assert.match(sources['WebApp.gs'], /effectiveDate/);
   assert.match(sources['WebApp.gs'], /isNaN\(effectiveDate\.getTime\(\)\)/);
+  assert.match(sources['WebApp.gs'], /INVALID_EFFECTIVE_AT/);
 });
