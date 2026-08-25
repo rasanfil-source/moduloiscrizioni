@@ -12,7 +12,7 @@ La parrocchia è l'ente base. Ogni attività può avere logo, colori e contatti 
 
 ## Stato
 
-La versione WordPress `0.7.1` e Apps Script `1.1.0` sono installate e collegate. La `0.7.2` è in preparazione e completa disponibilità, lista d’attesa e controllo transazionale delle scadenze. Sono già operativi il percorso pubblico progressivo, l’elemento Divi e l’anteprima riservata senza invio. Il deployment resta in modalità `ANTEPRIMA`; non vengono memorizzati IBAN o collegamenti carta, non esiste alcuna riscossione e la coda email resta `PREVIEW`.
+La versione WordPress `0.7.2` e Apps Script `1.1.0` sono installate e collegate. La `0.8.0` è in preparazione e introduce la spedizione email controllata: parte sempre in `ANTEPRIMA`, consente una prova esclusivamente sintetica e sblocca `OPERATIVO` soltanto dopo una prova accettata dal sistema di posta. Non vengono memorizzati IBAN o collegamenti carta e non esiste alcuna riscossione.
 
 Il backend Google Workspace in `workspace-apps-script/` è installato come progetto `MODULI` sullo spreadsheet riservato `DB_MODULI`: crea le schede operative, convalida i pagamenti manuali, conserva audit e outbox in anteprima e accetta soltanto richieste WordPress firmate. Il controllo `PING` e una registrazione sintetica end-to-end sono stati verificati, compreso il replay idempotente senza duplicati. L'evento di prova è tornato in bozza e nessuna email è stata inviata. Il repository resta sanitizzato e non contiene ID del foglio, URL di distribuzione, segreti, codici di collaudo o destinatari reali.
 

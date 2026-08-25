@@ -24,8 +24,8 @@ final class MI_Admin {
 		);
 		add_submenu_page(
 			'edit.php?post_type=' . MI_Event_Post_Type::EVENT_TYPE,
-			'Email in anteprima',
-			'Email in anteprima',
+			'Coda email',
+			'Coda email',
 			'mi_view_registrations',
 			'mi-email-outbox',
 			array( __CLASS__, 'outbox_page' )
@@ -297,7 +297,7 @@ final class MI_Admin {
 			}
 		}
 		?>
-		<div class="wrap"><h1>Email in anteprima</h1><p>Nessuna email viene spedita in questa fase.</p>
+		<div class="wrap"><h1>Coda email</h1><p>Lo stato <code>PREVIEW</code> non viene spedito; <code>PENDING</code> indica una conferma operativa in attesa.</p>
 		<table class="widefat striped"><thead><tr><th>ID</th><th>Iscrizione</th><th>Destinatario</th><th>Modello</th><th>Stato</th><th>Data UTC</th><th></th></tr></thead><tbody>
 		<?php if ( ! $rows ) : ?><tr><td colspan="7">Coda vuota.</td></tr><?php endif; ?>
 		<?php foreach ( $rows as $row ) : ?><?php $preview_url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox', 'email_id' => (int) $row['id'] ), admin_url( 'edit.php' ) ); ?><tr><td><?php echo esc_html( $row['id'] ); ?></td><td><?php echo esc_html( $row['registration_id'] ); ?></td><td><?php echo esc_html( $row['recipient'] ); ?></td><td><?php echo esc_html( $row['template_type'] ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $preview_url ); ?>">Apri anteprima</a></td></tr><?php endforeach; ?>
@@ -378,7 +378,7 @@ final class MI_Admin {
 		}
 		$screen = get_current_screen();
 		if ( $screen && in_array( $screen->post_type, array( MI_Event_Post_Type::EVENT_TYPE, MI_Event_Post_Type::ACTIVITY_TYPE ), true ) ) {
-			echo '<div class="notice notice-info"><p><strong>Vertical slice:</strong> le email sono salvate soltanto in anteprima e non vengono inviate.</p></div>';
+			echo '<div class="notice notice-info"><p><strong>Spedizione email:</strong> la modalità iniziale è Anteprima; l’amministratore può collaudare un messaggio sintetico prima di abilitare le conferme operative.</p></div>';
 		}
 	}
 }
