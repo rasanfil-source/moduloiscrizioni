@@ -105,16 +105,18 @@ function sincronizzaPagamenti_(orderCode, payments) {
   const existing = convertiRigheInOggetti_(sheet);
   const kindMap = { PAYMENT: 'INCASSO', REFUND: 'RIMBORSO', INCASSO: 'INCASSO', RIMBORSO: 'RIMBORSO', STORNO: 'STORNO' };
   const sourceMap = { BANK_TRANSFER: 'BONIFICO', CARD: 'CARTA', CASH: 'CONTANTE', BONIFICO: 'BONIFICO', CARTA: 'CARTA', CONTANTE: 'CONTANTE' };
+  const installmentMap = { DEPOSIT: 'CAPARRA', BALANCE: 'SALDO', FULL: 'INTERO', OTHER: 'NON_ASSEGNATO', CAPARRA: 'CAPARRA', SALDO: 'SALDO', INTERO: 'INTERO', NON_ASSEGNATO: 'NON_ASSEGNATO' };
   payments.slice(0, 100).forEach(function (payment) {
     const kind = kindMap[String(payment.transaction_kind || '').toUpperCase()];
     const source = sourceMap[String(payment.payment_source || '').toUpperCase()];
+    const installment = installmentMap[String(payment.installment_kind || '').toUpperCase()] || 'NON_ASSEGNATO';
     const amount = Math.max(0, Math.round(Number(payment.amount_cents) || 0));
     if (!kind || !source || amount < 1) return;
     const effective = normalizzaTesto_(payment.effective_at, 40);
     const reference = normalizzaTesto_(payment.external_reference, 120);
     const origin = 'WP|' + orderCode + '|' + kind + '|' + effective + '|' + amount + '|' + source + '|' + reference;
     if (existing.some(function (row) { return String(row.id_inserimento_origine) === origin; })) return;
-    sheet.appendRow([creaIdentificativoOpaco_('pay'), neutralizzaFormula_(orderCode, 64), kind, normalizzaValoreElenco_(payment.installment_kind, MI_PAYMENT_ENUMS.installmentKinds) || 'NON_ASSEGNATO', effective ? new Date(effective) : new Date(), amount, 'EUR', source, neutralizzaFormula_(reference, 120), neutralizzaFormula_(payment.operator_label, 100), 'WORDPRESS', origin, new Date()]);
+    sheet.appendRow([creaIdentificativoOpaco_('pay'), neutralizzaFormula_(orderCode, 64), kind, installment, effective ? new Date(effective) : new Date(), amount, 'EUR', source, neutralizzaFormula_(reference, 120), neutralizzaFormula_(payment.operator_label, 100), 'WORDPRESS', origin, new Date()]);
     existing.push({ id_inserimento_origine: origin });
   });
 }

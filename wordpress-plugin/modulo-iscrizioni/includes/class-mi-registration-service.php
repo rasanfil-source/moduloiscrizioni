@@ -229,7 +229,7 @@ final class MI_Registration_Service {
 				'{{ordine.partecipanti}}'     => (string) $selection['quantity'],
 				'{{referente.nome_completo}}' => $buyer['first_name'] . ' ' . $buyer['last_name'],
 			);
-			$email_snapshot = MI_Modello_Email::crea_istantanea( $event_id, $email_values );
+			$email_snapshot = MI_Modello_Email::crea_istantanea( $event_id, array_map( 'esc_html', $email_values ) );
 			$email_status = MI_Spedizione_Email::stato_nuova_email( $email_snapshot );
 			$payload_json = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $order_code, 'status' => $status, 'quantity' => $selection['quantity'], 'total_cents' => $selection['total_cents'], 'economic_summary' => $economic_summary, 'email_preview' => $email_snapshot ) );
 			if ( false === $wpdb->insert( $outbox_table, array( 'registration_id' => $registration_id, 'recipient' => $buyer['email'], 'template_type' => 'REGISTRATION_CONFIRMATION', 'payload_json' => $payload_json, 'status' => $email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) {
