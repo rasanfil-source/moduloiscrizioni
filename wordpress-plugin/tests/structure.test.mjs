@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.4\.4/);
+  assert.match(source, /Version:\s+3\.4\.6/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -86,6 +86,12 @@ test('il percorso pubblico è progressivo e dispone di un modello concentrato', 
   assert.match(script, /prefillBuyerFromFirstParticipant/);
   assert.match(script, /buyerEdited\.firstName/);
   assert.match(script, /buyerEdited\.lastName/);
+  assert.match(script, /Completa i tuoi dati/);
+  assert.match(script, /Abbiamo bisogno di qualche dato in più di almeno uno degli iscritti/);
+  assert.match(script, /Aggiungi i dati degli altri partecipanti \(facoltativo\)/);
+  assert.match(script, /data-mi-required-when-open/);
+  assert.match(script, /additionalToggle\.addEventListener\('click'/);
+  assert.match(script, /sourceInputs/);
   assert.match(template, /wp_head/);
   assert.doesNotMatch(template, /get_header|get_sidebar/);
 });

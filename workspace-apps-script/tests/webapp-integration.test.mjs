@@ -103,3 +103,10 @@ test('APPEND_REGISTRATION rifiuta conflitti e mapping partecipanti non biunivoci
   invalid.participants[1].ticket_index = 1;
   assert.equal(context.aggiungiIscrizione_(invalid).error, 'INVALID_PARTICIPANTS');
 });
+
+test('APPEND_REGISTRATION accetta partecipanti secondari lasciati facoltativamente vuoti', () => {
+  const { context } = environment();
+  const optional = payload();
+  optional.participants[1] = { ticket_type_code: 'standard', ticket_index: 2, first_name: '', last_name: '', fields: {}, options: [] };
+  assert.equal(context.aggiungiIscrizione_(optional).ok, true);
+});

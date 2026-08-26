@@ -78,7 +78,7 @@ function aggiungiIscrizione_(payload) {
 		return false;
 	}) || ticketQuantity !== participants.length) return { ok: false, error: 'INVALID_TICKETS' };
 	const participantIndexes = {};
-	if (participants.some(function (participant) {
+	if (participants.some(function (participant, participantPosition) {
 		const fieldsJson = JSON.stringify(participant.fields || {});
 		const optionsJson = JSON.stringify(participant.options || []);
 		const code = normalizzaTesto_(participant.ticket_type_code, 64);
@@ -86,7 +86,10 @@ function aggiungiIscrizione_(payload) {
 		const indexKey = code + ':' + ticketIndex;
 		if (!/^[A-Za-z0-9_-]{1,64}$/.test(code) || !Number.isInteger(ticketIndex) || ticketIndex < 1 || ticketIndex > Number(ticketCounts[code] || 0) || participantIndexes[indexKey]) return true;
 		participantIndexes[indexKey] = true;
-		return !normalizzaTesto_(participant.first_name, 80) || !normalizzaTesto_(participant.last_name, 80) || fieldsJson.length > 5000 || optionsJson.length > 5000;
+		const firstName = normalizzaTesto_(participant.first_name, 80);
+		const lastName = normalizzaTesto_(participant.last_name, 80);
+		const hasOptionalData = firstName || lastName || Object.keys(participant.fields || {}).some(function (key) { return normalizzaTesto_(participant.fields[key], 5000); }) || Object.keys(participant.options || {}).some(function (key) { return Number(participant.options[key]) > 0; });
+		return (participantPosition === 0 || hasOptionalData) && (!firstName || !lastName) || fieldsJson.length > 5000 || optionsJson.length > 5000;
 	})) return { ok: false, error: 'INVALID_PARTICIPANTS' };
 
   const lock = LockService.getDocumentLock();

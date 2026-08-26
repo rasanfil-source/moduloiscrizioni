@@ -33,6 +33,14 @@
 	  if (!buyerEdited.lastName && buyerLastName) buyerLastName.value = firstParticipant.querySelector('[data-mi-last-name]')?.value.trim() || '';
 	}
 
+	function updateBuyerStepHeading() {
+	  const heading = steps[2]?.querySelector('h2');
+	  if (!heading) return;
+	  heading.textContent = totalQuantity() === 1
+	    ? 'Completa i tuoi dati'
+	    : 'Abbiamo bisogno di qualche dato in più di almeno uno degli iscritti';
+	}
+
     function makeRequestKey() {
       if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
         return globalThis.crypto.randomUUID().replaceAll('-', '');
@@ -164,6 +172,32 @@
         const selected = ticketSelection()[ticket.code] || 0;
         for (let position = 1; position <= selected; position += 1) tickets.push({ ...ticket, position });
       });
+      let additionalParticipants;
+      let additionalToggle;
+      if (tickets.length > 1) {
+        additionalParticipants = document.createElement('div');
+        additionalParticipants.className = 'mi-registration__additional-participants';
+        additionalParticipants.hidden = true;
+        additionalToggle = document.createElement('button');
+        additionalToggle.type = 'button';
+        additionalToggle.className = 'mi-registration__secondary-button';
+        additionalToggle.textContent = 'Aggiungi i dati degli altri partecipanti (facoltativo)';
+        additionalToggle.addEventListener('click', () => {
+          const first = participantsRoot.querySelector('.mi-registration__participant');
+          additionalParticipants.querySelectorAll('.mi-registration__participant').forEach((row) => {
+            const identifyingValues = Array.from(row.querySelectorAll('[data-mi-first-name], [data-mi-last-name], [data-mi-participant-field]')).some((input) => input.value.trim());
+            if (!identifyingValues && first) {
+              const sourceInputs = Array.from(first.querySelectorAll('[data-mi-first-name], [data-mi-last-name], [data-mi-participant-field], [data-mi-participant-option]'));
+              const targetInputs = Array.from(row.querySelectorAll('[data-mi-first-name], [data-mi-last-name], [data-mi-participant-field], [data-mi-participant-option]'));
+              targetInputs.forEach((input, position) => { input.value = sourceInputs[position]?.value || input.value; });
+            }
+          });
+          additionalParticipants.hidden = false;
+          additionalParticipants.querySelectorAll('[data-mi-required-when-open]').forEach((input) => { input.required = true; });
+          additionalToggle.hidden = true;
+          additionalParticipants.querySelector('input, select, textarea')?.focus();
+        });
+      }
       tickets.forEach((ticket, index) => {
         const key = `${ticket.code}:${ticket.position}`;
         const previous = participantValues.find((value) => value.key === key) || {};
@@ -186,8 +220,10 @@
           grid.append(configuredParticipantOption(option, previous.options?.[option.code] || '0', index));
         });
         row.append(legend, grid);
-        participantsRoot.append(row);
+        if (index === 0) participantsRoot.append(row);
+        else additionalParticipants.append(row);
       });
+      if (additionalParticipants) participantsRoot.append(additionalToggle, additionalParticipants);
       renderEconomicSummary();
       updateStickySummary();
     }
@@ -199,7 +235,8 @@
       input.name = `participant-${index}-${key}`;
       input.maxLength = 80;
       input.autocomplete = `section-participant-${index + 1} ${autocomplete}`;
-      input.required = true;
+      input.required = index === 0;
+      if (index > 0) input.dataset.miRequiredWhenOpen = '';
       input.value = value;
       input.dataset[key === 'firstName' ? 'miFirstName' : 'miLastName'] = '';
       label.append(input);
@@ -230,7 +267,8 @@
         input.type = field.type === 'date' ? 'date' : 'text';
       }
       input.name = `participant-${index}-field-${field.key}`;
-      input.required = Boolean(field.required);
+      input.required = Boolean(field.required) && index === 0;
+      if (field.required && index > 0) input.dataset.miRequiredWhenOpen = '';
       input.value = value;
       input.dataset.miParticipantField = field.key;
       if (field.max_length) input.maxLength = field.max_length;
@@ -325,7 +363,10 @@
 	nextButton.addEventListener('click', () => {
 	  if (!currentStepIsValid()) return;
 	  if (currentStep === 1) renderParticipants();
-	  if (currentStep === 2) prefillBuyerFromFirstParticipant();
+	  if (currentStep === 2) {
+		prefillBuyerFromFirstParticipant();
+		updateBuyerStepHeading();
+	  }
 	  showStep(currentStep + 1);
 	});
 	backButton.addEventListener('click', () => showStep(currentStep - 1));
