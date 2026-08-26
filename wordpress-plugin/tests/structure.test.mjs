@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.4\.8/);
+  assert.match(source, /Version:\s+3\.4\.9/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -490,6 +490,15 @@ test('rimborsi, scadenza originaria e lista attesa sono riconciliati', async () 
   assert.match(service, /WAITLIST_PROMOTED/);
   assert.match(service, /WAITLIST_PROMOTION/);
   assert.match(service, /ORDER BY created_at, id FOR UPDATE/);
+});
+
+test('la scadenza dei pagamenti usa una data e ora esplicita', async () => {
+  const eventType = await read('includes/class-mi-event-post-type.php');
+  const service = await read('includes/class-mi-registration-service.php');
+  assert.match(eventType, /name="mi_payment_deadline_at" type="datetime-local"/);
+  assert.doesNotMatch(eventType, /name="mi_reservation_minutes"/);
+  assert.match(service, /payment_deadline_at/);
+  assert.match(service, /setTimezone\( new DateTimeZone\( 'UTC' \) \)/);
 });
 
 test('gli importi ambigui sono rifiutati e il nome completo è ricercabile', async () => {

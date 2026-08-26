@@ -107,6 +107,7 @@ final class MI_Registration_Service {
 			'options'          => array_values( array_filter( (array) get_post_meta( $event_id, '_mi_options', true ), 'is_array' ) ),
 			'data_profile'     => $field_configuration['profile'],
 			'participant_fields'=> MI_Field_Schema::public_fields( $field_configuration ),
+			'payment_deadline_at'=> (string) get_post_meta( $event_id, '_mi_payment_deadline_at', true ),
 			'reservation_minutes'=> min( 10080, absint( get_post_meta( $event_id, '_mi_reservation_minutes', true ) ) ),
 			'privacy_url'      => get_privacy_policy_url(),
 			'privacy_policy_version' => (string) get_post_meta( $event_id, '_mi_privacy_policy_version', true ),
@@ -865,10 +866,17 @@ final class MI_Registration_Service {
 	}
 
 	private static function registration_expiry( $event, $status, $now ) {
-		$minutes = absint( $event['reservation_minutes'] ?? 0 );
-		if ( 'CONFIRMED' !== $status || ! $minutes || ! in_array( $event['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) {
+		if ( 'CONFIRMED' !== $status || ! in_array( $event['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) {
 			return null;
 		}
+		$deadline = (string) ( $event['payment_deadline_at'] ?? '' );
+		if ( $deadline && preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $deadline ) ) {
+			$local = DateTimeImmutable::createFromFormat( 'Y-m-d\TH:i', $deadline, wp_timezone() );
+			return $local ? $local->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' ) : null;
+		}
+		// Compatibilità con eventi salvati prima della versione 3.4.9.
+		$minutes = absint( $event['reservation_minutes'] ?? 0 );
+		if ( ! $minutes ) return null;
 		$base = DateTimeImmutable::createFromFormat( 'Y-m-d H:i:s', $now, new DateTimeZone( 'UTC' ) );
 		return $base ? $base->modify( '+' . $minutes . ' minutes' )->format( 'Y-m-d H:i:s' ) : null;
 	}

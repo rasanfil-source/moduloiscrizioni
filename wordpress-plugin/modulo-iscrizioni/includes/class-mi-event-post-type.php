@@ -112,7 +112,7 @@ final class MI_Event_Post_Type {
 		$payment_methods = get_post_meta( $post->ID, '_mi_payment_methods', true );
 		$payment_methods = is_array( $payment_methods ) ? $payment_methods : array();
 		$identifier_display = get_post_meta( $post->ID, '_mi_identifier_display', true ) ?: 'TEXT';
-		$reservation_minutes = min( 10080, absint( get_post_meta( $post->ID, '_mi_reservation_minutes', true ) ) );
+		$payment_deadline_at = (string) get_post_meta( $post->ID, '_mi_payment_deadline_at', true );
 		$privacy_policy_version = (string) get_post_meta( $post->ID, '_mi_privacy_policy_version', true );
 		$privacy_consent_id = (string) ( get_post_meta( $post->ID, '_mi_privacy_consent_id', true ) ?: 'privacy-' . $post->ID );
 		$marketing_enabled = '1' === get_post_meta( $post->ID, '_mi_marketing_enabled', true );
@@ -147,8 +147,8 @@ final class MI_Event_Post_Type {
 			<p><label for="mi_event_starts_at"><strong>Data e ora dell’evento</strong></label><br><input id="mi_event_starts_at" name="mi_event_starts_at" type="datetime-local" value="<?php echo esc_attr( $event_starts_at ); ?>"></p>
 			<p><label for="mi_event_location"><strong>Luogo dell’evento</strong></label><br><input id="mi_event_location" name="mi_event_location" type="text" maxlength="180" value="<?php echo esc_attr( $event_location ); ?>" placeholder="Es. Piazza San Pietro, Roma"></p>
 			<p><label><input name="mi_waitlist_enabled" type="checkbox" value="1" <?php checked( $waitlist ); ?>> Attiva automaticamente la lista d’attesa a esaurimento posti</label></p>
-			<p><label for="mi_reservation_minutes"><strong>Scadenza prenotazioni non saldate</strong></label><br><input id="mi_reservation_minutes" name="mi_reservation_minutes" type="number" min="0" max="10080" value="<?php echo esc_attr( $reservation_minutes ); ?>"> minuti</p>
-			<p class="description">Zero disattiva la scadenza automatica. È applicata soltanto agli eventi con versamenti tracciati.</p>
+			<p><label for="mi_payment_deadline_at"><strong>Scadenza prenotazioni non saldate</strong></label><br><input id="mi_payment_deadline_at" name="mi_payment_deadline_at" type="datetime-local" value="<?php echo esc_attr( $payment_deadline_at ); ?>"></p>
+			<p class="description">Lascia vuoto per non applicare una scadenza automatica. È usata soltanto per gli eventi con versamenti tracciati.</p>
 			<p><label for="mi_pricing_mode"><strong>Prezzo</strong></label><br><select id="mi_pricing_mode" name="mi_pricing_mode"><option value="NONE" <?php selected( $pricing_mode, 'NONE' ); ?>>Nessun prezzo</option><option value="ZERO" <?php selected( $pricing_mode, 'ZERO' ); ?>>Gratuito esplicito</option><option value="CALCULATED" <?php selected( $pricing_mode, 'CALCULATED' ); ?>>Calcolato dalle quote</option></select></p>
 			<p><label for="mi_economic_mode"><strong>Gestione economica</strong></label><br><select id="mi_economic_mode" name="mi_economic_mode"><option value="REGISTRATION_ONLY" <?php selected( $economic_mode, 'REGISTRATION_ONLY' ); ?>>Solo iscrizione</option><option value="PRICE_ONLY" <?php selected( $economic_mode, 'PRICE_ONLY' ); ?>>Prezzo informativo</option><option value="FULL_PAYMENT" <?php selected( $economic_mode, 'FULL_PAYMENT' ); ?>>Versamento completo</option><option value="DEPOSIT_BALANCE" <?php selected( $economic_mode, 'DEPOSIT_BALANCE' ); ?>>Caparra e saldo</option></select></p>
 			<p data-mi-economic-deposit><label for="mi_deposit_percentage"><strong>Caparra percentuale</strong></label><br><input id="mi_deposit_percentage" name="mi_deposit_percentage" type="number" min="1" max="99" value="<?php echo esc_attr( $deposit_percentage ); ?>"> %</p>
@@ -256,7 +256,11 @@ final class MI_Event_Post_Type {
 		$capacity = isset( $_POST['mi_capacity'] ) ? min( 10000, max( 1, absint( $_POST['mi_capacity'] ) ) ) : 30;
 		update_post_meta( $post_id, '_mi_capacity', $capacity );
 		update_post_meta( $post_id, '_mi_waitlist_enabled', isset( $_POST['mi_waitlist_enabled'] ) ? '1' : '0' );
-		update_post_meta( $post_id, '_mi_reservation_minutes', min( 10080, absint( $_POST['mi_reservation_minutes'] ?? 0 ) ) );
+		$payment_deadline_at = isset( $_POST['mi_payment_deadline_at'] ) ? sanitize_text_field( wp_unslash( $_POST['mi_payment_deadline_at'] ) ) : '';
+		if ( '' === $payment_deadline_at || preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $payment_deadline_at ) ) {
+			update_post_meta( $post_id, '_mi_payment_deadline_at', $payment_deadline_at );
+			delete_post_meta( $post_id, '_mi_reservation_minutes' );
+		}
 		update_post_meta( $post_id, '_mi_privacy_policy_version', sanitize_text_field( wp_unslash( $_POST['mi_privacy_policy_version'] ?? '' ) ) );
 		update_post_meta( $post_id, '_mi_privacy_consent_id', sanitize_key( wp_unslash( $_POST['mi_privacy_consent_id'] ?? '' ) ) );
 		update_post_meta( $post_id, '_mi_marketing_enabled', isset( $_POST['mi_marketing_enabled'] ) ? '1' : '0' );
