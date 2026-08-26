@@ -115,7 +115,8 @@ final class MI_Event_Post_Type {
 		$identifier_display = get_post_meta( $post->ID, '_mi_identifier_display', true ) ?: 'TEXT';
 		$payment_deadline_at = (string) get_post_meta( $post->ID, '_mi_payment_deadline_at', true );
 		$marketing_enabled = '1' === get_post_meta( $post->ID, '_mi_marketing_enabled', true );
-		$high_impact_approved = '1' === get_post_meta( $post->ID, '_mi_high_impact_approved', true );
+		$custom_participant_fields = MI_Field_Schema::sanitize_custom_fields( get_post_meta( $post->ID, '_mi_custom_participant_fields', true ) );
+		$special_requests_enabled = '1' === get_post_meta( $post->ID, '_mi_special_requests_enabled', true );
 		$ticket_types = get_post_meta( $post->ID, '_mi_ticket_types', true );
 		$options = get_post_meta( $post->ID, '_mi_options', true );
 		$options = is_array( $options ) ? $options : array();
@@ -155,8 +156,8 @@ final class MI_Event_Post_Type {
 			<p class="description" data-mi-economic-help aria-live="polite"></p>
 			<p><label for="mi_identifier_display"><strong>Identificativo nell’email</strong></label><br><select id="mi_identifier_display" name="mi_identifier_display"><option value="NONE" <?php selected( $identifier_display, 'NONE' ); ?>>Non mostrare</option><option value="TEXT" <?php selected( $identifier_display, 'TEXT' ); ?>>Testo</option><option value="QR" <?php selected( $identifier_display, 'QR' ); ?>>QR facoltativo</option><option value="BARCODE" <?php selected( $identifier_display, 'BARCODE' ); ?>>Barcode facoltativo</option></select></p>
 			<p class="description">QR e barcode sono scelte dell’organizzatore. Il payload resta legato all’evento e al codice ordine, senza dati personali.</p>
-			<p><label><input name="mi_marketing_enabled" type="checkbox" value="1" <?php checked( $marketing_enabled ); ?>> Mostra il campo facoltativo “Comunicazioni su future iniziative”</label></p>
-			<p><label><input name="mi_high_impact_approved" type="checkbox" value="1" <?php checked( $high_impact_approved ); ?>> La verifica privacy per campi ad alto impatto è stata approvata</label></p>
+			<p><label><input name="mi_marketing_enabled" type="checkbox" value="1" <?php checked( $marketing_enabled ); ?>> Chiedi: “Vuoi essere avvisato delle future iniziative?”</label></p>
+			<p><label><input name="mi_special_requests_enabled" type="checkbox" value="1" <?php checked( $special_requests_enabled ); ?>> Mostra il campo facoltativo “Richieste particolari”</label></p>
 		</div>
 		<hr>
 		<h3>Dati dei partecipanti</h3>
@@ -186,6 +187,14 @@ final class MI_Event_Post_Type {
 			<strong>Anteprima partecipante</strong>
 			<ul data-mi-field-preview></ul>
 		</div>
+		<h3>Domande personalizzate</h3>
+		<p class="description">Aggiungi domande specifiche per questo evento. Le risposte seguiranno la scelta “solo uno” oppure “tutti gli iscritti”.</p>
+		<table class="widefat striped" id="mi-custom-fields"><thead><tr><th>Codice</th><th>Domanda</th><th>Tipo risposta</th><th>Scelte</th><th>Obbligatoria</th><th></th></tr></thead><tbody>
+		<?php foreach ( $custom_participant_fields as $custom_index => $field ) : ?>
+			<tr><td><input name="mi_custom_field_key[<?php echo esc_attr( $custom_index ); ?>]" value="<?php echo esc_attr( preg_replace( '/^custom_/', '', $field['key'] ) ); ?>" pattern="[a-z0-9_-]+"></td><td><input name="mi_custom_field_label[<?php echo esc_attr( $custom_index ); ?>]" value="<?php echo esc_attr( $field['label'] ); ?>" required></td><td><select name="mi_custom_field_type[<?php echo esc_attr( $custom_index ); ?>]"><?php foreach ( array( 'text' => 'Risposta breve', 'textarea' => 'Risposta lunga', 'date' => 'Data', 'select' => 'Scelta singola', 'email' => 'Email', 'tel' => 'Cellulare' ) as $type => $label ) : ?><option value="<?php echo esc_attr( $type ); ?>" <?php selected( $field['type'], $type ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select></td><td><input name="mi_custom_field_options[<?php echo esc_attr( $custom_index ); ?>]" value="<?php echo esc_attr( implode( ' | ', $field['options'] ?? array() ) ); ?>" placeholder="Opzione A | Opzione B"></td><td><input type="hidden" name="mi_custom_field_required[<?php echo esc_attr( $custom_index ); ?>]" value="0"><input name="mi_custom_field_required[<?php echo esc_attr( $custom_index ); ?>]" type="checkbox" value="1" <?php checked( ! empty( $field['required'] ) ); ?>></td><td><button type="button" class="button mi-remove-custom-field">Rimuovi</button></td></tr>
+		<?php endforeach; ?>
+		</tbody></table>
+		<p><button type="button" class="button" id="mi-add-custom-field">Aggiungi domanda</button></p>
 		<h3>Tipologie di iscrizione</h3>
 		<table class="widefat striped" id="mi-ticket-types"><thead><tr><th>Codice</th><th>Nome</th><th>Prezzo €</th><th>Massimo per ordine</th><th>Capienza tipo</th><th></th></tr></thead><tbody>
 		<?php foreach ( $ticket_types as $index => $ticket ) : ?>
@@ -274,7 +283,7 @@ final class MI_Event_Post_Type {
 		if ( ! get_post_meta( $post_id, '_mi_privacy_consent_id', true ) ) update_post_meta( $post_id, '_mi_privacy_consent_id', 'privacy-' . $post_id );
 		update_post_meta( $post_id, '_mi_marketing_enabled', isset( $_POST['mi_marketing_enabled'] ) ? '1' : '0' );
 		if ( ! get_post_meta( $post_id, '_mi_marketing_consent_id', true ) ) update_post_meta( $post_id, '_mi_marketing_consent_id', 'marketing-' . $post_id );
-		update_post_meta( $post_id, '_mi_high_impact_approved', isset( $_POST['mi_high_impact_approved'] ) ? '1' : '0' );
+		update_post_meta( $post_id, '_mi_special_requests_enabled', isset( $_POST['mi_special_requests_enabled'] ) ? '1' : '0' );
 
 		foreach ( array( 'opens_at', 'closes_at' ) as $field ) {
 			$key = 'mi_registration_' . $field;
@@ -322,6 +331,15 @@ final class MI_Event_Post_Type {
 		update_post_meta( $post_id, '_mi_data_profile', $field_configuration['profile'] );
 		update_post_meta( $post_id, '_mi_participant_fields', $field_configuration['enabled'] );
 		update_post_meta( $post_id, '_mi_participant_required_fields', $field_configuration['required'] );
+		$custom_keys = (array) wp_unslash( $_POST['mi_custom_field_key'] ?? array() );
+		$custom_labels = (array) wp_unslash( $_POST['mi_custom_field_label'] ?? array() );
+		$custom_types = (array) wp_unslash( $_POST['mi_custom_field_type'] ?? array() );
+		$custom_options = (array) wp_unslash( $_POST['mi_custom_field_options'] ?? array() );
+		$custom_required = (array) wp_unslash( $_POST['mi_custom_field_required'] ?? array() );
+		$custom_rows = array();
+		foreach ( $custom_labels as $index => $label ) $custom_rows[] = array( 'key' => $custom_keys[ $index ] ?? '', 'label' => $label, 'type' => $custom_types[ $index ] ?? 'text', 'options' => $custom_options[ $index ] ?? '', 'required' => ! empty( $custom_required[ $index ] ) );
+		update_post_meta( $post_id, '_mi_custom_participant_fields', MI_Field_Schema::sanitize_custom_fields( $custom_rows ) );
+		update_post_meta( $post_id, '_mi_high_impact_approved', MI_Field_Schema::has_high_impact_fields( $field_configuration ) ? '1' : '0' );
 		$participant_extra_scope = isset( $_POST['mi_participant_extra_scope'] ) ? strtoupper( sanitize_key( wp_unslash( $_POST['mi_participant_extra_scope'] ) ) ) : 'ONE';
 		update_post_meta( $post_id, '_mi_participant_extra_scope', 'ALL' === $participant_extra_scope ? 'ALL' : 'ONE' );
 

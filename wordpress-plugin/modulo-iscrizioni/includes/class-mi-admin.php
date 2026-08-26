@@ -294,6 +294,7 @@ final class MI_Admin {
 		<tr><th scope="row">Referente</th><td><?php echo esc_html( $detail['buyer_first_name'] . ' ' . $detail['buyer_last_name'] ); ?></td></tr>
 		<tr><th scope="row">Email</th><td><?php echo esc_html( $detail['buyer_email'] ); ?></td></tr>
 		<tr><th scope="row">Cellulare</th><td><?php echo esc_html( $detail['buyer_phone'] ); ?></td></tr>
+		<tr><th scope="row">Richieste particolari</th><td><?php echo nl2br( esc_html( $detail['special_requests'] ?: 'Nessuna' ) ); ?></td></tr>
 		<tr><th scope="row">Modalità di pagamento richiesta</th><td><?php echo esc_html( self::etichetta_modalita_economica( $detail['economic_mode'] ) ); ?></td></tr>
 		<tr><th scope="row">Totale</th><td><?php echo esc_html( self::formatta_importo( $detail['total_cents'] ) ); ?></td></tr>
 		<tr><th scope="row">Primo versamento</th><td><?php echo esc_html( self::formatta_importo( $detail['initial_due_cents'] ) ); ?></td></tr>
@@ -397,7 +398,7 @@ final class MI_Admin {
 		}
 		$registrations = $wpdb->prefix . 'mi_registrations';
 		$participants = $wpdb->prefix . 'mi_participants';
-		$rows = $wpdb->get_results( "SELECT r.order_code, r.event_id, r.status, r.workspace_status, r.buyer_first_name, r.buyer_last_name, r.buyer_email, r.buyer_phone, r.economic_mode, r.total_cents, r.initial_due_cents, r.balance_cents, r.order_options_json, r.privacy_consent_id, r.privacy_policy_version, r.privacy_accepted_at, r.created_at, p.ticket_type_code, p.first_name, p.last_name, p.extra_json, p.options_json FROM {$registrations} r LEFT JOIN {$participants} p ON p.registration_id = r.id {$where} ORDER BY r.id DESC, p.id ASC", ARRAY_A );
+		$rows = $wpdb->get_results( "SELECT r.order_code, r.event_id, r.status, r.workspace_status, r.buyer_first_name, r.buyer_last_name, r.buyer_email, r.buyer_phone, r.special_requests, r.economic_mode, r.total_cents, r.initial_due_cents, r.balance_cents, r.order_options_json, r.privacy_consent_id, r.privacy_policy_version, r.privacy_accepted_at, r.created_at, p.ticket_type_code, p.first_name, p.last_name, p.extra_json, p.options_json FROM {$registrations} r LEFT JOIN {$participants} p ON p.registration_id = r.id {$where} ORDER BY r.id DESC, p.id ASC", ARRAY_A );
 		header( 'Content-Type: text/csv; charset=UTF-8' );
 		header( 'Content-Disposition: attachment; filename="iscrizioni-' . gmdate( 'Y-m-d' ) . '.csv"' );
 		$output = fopen( 'php://output', 'w' );
@@ -410,15 +411,15 @@ final class MI_Admin {
 				$extra_keys = array_values( array_unique( array_merge( $extra_keys, array_keys( $answers ) ) ) );
 			}
 		}
-		$headers = array( 'Codice iscrizione', 'Evento', 'Stato', 'Stato Workspace', 'Nome referente', 'Cognome referente', 'Email referente', 'Cellulare referente', 'Modalità di pagamento richiesta', 'Totale centesimi', 'Primo versamento centesimi', 'Saldo centesimi', 'Opzioni ordine JSON', 'ID consenso privacy', 'Versione informativa', 'Accettazione privacy UTC', 'Data UTC', 'Tipologia', 'Nome partecipante', 'Cognome partecipante', 'Opzioni partecipante JSON' );
+		$headers = array( 'Codice iscrizione', 'Evento', 'Stato', 'Stato Workspace', 'Nome referente', 'Cognome referente', 'Email referente', 'Cellulare referente', 'Richieste particolari', 'Modalità di pagamento richiesta', 'Totale centesimi', 'Primo versamento centesimi', 'Saldo centesimi', 'Opzioni ordine JSON', 'ID consenso privacy', 'Versione informativa', 'Accettazione privacy UTC', 'Data UTC', 'Tipologia', 'Nome partecipante', 'Cognome partecipante', 'Opzioni partecipante JSON' );
 		foreach ( $extra_keys as $key ) {
-			$headers[] = isset( $catalog[ $key ]['label'] ) ? $catalog[ $key ]['label'] : 'Dato aggiuntivo';
+			$headers[] = isset( $catalog[ $key ]['label'] ) ? $catalog[ $key ]['label'] : 'Dato aggiuntivo (' . $key . ')';
 		}
 		fputcsv( $output, $headers, ';' );
 		foreach ( $rows as $row ) {
 			$answers = json_decode( (string) $row['extra_json'], true );
 			$answers = is_array( $answers ) ? $answers : array();
-			$line = array( $row['order_code'], get_the_title( (int) $row['event_id'] ), $row['status'], $row['workspace_status'], $row['buyer_first_name'], $row['buyer_last_name'], $row['buyer_email'], $row['buyer_phone'], self::etichetta_modalita_economica( $row['economic_mode'] ), $row['total_cents'], $row['initial_due_cents'], $row['balance_cents'], $row['order_options_json'], $row['privacy_consent_id'], $row['privacy_policy_version'], $row['privacy_accepted_at'], $row['created_at'], $row['ticket_type_code'], $row['first_name'], $row['last_name'], $row['options_json'] );
+			$line = array( $row['order_code'], get_the_title( (int) $row['event_id'] ), $row['status'], $row['workspace_status'], $row['buyer_first_name'], $row['buyer_last_name'], $row['buyer_email'], $row['buyer_phone'], $row['special_requests'], self::etichetta_modalita_economica( $row['economic_mode'] ), $row['total_cents'], $row['initial_due_cents'], $row['balance_cents'], $row['order_options_json'], $row['privacy_consent_id'], $row['privacy_policy_version'], $row['privacy_accepted_at'], $row['created_at'], $row['ticket_type_code'], $row['first_name'], $row['last_name'], $row['options_json'] );
 			foreach ( $extra_keys as $key ) {
 				$line[] = isset( $answers[ $key ] ) ? $answers[ $key ] : '';
 			}
@@ -580,12 +581,6 @@ final class MI_Admin {
 		$payment_methods = isset( $_POST['mi_payment_methods'] ) ? (array) wp_unslash( $_POST['mi_payment_methods'] ) : array();
 		$privacy_version = (string) ( get_post_meta( $post_id, '_mi_privacy_policy_version', true ) ?: wp_date( 'Y-m' ) );
 		$privacy_consent_id = (string) ( get_post_meta( $post_id, '_mi_privacy_consent_id', true ) ?: 'privacy-' . $post_id );
-		$field_configuration = MI_Field_Schema::sanitize_configuration(
-			wp_unslash( $_POST['mi_data_profile'] ?? 'MINIMAL' ),
-			(array) wp_unslash( $_POST['mi_participant_fields'] ?? array() ),
-			(array) wp_unslash( $_POST['mi_participant_required'] ?? array() )
-		);
-		$high_impact_valid = ! MI_Field_Schema::has_high_impact_fields( $field_configuration ) || isset( $_POST['mi_high_impact_approved'] );
 		$privacy_valid = '' !== $privacy_version && '' !== $privacy_consent_id && (bool) get_privacy_policy_url();
 		$marketing_valid = ! isset( $_POST['mi_marketing_enabled'] ) || '' !== (string) ( get_post_meta( $post_id, '_mi_marketing_consent_id', true ) ?: 'marketing-' . $post_id );
 		$uses_price = in_array( $economic_mode, array( 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
@@ -595,7 +590,7 @@ final class MI_Admin {
 		$fixed_price_cents = self::parse_importo_centesimi( wp_unslash( $_POST['mi_fixed_price'] ?? '' ) );
 		$fixed_price_valid = $uses_price && 'FIXED' === $pricing_mode && null !== $fixed_price_cents && $fixed_price_cents > 0;
 		$valid_economic = ( $registration_only_price || $calculated_price || $fixed_price_valid ) && ( ! $collects_payment || ! empty( $payment_methods ) );
-		if ( ! $activity_id || MI_Event_Post_Type::ACTIVITY_TYPE !== get_post_type( $activity_id ) || ! $activity_stable || ! $valid_dates || ! $has_ticket || ! $valid_economic || ! $privacy_valid || ! $marketing_valid || ! $high_impact_valid ) {
+		if ( ! $activity_id || MI_Event_Post_Type::ACTIVITY_TYPE !== get_post_type( $activity_id ) || ! $activity_stable || ! $valid_dates || ! $has_ticket || ! $valid_economic || ! $privacy_valid || ! $marketing_valid ) {
 			$data['post_status'] = 'draft';
 			$message = 'Evento mantenuto in bozza: completa attività, date e tipologie.';
 			if ( ! $activity_stable ) {
@@ -606,8 +601,6 @@ final class MI_Admin {
 				$message = 'Evento mantenuto in bozza: configura la pagina privacy di WordPress, la versione dell’informativa e l’ID del consenso.';
 			} elseif ( ! $marketing_valid ) {
 				$message = 'Evento mantenuto in bozza: il campo facoltativo “Comunicazioni su future iniziative” richiede un ID specifico.';
-			} elseif ( ! $high_impact_valid ) {
-				$message = 'Evento mantenuto in bozza: i campi ad alto impatto richiedono un’approvazione privacy esplicita.';
 			}
 			set_transient( 'mi_publication_error_' . get_current_user_id(), $message, MINUTE_IN_SECONDS );
 		}

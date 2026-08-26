@@ -44,8 +44,18 @@ function verificaBusta_(envelope) {
   lock.waitLock(5000);
   try {
     const cache = CacheService.getScriptCache();
-    if (cache.get('nonce_' + nonce)) return { ok: false, error: 'REPLAYED_REQUEST' };
+	const nonceKey = Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, nonce)).replace(/=+$/, '');
+	const properties = PropertiesService.getScriptProperties();
+	let durableNonces = {};
+	try { durableNonces = JSON.parse(properties.getProperty('MI_USED_NONCES') || '{}'); } catch (error) { durableNonces = {}; }
+	const nonceCutoff = Date.now() - 180000;
+	Object.keys(durableNonces).forEach(function (key) { if (Number(durableNonces[key]) < nonceCutoff) delete durableNonces[key]; });
+	if (cache.get('nonce_' + nonce) || durableNonces[nonceKey]) return { ok: false, error: 'REPLAYED_REQUEST' };
     cache.put('nonce_' + nonce, '1', 180);
+	durableNonces[nonceKey] = Date.now();
+	const nonceKeys = Object.keys(durableNonces).sort(function (left, right) { return Number(durableNonces[right]) - Number(durableNonces[left]); });
+	nonceKeys.slice(500).forEach(function (key) { delete durableNonces[key]; });
+	properties.setProperty('MI_USED_NONCES', JSON.stringify(durableNonces));
   } finally {
     lock.releaseLock();
   }
@@ -100,8 +110,7 @@ function aggiungiIscrizione_(payload) {
 		participantIndexes[indexKey] = true;
 		const firstName = normalizzaTesto_(participant.first_name, 80);
 		const lastName = normalizzaTesto_(participant.last_name, 80);
-		const hasOptionalData = firstName || lastName || Object.keys(participant.fields || {}).some(function (key) { return normalizzaTesto_(participant.fields[key], 5000); }) || Object.keys(participant.options || {}).some(function (key) { return Number(participant.options[key]) > 0; });
-		return (participantPosition === 0 && (!firstName || !lastName)) || fieldsJson.length > 5000 || optionsJson.length > 5000;
+		return !firstName || !lastName || fieldsJson.length > 5000 || optionsJson.length > 5000;
 	})) return { ok: false, error: 'INVALID_PARTICIPANTS' };
 
   const lock = LockService.getDocumentLock();
@@ -120,8 +129,9 @@ function aggiungiIscrizione_(payload) {
       neutralizzaFormula_(buyer.first_name, 80),
       neutralizzaFormula_(buyer.last_name, 80),
       neutralizzaFormula_(buyer.email, 254),
-      neutralizzaFormula_(buyer.phone, 32),
-      participants.length,
+		neutralizzaFormula_(buyer.phone, 32),
+		neutralizzaFormula_(payload.special_requests, 2000),
+		participants.length,
       Math.max(0, Math.round(Number(payload.total_cents) || 0)),
       neutralizzaFormula_(idempotencyKey, 64),
 	  existing && existing.data_creazione ? existing.data_creazione : new Date(),

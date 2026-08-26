@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.4\.17/);
+	assert.match(source, /Version:\s+3\.4\.18/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -430,6 +430,40 @@ test('i metadati tecnici dei consensi non compaiono nel pannello evento', async 
 	assert.doesNotMatch(eventType, /<strong>ID del consenso alle comunicazioni<\/strong>/);
 	assert.match(eventType, /'privacy-' \. \$post_id/);
 	assert.match(eventType, /'marketing-' \. \$post_id/);
+});
+
+test('email e cellulare dei partecipanti sono campi configurabili e validati', async () => {
+	const schema = await read('includes/class-mi-field-schema.php');
+	const script = await read('assets/public.js');
+	assert.match(schema, /'email'\s*=>[\s\S]*Email del partecipante/);
+	assert.match(schema, /'phone'\s*=>[\s\S]*Cellulare del partecipante/);
+	assert.match(schema, /mi_participant_email_invalid/);
+	assert.match(schema, /mi_participant_phone_invalid/);
+	assert.match(script, /\['date', 'email', 'tel'\]/);
+});
+
+test('gli eventi supportano domande personalizzate e richieste particolari', async () => {
+	const eventType = await read('includes/class-mi-event-post-type.php');
+	const schema = await read('includes/class-mi-field-schema.php');
+	const service = await read('includes/class-mi-registration-service.php');
+	const activator = await read('includes/class-mi-activator.php');
+	const adminScript = await read('assets/admin.js');
+	const publicScript = await read('assets/public.js');
+	assert.match(eventType, /Domande personalizzate/);
+	assert.match(schema, /sanitize_custom_fields/);
+	assert.match(adminScript, /mi-add-custom-field/);
+	assert.match(eventType, /mi_special_requests_enabled/);
+	assert.match(activator, /special_requests text NULL/);
+	assert.match(service, /mi_special_requests_invalid/);
+	assert.match(publicScript, /Richieste particolari \(facoltativo\)/);
+});
+
+test('consenso futuro e approvazioni tecniche hanno il corretto livello di interfaccia', async () => {
+	const eventType = await read('includes/class-mi-event-post-type.php');
+	const publicScript = await read('assets/public.js');
+	assert.match(eventType, /Vuoi essere avvisato delle future iniziative/);
+	assert.doesNotMatch(eventType, /name="mi_high_impact_approved"/);
+	assert.match(publicScript, /Vuoi essere avvisato delle future iniziative/);
 });
 
 test('la configurazione economica viene normalizzata prima di ogni uso', async () => {

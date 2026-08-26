@@ -116,8 +116,9 @@ final class MI_Registration_Service {
 			'ticket_types'     => array_values( $ticket_types ),
 			'options'          => array_values( array_filter( (array) get_post_meta( $event_id, '_mi_options', true ), 'is_array' ) ),
 			'data_profile'     => $field_configuration['profile'],
-			'participant_fields'=> MI_Field_Schema::public_fields( $field_configuration ),
+			'participant_fields'=> array_merge( MI_Field_Schema::public_fields( $field_configuration ), MI_Field_Schema::sanitize_custom_fields( get_post_meta( $event_id, '_mi_custom_participant_fields', true ) ) ),
 			'participant_extra_scope' => 'ALL' === strtoupper( (string) get_post_meta( $event_id, '_mi_participant_extra_scope', true ) ) ? 'ALL' : 'ONE',
+			'special_requests_enabled' => '1' === get_post_meta( $event_id, '_mi_special_requests_enabled', true ),
 			'payment_deadline_at'=> (string) get_post_meta( $event_id, '_mi_payment_deadline_at', true ),
 			'reservation_minutes'=> min( 10080, absint( get_post_meta( $event_id, '_mi_reservation_minutes', true ) ) ),
 			'privacy_url'      => get_privacy_policy_url(),
@@ -258,6 +259,8 @@ final class MI_Registration_Service {
 		if ( is_wp_error( $buyer ) ) {
 			return $buyer;
 		}
+		$special_requests = ! empty( $event['special_requests_enabled'] ) ? sanitize_textarea_field( $payload['special_requests'] ?? '' ) : '';
+		if ( strlen( $special_requests ) > 2000 ) return new WP_Error( 'mi_special_requests_invalid', 'Le richieste particolari sono troppo lunghe.', array( 'status' => 400 ) );
 		if ( true !== ( $payload['privacy_accepted'] ?? false ) || empty( $event['privacy_url'] ) || empty( $event['privacy_policy_version'] ) || empty( $event['privacy_consent_id'] ) ) {
 			return new WP_Error( 'mi_privacy_required', 'È necessario accettare l’informativa privacy.', array( 'status' => 400 ) );
 		}
@@ -319,7 +322,7 @@ final class MI_Registration_Service {
 			$expires_at = self::registration_expiry( $event, $status, $now );
 			$revision = (array) ( $event['revision'] ?? array() );
 			$accepted_at = current_time( 'mysql', true );
-			$snapshot = self::build_order_snapshot( $event, $selection, $participants, $order_options, $buyer, $economic_summary, $status, $accepted_at, $marketing_accepted );
+			$snapshot = self::build_order_snapshot( $event, $selection, $participants, $order_options, $buyer, $economic_summary, $status, $accepted_at, $marketing_accepted, $special_requests );
 			$snapshot_json = wp_json_encode( $snapshot );
 			if ( false === $snapshot_json || strlen( $snapshot_json ) > 45000 ) {
 				throw new RuntimeException( 'Istantanea ordine non serializzabile.' );
@@ -335,6 +338,7 @@ final class MI_Registration_Service {
 					'buyer_last_name' => $buyer['last_name'],
 					'buyer_email'     => $buyer['email'],
 					'buyer_phone'     => $buyer['phone'],
+					'special_requests'=> $special_requests,
 					'total_qty'       => $selection['quantity'],
 					'economic_mode'   => $economic_summary['mode'],
 					'total_cents'     => $economic_summary['total_cents'],
@@ -515,6 +519,7 @@ final class MI_Registration_Service {
 					'email'      => $registration['buyer_email'],
 					'phone'      => $registration['buyer_phone'],
 				),
+				'special_requests'=> (string) ( $registration['special_requests'] ?? '' ),
 				'participants'   => $participants,
 				'tickets'        => $items,
 				'order_options'  => $order_options,
@@ -922,12 +927,13 @@ final class MI_Registration_Service {
 		return $base ? $base->modify( '+' . $minutes . ' minutes' )->format( 'Y-m-d H:i:s' ) : null;
 	}
 
-	private static function build_order_snapshot( $event, $selection, $participants, $order_options, $buyer, $economic_summary, $status, $accepted_at, $marketing_accepted ) {
+	private static function build_order_snapshot( $event, $selection, $participants, $order_options, $buyer, $economic_summary, $status, $accepted_at, $marketing_accepted, $special_requests = '' ) {
 		return array(
 			'schema_version' => MI_VERSION,
 			'event' => $event,
 			'status' => $status,
 			'buyer' => $buyer,
+			'special_requests' => $special_requests,
 			'tickets' => $selection['items'],
 			'participants' => $participants,
 			'order_options' => $order_options,

@@ -57,6 +57,7 @@ final class MI_Activator {
 			buyer_last_name varchar(80) NOT NULL,
 			buyer_email varchar(254) NOT NULL,
 			buyer_phone varchar(32) NOT NULL,
+			special_requests text NULL,
 			total_qty smallint(5) unsigned NOT NULL,
 			economic_mode varchar(24) NOT NULL DEFAULT 'REGISTRATION_ONLY',
 			total_cents int(10) unsigned NOT NULL DEFAULT 0,

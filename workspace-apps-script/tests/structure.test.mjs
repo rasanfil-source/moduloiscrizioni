@@ -22,7 +22,10 @@ test('il setup dichiara tutte le schede operative', () => {
 test('il web endpoint fallisce chiuso e richiede HMAC e anti replay', () => {
   assert.match(sources['Config.gs'], /MI_SHARED_SECRET/);
   assert.match(sources['WebApp.gs'], /computeHmacSha256Signature/);
-  assert.match(sources['WebApp.gs'], /REPLAYED_REQUEST/);
+	assert.match(sources['WebApp.gs'], /REPLAYED_REQUEST/);
+	assert.match(sources['WebApp.gs'], /getScriptLock/);
+	assert.match(sources['WebApp.gs'], /MI_USED_NONCES/);
+	assert.match(sources['WebApp.gs'], /120000/);
   assert.match(sources['WebApp.gs'], /envelope\.action === 'PING'/);
   assert.doesNotMatch(combined, /API_KEY\s*=\s*['"]\s*['"]/);
 });
@@ -52,7 +55,7 @@ test('le funzioni Apps Script applicative hanno nomi italiani', () => {
 });
 
 test('la migrazione aggiunge il riepilogo economico alle iscrizioni', () => {
-  assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.2\.3'/);
+	assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.2\.4'/);
   assert.match(sources['Config.gs'], /modalita_economica/);
   assert.match(sources['Config.gs'], /primo_versamento_centesimi/);
   assert.match(sources['Config.gs'], /saldo_centesimi/);

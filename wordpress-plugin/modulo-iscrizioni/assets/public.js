@@ -19,10 +19,25 @@
 	const nextButton = root.querySelector('[data-mi-next]');
 	const backButton = root.querySelector('[data-mi-back]');
 	const stickySummary = root.querySelector('[data-mi-sticky-summary]');
+	const marketingInput = form.elements.namedItem('marketingAccepted');
+	const marketingText = marketingInput?.closest('label')?.querySelector('span');
+	if (marketingText) marketingText.textContent = 'Vuoi essere avvisato delle future iniziative? Il consenso è facoltativo e può essere revocato.';
 	const participantDetailsRoot = document.createElement('div');
 	participantDetailsRoot.className = 'mi-registration__participant-details';
 	participantDetailsRoot.dataset.miParticipantDetails = '';
 	steps[2]?.querySelector('.mi-registration__grid')?.before(participantDetailsRoot);
+	if (config.event.special_requests_enabled) {
+	  const specialRequestsLabel = document.createElement('label');
+	  specialRequestsLabel.className = 'mi-registration__special-requests';
+	  specialRequestsLabel.textContent = 'Richieste particolari (facoltativo)';
+	  const specialRequestsInput = document.createElement('textarea');
+	  specialRequestsInput.name = 'specialRequests';
+	  specialRequestsInput.rows = 4;
+	  specialRequestsInput.maxLength = 2000;
+	  specialRequestsInput.placeholder = 'Segnala esigenze organizzative, alimentari o di accessibilità che ritieni utile comunicare.';
+	  specialRequestsLabel.append(specialRequestsInput);
+	  steps[2]?.querySelector('.mi-registration__grid')?.before(specialRequestsLabel);
+	}
 	let currentStep = 1;
     let requestKey = makeRequestKey();
     let participantValues = [];
@@ -292,9 +307,9 @@
       } else if (field.type === 'textarea') {
         input = document.createElement('textarea');
         input.rows = 3;
-      } else {
-        input = document.createElement('input');
-        input.type = field.type === 'date' ? 'date' : 'text';
+	  } else {
+		input = document.createElement('input');
+		input.type = ['date', 'email', 'tel'].includes(field.type) ? field.type : 'text';
       }
       input.name = `participant-${index}-field-${field.key}`;
 	  input.required = required && Boolean(field.required);
@@ -442,12 +457,13 @@
         tickets: ticketSelection(),
 		order_options: orderOptionSelection(),
         participants: participantPayload(),
-        buyer: {
+		buyer: {
           first_name: String(formData.get('buyerFirstName') || '').trim(),
           last_name: String(formData.get('buyerLastName') || '').trim(),
           email: String(formData.get('buyerEmail') || '').trim(),
-          phone: String(formData.get('buyerPhone') || '').trim()
-        }
+		  phone: String(formData.get('buyerPhone') || '').trim()
+		},
+		special_requests: String(formData.get('specialRequests') || '').trim()
       };
 
       try {
@@ -457,7 +473,7 @@
           headers: {
             'Content-Type': 'application/json',
             'X-Idempotency-Key': requestKey
-          },
+		},
           body: JSON.stringify(payload)
         });
         const result = await response.json();

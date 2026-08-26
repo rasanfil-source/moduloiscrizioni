@@ -89,6 +89,18 @@ expect( is_wp_error( $missing_required ), 'campo esteso obbligatorio non applica
 $implausible_birth_date = invoke_private( 'validate_participants', array( array( array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Persona', 'last_name' => 'Demo', 'fields' => array( 'birth_date' => '1800-01-01' ) ) ), $one_selection, $extended_fields, array() ) );
 expect( is_wp_error( $implausible_birth_date ), 'data di nascita anteriore a 120 anni accettata' );
 
+$contact_fields = array(
+	array( 'key' => 'email', 'type' => 'email', 'required' => true ),
+	array( 'key' => 'phone', 'type' => 'tel', 'required' => true ),
+);
+$valid_contacts = invoke_private( 'validate_participants', array( array( array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Persona', 'last_name' => 'Demo', 'fields' => array( 'email' => 'persona@example.invalid', 'phone' => '+39 333 1234567' ) ) ), $one_selection, $contact_fields, array() ) );
+expect( ! is_wp_error( $valid_contacts ), 'contatti partecipante validi rifiutati' );
+$invalid_contacts = invoke_private( 'validate_participants', array( array( array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Persona', 'last_name' => 'Demo', 'fields' => array( 'email' => 'non-valida', 'phone' => '333' ) ) ), $one_selection, $contact_fields, array() ) );
+expect( is_wp_error( $invalid_contacts ), 'contatti partecipante non validi accettati' );
+
+$custom_fields = MI_Field_Schema::sanitize_custom_fields( array( array( 'key' => 'parrocchia', 'label' => 'Parrocchia di provenienza', 'type' => 'text', 'required' => true ) ) );
+expect( 1 === count( $custom_fields ) && 'custom_parrocchia' === $custom_fields[0]['key'] && true === $custom_fields[0]['required'], 'domanda personalizzata non normalizzata' );
+
 $two_selection = invoke_private( 'validate_selection', array( $event, array( 'intero' => 2 ) ) );
 $duplicate_ticket_index = invoke_private( 'validate_participants', array( array(
 	array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Uno', 'last_name' => 'Demo' ),
