@@ -37,14 +37,6 @@ final class MI_Field_Schema {
 				'options'    => array( 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL' ),
 				'help'       => 'Usa una scelta controllata invece di testo libero.',
 			),
-			'dietary_notes' => array(
-				'key'        => 'dietary_notes',
-				'label'      => 'Esigenze alimentari',
-				'type'       => 'textarea',
-				'max_length' => 300,
-				'help'       => 'Può contenere dati particolari: attivare soltanto dopo verifica privacy.',
-				'high_impact'=> true,
-			),
 		);
 	}
 

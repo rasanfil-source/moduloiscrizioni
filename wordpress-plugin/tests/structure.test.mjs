@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.4\.1/);
+  assert.match(source, /Version:\s+3\.4\.7/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -83,8 +83,27 @@ test('il percorso pubblico è progressivo e dispone di un modello concentrato', 
   assert.match(shortcode, /data-mi-step="3"/);
   assert.match(shortcode, /theme_page_templates/);
   assert.match(script, /showStep/);
+  assert.match(script, /prefillBuyerFromFirstParticipant/);
+  assert.match(script, /buyerEdited\.firstName/);
+  assert.match(script, /buyerEdited\.lastName/);
+  assert.match(script, /Completa i tuoi dati/);
+  assert.match(script, /Abbiamo bisogno di qualche dato in più di almeno uno degli iscritti/);
+  assert.match(script, /Aggiungi i dati degli altri partecipanti \(facoltativo\)/);
+  assert.match(script, /data-mi-required-when-open/);
+  assert.match(script, /additionalToggle\.addEventListener\('click'/);
+  assert.match(script, /sourceInputs/);
   assert.match(template, /wp_head/);
   assert.doesNotMatch(template, /get_header|get_sidebar/);
+});
+
+test('la bacheca offre ai delegati un accesso diretto al servizio moduli', async () => {
+  const admin = await read('includes/class-mi-admin.php');
+  const access = await read('includes/class-mi-access.php');
+  assert.match(admin, /wp_dashboard_setup/);
+  assert.match(admin, /Servizio moduli iscrizioni/);
+  assert.match(admin, /Apri il servizio moduli/);
+  assert.match(admin, /mi_view_registrations/);
+  assert.doesNotMatch(access, /remove_menu_page\( 'index\.php' \)/);
 });
 
 test('l’integrazione Divi è facoltativa e riusa il motore dello shortcode', async () => {
@@ -107,6 +126,8 @@ test('l’anteprima riservata non invia iscrizioni e accetta le bozze autorizzat
   assert.match(shortcode, /admin_post_mi_anteprima_evento/);
   assert.match(shortcode, /check_admin_referer/);
   assert.match(shortcode, /MI_Access::can_access_event/);
+	assert.match(shortcode, /set_current_screen\( 'mi_event_preview' \)/);
+	assert.match(shortcode, /show_admin_bar\( false \)/);
   assert.match(service, /\$allow_unpublished/);
   assert.match(script, /if \(config\.preview\)/);
 });
@@ -544,4 +565,3 @@ test('il pannello verifica lo schema economico senza creare iscrizioni', async (
   assert.match(settings, /schema_version/);
   assert.match(client, /STATO_SCHEMA/);
 });
-

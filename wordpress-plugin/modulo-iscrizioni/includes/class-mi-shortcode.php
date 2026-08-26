@@ -36,6 +36,8 @@ final class MI_Shortcode {
 	}
 
 	public static function render( $attributes ) {
+		if ( ! headers_sent() ) nocache_headers();
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) define( 'DONOTCACHEPAGE', true );
 		$attributes = shortcode_atts( array( 'event' => 0, 'anteprima' => 0 ), $attributes, 'modulo_iscrizioni' );
 		$event_id = absint( $attributes['event'] );
 		$is_preview = ! empty( $attributes['anteprima'] ) && current_user_can( 'mi_manage_events' ) && MI_Access::can_access_event( $event_id );
@@ -86,6 +88,11 @@ final class MI_Shortcode {
 		$event_id = isset( $_GET['event'] ) ? absint( $_GET['event'] ) : 0;
 		if ( ! current_user_can( 'mi_manage_events' ) || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Non hai accesso a questo evento.', 'Accesso negato', array( 'response' => 403 ) );
 		check_admin_referer( 'mi_anteprima_evento_' . $event_id );
+		// admin-post.php non inizializza uno screen: Divi e la toolbar lo assumono presente negli hook di pagina.
+		if ( function_exists( 'get_current_screen' ) && function_exists( 'set_current_screen' ) && ! get_current_screen() ) {
+			set_current_screen( 'mi_event_preview' );
+		}
+		show_admin_bar( false );
 		$content = self::render( array( 'event' => $event_id, 'anteprima' => 1 ) );
 		nocache_headers();
 		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width, initial-scale=1"><?php wp_head(); ?></head><body class="mi-focused-page"><main class="mi-focused-page__main"><?php echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- HTML già protetto dal renderer. ?></main><?php wp_footer(); ?></body></html><?php

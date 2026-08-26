@@ -22,15 +22,21 @@ function verificaBusta_(envelope) {
   const timestamp = Number(envelope.timestamp || 0);
   const nonce = normalizzaTesto_(envelope.nonce, 80);
   const signature = normalizzaTesto_(envelope.signature, 200);
-  if (!timestamp || Math.abs(Date.now() - timestamp) > 300000) return { ok: false, error: 'STALE_REQUEST' };
+  if (!timestamp || Math.abs(Date.now() - timestamp) > 120000) return { ok: false, error: 'STALE_REQUEST' };
   if (nonce.length < 16 || signature.length < 32) return { ok: false, error: 'INVALID_SIGNATURE' };
-  const cache = CacheService.getScriptCache();
-  if (cache.get('nonce_' + nonce)) return { ok: false, error: 'REPLAYED_REQUEST' };
   const message = timestamp + '\n' + nonce + '\n' + String(envelope.action || '') + '\n' + serializzaInModoStabile_(envelope.payload || {});
   const digest = Utilities.computeHmacSha256Signature(message, ottieniSegretoScript_());
   const expected = Utilities.base64EncodeWebSafe(digest).replace(/=+$/, '');
   if (!confrontaInTempoCostante_(expected, signature)) return { ok: false, error: 'INVALID_SIGNATURE' };
-  cache.put('nonce_' + nonce, '1', 600);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(5000);
+  try {
+    const cache = CacheService.getScriptCache();
+    if (cache.get('nonce_' + nonce)) return { ok: false, error: 'REPLAYED_REQUEST' };
+    cache.put('nonce_' + nonce, '1', 180);
+  } finally {
+    lock.releaseLock();
+  }
   return { ok: true };
 }
 
@@ -72,7 +78,7 @@ function aggiungiIscrizione_(payload) {
 		return false;
 	}) || ticketQuantity !== participants.length) return { ok: false, error: 'INVALID_TICKETS' };
 	const participantIndexes = {};
-	if (participants.some(function (participant) {
+	if (participants.some(function (participant, participantPosition) {
 		const fieldsJson = JSON.stringify(participant.fields || {});
 		const optionsJson = JSON.stringify(participant.options || []);
 		const code = normalizzaTesto_(participant.ticket_type_code, 64);
@@ -80,7 +86,10 @@ function aggiungiIscrizione_(payload) {
 		const indexKey = code + ':' + ticketIndex;
 		if (!/^[A-Za-z0-9_-]{1,64}$/.test(code) || !Number.isInteger(ticketIndex) || ticketIndex < 1 || ticketIndex > Number(ticketCounts[code] || 0) || participantIndexes[indexKey]) return true;
 		participantIndexes[indexKey] = true;
-		return !normalizzaTesto_(participant.first_name, 80) || !normalizzaTesto_(participant.last_name, 80) || fieldsJson.length > 5000 || optionsJson.length > 5000;
+		const firstName = normalizzaTesto_(participant.first_name, 80);
+		const lastName = normalizzaTesto_(participant.last_name, 80);
+		const hasOptionalData = firstName || lastName || Object.keys(participant.fields || {}).some(function (key) { return normalizzaTesto_(participant.fields[key], 5000); }) || Object.keys(participant.options || {}).some(function (key) { return Number(participant.options[key]) > 0; });
+		return (participantPosition === 0 || hasOptionalData) && (!firstName || !lastName) || fieldsJson.length > 5000 || optionsJson.length > 5000;
 	})) return { ok: false, error: 'INVALID_PARTICIPANTS' };
 
   const lock = LockService.getDocumentLock();
@@ -178,7 +187,7 @@ function sincronizzaPagamenti_(orderCode, payments) {
     const reference = normalizzaTesto_(payment.external_reference, 120);
     const origin = 'WP|' + orderCode + '|' + kind + '|' + installment + '|' + effective + '|' + amount + '|' + source + '|' + reference;
     if (existing.some(function (row) { return String(row.id_inserimento_origine) === origin; })) return;
-    sheet.appendRow([creaIdentificativoOpaco_('pay'), neutralizzaFormula_(orderCode, 64), kind, installment, effectiveDate, amount, 'EUR', source, neutralizzaFormula_(reference, 120), neutralizzaFormula_(payment.operator_label, 100), 'WORDPRESS', origin, new Date()]);
+    sheet.appendRow([creaIdentificativoOpaco_('pay'), neutralizzaFormula_(orderCode, 64), kind, installment, effectiveDate, amount, 'EUR', source, neutralizzaFormula_(reference, 120), neutralizzaFormula_(payment.operator_label, 100), 'WORDPRESS', origin, new Date(), neutralizzaFormula_(payment.administrative_note, 500)]);
     existing.push({ id_inserimento_origine: origin });
   });
 }

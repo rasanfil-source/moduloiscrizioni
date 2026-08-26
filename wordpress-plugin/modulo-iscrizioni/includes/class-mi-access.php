@@ -120,7 +120,6 @@ final class MI_Access {
 		if ( self::is_global_manager() || ! current_user_can( 'mi_manage_events' ) ) {
 			return;
 		}
-		remove_menu_page( 'index.php' );
 		remove_menu_page( 'edit-comments.php' );
 	}
 }

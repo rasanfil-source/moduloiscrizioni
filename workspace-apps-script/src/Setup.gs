@@ -4,6 +4,9 @@ function onOpen() {
     .addSeparator()
     .addItem('Convalida pagamenti selezionati', 'convalidaPagamentiSelezionati')
     .addItem('Convalida tutti i pagamenti in attesa', 'convalidaPagamentiInAttesa')
+    .addSeparator()
+    .addItem('Configura destinatario email di test', 'configuraDestinatarioTestEmail')
+    .addItem('Invia coda al solo destinatario di test', 'inviaCodaEmailDiTest')
     .addToUi();
 }
 
@@ -50,7 +53,7 @@ function inizializzaScheda_(sheet, headers) {
 	const usesPreviousHeaders = previous.length > 0 && current.slice(0, previous.length).join('|') === previous.join('|') && current.slice(previous.length).every(function (value) { return value === ''; });
 	const italianPrevious = MI_INTESTAZIONI_PRECEDENTI[sheet.getName()] || [];
 	const usesItalianPrevious = italianPrevious.length > 0 && current.slice(0, italianPrevious.length).join('|') === italianPrevious.join('|') && current.slice(italianPrevious.length).every(function (value) { return value === ''; });
-	const immediatelyPrevious = sheet.getName() === MI_SHEETS.REGISTRATIONS ? headers.slice(0, -1) : [];
+	const immediatelyPrevious = [MI_SHEETS.REGISTRATIONS, MI_SHEETS.PAYMENTS].indexOf(sheet.getName()) >= 0 ? headers.slice(0, -1) : [];
 	const usesImmediatelyPrevious = immediatelyPrevious.length > 0 && current.slice(0, immediatelyPrevious.length).join('|') === immediatelyPrevious.join('|') && current.slice(immediatelyPrevious.length).every(function (value) { return value === ''; });
   if (hasData && current.join('|') !== headers.join('|') && !usesPreviousHeaders && !usesItalianPrevious && !usesImmediatelyPrevious) {
     throw new Error('Intestazioni inattese nel foglio ' + sheet.getName() + '. Intervento manuale richiesto.');

@@ -1,4 +1,4 @@
-# Backend Google Workspace — schema 1.2.0
+# Backend Google Workspace — schema 1.2.1
 
 Progetto Google Apps Script associato a uno spreadsheet dedicato. Il repository non contiene ID del foglio, URL di deployment, destinatari reali, coordinate bancarie o segreti.
 
@@ -12,7 +12,14 @@ Progetto Google Apps Script associato a uno spreadsheet dedicato. Il repository 
 - `APPEND_REGISTRATION` riconcilia iscrizione, partecipanti, outbox e pagamenti senza duplicati;
 - revisioni, snapshot, consensi, tipologie e opzioni vengono conservati in colonne esplicite;
 - la risposta dichiara `complete: true` soltanto dopo aver verificato tutte le proiezioni;
-- l'outbox Workspace resta nello stato `PREVIEW` perché la spedizione effettiva è responsabilità di WordPress.
+- l'outbox Workspace resta normalmente nello stato `PREVIEW`; una spedizione GAS è possibile soltanto con la modalità esplicita `TEST` e sostituisce sempre il destinatario con quello conservato nelle proprietà private dello script.
+
+## Collaudo email protetto
+
+1. Dal menu **Modulo iscrizioni** scegliere **Configura destinatario email di test**. L'indirizzo viene salvato nella proprietà privata `MI_EMAIL_TEST_RECIPIENT`, mai nel repository o nelle celle.
+2. Nel foglio `Configurazione` impostare `modalita_email` su `TEST`.
+3. Scegliere **Invia coda al solo destinatario di test**. Vengono elaborate solo le righe `PREVIEW` e ogni messaggio va esclusivamente al destinatario privato.
+4. Al termine riportare `modalita_email` su `ANTEPRIMA`. La spedizione operativa ai destinatari reali resta responsabilità di WordPress.
 
 ## Replica dei pagamenti
 

@@ -14,6 +14,29 @@ final class MI_Admin {
 		add_filter( 'post_row_actions', array( __CLASS__, 'event_row_actions' ), 10, 2 );
 		add_filter( 'wp_insert_post_data', array( __CLASS__, 'guard_publication' ), 20, 2 );
 		add_action( 'admin_notices', array( __CLASS__, 'publication_notice' ) );
+		add_action( 'wp_dashboard_setup', array( __CLASS__, 'dashboard_widget' ) );
+	}
+
+	public static function dashboard_widget() {
+		if ( ! current_user_can( 'mi_manage_events' ) ) return;
+		wp_add_dashboard_widget( 'mi_dashboard_service', 'Servizio moduli iscrizioni', array( __CLASS__, 'render_dashboard_widget' ) );
+	}
+
+	public static function render_dashboard_widget() {
+		$base = 'edit.php?post_type=' . MI_Event_Post_Type::EVENT_TYPE;
+		?>
+		<p>Gestisci gli eventi e consulta le iscrizioni delle attività che ti sono state assegnate.</p>
+		<p><a class="button button-primary" href="<?php echo esc_url( admin_url( $base ) ); ?>">Apri il servizio moduli</a>
+		<?php if ( current_user_can( 'mi_view_registrations' ) ) : ?>
+			<a class="button" href="<?php echo esc_url( admin_url( $base . '&page=mi-registrations' ) ); ?>">Vedi le iscrizioni</a>
+		<?php endif; ?></p>
+		<ul>
+			<li><a href="<?php echo esc_url( admin_url( 'post-new.php?post_type=' . MI_Event_Post_Type::EVENT_TYPE ) ); ?>">Crea un nuovo evento</a></li>
+			<?php if ( current_user_can( 'mi_view_registrations' ) ) : ?><li><a href="<?php echo esc_url( admin_url( $base . '&page=mi-email-outbox' ) ); ?>">Controlla la coda email</a></li><?php endif; ?>
+			<?php if ( current_user_can( 'mi_manage_payments' ) ) : ?><li><a href="<?php echo esc_url( admin_url( $base . '&page=mi-payments' ) ); ?>">Consulta i pagamenti</a></li><?php endif; ?>
+		</ul>
+		<p><small>Ogni delegato vede esclusivamente le attività autorizzate dall’amministratore.</small></p>
+		<?php
 	}
 
 	public static function menu() {
@@ -52,7 +75,7 @@ final class MI_Admin {
 		if ( $effective_raw ) {
 			$effective_date = DateTimeImmutable::createFromFormat( 'Y-m-d\\TH:i', $effective_raw, wp_timezone() );
 			if ( ! $effective_date || $effective_date->format( 'Y-m-d\\TH:i' ) !== $effective_raw ) { wp_die( esc_html__( 'Data effettiva non valida.', 'modulo-iscrizioni' ) ); }
-			$effective_at = $effective_date->format( 'Y-m-d H:i:s' );
+			$effective_at = $effective_date->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
 		}
 		if ( ! in_array( $source, array( 'BANK_TRANSFER', 'CARD', 'CASH' ), true ) || ! in_array( $kind, array( 'DEPOSIT', 'BALANCE', 'FULL', 'OTHER' ), true ) || ! in_array( $transaction, array( 'PAYMENT', 'REFUND' ), true ) || $amount < 1 ) { wp_die( esc_html__( 'Dati del versamento non validi.', 'modulo-iscrizioni' ) ); }
 		$external_reference = sanitize_text_field( wp_unslash( $_POST['external_reference'] ?? '' ) );

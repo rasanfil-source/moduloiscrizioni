@@ -707,7 +707,7 @@ final class MI_Registration_Service {
 			$remaining[ $item['code'] ] = (int) $item['quantity'];
 			$seen_indexes[ $item['code'] ] = array();
 		}
-		foreach ( $raw_participants as $raw ) {
+		foreach ( $raw_participants as $participant_position => $raw ) {
 			if ( ! is_array( $raw ) ) {
 				return new WP_Error( 'mi_participant_invalid', 'Controlla i dati dei partecipanti.', array( 'status' => 400 ) );
 			}
@@ -721,14 +721,17 @@ final class MI_Registration_Service {
 			$remaining[ $ticket_type_code ]--;
 			$first_name = sanitize_text_field( $raw['first_name'] ?? '' );
 			$last_name = sanitize_text_field( $raw['last_name'] ?? '' );
-			if ( ! $first_name || ! $last_name || strlen( $first_name ) > 80 || strlen( $last_name ) > 80 ) {
+			$raw_fields = is_array( $raw['fields'] ?? null ) ? $raw['fields'] : array();
+			$raw_options = is_array( $raw['options'] ?? null ) ? $raw['options'] : array();
+			$has_optional_data = $first_name || $last_name || array_filter( $raw_fields, static function ( $value ) { return '' !== trim( (string) $value ); } ) || array_filter( $raw_options, static function ( $value ) { return (int) $value > 0; } );
+			if ( ( 0 === $participant_position || $has_optional_data ) && ( ! $first_name || ! $last_name ) || strlen( $first_name ) > 80 || strlen( $last_name ) > 80 ) {
 				return new WP_Error( 'mi_participant_invalid', 'Controlla i dati dei partecipanti.', array( 'status' => 400 ) );
 			}
-			$answers = MI_Field_Schema::validate_answers( $raw['fields'] ?? array(), $fields );
+			$answers = $has_optional_data || 0 === $participant_position ? MI_Field_Schema::validate_answers( $raw_fields, $fields ) : array();
 			if ( is_wp_error( $answers ) ) {
 				return $answers;
 			}
-			$options = self::validate_options( $raw['options'] ?? array(), $option_definitions, 'TICKET' );
+			$options = self::validate_options( $raw_options, $option_definitions, 'TICKET' );
 			if ( is_wp_error( $options ) ) {
 				return $options;
 			}

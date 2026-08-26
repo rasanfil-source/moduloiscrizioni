@@ -32,7 +32,7 @@ function environment() {
   const headers = {
     Iscrizioni: ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'hash_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'versione_informativa_privacy', 'data_accettazione_privacy', 'biglietti_json', 'id_consenso_marketing', 'data_accettazione_marketing', 'opzioni_ordine_json'],
     Partecipanti: ['codice_ordine', 'numero_partecipante', 'codice_tipologia', 'indice_tipologia', 'nome', 'cognome', 'dati_aggiuntivi_json', 'opzioni_json'],
-    Pagamenti: ['id_pagamento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo_centesimi', 'valuta', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'canale_registrazione', 'id_inserimento_origine', 'data_creazione'],
+    Pagamenti: ['id_pagamento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo_centesimi', 'valuta', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'canale_registrazione', 'id_inserimento_origine', 'data_creazione', 'nota_amministrativa'],
     'Coda email': ['id_messaggio', 'codice_ordine', 'destinatario', 'tipo_modello', 'contenuto_json', 'stato', 'data_creazione'],
     'Registro controlli': ['id_controllo', 'data_evento', 'canale', 'azione', 'tipo_entita', 'riferimento_entita', 'esito', 'etichetta_attore', 'codice_dettaglio']
   };
@@ -102,4 +102,11 @@ test('APPEND_REGISTRATION rifiuta conflitti e mapping partecipanti non biunivoci
   const invalid = payload({ order_code: 'MI-260825-ALTRO123', idempotency_key: 'abcdef1234567890abcdef1234567890' });
   invalid.participants[1].ticket_index = 1;
   assert.equal(context.aggiungiIscrizione_(invalid).error, 'INVALID_PARTICIPANTS');
+});
+
+test('APPEND_REGISTRATION accetta partecipanti secondari lasciati facoltativamente vuoti', () => {
+  const { context } = environment();
+  const optional = payload();
+  optional.participants[1] = { ticket_type_code: 'standard', ticket_index: 2, first_name: '', last_name: '', fields: {}, options: [] };
+  assert.equal(context.aggiungiIscrizione_(optional).ok, true);
 });
