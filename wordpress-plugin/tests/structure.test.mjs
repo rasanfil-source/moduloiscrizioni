@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.4\.13/);
+  assert.match(source, /Version:\s+3\.4\.16/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -254,7 +254,7 @@ test('l’outbox conserva e mostra una revisione immutabile dell’anteprima', a
   assert.match(model, /hash\(\s*'sha256'/);
   assert.match(service, /email_preview/);
   assert.match(admin, /Anteprima email conservata/);
-  assert.match(admin, /wp_kses_post/);
+  assert.match(admin, /MI_Modello_Email::sanitizza_html_email/);
 });
 
 test('l’anteprima storica conserva il branding dell’attività', async () => {
@@ -263,8 +263,54 @@ test('l’anteprima storica conserva il branding dell’attività', async () => 
   assert.match(model, /nome_attivita/);
   assert.match(model, /wp_get_attachment_image_url/);
   assert.match(model, /logo_alt/);
-  assert.match(admin, /identity\['logo_url'\]/);
-  assert.match(admin, /identity\['logo_alt'\]/);
+  assert.match(model, /primary_color/);
+  assert.match(model, /secondary_color/);
+  assert.match(admin, /MI_Modello_Email::componi_html/);
+});
+
+test('il guscio email usa il branding dello snapshot e componenti email-safe', async () => {
+  const model = await read('includes/class-mi-modello-email.php');
+  const sender = await read('includes/class-mi-spedizione-email.php');
+  assert.match(sender, /MI_Modello_Email::componi_html\(\s*\$istantanea/);
+  assert.match(sender, /MI_Modello_Email::componi_testo/);
+  assert.match(sender, /AltBody/);
+  assert.match(model, /max-width:600px/);
+  assert.match(model, /opacity:0;color:transparent/);
+  assert.match(model, /Assistenza/);
+  assert.match(model, /border-radius:12px/);
+  assert.match(model, /font-style:italic/);
+  assert.match(model, /#151b38/);
+  assert.match(model, /#337ab7/);
+  assert.doesNotMatch(model, /#1a365d|#F97316/i);
+  assert.match(model, /url_pubblica_evento/);
+  assert.match(model, /'post_status'\s*=>\s*'publish'/);
+  assert.match(model, /shortcode_parse_atts/);
+});
+
+test('i segnaposto email coprono evento, riepilogo economico e pagamento', async () => {
+  const model = await read('includes/class-mi-modello-email.php');
+  const service = await read('includes/class-mi-registration-service.php');
+  for (const placeholder of [
+    '{{evento.data}}',
+    '{{evento.luogo}}',
+    '{{ordine.riepilogo_economico}}',
+    '{{ordine.totale}}',
+    '{{pagamento.importo_dovuto}}',
+    '{{pagamento.istruzioni}}',
+    '{{pagamento.scadenza}}',
+    '{{pagamento.causale}}',
+  ]) assert.ok(model.includes(placeholder), `segnaposto mancante: ${placeholder}`);
+  assert.match(service, /MI_Modello_Email::valori_ordine/);
+});
+
+test('il sanitizzatore email dichiara gli attributi da preservare', async () => {
+  const model = await read('includes/class-mi-modello-email.php');
+  assert.match(model, /wp_kses_allowed_html\(\s*'post'\s*\)/);
+  for (const attribute of ['role', 'cellpadding', 'cellspacing', 'bgcolor', 'style']) {
+    assert.ok(model.includes(`'${attribute}' => true`), `attributo email-safe non dichiarato: ${attribute}`);
+  }
+  assert.doesNotMatch(model, /\$html\s*=\s*wp_kses_post/);
+  assert.match(model, /wp_kses\(\s*\(string\) \$html,\s*\$allowed\s*\)/);
 });
 
 test('l’editor aggiorna l’anteprima e rifiuta segnaposto non ammessi', async () => {

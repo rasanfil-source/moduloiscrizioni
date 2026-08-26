@@ -82,6 +82,11 @@ final class MI_Registration_Service {
 		$field_configuration = MI_Field_Schema::event_configuration( $event_id );
 		$activity_thumbnail_id = $activity ? get_post_thumbnail_id( $activity ) : 0;
 		$event_thumbnail_id = get_post_thumbnail_id( $event_id );
+		$legacy_activity_color = $activity ? sanitize_hex_color( get_post_meta( $activity_id, '_mi_accent_color', true ) ) : '';
+		$activity_primary_color = $activity ? sanitize_hex_color( get_post_meta( $activity_id, '_mi_primary_color', true ) ) : '';
+		$activity_secondary_color = $activity ? sanitize_hex_color( get_post_meta( $activity_id, '_mi_secondary_color', true ) ) : '';
+		$activity_primary_color = $activity_primary_color ?: ( $legacy_activity_color ?: '#151b38' );
+		$activity_secondary_color = $activity_secondary_color ?: '#337ab7';
 		$public_event = array(
 			'id'               => $event_id,
 			'title'            => get_the_title( $event_id ),
@@ -89,7 +94,11 @@ final class MI_Registration_Service {
 			'activity'         => $activity ? $activity->post_title : '',
 			'activity_logo'    => $activity ? get_the_post_thumbnail_url( $activity, 'medium' ) : '',
 			'activity_logo_alt'=> $activity_thumbnail_id ? (string) get_post_meta( $activity_thumbnail_id, '_wp_attachment_image_alt', true ) : '',
-			'accent_color'     => $activity ? ( sanitize_hex_color( get_post_meta( $activity_id, '_mi_accent_color', true ) ) ?: '#c43b2f' ) : '#c43b2f',
+			'accent_color'     => $activity_primary_color,
+			'resolved_branding'=> array(
+				'primary_color'   => $activity_primary_color,
+				'secondary_color' => $activity_secondary_color,
+			),
 			'cover_image'      => $event_thumbnail_id ? get_the_post_thumbnail_url( $event_id, 'large' ) : '',
 			'cover_image_alt'  => $event_thumbnail_id ? (string) get_post_meta( $event_thumbnail_id, '_wp_attachment_image_alt', true ) : '',
 			'event_starts_at'  => (string) get_post_meta( $event_id, '_mi_event_starts_at', true ),
@@ -379,14 +388,8 @@ final class MI_Registration_Service {
 			if ( ! self::append_registration_event( $registration_id, 'CREATED', '', $status, 'PUBLIC_FORM', array( 'expires_at' => $expires_at ) ) ) {
 				throw new RuntimeException( 'Evento di audit non salvato.' );
 			}
-			$email_values = array(
-				'{{evento.titolo}}'           => $event['title'],
-				'{{attivita.nome}}'           => $event['activity'],
-				'{{ordine.codice}}'           => $order_code,
-				'{{ordine.stato}}'            => 'CONFIRMED' === $status ? 'Confermata' : ( 'PENDING_PAYMENT' === $status ? 'In attesa di pagamento' : 'Lista d’attesa' ),
-				'{{ordine.partecipanti}}'     => (string) $selection['quantity'],
-				'{{referente.nome_completo}}' => $buyer['first_name'] . ' ' . $buyer['last_name'],
-			);
+			$email_items = array_merge( $selection['items'], $order_options );
+			$email_values = MI_Modello_Email::valori_ordine( $event, $order_code, 'CONFIRMED' === $status ? 'Confermata' : ( 'PENDING_PAYMENT' === $status ? 'In attesa di pagamento' : 'Lista d’attesa' ), $selection['quantity'], $buyer['first_name'] . ' ' . $buyer['last_name'], $economic_summary, $email_items );
 			$email_snapshot = MI_Modello_Email::crea_istantanea( $event_id, $email_values );
 			$email_status = MI_Spedizione_Email::stato_nuova_email( $email_snapshot );
 			$payload_json = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $order_code, 'status' => $status, 'quantity' => $selection['quantity'], 'total_cents' => $economic_summary['total_cents'], 'economic_summary' => $economic_summary, 'email_preview' => $email_snapshot ) );
@@ -721,7 +724,16 @@ final class MI_Registration_Service {
 				$type_counts[ $item['ticket_type_code'] ]['confirmed_count'] = (int) ( $type_counts[ $item['ticket_type_code'] ]['confirmed_count'] ?? 0 ) + (int) $item['quantity'];
 			}
 			self::append_registration_event( (int) $candidate['id'], 'WAITLIST_PROMOTED', 'WAITLISTED', $promoted_status, 'SYSTEM', array( 'expires_at' => $deadline ) );
-			$email_values = array( '{{evento.titolo}}' => $event['title'], '{{attivita.nome}}' => $event['activity'], '{{ordine.codice}}' => $candidate['order_code'], '{{ordine.stato}}' => 'PENDING_PAYMENT' === $promoted_status ? 'In attesa di pagamento' : 'Confermata', '{{ordine.partecipanti}}' => (string) $candidate['total_qty'], '{{referente.nome_completo}}' => $candidate['buyer_first_name'] . ' ' . $candidate['buyer_last_name'] );
+			$email_items = array();
+			foreach ( $items as $item ) {
+				foreach ( $event['ticket_types'] as $ticket ) {
+					if ( $ticket['code'] === $item['ticket_type_code'] ) {
+						$email_items[] = array( 'name' => $ticket['name'], 'quantity' => $item['quantity'] );
+						break;
+					}
+				}
+			}
+			$email_values = MI_Modello_Email::valori_ordine( $event, $candidate['order_code'], 'PENDING_PAYMENT' === $promoted_status ? 'In attesa di pagamento' : 'Confermata', $candidate['total_qty'], $candidate['buyer_first_name'] . ' ' . $candidate['buyer_last_name'], $economic, $email_items );
 			$email_snapshot = MI_Modello_Email::crea_istantanea( $event_id, $email_values );
 			$email_status = MI_Spedizione_Email::stato_nuova_email( $email_snapshot );
 			$wpdb->insert( $outbox, array( 'registration_id' => $candidate['id'], 'recipient' => $candidate['buyer_email'], 'template_type' => 'WAITLIST_PROMOTION', 'payload_json' => wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $candidate['order_code'], 'status' => $promoted_status, 'email_preview' => $email_snapshot ) ), 'status' => $email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) );

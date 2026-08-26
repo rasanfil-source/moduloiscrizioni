@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — versione 3.4.14
+# Modulo Iscrizioni — versione 3.4.16
 
 Plugin WordPress per attività ed eventi con modulo pubblico, registro locale autorevole e replica firmata verso Google Workspace.
 

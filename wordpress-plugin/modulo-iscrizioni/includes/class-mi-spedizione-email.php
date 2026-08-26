@@ -8,6 +8,7 @@ final class MI_Spedizione_Email {
 	const OPZIONE_PROVA_VERIFICATA = 'mi_prova_email_verificata';
 	private static $nome_mittente = '';
 	private static $codice_incorporato = '';
+	private static $corpo_testo = '';
 
 	public static function avvia() {
 		add_action( 'admin_menu', array( __CLASS__, 'aggiungi_pagina' ) );
@@ -95,8 +96,23 @@ final class MI_Spedizione_Email {
 			self::torna_alla_pagina( 'indirizzo' );
 		}
 		$oggetto = 'Prova Modulo Iscrizioni — ' . wp_date( 'd/m/Y H:i' );
-		$corpo = '<p>Questa è una <strong>email sintetica di prova</strong> del Modulo Iscrizioni.</p><p>Evento: Evento dimostrativo<br>Codice: MI-PROVA-0001<br>Referente: Persona Esempio</p><p>Nessun dato di un’iscrizione reale è stato utilizzato.</p>';
-		if ( wp_mail( $destinatario, $oggetto, $corpo, array( 'Content-Type: text/html; charset=UTF-8' ) ) ) {
+		$istantanea = array(
+			'preheader' => 'Anteprima sintetica del nuovo modello email.',
+			'html' => '<p>Questa è una <strong>email sintetica di prova</strong> del Modulo Iscrizioni.</p><p>Evento: Evento dimostrativo<br>Codice: MI-PROVA-0001<br>Referente: Persona Esempio</p><p>Nessun dato di un’iscrizione reale è stato utilizzato.</p>',
+			'testo' => "Questa è una email sintetica di prova del Modulo Iscrizioni.\nEvento: Evento dimostrativo\nCodice: MI-PROVA-0001\nReferente: Persona Esempio\nNessun dato di un’iscrizione reale è stato utilizzato.",
+			'footer' => 'Un saluto dall’organizzazione.',
+			'identita' => array( 'nome_attivita' => 'Attività dimostrativa', 'primary_color' => '#151b38', 'secondary_color' => '#337ab7', 'primary_text_color' => '#ffffff', 'secondary_text_color' => '#ffffff' ),
+			'identita_email' => array(),
+			'evento' => array( 'titolo' => 'Evento dimostrativo', 'url' => '' ),
+			'identificativo' => array( 'codice' => 'MI-PROVA-0001' ),
+		);
+		$corpo = MI_Modello_Email::componi_html( $istantanea );
+		self::$corpo_testo = MI_Modello_Email::componi_testo( $istantanea );
+		add_action( 'phpmailer_init', array( __CLASS__, 'incorpora_codice' ) );
+		$inviata = wp_mail( $destinatario, $oggetto, $corpo, array( 'Content-Type: text/html; charset=UTF-8' ) );
+		remove_action( 'phpmailer_init', array( __CLASS__, 'incorpora_codice' ) );
+		self::$corpo_testo = '';
+		if ( $inviata ) {
 			update_option( self::OPZIONE_PROVA_VERIFICATA, self::impronta_destinatario( $destinatario ), false );
 			self::torna_alla_pagina( 'prova_ok' );
 		}
@@ -151,17 +167,18 @@ final class MI_Spedizione_Email {
 		if ( ! empty( $identita['indirizzo_risposte'] ) && is_email( $identita['indirizzo_risposte'] ) ) {
 			$intestazioni[] = 'Reply-To: ' . sanitize_email( $identita['indirizzo_risposte'] );
 		}
-		$preheader = ! empty( $istantanea['preheader'] ) ? '<div style="display:none;max-height:0;overflow:hidden">' . esc_html( $istantanea['preheader'] ) . '</div>' : '';
-		$corpo = $preheader . wp_kses_post( $istantanea['html'] ?? '' ) . '<hr><p>' . nl2br( esc_html( $istantanea['footer'] ?? '' ) ) . '</p>';
+		$codice_html = '';
 		if ( isset( $istantanea['identificativo'] ) && is_array( $istantanea['identificativo'] ) && in_array( $istantanea['identificativo']['modalita'] ?? 'NONE', array( 'TEXT', 'QR', 'BARCODE' ), true ) ) {
-			$corpo .= '<p><strong>Codice:</strong> <code>' . esc_html( $istantanea['identificativo']['codice'] ?? '' ) . '</code></p>';
+			$codice_html = '<p style="margin-top:20px;"><strong>Codice:</strong> <code>' . esc_html( $istantanea['identificativo']['codice'] ?? '' ) . '</code></p>';
 			if ( in_array( $istantanea['identificativo']['modalita'], array( 'QR', 'BARCODE' ), true ) ) {
 				$code_payload = 'QR' === $istantanea['identificativo']['modalita'] ? ( $istantanea['identificativo']['payload_qr'] ?? '' ) : ( $istantanea['identificativo']['codice'] ?? '' );
 				self::$codice_incorporato = MI_Code_Image::svg( $istantanea['identificativo']['modalita'], $code_payload );
-				add_action( 'phpmailer_init', array( __CLASS__, 'incorpora_codice' ) );
-				$corpo .= '<p><img src="cid:mi-registration-code" alt="Codice grafico dell’iscrizione" style="max-width:280px;height:auto"></p>';
+				$codice_html .= '<p><img src="cid:mi-registration-code" alt="Codice grafico dell’iscrizione" style="display:block;max-width:280px;height:auto;border:0;"></p>';
 			}
 		}
+		$corpo = MI_Modello_Email::componi_html( $istantanea, $codice_html );
+		self::$corpo_testo = MI_Modello_Email::componi_testo( $istantanea );
+		add_action( 'phpmailer_init', array( __CLASS__, 'incorpora_codice' ) );
 		self::$nome_mittente = sanitize_text_field( $identita['nome_mittente'] ?? '' );
 		if ( self::$nome_mittente ) {
 			add_filter( 'wp_mail_from_name', array( __CLASS__, 'filtra_nome_mittente' ) );
@@ -171,10 +188,14 @@ final class MI_Spedizione_Email {
 		remove_filter( 'wp_mail_from_name', array( __CLASS__, 'filtra_nome_mittente' ) );
 		self::$nome_mittente = '';
 		self::$codice_incorporato = '';
+		self::$corpo_testo = '';
 		return $inviata;
 	}
 
 	public static function incorpora_codice( $phpmailer ) {
+		if ( self::$corpo_testo && property_exists( $phpmailer, 'AltBody' ) ) {
+			$phpmailer->AltBody = self::$corpo_testo;
+		}
 		if ( self::$codice_incorporato && method_exists( $phpmailer, 'addStringEmbeddedImage' ) ) {
 			$phpmailer->addStringEmbeddedImage( self::$codice_incorporato, 'mi-registration-code', 'codice-iscrizione.svg', 'base64', 'image/svg+xml' );
 		}
