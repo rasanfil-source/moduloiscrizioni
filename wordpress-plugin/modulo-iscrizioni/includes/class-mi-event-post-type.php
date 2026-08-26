@@ -158,8 +158,8 @@ final class MI_Event_Post_Type {
 			<p class="description">QR e barcode sono scelte dell’organizzatore. Il payload resta legato all’evento e al codice ordine, senza dati personali.</p>
 			<p><label for="mi_privacy_policy_version"><strong>Versione informativa privacy</strong></label><br><input id="mi_privacy_policy_version" name="mi_privacy_policy_version" maxlength="64" value="<?php echo esc_attr( $privacy_policy_version ); ?>" placeholder="Es. 2026-08"></p>
 			<p><label for="mi_privacy_consent_id"><strong>ID consenso privacy</strong></label><br><input id="mi_privacy_consent_id" name="mi_privacy_consent_id" maxlength="100" value="<?php echo esc_attr( $privacy_consent_id ); ?>"></p>
-			<p><label><input name="mi_marketing_enabled" type="checkbox" value="1" <?php checked( $marketing_enabled ); ?>> Mostra consenso marketing facoltativo</label></p>
-			<p><label for="mi_marketing_consent_id"><strong>ID consenso marketing</strong></label><br><input id="mi_marketing_consent_id" name="mi_marketing_consent_id" maxlength="100" value="<?php echo esc_attr( $marketing_consent_id ); ?>"></p>
+			<p><label><input name="mi_marketing_enabled" type="checkbox" value="1" <?php checked( $marketing_enabled ); ?>> Mostra il campo facoltativo “Comunicazioni su future iniziative”</label></p>
+			<p><label for="mi_marketing_consent_id"><strong>ID del consenso alle comunicazioni</strong></label><br><input id="mi_marketing_consent_id" name="mi_marketing_consent_id" maxlength="100" value="<?php echo esc_attr( $marketing_consent_id ); ?>"></p>
 			<p><label><input name="mi_high_impact_approved" type="checkbox" value="1" <?php checked( $high_impact_approved ); ?>> La verifica privacy per campi ad alto impatto è stata approvata</label></p>
 		</div>
 		<hr>

@@ -288,7 +288,7 @@ final class MI_Admin {
 		<tr><th scope="row">Sincronizzata il</th><td><?php echo esc_html( $detail['workspace_synced_at'] ?: 'Non ancora sincronizzata' ); ?></td></tr>
 		<tr><th scope="row">Revisione evento</th><td><?php echo esc_html( $detail['event_revision_id'] ?: 'Storica non disponibile' ); ?><?php if ( $detail['event_revision_hash'] ) : ?> · <code><?php echo esc_html( substr( $detail['event_revision_hash'], 0, 16 ) ); ?></code><?php endif; ?></td></tr>
 		<tr><th scope="row">Consenso privacy</th><td><?php echo esc_html( $detail['privacy_consent_id'] ?: 'Storico non disponibile' ); ?> · versione <?php echo esc_html( $detail['privacy_policy_version'] ?: '—' ); ?> · <?php echo esc_html( $detail['privacy_accepted_at'] ?: '—' ); ?></td></tr>
-		<tr><th scope="row">Consenso marketing</th><td><?php echo esc_html( $detail['marketing_consent_id'] ? $detail['marketing_consent_id'] . ' · ' . $detail['marketing_accepted_at'] : 'Non prestato' ); ?></td></tr>
+		<tr><th scope="row">Comunicazioni su future iniziative</th><td><?php echo esc_html( $detail['marketing_consent_id'] ? $detail['marketing_consent_id'] . ' · ' . $detail['marketing_accepted_at'] : 'Consenso non prestato' ); ?></td></tr>
 		<tr><th scope="row">Scadenza prenotazione</th><td><?php echo esc_html( $detail['expires_at'] ?: 'Non prevista' ); ?></td></tr>
 		<tr><th scope="row">Posti liberati il</th><td><?php echo esc_html( $detail['capacity_released_at'] ?: 'Non liberati' ); ?></td></tr>
 		<tr><th scope="row">Referente</th><td><?php echo esc_html( $detail['buyer_first_name'] . ' ' . $detail['buyer_last_name'] ); ?></td></tr>
@@ -603,7 +603,7 @@ final class MI_Admin {
 			} elseif ( ! $privacy_valid ) {
 				$message = 'Evento mantenuto in bozza: configura la pagina privacy di WordPress, la versione dell’informativa e l’ID del consenso.';
 			} elseif ( ! $marketing_valid ) {
-				$message = 'Evento mantenuto in bozza: il consenso marketing facoltativo richiede un ID specifico.';
+				$message = 'Evento mantenuto in bozza: il campo facoltativo “Comunicazioni su future iniziative” richiede un ID specifico.';
 			} elseif ( ! $high_impact_valid ) {
 				$message = 'Evento mantenuto in bozza: i campi ad alto impatto richiedono un’approvazione privacy esplicita.';
 			}

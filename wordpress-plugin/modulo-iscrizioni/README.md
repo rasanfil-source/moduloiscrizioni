@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — versione 3.4.12
+# Modulo Iscrizioni — versione 3.4.13
 
 Plugin WordPress per attività ed eventi con modulo pubblico, registro locale autorevole e replica firmata verso Google Workspace.
 
@@ -11,7 +11,7 @@ Plugin WordPress per attività ed eventi con modulo pubblico, registro locale au
 - partecipanti associati in modo univoco alla tipologia e alla posizione acquistata;
 - opzioni quantitative per ordine o partecipante, ricalcolate sempre sul server;
 - profili dati configurabili e approvazione esplicita dei campi privacy ad alto impatto;
-- consenso privacy versionato e consenso marketing facoltativo separato;
+- consenso privacy versionato e consenso facoltativo separato per comunicazioni su future iniziative;
 - scadenza delle prenotazioni non saldate e annullamento con rilascio idempotente dei posti;
 - pagamenti e rimborsi manuali serializzati, auditati e privi di dati completi di carta;
 - outbox email con anteprima, prova sintetica, modalità operativa protetta, retry e recupero;
