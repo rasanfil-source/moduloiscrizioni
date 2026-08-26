@@ -578,8 +578,8 @@ final class MI_Admin {
 		$option_prices = isset( $_POST['mi_option_price'] ) ? array_map( 'floatval', (array) wp_unslash( $_POST['mi_option_price'] ) ) : array();
 		$all_prices = array_merge( $prices, $option_prices );
 		$payment_methods = isset( $_POST['mi_payment_methods'] ) ? (array) wp_unslash( $_POST['mi_payment_methods'] ) : array();
-		$privacy_version = sanitize_text_field( wp_unslash( $_POST['mi_privacy_policy_version'] ?? '' ) );
-		$privacy_consent_id = sanitize_key( wp_unslash( $_POST['mi_privacy_consent_id'] ?? '' ) );
+		$privacy_version = (string) ( get_post_meta( $post_id, '_mi_privacy_policy_version', true ) ?: wp_date( 'Y-m' ) );
+		$privacy_consent_id = (string) ( get_post_meta( $post_id, '_mi_privacy_consent_id', true ) ?: 'privacy-' . $post_id );
 		$field_configuration = MI_Field_Schema::sanitize_configuration(
 			wp_unslash( $_POST['mi_data_profile'] ?? 'MINIMAL' ),
 			(array) wp_unslash( $_POST['mi_participant_fields'] ?? array() ),
@@ -587,19 +587,21 @@ final class MI_Admin {
 		);
 		$high_impact_valid = ! MI_Field_Schema::has_high_impact_fields( $field_configuration ) || isset( $_POST['mi_high_impact_approved'] );
 		$privacy_valid = '' !== $privacy_version && '' !== $privacy_consent_id && (bool) get_privacy_policy_url();
-		$marketing_valid = ! isset( $_POST['mi_marketing_enabled'] ) || '' !== sanitize_key( wp_unslash( $_POST['mi_marketing_consent_id'] ?? '' ) );
+		$marketing_valid = ! isset( $_POST['mi_marketing_enabled'] ) || '' !== (string) ( get_post_meta( $post_id, '_mi_marketing_consent_id', true ) ?: 'marketing-' . $post_id );
 		$uses_price = in_array( $economic_mode, array( 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 		$collects_payment = in_array( $economic_mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 		$registration_only_price = 'REGISTRATION_ONLY' === $economic_mode && in_array( $pricing_mode, array( 'NONE', 'ZERO' ), true ) && max( array_merge( array( 0 ), $all_prices ) ) <= 0;
 		$calculated_price = $uses_price && 'CALCULATED' === $pricing_mode && max( array_merge( array( 0 ), $all_prices ) ) > 0;
-		$valid_economic = ( $registration_only_price || $calculated_price ) && ( ! $collects_payment || ! empty( $payment_methods ) );
+		$fixed_price_cents = self::parse_importo_centesimi( wp_unslash( $_POST['mi_fixed_price'] ?? '' ) );
+		$fixed_price_valid = $uses_price && 'FIXED' === $pricing_mode && null !== $fixed_price_cents && $fixed_price_cents > 0;
+		$valid_economic = ( $registration_only_price || $calculated_price || $fixed_price_valid ) && ( ! $collects_payment || ! empty( $payment_methods ) );
 		if ( ! $activity_id || MI_Event_Post_Type::ACTIVITY_TYPE !== get_post_type( $activity_id ) || ! $activity_stable || ! $valid_dates || ! $has_ticket || ! $valid_economic || ! $privacy_valid || ! $marketing_valid || ! $high_impact_valid ) {
 			$data['post_status'] = 'draft';
 			$message = 'Evento mantenuto in bozza: completa attività, date e tipologie.';
 			if ( ! $activity_stable ) {
 				$message = 'Evento mantenuto in bozza: l’attività non può cambiare dopo la prima iscrizione senza una migrazione amministrativa esplicita.';
 			} elseif ( ! $valid_economic ) {
-				$message = 'Evento mantenuto in bozza: “Gratuito esplicito” richiede “Nessun pagamento previsto”; le altre modalità richiedono prezzi calcolati positivi e, quando previsto, almeno una fonte di pagamento.';
+				$message = 'Evento mantenuto in bozza: “Gratuito” richiede “Nessun pagamento previsto”; le altre modalità richiedono una quota positiva e, quando previsto, almeno una fonte di pagamento.';
 			} elseif ( ! $privacy_valid ) {
 				$message = 'Evento mantenuto in bozza: configura la pagina privacy di WordPress, la versione dell’informativa e l’ID del consenso.';
 			} elseif ( ! $marketing_valid ) {

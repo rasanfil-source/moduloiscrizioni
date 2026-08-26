@@ -79,16 +79,22 @@
   const modalitaPrezzo = document.getElementById('mi_pricing_mode');
   const riquadroCaparra = document.querySelector('[data-mi-economic-deposit]');
   const riquadroPagamenti = document.querySelector('[data-mi-economic-payments]');
+	const riquadroPrezzoFisso = document.querySelector('[data-mi-fixed-price]');
   const aiutoEconomico = document.querySelector('[data-mi-economic-help]');
   if (modalitaEconomica && modalitaPrezzo && riquadroCaparra && riquadroPagamenti && aiutoEconomico) {
     const aggiornaConfigurazioneEconomica = () => {
       const modalita = modalitaEconomica.value;
       const incassa = ['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(modalita);
-      const prezzoCoerente = modalita === 'REGISTRATION_ONLY' ? ['NONE', 'ZERO'].includes(modalitaPrezzo.value) : modalitaPrezzo.value === 'CALCULATED';
+	  const prezzoCoerente = modalita === 'REGISTRATION_ONLY' ? ['NONE', 'ZERO'].includes(modalitaPrezzo.value) : ['FIXED', 'CALCULATED'].includes(modalitaPrezzo.value);
+	  if (riquadroPrezzoFisso) {
+		riquadroPrezzoFisso.hidden = modalitaPrezzo.value !== 'FIXED';
+		const campoPrezzoFisso = riquadroPrezzoFisso.querySelector('input');
+		if (campoPrezzoFisso) { campoPrezzoFisso.required = modalitaPrezzo.value === 'FIXED'; campoPrezzoFisso.disabled = modalitaPrezzo.value !== 'FIXED'; }
+	  }
       riquadroCaparra.hidden = modalita !== 'DEPOSIT_BALANCE';
       riquadroPagamenti.hidden = !incassa;
       Array.from(riquadroPagamenti.querySelectorAll('input')).forEach((campo) => { campo.disabled = !incassa; });
-      modalitaPrezzo.setCustomValidity(prezzoCoerente ? '' : modalita === 'REGISTRATION_ONLY' ? 'Per la sola iscrizione scegli “Nessun prezzo” oppure “Gratuito esplicito”.' : 'Seleziona “Calcolato dalle quote” per questa modalità economica.');
+	  modalitaPrezzo.setCustomValidity(prezzoCoerente ? '' : modalita === 'REGISTRATION_ONLY' ? 'Per la sola iscrizione scegli “Nessun prezzo” oppure “Gratuito”.' : 'Seleziona una quota uguale per tutti oppure prezzi diversi secondo la tipologia.');
       aiutoEconomico.textContent = modalita === 'REGISTRATION_ONLY' ? (modalitaPrezzo.value === 'ZERO' ? 'L’evento è dichiarato esplicitamente gratuito.' : 'Il modulo raccoglie soltanto le iscrizioni senza dichiarare un prezzo.') : modalita === 'PRICE_ONLY' ? 'Il prezzo viene mostrato, ma non vengono richieste fonti di pagamento.' : modalita === 'FULL_PAYMENT' ? 'È richiesto il versamento dell’intero importo tramite almeno una fonte ammessa.' : 'Sono previsti una caparra percentuale e il successivo saldo.';
     };
     modalitaEconomica.addEventListener('change', aggiornaConfigurazioneEconomica);

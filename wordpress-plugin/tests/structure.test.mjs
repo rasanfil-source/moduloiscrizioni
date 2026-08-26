@@ -398,15 +398,38 @@ test('la pubblicazione richiede una configurazione economica coerente', async ()
   assert.match(script, /data-mi-economic-payments/);
 });
 
-test('la gratuità esplicita è visibile e compatibile soltanto con la sola iscrizione', async () => {
+test('la gratuità è visibile e compatibile soltanto con la sola iscrizione', async () => {
   const shortcode = await read('includes/class-mi-shortcode.php');
   const admin = await read('includes/class-mi-admin.php');
   const script = await read('assets/admin.js');
   assert.match(shortcode, /'ZERO'.+<small>Gratuito<\/small>/);
   assert.match(admin, /registration_only_price/);
   assert.match(admin, /array\(\s*'NONE',\s*'ZERO'\s*\)/);
-  assert.match(admin, /Gratuito esplicito.+Nessun pagamento previsto/);
+	assert.match(admin, /“Gratuito” richiede “Nessun pagamento previsto”/);
   assert.match(script, /\['NONE', 'ZERO'\]\.includes/);
+});
+
+test('il prezzo supporta una quota di partecipazione uguale per tutti', async () => {
+	const eventType = await read('includes/class-mi-event-post-type.php');
+	const service = await read('includes/class-mi-registration-service.php');
+	const shortcode = await read('includes/class-mi-shortcode.php');
+	const adminScript = await read('assets/admin.js');
+	const publicScript = await read('assets/public.js');
+	assert.match(eventType, /value="FIXED"[\s\S]*Quota di partecipazione uguale per tutti/);
+	assert.match(eventType, /_mi_fixed_price_cents/);
+	assert.match(service, /'FIXED' === \$event\['pricing_mode'\]/);
+	assert.match(shortcode, /Quota di partecipazione:/);
+	assert.match(adminScript, /\['FIXED', 'CALCULATED'\]/);
+	assert.match(publicScript, /fixed_price_cents/);
+});
+
+test('i metadati tecnici dei consensi non compaiono nel pannello evento', async () => {
+	const eventType = await read('includes/class-mi-event-post-type.php');
+	assert.doesNotMatch(eventType, /<strong>Versione informativa privacy<\/strong>/);
+	assert.doesNotMatch(eventType, /<strong>ID consenso privacy<\/strong>/);
+	assert.doesNotMatch(eventType, /<strong>ID del consenso alle comunicazioni<\/strong>/);
+	assert.match(eventType, /'privacy-' \. \$post_id/);
+	assert.match(eventType, /'marketing-' \. \$post_id/);
 });
 
 test('la configurazione economica viene normalizzata prima di ogni uso', async () => {

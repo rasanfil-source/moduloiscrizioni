@@ -107,16 +107,14 @@ final class MI_Event_Post_Type {
 		$capacity = max( 1, absint( get_post_meta( $post->ID, '_mi_capacity', true ) ?: 30 ) );
 		$waitlist = '1' === get_post_meta( $post->ID, '_mi_waitlist_enabled', true );
 		$pricing_mode = get_post_meta( $post->ID, '_mi_pricing_mode', true ) ?: 'NONE';
+		$fixed_price_cents = max( 0, (int) get_post_meta( $post->ID, '_mi_fixed_price_cents', true ) );
 		$economic_mode = get_post_meta( $post->ID, '_mi_economic_mode', true ) ?: 'REGISTRATION_ONLY';
 		$deposit_percentage = min( 99, max( 1, absint( get_post_meta( $post->ID, '_mi_deposit_percentage', true ) ?: 30 ) ) );
 		$payment_methods = get_post_meta( $post->ID, '_mi_payment_methods', true );
 		$payment_methods = is_array( $payment_methods ) ? $payment_methods : array();
 		$identifier_display = get_post_meta( $post->ID, '_mi_identifier_display', true ) ?: 'TEXT';
 		$payment_deadline_at = (string) get_post_meta( $post->ID, '_mi_payment_deadline_at', true );
-		$privacy_policy_version = (string) get_post_meta( $post->ID, '_mi_privacy_policy_version', true );
-		$privacy_consent_id = (string) ( get_post_meta( $post->ID, '_mi_privacy_consent_id', true ) ?: 'privacy-' . $post->ID );
 		$marketing_enabled = '1' === get_post_meta( $post->ID, '_mi_marketing_enabled', true );
-		$marketing_consent_id = (string) ( get_post_meta( $post->ID, '_mi_marketing_consent_id', true ) ?: 'marketing-' . $post->ID );
 		$high_impact_approved = '1' === get_post_meta( $post->ID, '_mi_high_impact_approved', true );
 		$ticket_types = get_post_meta( $post->ID, '_mi_ticket_types', true );
 		$options = get_post_meta( $post->ID, '_mi_options', true );
@@ -134,7 +132,7 @@ final class MI_Event_Post_Type {
 		}
 		?>
 		<div class="mi-admin-grid">
-			<p><label for="mi_activity_id"><strong>Attività organizzatrice</strong></label><br>
+			<p><label for="mi_activity_id"><strong>Attività</strong></label><br>
 			<select id="mi_activity_id" name="mi_activity_id" required>
 				<option value="">Seleziona attività</option>
 				<?php foreach ( $activities as $activity ) : ?>
@@ -149,17 +147,15 @@ final class MI_Event_Post_Type {
 			<p><label><input name="mi_waitlist_enabled" type="checkbox" value="1" <?php checked( $waitlist ); ?>> Attiva automaticamente la lista d’attesa a esaurimento posti</label></p>
 			<p><label for="mi_payment_deadline_at"><strong>Scadenza prenotazioni non saldate</strong></label><br><input id="mi_payment_deadline_at" name="mi_payment_deadline_at" type="datetime-local" value="<?php echo esc_attr( $payment_deadline_at ); ?>"></p>
 			<p class="description">Lascia vuoto per non applicare una scadenza automatica. È usata soltanto per gli eventi con versamenti tracciati.</p>
-			<p><label for="mi_pricing_mode"><strong>Prezzo</strong></label><br><select id="mi_pricing_mode" name="mi_pricing_mode"><option value="NONE" <?php selected( $pricing_mode, 'NONE' ); ?>>Nessun prezzo</option><option value="ZERO" <?php selected( $pricing_mode, 'ZERO' ); ?>>Gratuito esplicito</option><option value="CALCULATED" <?php selected( $pricing_mode, 'CALCULATED' ); ?>>Calcolato dalle quote</option></select></p>
+			<p><label for="mi_pricing_mode"><strong>Prezzo</strong></label><br><select id="mi_pricing_mode" name="mi_pricing_mode"><option value="NONE" <?php selected( $pricing_mode, 'NONE' ); ?>>Nessun prezzo</option><option value="ZERO" <?php selected( $pricing_mode, 'ZERO' ); ?>>Gratuito</option><option value="FIXED" <?php selected( $pricing_mode, 'FIXED' ); ?>>Quota di partecipazione uguale per tutti</option><option value="CALCULATED" <?php selected( $pricing_mode, 'CALCULATED' ); ?>>Prezzi diversi secondo la tipologia</option></select></p>
+			<p data-mi-fixed-price><label for="mi_fixed_price"><strong>Quota di partecipazione per persona</strong></label><br><input id="mi_fixed_price" name="mi_fixed_price" type="number" min="0.01" step="0.01" value="<?php echo esc_attr( number_format( $fixed_price_cents / 100, 2, '.', '' ) ); ?>"> €</p>
 			<p><label for="mi_economic_mode"><strong>Modalità di pagamento richiesta</strong></label><br><select id="mi_economic_mode" name="mi_economic_mode"><option value="REGISTRATION_ONLY" <?php selected( $economic_mode, 'REGISTRATION_ONLY' ); ?>>Nessun pagamento previsto</option><option value="PRICE_ONLY" <?php selected( $economic_mode, 'PRICE_ONLY' ); ?>>Prezzo solamente informativo</option><option value="FULL_PAYMENT" <?php selected( $economic_mode, 'FULL_PAYMENT' ); ?>>Pagamento completo richiesto</option><option value="DEPOSIT_BALANCE" <?php selected( $economic_mode, 'DEPOSIT_BALANCE' ); ?>>Caparra richiesta, saldo successivo</option></select></p>
 			<p data-mi-economic-deposit><label for="mi_deposit_percentage"><strong>Caparra percentuale</strong></label><br><input id="mi_deposit_percentage" name="mi_deposit_percentage" type="number" min="1" max="99" value="<?php echo esc_attr( $deposit_percentage ); ?>"> %</p>
 			<fieldset data-mi-economic-payments><legend><strong>Fonti di pagamento ammesse</strong></legend><label><input type="checkbox" name="mi_payment_methods[]" value="BANK_TRANSFER" <?php checked( in_array( 'BANK_TRANSFER', $payment_methods, true ) ); ?>> Bonifico</label><br><label><input type="checkbox" name="mi_payment_methods[]" value="CARD" <?php checked( in_array( 'CARD', $payment_methods, true ) ); ?>> Carta</label><br><label><input type="checkbox" name="mi_payment_methods[]" value="CASH" <?php checked( in_array( 'CASH', $payment_methods, true ) ); ?>> Contante</label></fieldset>
 			<p class="description" data-mi-economic-help aria-live="polite"></p>
 			<p><label for="mi_identifier_display"><strong>Identificativo nell’email</strong></label><br><select id="mi_identifier_display" name="mi_identifier_display"><option value="NONE" <?php selected( $identifier_display, 'NONE' ); ?>>Non mostrare</option><option value="TEXT" <?php selected( $identifier_display, 'TEXT' ); ?>>Testo</option><option value="QR" <?php selected( $identifier_display, 'QR' ); ?>>QR facoltativo</option><option value="BARCODE" <?php selected( $identifier_display, 'BARCODE' ); ?>>Barcode facoltativo</option></select></p>
 			<p class="description">QR e barcode sono scelte dell’organizzatore. Il payload resta legato all’evento e al codice ordine, senza dati personali.</p>
-			<p><label for="mi_privacy_policy_version"><strong>Versione informativa privacy</strong></label><br><input id="mi_privacy_policy_version" name="mi_privacy_policy_version" maxlength="64" value="<?php echo esc_attr( $privacy_policy_version ); ?>" placeholder="Es. 2026-08"></p>
-			<p><label for="mi_privacy_consent_id"><strong>ID consenso privacy</strong></label><br><input id="mi_privacy_consent_id" name="mi_privacy_consent_id" maxlength="100" value="<?php echo esc_attr( $privacy_consent_id ); ?>"></p>
 			<p><label><input name="mi_marketing_enabled" type="checkbox" value="1" <?php checked( $marketing_enabled ); ?>> Mostra il campo facoltativo “Comunicazioni su future iniziative”</label></p>
-			<p><label for="mi_marketing_consent_id"><strong>ID del consenso alle comunicazioni</strong></label><br><input id="mi_marketing_consent_id" name="mi_marketing_consent_id" maxlength="100" value="<?php echo esc_attr( $marketing_consent_id ); ?>"></p>
 			<p><label><input name="mi_high_impact_approved" type="checkbox" value="1" <?php checked( $high_impact_approved ); ?>> La verifica privacy per campi ad alto impatto è stata approvata</label></p>
 		</div>
 		<hr>
@@ -274,10 +270,10 @@ final class MI_Event_Post_Type {
 			update_post_meta( $post_id, '_mi_payment_deadline_at', $payment_deadline_at );
 			delete_post_meta( $post_id, '_mi_reservation_minutes' );
 		}
-		update_post_meta( $post_id, '_mi_privacy_policy_version', sanitize_text_field( wp_unslash( $_POST['mi_privacy_policy_version'] ?? '' ) ) );
-		update_post_meta( $post_id, '_mi_privacy_consent_id', sanitize_key( wp_unslash( $_POST['mi_privacy_consent_id'] ?? '' ) ) );
+		if ( ! get_post_meta( $post_id, '_mi_privacy_policy_version', true ) ) update_post_meta( $post_id, '_mi_privacy_policy_version', wp_date( 'Y-m' ) );
+		if ( ! get_post_meta( $post_id, '_mi_privacy_consent_id', true ) ) update_post_meta( $post_id, '_mi_privacy_consent_id', 'privacy-' . $post_id );
 		update_post_meta( $post_id, '_mi_marketing_enabled', isset( $_POST['mi_marketing_enabled'] ) ? '1' : '0' );
-		update_post_meta( $post_id, '_mi_marketing_consent_id', sanitize_key( wp_unslash( $_POST['mi_marketing_consent_id'] ?? '' ) ) );
+		if ( ! get_post_meta( $post_id, '_mi_marketing_consent_id', true ) ) update_post_meta( $post_id, '_mi_marketing_consent_id', 'marketing-' . $post_id );
 		update_post_meta( $post_id, '_mi_high_impact_approved', isset( $_POST['mi_high_impact_approved'] ) ? '1' : '0' );
 
 		foreach ( array( 'opens_at', 'closes_at' ) as $field ) {
@@ -296,8 +292,11 @@ final class MI_Event_Post_Type {
 
 		$pricing_mode = isset( $_POST['mi_pricing_mode'] ) ? sanitize_key( wp_unslash( $_POST['mi_pricing_mode'] ) ) : 'none';
 		$pricing_mode = strtoupper( $pricing_mode );
-		$pricing_mode = in_array( $pricing_mode, array( 'NONE', 'ZERO', 'CALCULATED' ), true ) ? $pricing_mode : 'NONE';
+		$pricing_mode = in_array( $pricing_mode, array( 'NONE', 'ZERO', 'FIXED', 'CALCULATED' ), true ) ? $pricing_mode : 'NONE';
 		update_post_meta( $post_id, '_mi_pricing_mode', $pricing_mode );
+		$fixed_price_raw = isset( $_POST['mi_fixed_price'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['mi_fixed_price'] ) ) ) : '';
+		$fixed_price = preg_match( '/^\d+(?:[\.,]\d{1,2})?$/', $fixed_price_raw ) ? (float) str_replace( ',', '.', $fixed_price_raw ) : 0;
+		update_post_meta( $post_id, '_mi_fixed_price_cents', 'FIXED' === $pricing_mode ? max( 0, (int) round( $fixed_price * 100 ) ) : 0 );
 
 		$economic_mode = isset( $_POST['mi_economic_mode'] ) ? strtoupper( sanitize_key( wp_unslash( $_POST['mi_economic_mode'] ) ) ) : 'REGISTRATION_ONLY';
 		$economic_modes = array( 'REGISTRATION_ONLY', 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE' );

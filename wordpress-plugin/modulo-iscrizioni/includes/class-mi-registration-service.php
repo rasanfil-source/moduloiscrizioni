@@ -108,6 +108,7 @@ final class MI_Registration_Service {
 			'opens_at'         => (string) get_post_meta( $event_id, '_mi_registration_opens_at', true ),
 			'closes_at'        => (string) get_post_meta( $event_id, '_mi_registration_closes_at', true ),
 			'pricing_mode'     => (string) get_post_meta( $event_id, '_mi_pricing_mode', true ),
+			'fixed_price_cents'=> max( 0, (int) get_post_meta( $event_id, '_mi_fixed_price_cents', true ) ),
 			'economic_mode'    => (string) ( get_post_meta( $event_id, '_mi_economic_mode', true ) ?: 'REGISTRATION_ONLY' ),
 			'deposit_percentage' => min( 99, max( 1, absint( get_post_meta( $event_id, '_mi_deposit_percentage', true ) ?: 30 ) ) ),
 			'payment_methods'  => (array) get_post_meta( $event_id, '_mi_payment_methods', true ),
@@ -273,7 +274,7 @@ final class MI_Registration_Service {
 		$outbox_table = $wpdb->prefix . 'mi_email_outbox';
 		$now = current_time( 'mysql', true );
 		$order_code = self::generate_order_code();
-		$options_total = 'CALCULATED' === $event['pricing_mode'] ? self::options_total( $order_options, $participants ) : 0;
+		$options_total = in_array( $event['pricing_mode'], array( 'FIXED', 'CALCULATED' ), true ) ? self::options_total( $order_options, $participants ) : 0;
 
 		$wpdb->query( 'START TRANSACTION' );
 		try {
@@ -799,7 +800,7 @@ final class MI_Registration_Service {
 				return new WP_Error( 'mi_ticket_limit', 'Quantità superiore al limite per ordine.', array( 'status' => 400 ) );
 			}
 			if ( $item_quantity > 0 ) {
-				$unit_price = 'CALCULATED' === $event['pricing_mode'] ? (int) $allowed[ $code ]['price_cents'] : 0;
+				$unit_price = 'FIXED' === $event['pricing_mode'] ? max( 0, (int) ( $event['fixed_price_cents'] ?? 0 ) ) : ( 'CALCULATED' === $event['pricing_mode'] ? (int) $allowed[ $code ]['price_cents'] : 0 );
 				$items[] = array( 'code' => $code, 'name' => sanitize_text_field( $allowed[ $code ]['name'] ), 'quantity' => $item_quantity, 'unit_price_cents' => $unit_price, 'capacity' => absint( $allowed[ $code ]['capacity'] ?? 0 ) );
 				$quantity += $item_quantity;
 				$total += $item_quantity * $unit_price;

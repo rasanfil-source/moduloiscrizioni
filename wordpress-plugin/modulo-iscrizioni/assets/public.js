@@ -67,7 +67,7 @@
     }
 
     function totalCents() {
-      const prices = Object.fromEntries((config.event.ticket_types || []).map((ticket) => [ticket.code, Number(ticket.price_cents) || 0]));
+	  const prices = Object.fromEntries((config.event.ticket_types || []).map((ticket) => [ticket.code, config.event.pricing_mode === 'FIXED' ? Number(config.event.fixed_price_cents) || 0 : Number(ticket.price_cents) || 0]));
       const optionPrices = Object.fromEntries((config.event.options || []).map((option) => [option.code, Number(option.price_cents) || 0]));
       const ticketTotal = Object.entries(ticketSelection()).reduce((total, [code, quantity]) => total + (prices[code] || 0) * quantity, 0);
       const orderTotal = Object.entries(orderOptionSelection()).reduce((total, [code, quantity]) => total + (optionPrices[code] || 0) * quantity, 0);
@@ -112,7 +112,7 @@
 	  const quantity = totalQuantity();
 	  if (!stickySummary) return;
 	  const quantityLabel = quantity === 1 ? '1 iscrizione' : `${quantity} iscrizioni`;
-	  const priceLabel = config.event.pricing_mode === 'CALCULATED' ? formatCurrency(totalCents()) : (config.event.pricing_mode === 'ZERO' ? 'evento gratuito' : '');
+	  const priceLabel = ['FIXED', 'CALCULATED'].includes(config.event.pricing_mode) ? formatCurrency(totalCents()) : (config.event.pricing_mode === 'ZERO' ? 'evento gratuito' : '');
 	  stickySummary.textContent = quantity ? `${quantityLabel}${priceLabel ? ` · ${priceLabel}` : ''}` : 'Nessuna iscrizione';
 	  root.querySelectorAll('[data-mi-ticket]').forEach((input) => {
 		input.closest('.mi-registration__ticket')?.classList.toggle('is-selected', Number(input.value) > 0);

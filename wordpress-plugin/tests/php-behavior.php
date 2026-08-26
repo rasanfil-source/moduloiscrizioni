@@ -62,6 +62,12 @@ $free_event['pricing_mode'] = 'ZERO';
 $free_selection = invoke_private( 'validate_selection', array( $free_event, array( 'intero' => 2 ) ) );
 expect( ! is_wp_error( $free_selection ) && 0 === $free_selection['total_cents'], 'evento gratuito con totale diverso da zero' );
 
+$fixed_event = $event;
+$fixed_event['pricing_mode'] = 'FIXED';
+$fixed_event['fixed_price_cents'] = 1500;
+$fixed_selection = invoke_private( 'validate_selection', array( $fixed_event, array( 'intero' => 2 ) ) );
+expect( ! is_wp_error( $fixed_selection ) && 3000 === $fixed_selection['total_cents'] && 1500 === $fixed_selection['items'][0]['unit_price_cents'], 'quota uguale per tutti non applicata' );
+
 $too_many = invoke_private( 'validate_selection', array( $event, array( 'intero' => 5 ) ) );
 expect( is_wp_error( $too_many ) && 'mi_ticket_limit' === $too_many->code, 'limite quota non applicato' );
 $fractional = invoke_private( 'validate_selection', array( $event, array( 'intero' => 1.5 ) ) );
