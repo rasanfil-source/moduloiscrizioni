@@ -193,7 +193,6 @@
             }
           });
           additionalParticipants.hidden = false;
-          additionalParticipants.querySelectorAll('[data-mi-required-when-open]').forEach((input) => { input.required = true; });
           additionalToggle.hidden = true;
           additionalParticipants.querySelector('input, select, textarea')?.focus();
         });
@@ -236,7 +235,6 @@
       input.maxLength = 80;
       input.autocomplete = `section-participant-${index + 1} ${autocomplete}`;
       input.required = index === 0;
-      if (index > 0) input.dataset.miRequiredWhenOpen = '';
       input.value = value;
       input.dataset[key === 'firstName' ? 'miFirstName' : 'miLastName'] = '';
       label.append(input);
@@ -245,7 +243,7 @@
 
     function configuredParticipantField(field, value, index) {
       const label = document.createElement('label');
-      label.textContent = field.required ? `${field.label} *` : field.label;
+      label.textContent = index === 0 ? `${field.label} *` : field.label;
       let input;
       if (field.type === 'select') {
         input = document.createElement('select');
@@ -267,8 +265,7 @@
         input.type = field.type === 'date' ? 'date' : 'text';
       }
       input.name = `participant-${index}-field-${field.key}`;
-      input.required = Boolean(field.required) && index === 0;
-      if (field.required && index > 0) input.dataset.miRequiredWhenOpen = '';
+      input.required = index === 0;
       input.value = value;
       input.dataset.miParticipantField = field.key;
       if (field.max_length) input.maxLength = field.max_length;

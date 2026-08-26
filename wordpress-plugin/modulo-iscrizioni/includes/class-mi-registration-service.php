@@ -806,10 +806,14 @@ final class MI_Registration_Service {
 			$raw_fields = is_array( $raw['fields'] ?? null ) ? $raw['fields'] : array();
 			$raw_options = is_array( $raw['options'] ?? null ) ? $raw['options'] : array();
 			$has_optional_data = $first_name || $last_name || array_filter( $raw_fields, static function ( $value ) { return '' !== trim( (string) $value ); } ) || array_filter( $raw_options, static function ( $value ) { return (int) $value > 0; } );
-			if ( ( 0 === $participant_position || $has_optional_data ) && ( ! $first_name || ! $last_name ) || strlen( $first_name ) > 80 || strlen( $last_name ) > 80 ) {
+			if ( ( 0 === $participant_position && ( ! $first_name || ! $last_name ) ) || strlen( $first_name ) > 80 || strlen( $last_name ) > 80 ) {
 				return new WP_Error( 'mi_participant_invalid', 'Controlla i dati dei partecipanti.', array( 'status' => 400 ) );
 			}
-			$answers = $has_optional_data || 0 === $participant_position ? MI_Field_Schema::validate_answers( $raw_fields, $fields ) : array();
+			$validation_fields = array_map( static function ( $field ) use ( $participant_position ) {
+				$field['required'] = 0 === $participant_position;
+				return $field;
+			}, $fields );
+			$answers = $has_optional_data || 0 === $participant_position ? MI_Field_Schema::validate_answers( $raw_fields, $validation_fields ) : array();
 			if ( is_wp_error( $answers ) ) {
 				return $answers;
 			}

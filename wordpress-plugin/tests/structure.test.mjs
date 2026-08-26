@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.4\.9/);
+  assert.match(source, /Version:\s+3\.4\.10/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -89,11 +89,20 @@ test('il percorso pubblico è progressivo e dispone di un modello concentrato', 
   assert.match(script, /Completa i tuoi dati/);
   assert.match(script, /Abbiamo bisogno di qualche dato in più di almeno uno degli iscritti/);
   assert.match(script, /Aggiungi i dati degli altri partecipanti \(facoltativo\)/);
-  assert.match(script, /data-mi-required-when-open/);
+  assert.doesNotMatch(script, /data-mi-required-when-open/);
+  assert.match(script, /input\.required = index === 0/);
   assert.match(script, /additionalToggle\.addEventListener\('click'/);
   assert.match(script, /sourceInputs/);
   assert.match(template, /wp_head/);
   assert.doesNotMatch(template, /get_header|get_sidebar/);
+});
+
+test('tutti i dati del primo partecipante sono obbligatori e quelli successivi facoltativi', async () => {
+  const service = await read('includes/class-mi-registration-service.php');
+  const script = await read('assets/public.js');
+  assert.match(service, /field\['required'\] = 0 === \$participant_position/);
+  assert.match(service, /0 === \$participant_position && \( ! \$first_name \|\| ! \$last_name \)/);
+  assert.doesNotMatch(script, /additionalParticipants[\s\S]{0,300}input\.required = true/);
 });
 
 test('la bacheca offre ai delegati un accesso diretto al servizio moduli', async () => {
