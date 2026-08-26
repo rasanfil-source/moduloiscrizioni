@@ -71,7 +71,7 @@ final class MI_Admin {
 		$transaction = strtoupper( sanitize_key( wp_unslash( $_POST['transaction_kind'] ?? 'PAYMENT' ) ) );
 		$amount = self::parse_importo_centesimi( wp_unslash( $_POST['amount'] ?? '' ) );
 		$effective_raw = sanitize_text_field( wp_unslash( $_POST['effective_at'] ?? '' ) );
-		$effective_at = current_time( 'mysql' );
+		$effective_at = current_time( 'mysql', true );
 		if ( $effective_raw ) {
 			$effective_date = DateTimeImmutable::createFromFormat( 'Y-m-d\\TH:i', $effective_raw, wp_timezone() );
 			if ( ! $effective_date || $effective_date->format( 'Y-m-d\\TH:i' ) !== $effective_raw ) { wp_die( esc_html__( 'Data effettiva non valida.', 'modulo-iscrizioni' ) ); }
@@ -91,15 +91,23 @@ final class MI_Admin {
 		$registration_changes = array( 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_changed' );
 		$registration_formats = array( '%s', '%s' );
 		$net_paid = self::totale_pagamenti( $registration_id );
-		if ( $net_paid >= (int) $locked['initial_due_cents'] ) {
+		$new_status = $locked['status'];
+		if ( 'PENDING_PAYMENT' === $locked['status'] && $net_paid >= (int) $locked['initial_due_cents'] ) {
+			$new_status = 'CONFIRMED';
+			$registration_changes['status'] = $new_status;
+			$registration_formats[] = '%s';
 			$registration_changes['expires_at'] = null;
 			$registration_formats[] = '%s';
-		} elseif ( 'CONFIRMED' === $locked['status'] && $locked['payment_deadline_at'] ) {
+		} elseif ( 'CONFIRMED' === $locked['status'] && (int) $locked['initial_due_cents'] > 0 && $net_paid < (int) $locked['initial_due_cents'] ) {
+			$new_status = 'PENDING_PAYMENT';
+			$registration_changes['status'] = $new_status;
+			$registration_formats[] = '%s';
 			$registration_changes['expires_at'] = $locked['payment_deadline_at'];
 			$registration_formats[] = '%s';
 		}
 		$marked_pending = $wpdb->update( $wpdb->prefix . 'mi_registrations', $registration_changes, array( 'id' => $registration_id ), $registration_formats, array( '%d' ) );
 		if ( false === $marked_pending ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Il movimento non è stato accodato per Workspace. Riprova.', 'modulo-iscrizioni' ) ); }
+		if ( $new_status !== $locked['status'] && ! MI_Registration_Service::append_registration_event( $registration_id, 'PAYMENT_STATUS_CHANGED', $locked['status'], $new_status, wp_get_current_user()->display_name, array( 'net_paid_cents' => $net_paid, 'initial_due_cents' => (int) $locked['initial_due_cents'] ) ) ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Lo stato del pagamento non è stato registrato. Riprova.', 'modulo-iscrizioni' ) ); }
 		$wpdb->query( 'COMMIT' );
 		MI_Registration_Service::accoda_iscrizione_workspace( $registration_id );
 		$url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-registrations', 'registration_id' => $registration_id, 'mi_payment_added' => '1' ), admin_url( 'edit.php' ) );
@@ -266,14 +274,14 @@ final class MI_Admin {
 		<?php if ( ! $rows ) : ?><tr><td colspan="12">Nessuna iscrizione.</td></tr><?php endif; ?>
 		<?php foreach ( $rows as $row ) : ?>
 		<?php $detail_url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-registrations', 'registration_id' => (int) $row['id'] ), admin_url( 'edit.php' ) ); ?>
-		<?php $paid_cents = self::totale_pagamenti( (int) $row['id'] ); ?><tr><td><code><?php echo esc_html( $row['order_code'] ); ?></code></td><td><?php echo esc_html( get_the_title( (int) $row['event_id'] ) ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['workspace_status'] ); ?><?php if ( (int) $row['workspace_attempts'] > 0 ) : ?><br><small><?php echo esc_html( 'Tentativi: ' . (int) $row['workspace_attempts'] ); ?></small><?php endif; ?></td><td><?php echo esc_html( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ); ?></td><td><?php echo esc_html( $row['buyer_email'] ); ?></td><td><?php echo esc_html( $row['total_qty'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['total_cents'] ) ); ?></td><td><?php echo esc_html( self::formatta_importo( $paid_cents ) ); ?></td><td><?php echo esc_html( self::formatta_importo( max( 0, (int) $row['total_cents'] - $paid_cents ) ) ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $detail_url ); ?>">Dettagli</a></td></tr>
+		<?php $paid_cents = self::totale_pagamenti( (int) $row['id'] ); ?><tr><td><code><?php echo esc_html( $row['order_code'] ); ?></code></td><td><?php echo esc_html( get_the_title( (int) $row['event_id'] ) ); ?></td><td><?php echo esc_html( self::etichetta_stato( $row['status'] ) ); ?></td><td><?php echo esc_html( $row['workspace_status'] ); ?><?php if ( (int) $row['workspace_attempts'] > 0 ) : ?><br><small><?php echo esc_html( 'Tentativi: ' . (int) $row['workspace_attempts'] ); ?></small><?php endif; ?></td><td><?php echo esc_html( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ); ?></td><td><?php echo esc_html( $row['buyer_email'] ); ?></td><td><?php echo esc_html( $row['total_qty'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['total_cents'] ) ); ?></td><td><?php echo esc_html( self::formatta_importo( $paid_cents ) ); ?></td><td><?php echo esc_html( self::formatta_importo( max( 0, (int) $row['total_cents'] - $paid_cents ) ) ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $detail_url ); ?>">Dettagli</a></td></tr>
 		<?php endforeach; ?>
 		</tbody></table>
 		<?php if ( $detail ) : ?>
 		<hr><h2>Dettaglio iscrizione <code><?php echo esc_html( $detail['order_code'] ); ?></code></h2>
 		<table class="widefat striped" style="max-width:900px"><tbody>
 		<tr><th scope="row">Evento</th><td><?php echo esc_html( get_the_title( (int) $detail['event_id'] ) ); ?></td></tr>
-		<tr><th scope="row">Stato</th><td><?php echo esc_html( $detail['status'] ); ?></td></tr>
+		<tr><th scope="row">Stato</th><td><?php echo esc_html( self::etichetta_stato( $detail['status'] ) ); ?></td></tr>
 		<tr><th scope="row">Workspace</th><td><?php echo esc_html( $detail['workspace_status'] ); ?></td></tr>
 		<tr><th scope="row">Tentativi Workspace</th><td><?php echo esc_html( (string) (int) $detail['workspace_attempts'] ); ?></td></tr>
 		<tr><th scope="row">Ultimo errore Workspace</th><td><?php echo esc_html( $detail['workspace_last_error'] ?: 'Nessuno' ); ?></td></tr>
@@ -299,7 +307,7 @@ final class MI_Admin {
 		<?php $detail_order_options = json_decode( (string) ( $detail['order_options_json'] ?? '' ), true ); if ( ! is_array( $detail_order_options ) && $registration_items ) { $detail_order_options = json_decode( (string) $registration_items[0]['options_json'], true ); } $detail_order_options = is_array( $detail_order_options ) ? $detail_order_options : array(); ?>
 		<?php if ( $detail_order_options ) : ?><p><strong>Opzioni ordine:</strong> <?php echo esc_html( implode( ', ', array_map( static function ( $option ) { return ( $option['name'] ?? $option['code'] ?? 'Opzione' ) . ' × ' . absint( $option['quantity'] ?? 0 ); }, $detail_order_options ) ) ); ?></p><?php else : ?><p>Nessuna opzione ordine.</p><?php endif; ?>
 		<?php if ( ! $registration_items ) : ?><p>Nessuna tipologia storica disponibile.</p><?php else : ?><table class="widefat striped" style="max-width:900px"><thead><tr><th>Codice</th><th>Nome</th><th>Quantità</th><th>Prezzo unitario</th></tr></thead><tbody><?php foreach ( $registration_items as $registration_item ) : ?><tr><td><code><?php echo esc_html( $registration_item['ticket_type_code'] ); ?></code></td><td><?php echo esc_html( $registration_item['ticket_type_name'] ?: 'Nome storico non disponibile' ); ?></td><td><?php echo esc_html( $registration_item['quantity'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $registration_item['unit_price_cents'] ) ); ?></td></tr><?php endforeach; ?></tbody></table><?php endif; ?>
-		<?php if ( current_user_can( 'mi_manage_events' ) && in_array( $detail['status'], array( 'CONFIRMED', 'WAITLISTED' ), true ) ) : ?><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" onsubmit="return confirm('Annullare questa iscrizione e liberare i posti?');"><input type="hidden" name="action" value="mi_cancel_registration"><input type="hidden" name="registration_id" value="<?php echo esc_attr( $detail_id ); ?>"><?php wp_nonce_field( 'mi_cancel_registration_' . $detail_id ); ?><button class="button button-secondary">Annulla iscrizione e libera posti</button></form><?php endif; ?>
+		<?php if ( current_user_can( 'mi_manage_events' ) && in_array( $detail['status'], array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED' ), true ) ) : ?><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" onsubmit="return confirm('Annullare questa iscrizione e liberare i posti?');"><input type="hidden" name="action" value="mi_cancel_registration"><input type="hidden" name="registration_id" value="<?php echo esc_attr( $detail_id ); ?>"><?php wp_nonce_field( 'mi_cancel_registration_' . $detail_id ); ?><button class="button button-secondary">Annulla iscrizione e libera posti</button></form><?php endif; ?>
 		<?php if ( 'SYNCED' !== $detail['workspace_status'] ) : ?>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin:16px 0">
 		<input type="hidden" name="action" value="mi_retry_workspace">
@@ -473,6 +481,11 @@ final class MI_Admin {
 	private static function etichetta_modalita_economica( $mode ) {
 		$labels = array( 'REGISTRATION_ONLY' => 'Solo iscrizione', 'PRICE_ONLY' => 'Prezzo informativo', 'FULL_PAYMENT' => 'Versamento completo', 'DEPOSIT_BALANCE' => 'Caparra e saldo' );
 		return $labels[ $mode ] ?? 'Solo iscrizione';
+	}
+
+	private static function etichetta_stato( $status ) {
+		$labels = array( 'PENDING_PAYMENT' => 'In attesa di pagamento', 'CONFIRMED' => 'Confermata', 'WAITLISTED' => 'Lista d’attesa', 'CANCELLED' => 'Annullata', 'EXPIRED' => 'Scaduta' );
+		return $labels[ $status ] ?? (string) $status;
 	}
 
 	public static function outbox_page() {

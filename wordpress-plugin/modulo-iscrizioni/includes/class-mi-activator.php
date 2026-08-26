@@ -209,7 +209,7 @@ final class MI_Activator {
 			$wpdb->prepare(
 				"INSERT INTO {$ticket_counters} (event_id, ticket_type_code, confirmed_count, waitlisted_count, updated_at)
 				 SELECT r.event_id, i.ticket_type_code,
-				 SUM(CASE WHEN r.status = 'CONFIRMED' AND r.capacity_released_at IS NULL THEN i.quantity ELSE 0 END),
+				 SUM(CASE WHEN r.status IN ('CONFIRMED','PENDING_PAYMENT') AND r.capacity_released_at IS NULL THEN i.quantity ELSE 0 END),
 				 SUM(CASE WHEN r.status = 'WAITLISTED' AND r.capacity_released_at IS NULL THEN i.quantity ELSE 0 END), %s
 				 FROM {$items} i INNER JOIN {$registrations} r ON r.id = i.registration_id
 				 GROUP BY r.event_id, i.ticket_type_code",

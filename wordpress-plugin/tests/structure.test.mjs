@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.4\.10/);
+  assert.match(source, /Version:\s+3\.4\.11/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -150,7 +150,7 @@ test('capienza, scadenze e lista d’attesa sono verificate anche nella transazi
   assert.match(service, /'SOLD_OUT'/);
   assert.match(service, /'remaining'/);
   assert.match(shortcode, /Posti ordinari esauriti/);
-  assert.match(postType, /confermati/);
+  assert.match(postType, /posti occupati/);
 });
 
 test('i campi partecipante usano profili, allowlist e validazione server', async () => {
@@ -583,9 +583,26 @@ test('il modulo mostra totale, caparra e saldo senza pagamenti online', async ()
   assert.match(shortcode, /data-mi-economic-summary/);
   assert.match(script, /renderEconomicSummary/);
   assert.match(script, /deposit_percentage/);
-  assert.match(script, /Primo versamento previsto/);
+  assert.match(script, /Importo da versare/);
   assert.match(script, /registrat[oi] manualmente dall’organizzazione/);
   assert.doesNotMatch(script, /stripe|paypal|checkout/i);
+});
+
+test('le prenotazioni a pagamento attendono il versamento prima della conferma', async () => {
+  const service = await read('includes/class-mi-registration-service.php');
+  const admin = await read('includes/class-mi-admin.php');
+  const script = await read('assets/public.js');
+  assert.match(service, /'PENDING_PAYMENT'/);
+  assert.match(service, /WHERE r\.status = 'PENDING_PAYMENT'/);
+  assert.match(service, /PAYMENT_STATUS_CHANGED/);
+  assert.match(admin, /'PENDING_PAYMENT'.*'CONFIRMED'/s);
+  assert.match(admin, /In attesa di pagamento/);
+  assert.match(script, /Prenotazione registrata e in attesa di pagamento/);
+});
+
+test('il nome storico della tipologia resta una stringa', async () => {
+  const service = await read('includes/class-mi-registration-service.php');
+  assert.match(service, /ticket_type_name' => \$item\['name'\][\s\S]{0,180}array\( '%d', '%s', '%s', '%d', '%d' \)/);
 });
 
 test('il modulo presenta in italiano le fonti registrate manualmente', async () => {

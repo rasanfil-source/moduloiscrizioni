@@ -418,9 +418,11 @@
         if (!response.ok) throw new Error(result.message || 'Invio non riuscito.');
         form.hidden = true;
         successBox.hidden = false;
-        const successText = result.status === 'WAITLISTED'
-          ? `Richiesta inserita in lista d’attesa. Codice: ${result.order_code}`
-          : `Iscrizione registrata. Codice: ${result.order_code}${result.economic_summary?.initial_due_cents > 0 ? `. Primo versamento previsto: ${formatCurrency(result.economic_summary.initial_due_cents)}` : ''}`;
+		const successText = result.status === 'WAITLISTED'
+		  ? `Richiesta inserita in lista d’attesa. Codice: ${result.order_code}`
+		  : result.status === 'PENDING_PAYMENT'
+			? `Prenotazione registrata e in attesa di pagamento. Codice: ${result.order_code}. Importo da versare: ${formatCurrency(result.economic_summary.initial_due_cents)}`
+			: `Iscrizione confermata. Codice: ${result.order_code}`;
         successBox.textContent = successText;
         if (config.event.identifier_display === 'QR' && typeof window.qrcode === 'function') {
           const qr = window.qrcode(0, 'M');

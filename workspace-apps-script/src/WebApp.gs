@@ -70,7 +70,7 @@ function aggiungiIscrizione_(payload) {
   const snapshotJson = String(payload.snapshot_json || '');
 	const revisionId = normalizzaTesto_(payload.event_revision_id, 40);
 	const revisionHash = normalizzaTesto_(payload.event_revision_hash, 64);
-	const registrationStatus = normalizzaValoreElenco_(payload.status, ['CONFIRMED', 'WAITLISTED', 'CANCELLED', 'EXPIRED']);
+	const registrationStatus = normalizzaValoreElenco_(payload.status, ['PENDING_PAYMENT', 'CONFIRMED', 'WAITLISTED', 'CANCELLED', 'EXPIRED']);
 	const economicMode = normalizzaValoreElenco_(payload.economic_mode, ['REGISTRATION_ONLY', 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE']);
   if (!/^[A-Za-z0-9_-]{3,64}$/.test(orderCode) || !/^\d+$/.test(eventId) || !/^[A-Za-z0-9_-]{16,64}$/.test(idempotencyKey) || !registrationStatus || !economicMode || participants.length < 1 || participants.length > 20) return { ok: false, error: 'INVALID_REGISTRATION' };
 	if (!/^\d+$/.test(revisionId) || !/^[a-f0-9]{64}$/i.test(revisionHash) || !normalizzaTesto_(payload.privacy_consent_id, 100) || !normalizzaTesto_(payload.privacy_policy_version, 64) || !normalizzaTesto_(payload.privacy_accepted_at, 40)) return { ok: false, error: 'INVALID_REVISION_OR_CONSENT' };
@@ -101,7 +101,7 @@ function aggiungiIscrizione_(payload) {
 		const firstName = normalizzaTesto_(participant.first_name, 80);
 		const lastName = normalizzaTesto_(participant.last_name, 80);
 		const hasOptionalData = firstName || lastName || Object.keys(participant.fields || {}).some(function (key) { return normalizzaTesto_(participant.fields[key], 5000); }) || Object.keys(participant.options || {}).some(function (key) { return Number(participant.options[key]) > 0; });
-		return (participantPosition === 0 || hasOptionalData) && (!firstName || !lastName) || fieldsJson.length > 5000 || optionsJson.length > 5000;
+		return (participantPosition === 0 && (!firstName || !lastName)) || fieldsJson.length > 5000 || optionsJson.length > 5000;
 	})) return { ok: false, error: 'INVALID_PARTICIPANTS' };
 
   const lock = LockService.getDocumentLock();
@@ -162,11 +162,11 @@ function aggiungiIscrizione_(payload) {
     const message = convertiRigheInOggetti_(outbox).find(function (row) { return String(row.codice_ordine) === orderCode && String(row.tipo_modello) === 'REGISTRATION_CONFIRMATION'; });
     const snapshotBuyer = snapshotData && snapshotData.buyer ? snapshotData.buyer : buyer;
     const originalRecipient = normalizzaTesto_(snapshotBuyer.email || buyer.email, 254);
-    const currentStatus = normalizzaValoreElenco_(payload.status, ['CONFIRMED', 'WAITLISTED']);
+    const currentStatus = normalizzaValoreElenco_(payload.status, ['PENDING_PAYMENT', 'CONFIRMED', 'WAITLISTED']);
     // Una promozione aggiorna lo stato corrente pur conservando l'istantanea
     // originaria WAITLISTED. Le cancellazioni continuano invece a usare lo
     // stato dell'istantanea per non generare una nuova conferma.
-    const originalStatus = currentStatus === 'CONFIRMED' ? 'CONFIRMED' : normalizzaValoreElenco_(snapshotData && snapshotData.status, ['CONFIRMED', 'WAITLISTED']) || currentStatus || 'CONFIRMED';
+    const originalStatus = ['CONFIRMED', 'PENDING_PAYMENT'].indexOf(currentStatus) >= 0 ? currentStatus : normalizzaValoreElenco_(snapshotData && snapshotData.status, ['PENDING_PAYMENT', 'CONFIRMED', 'WAITLISTED']) || currentStatus || 'CONFIRMED';
     const messageValues = [message ? message.id_messaggio : creaIdentificativoOpaco_('msg'), neutralizzaFormula_(orderCode, 64), neutralizzaFormula_(originalRecipient, 254), 'REGISTRATION_CONFIRMATION', JSON.stringify({ order_code: orderCode, status: originalStatus }), 'PREVIEW', message && message.data_creazione ? message.data_creazione : new Date()];
     if (message) outbox.getRange(message._row, 1, 1, messageValues.length).setValues([messageValues]); else outbox.appendRow(messageValues);
     sincronizzaPagamenti_(orderCode, payload.payments);

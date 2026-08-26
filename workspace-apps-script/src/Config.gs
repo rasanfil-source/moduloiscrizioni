@@ -1,4 +1,4 @@
-const MI_SCHEMA_VERSION = '1.2.2';
+const MI_SCHEMA_VERSION = '1.2.3';
 const MI_SHEETS = Object.freeze({
   CONFIG: 'Configurazione',
   EVENTS: 'Eventi',

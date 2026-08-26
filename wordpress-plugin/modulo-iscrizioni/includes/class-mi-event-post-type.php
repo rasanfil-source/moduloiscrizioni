@@ -392,8 +392,12 @@ final class MI_Event_Post_Type {
 		} elseif ( 'mi_window' === $column ) {
 			echo esc_html( get_post_meta( $post_id, '_mi_registration_opens_at', true ) . ' → ' . get_post_meta( $post_id, '_mi_registration_closes_at', true ) );
 		} elseif ( 'mi_capacity' === $column ) {
-			$availability = MI_Registration_Service::availability( array( 'id' => $post_id, 'capacity' => absint( get_post_meta( $post_id, '_mi_capacity', true ) ) ) );
-			echo esc_html( $availability['confirmed'] . '/' . $availability['capacity'] . ' confermati' );
+			$published_event = MI_Registration_Service::public_event( $post_id );
+			$draft_capacity = absint( get_post_meta( $post_id, '_mi_capacity', true ) );
+			$capacity_event = is_wp_error( $published_event ) ? array( 'id' => $post_id, 'capacity' => $draft_capacity ) : $published_event;
+			$availability = MI_Registration_Service::availability( $capacity_event );
+			echo esc_html( $availability['confirmed'] . '/' . $availability['capacity'] . ' posti occupati' );
+			if ( ! is_wp_error( $published_event ) && $draft_capacity !== (int) $availability['capacity'] ) echo '<br><small style="color:#b32d2e">Bozza: ' . esc_html( $draft_capacity ) . ' · ripubblicare</small>';
 			if ( $availability['waitlisted'] ) {
 				echo '<br><small>' . esc_html( $availability['waitlisted'] . ' in attesa' ) . '</small>';
 			}

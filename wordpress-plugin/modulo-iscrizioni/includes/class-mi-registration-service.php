@@ -295,7 +295,7 @@ final class MI_Registration_Service {
 				}
 			}
 			if ( $selection['quantity'] <= $remaining && $type_capacity_available ) {
-				$status = 'CONFIRMED';
+				$status = in_array( $event['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) && ( $selection['total_cents'] + $options_total ) > 0 ? 'PENDING_PAYMENT' : 'CONFIRMED';
 				$counter_field = 'confirmed_count';
 			} elseif ( $event['waitlist_enabled'] ) {
 				$status = 'WAITLISTED';
@@ -383,7 +383,7 @@ final class MI_Registration_Service {
 				'{{evento.titolo}}'           => $event['title'],
 				'{{attivita.nome}}'           => $event['activity'],
 				'{{ordine.codice}}'           => $order_code,
-				'{{ordine.stato}}'            => 'CONFIRMED' === $status ? 'Confermata' : 'Lista d’attesa',
+				'{{ordine.stato}}'            => 'CONFIRMED' === $status ? 'Confermata' : ( 'PENDING_PAYMENT' === $status ? 'In attesa di pagamento' : 'Lista d’attesa' ),
 				'{{ordine.partecipanti}}'     => (string) $selection['quantity'],
 				'{{referente.nome_completo}}' => $buyer['first_name'] . ' ' . $buyer['last_name'],
 			);
@@ -410,9 +410,9 @@ final class MI_Registration_Service {
 		$mode = in_array( $event['economic_mode'] ?? '', array( 'REGISTRATION_ONLY', 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ? $event['economic_mode'] : 'REGISTRATION_ONLY';
 		$initial_due = 0;
 		$balance = 0;
-		if ( 'CONFIRMED' === $status && 'FULL_PAYMENT' === $mode ) {
+		if ( in_array( $status, array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) && 'FULL_PAYMENT' === $mode ) {
 			$initial_due = $total_cents;
-		} elseif ( 'CONFIRMED' === $status && 'DEPOSIT_BALANCE' === $mode ) {
+		} elseif ( in_array( $status, array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) && 'DEPOSIT_BALANCE' === $mode ) {
 			$percentage = min( 99, max( 1, absint( $event['deposit_percentage'] ?? 30 ) ) );
 			$initial_due = (int) round( $total_cents * $percentage / 100 );
 			$balance = max( 0, $total_cents - $initial_due );
@@ -559,7 +559,7 @@ final class MI_Registration_Service {
 			$wpdb->prepare(
 				"SELECT r.id FROM {$registrations} r
 				 LEFT JOIN {$payments} p ON p.registration_id = r.id
-				 WHERE r.status = 'CONFIRMED' AND r.capacity_released_at IS NULL AND r.expires_at IS NOT NULL AND r.expires_at <= %s
+				 WHERE r.status = 'PENDING_PAYMENT' AND r.capacity_released_at IS NULL AND r.expires_at IS NOT NULL AND r.expires_at <= %s
 				 GROUP BY r.id, r.initial_due_cents
 				 HAVING COALESCE(SUM(CASE WHEN p.transaction_kind = 'REFUND' THEN -p.amount_cents ELSE p.amount_cents END), 0) < r.initial_due_cents
 				 ORDER BY r.id LIMIT 50",
@@ -575,7 +575,7 @@ final class MI_Registration_Service {
 		global $wpdb;
 		$registrations = $wpdb->prefix . 'mi_registrations';
 		$payments_table = $wpdb->prefix . 'mi_payments';
-		$orders = $wpdb->get_results( "SELECT id, order_code FROM {$registrations} WHERE status = 'CONFIRMED' AND capacity_released_at IS NULL ORDER BY id LIMIT 50", ARRAY_A );
+		$orders = $wpdb->get_results( "SELECT id, order_code FROM {$registrations} WHERE status IN ('CONFIRMED','PENDING_PAYMENT') AND capacity_released_at IS NULL ORDER BY id LIMIT 50", ARRAY_A );
 		if ( ! $orders ) return 0;
 		$result = MI_Workspace_Client::request( 'ELENCA_PAGAMENTI', array( 'order_codes' => array_column( $orders, 'order_code' ) ) );
 		if ( is_wp_error( $result ) || ! isset( $result['payments'] ) || ! is_array( $result['payments'] ) ) return new WP_Error( 'mi_workspace_payment_reconciliation_failed', 'Riconciliazione pagamenti Workspace non disponibile.' );
@@ -596,7 +596,27 @@ final class MI_Registration_Service {
 			$result_insert = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$payments_table} (registration_id, transaction_kind, installment_kind, effective_at, amount_cents, payment_source, external_reference, operator_label, administrative_note, origin_channel, origin_id, created_at) VALUES (%d,%s,%s,%s,%d,%s,%s,%s,%s,'WORKSPACE',%s,%s)", $by_code[ $order_code ], $kind, $installment, gmdate( 'Y-m-d H:i:s', $date ), $amount, $source, sanitize_text_field( $payment['riferimento_esterno'] ?? '' ), sanitize_text_field( $payment['etichetta_operatore'] ?? '' ), sanitize_textarea_field( $payment['nota_amministrativa'] ?? '' ), $origin_id, current_time( 'mysql', true ) ) );
 			if ( $result_insert ) $inserted++;
 		}
+		foreach ( $orders as $order ) self::reconcile_payment_status( (int) $order['id'], 'WORKSPACE' );
 		return $inserted;
+	}
+
+	private static function reconcile_payment_status( $registration_id, $actor_label ) {
+		global $wpdb;
+		$registrations = $wpdb->prefix . 'mi_registrations';
+		$payments = $wpdb->prefix . 'mi_payments';
+		$wpdb->query( 'START TRANSACTION' );
+		try {
+			$registration = $wpdb->get_row( $wpdb->prepare( "SELECT id, status, initial_due_cents, payment_deadline_at FROM {$registrations} WHERE id = %d FOR UPDATE", $registration_id ), ARRAY_A );
+			if ( ! $registration || ! in_array( $registration['status'], array( 'PENDING_PAYMENT', 'CONFIRMED' ), true ) || (int) $registration['initial_due_cents'] < 1 ) { $wpdb->query( 'COMMIT' ); return; }
+			$paid = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(CASE WHEN transaction_kind = 'REFUND' THEN -amount_cents ELSE amount_cents END),0) FROM {$payments} WHERE registration_id = %d", $registration_id ) );
+			$new_status = $paid >= (int) $registration['initial_due_cents'] ? 'CONFIRMED' : 'PENDING_PAYMENT';
+			if ( $new_status === $registration['status'] ) { $wpdb->query( 'COMMIT' ); return; }
+			$expires_at = 'CONFIRMED' === $new_status ? null : $registration['payment_deadline_at'];
+			if ( false === $wpdb->update( $registrations, array( 'status' => $new_status, 'expires_at' => $expires_at, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_status_changed' ), array( 'id' => $registration_id ), array( '%s', '%s', '%s', '%s' ), array( '%d' ) ) || ! self::append_registration_event( $registration_id, 'PAYMENT_STATUS_CHANGED', $registration['status'], $new_status, $actor_label, array( 'net_paid_cents' => $paid, 'initial_due_cents' => (int) $registration['initial_due_cents'] ) ) ) throw new RuntimeException( 'Stato pagamento non aggiornato.' );
+			$wpdb->query( 'COMMIT' );
+		} catch ( Throwable $error ) {
+			$wpdb->query( 'ROLLBACK' );
+		}
 	}
 
 	public static function cancel_registration( $registration_id, $actor_label = 'ADMIN' ) {
@@ -624,7 +644,7 @@ final class MI_Registration_Service {
 				$wpdb->query( 'COMMIT' );
 				return $registration['status'];
 			}
-			if ( ! in_array( $registration['status'], array( 'CONFIRMED', 'WAITLISTED' ), true ) || $registration['capacity_released_at'] ) {
+			if ( ! in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED' ), true ) || $registration['capacity_released_at'] ) {
 				throw new RuntimeException( 'Iscrizione non annullabile.' );
 			}
 			if ( 'EXPIRED' === $target_status ) {
@@ -636,7 +656,7 @@ final class MI_Registration_Service {
 				}
 			}
 			$event_id = (int) $registration['event_id'];
-			$counter_field = 'CONFIRMED' === $registration['status'] ? 'confirmed_count' : 'waitlisted_count';
+			$counter_field = in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ? 'confirmed_count' : 'waitlisted_count';
 			$wpdb->get_row( $wpdb->prepare( "SELECT event_id FROM {$counters} WHERE event_id = %d FOR UPDATE", $event_id ), ARRAY_A );
 			$items = $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code, quantity FROM {$items_table} WHERE registration_id = %d ORDER BY ticket_type_code", $registration_id ), ARRAY_A );
 			foreach ( $items as $item ) {
@@ -651,7 +671,7 @@ final class MI_Registration_Service {
 			if ( false === $updated || ! self::append_registration_event( $registration_id, $target_status, $registration['status'], $target_status, $actor_label ) ) {
 				throw new RuntimeException( 'Stato non aggiornato.' );
 			}
-			$promoted = 'CONFIRMED' === $registration['status'] ? self::promote_waitlisted_locked( $event_id, $now ) : array();
+			$promoted = in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ? self::promote_waitlisted_locked( $event_id, $now ) : array();
 			$wpdb->query( 'COMMIT' );
 			self::accoda_sincronizzazione_workspace( $registration_id, 'PENDING' );
 			foreach ( $promoted as $promoted_id ) self::accoda_sincronizzazione_workspace( $promoted_id, 'PENDING' );
@@ -690,20 +710,21 @@ final class MI_Registration_Service {
 				if ( $limit && $current + (int) $item['quantity'] > $limit ) { $fits = false; break; }
 			}
 			if ( ! $fits ) continue;
-			$economic = self::riepilogo_economico( $event, (int) $candidate['total_cents'], 'CONFIRMED' );
-			$deadline = self::registration_expiry( $event, 'CONFIRMED', $now );
-			$wpdb->update( $registrations, array( 'status' => 'CONFIRMED', 'initial_due_cents' => $economic['initial_due_cents'], 'balance_cents' => $economic['balance_cents'], 'expires_at' => $deadline, 'payment_deadline_at' => $deadline, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'waitlist_promoted' ), array( 'id' => $candidate['id'] ), array( '%s', '%d', '%d', '%s', '%s', '%s', '%s' ), array( '%d' ) );
+			$promoted_status = in_array( $event['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) && (int) $candidate['total_cents'] > 0 ? 'PENDING_PAYMENT' : 'CONFIRMED';
+			$economic = self::riepilogo_economico( $event, (int) $candidate['total_cents'], $promoted_status );
+			$deadline = self::registration_expiry( $event, $promoted_status, $now );
+			$wpdb->update( $registrations, array( 'status' => $promoted_status, 'initial_due_cents' => $economic['initial_due_cents'], 'balance_cents' => $economic['balance_cents'], 'expires_at' => $deadline, 'payment_deadline_at' => $deadline, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'waitlist_promoted' ), array( 'id' => $candidate['id'] ), array( '%s', '%d', '%d', '%s', '%s', '%s', '%s' ), array( '%d' ) );
 			$wpdb->query( $wpdb->prepare( "UPDATE {$counters} SET waitlisted_count = GREATEST(0, waitlisted_count - %d), confirmed_count = confirmed_count + %d, updated_at = %s WHERE event_id = %d", $candidate['total_qty'], $candidate['total_qty'], $now, $event_id ) );
 			$counter['confirmed_count'] += (int) $candidate['total_qty'];
 			foreach ( $items as $item ) {
 				$wpdb->query( $wpdb->prepare( "UPDATE {$ticket_counters} SET waitlisted_count = GREATEST(0, waitlisted_count - %d), confirmed_count = confirmed_count + %d, updated_at = %s WHERE event_id = %d AND ticket_type_code = %s", $item['quantity'], $item['quantity'], $now, $event_id, $item['ticket_type_code'] ) );
 				$type_counts[ $item['ticket_type_code'] ]['confirmed_count'] = (int) ( $type_counts[ $item['ticket_type_code'] ]['confirmed_count'] ?? 0 ) + (int) $item['quantity'];
 			}
-			self::append_registration_event( (int) $candidate['id'], 'WAITLIST_PROMOTED', 'WAITLISTED', 'CONFIRMED', 'SYSTEM', array( 'expires_at' => $deadline ) );
-			$email_values = array( '{{evento.titolo}}' => $event['title'], '{{attivita.nome}}' => $event['activity'], '{{ordine.codice}}' => $candidate['order_code'], '{{ordine.stato}}' => 'Confermata', '{{ordine.partecipanti}}' => (string) $candidate['total_qty'], '{{referente.nome_completo}}' => $candidate['buyer_first_name'] . ' ' . $candidate['buyer_last_name'] );
+			self::append_registration_event( (int) $candidate['id'], 'WAITLIST_PROMOTED', 'WAITLISTED', $promoted_status, 'SYSTEM', array( 'expires_at' => $deadline ) );
+			$email_values = array( '{{evento.titolo}}' => $event['title'], '{{attivita.nome}}' => $event['activity'], '{{ordine.codice}}' => $candidate['order_code'], '{{ordine.stato}}' => 'PENDING_PAYMENT' === $promoted_status ? 'In attesa di pagamento' : 'Confermata', '{{ordine.partecipanti}}' => (string) $candidate['total_qty'], '{{referente.nome_completo}}' => $candidate['buyer_first_name'] . ' ' . $candidate['buyer_last_name'] );
 			$email_snapshot = MI_Modello_Email::crea_istantanea( $event_id, $email_values );
 			$email_status = MI_Spedizione_Email::stato_nuova_email( $email_snapshot );
-			$wpdb->insert( $outbox, array( 'registration_id' => $candidate['id'], 'recipient' => $candidate['buyer_email'], 'template_type' => 'WAITLIST_PROMOTION', 'payload_json' => wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $candidate['order_code'], 'status' => 'CONFIRMED', 'email_preview' => $email_snapshot ) ), 'status' => $email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) );
+			$wpdb->insert( $outbox, array( 'registration_id' => $candidate['id'], 'recipient' => $candidate['buyer_email'], 'template_type' => 'WAITLIST_PROMOTION', 'payload_json' => wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $candidate['order_code'], 'status' => $promoted_status, 'email_preview' => $email_snapshot ) ), 'status' => $email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) );
 			$promoted[] = (int) $candidate['id'];
 		}
 		return $promoted;
@@ -870,7 +891,7 @@ final class MI_Registration_Service {
 	}
 
 	private static function registration_expiry( $event, $status, $now ) {
-		if ( 'CONFIRMED' !== $status || ! in_array( $event['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) {
+		if ( 'PENDING_PAYMENT' !== $status || ! in_array( $event['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) {
 			return null;
 		}
 		$deadline = (string) ( $event['payment_deadline_at'] ?? '' );
@@ -902,7 +923,7 @@ final class MI_Registration_Service {
 		);
 	}
 
-	private static function append_registration_event( $registration_id, $event_type, $from_status, $to_status, $actor_label, $detail = array() ) {
+	public static function append_registration_event( $registration_id, $event_type, $from_status, $to_status, $actor_label, $detail = array() ) {
 		global $wpdb;
 		return false !== $wpdb->insert( $wpdb->prefix . 'mi_registration_events', array( 'registration_id' => absint( $registration_id ), 'event_type' => sanitize_key( $event_type ), 'from_status' => sanitize_key( $from_status ), 'to_status' => sanitize_key( $to_status ), 'actor_label' => sanitize_text_field( $actor_label ), 'detail_json' => wp_json_encode( $detail ), 'created_at' => current_time( 'mysql', true ) ), array( '%d', '%s', '%s', '%s', '%s', '%s', '%s' ) );
 	}

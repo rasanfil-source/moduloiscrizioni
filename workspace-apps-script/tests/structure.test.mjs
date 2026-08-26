@@ -52,7 +52,7 @@ test('le funzioni Apps Script applicative hanno nomi italiani', () => {
 });
 
 test('la migrazione aggiunge il riepilogo economico alle iscrizioni', () => {
-  assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.2\.2'/);
+  assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.2\.3'/);
   assert.match(sources['Config.gs'], /modalita_economica/);
   assert.match(sources['Config.gs'], /primo_versamento_centesimi/);
   assert.match(sources['Config.gs'], /saldo_centesimi/);
