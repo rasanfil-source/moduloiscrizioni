@@ -90,6 +90,23 @@ $duplicate_ticket_index = invoke_private( 'validate_participants', array( array(
 ), $two_selection, array(), array() ) );
 expect( is_wp_error( $duplicate_ticket_index ), 'indice tipologia duplicato accettato' );
 
+$missing_second_name = invoke_private( 'validate_participants', array( array(
+	array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Uno', 'last_name' => 'Demo' ),
+	array( 'ticket_type_code' => 'intero', 'ticket_index' => 2, 'first_name' => '', 'last_name' => '' ),
+), $two_selection, array(), array(), 'ONE' ) );
+expect( is_wp_error( $missing_second_name ), 'nome e cognome del secondo partecipante non richiesti' );
+
+$one_scope = invoke_private( 'validate_participants', array( array(
+	array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Uno', 'last_name' => 'Demo', 'fields' => array( 'birth_date' => '2000-01-02' ) ),
+	array( 'ticket_type_code' => 'intero', 'ticket_index' => 2, 'first_name' => 'Due', 'last_name' => 'Demo', 'fields' => array() ),
+), $two_selection, $extended_fields, array(), 'ONE' ) );
+expect( ! is_wp_error( $one_scope ), 'ambito dati aggiuntivi ONE non rispettato' );
+$all_scope = invoke_private( 'validate_participants', array( array(
+	array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Uno', 'last_name' => 'Demo', 'fields' => array( 'birth_date' => '2000-01-02' ) ),
+	array( 'ticket_type_code' => 'intero', 'ticket_index' => 2, 'first_name' => 'Due', 'last_name' => 'Demo', 'fields' => array() ),
+), $two_selection, $extended_fields, array(), 'ALL' ) );
+expect( is_wp_error( $all_scope ), 'ambito dati aggiuntivi ALL non applicato' );
+
 $options = array(
 	array( 'code' => 'pranzo', 'name' => 'Pranzo', 'scope' => 'ORDER', 'price_cents' => 500, 'max_quantity' => 2 ),
 	array( 'code' => 'maglia', 'name' => 'Maglia', 'scope' => 'TICKET', 'price_cents' => 800, 'max_quantity' => 1 ),

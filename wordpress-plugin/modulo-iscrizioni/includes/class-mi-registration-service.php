@@ -116,6 +116,7 @@ final class MI_Registration_Service {
 			'options'          => array_values( array_filter( (array) get_post_meta( $event_id, '_mi_options', true ), 'is_array' ) ),
 			'data_profile'     => $field_configuration['profile'],
 			'participant_fields'=> MI_Field_Schema::public_fields( $field_configuration ),
+			'participant_extra_scope' => 'ALL' === strtoupper( (string) get_post_meta( $event_id, '_mi_participant_extra_scope', true ) ) ? 'ALL' : 'ONE',
 			'payment_deadline_at'=> (string) get_post_meta( $event_id, '_mi_payment_deadline_at', true ),
 			'reservation_minutes'=> min( 10080, absint( get_post_meta( $event_id, '_mi_reservation_minutes', true ) ) ),
 			'privacy_url'      => get_privacy_policy_url(),
@@ -248,7 +249,7 @@ final class MI_Registration_Service {
 		if ( is_wp_error( $order_options ) ) {
 			return $order_options;
 		}
-		$participants = self::validate_participants( $payload['participants'] ?? array(), $selection, $event['participant_fields'], $event['options'] ?? array() );
+		$participants = self::validate_participants( $payload['participants'] ?? array(), $selection, $event['participant_fields'], $event['options'] ?? array(), $event['participant_extra_scope'] ?? 'ONE' );
 		if ( is_wp_error( $participants ) ) {
 			return $participants;
 		}
@@ -810,8 +811,9 @@ final class MI_Registration_Service {
 		return array( 'items' => $items, 'quantity' => $quantity, 'total_cents' => $total );
 	}
 
-	private static function validate_participants( $raw_participants, $selection, $fields, $option_definitions ) {
+	private static function validate_participants( $raw_participants, $selection, $fields, $option_definitions, $extra_scope = 'ONE' ) {
 		$expected = (int) $selection['quantity'];
+		$extra_scope = 'ALL' === strtoupper( (string) $extra_scope ) ? 'ALL' : 'ONE';
 		if ( ! is_array( $raw_participants ) || count( $raw_participants ) !== $expected ) {
 			return new WP_Error( 'mi_participants', 'Inserisci nome e cognome di ogni partecipante.', array( 'status' => 400 ) );
 		}
@@ -838,15 +840,16 @@ final class MI_Registration_Service {
 			$last_name = sanitize_text_field( $raw['last_name'] ?? '' );
 			$raw_fields = is_array( $raw['fields'] ?? null ) ? $raw['fields'] : array();
 			$raw_options = is_array( $raw['options'] ?? null ) ? $raw['options'] : array();
-			$has_optional_data = $first_name || $last_name || array_filter( $raw_fields, static function ( $value ) { return '' !== trim( (string) $value ); } ) || array_filter( $raw_options, static function ( $value ) { return (int) $value > 0; } );
-			if ( ( 0 === $participant_position && ( ! $first_name || ! $last_name ) ) || strlen( $first_name ) > 80 || strlen( $last_name ) > 80 ) {
+			$has_extra_data = array_filter( $raw_fields, static function ( $value ) { return '' !== trim( (string) $value ); } ) || array_filter( $raw_options, static function ( $value ) { return (int) $value > 0; } );
+			if ( ! $first_name || ! $last_name || strlen( $first_name ) > 80 || strlen( $last_name ) > 80 ) {
 				return new WP_Error( 'mi_participant_invalid', 'Controlla i dati dei partecipanti.', array( 'status' => 400 ) );
 			}
-			$validation_fields = array_map( static function ( $field ) use ( $participant_position ) {
-				$field['required'] = 0 === $participant_position;
+			$requires_extra_data = 'ALL' === $extra_scope || 0 === $participant_position;
+			$validation_fields = array_map( static function ( $field ) use ( $requires_extra_data ) {
+				$field['required'] = $requires_extra_data && ! empty( $field['required'] );
 				return $field;
 			}, $fields );
-			$answers = $has_optional_data || 0 === $participant_position ? MI_Field_Schema::validate_answers( $raw_fields, $validation_fields ) : array();
+			$answers = $requires_extra_data || $has_extra_data ? MI_Field_Schema::validate_answers( $raw_fields, $validation_fields ) : array();
 			if ( is_wp_error( $answers ) ) {
 				return $answers;
 			}

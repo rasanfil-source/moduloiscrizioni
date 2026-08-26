@@ -19,6 +19,10 @@
 	const nextButton = root.querySelector('[data-mi-next]');
 	const backButton = root.querySelector('[data-mi-back]');
 	const stickySummary = root.querySelector('[data-mi-sticky-summary]');
+	const participantDetailsRoot = document.createElement('div');
+	participantDetailsRoot.className = 'mi-registration__participant-details';
+	participantDetailsRoot.dataset.miParticipantDetails = '';
+	steps[2]?.querySelector('.mi-registration__grid')?.before(participantDetailsRoot);
 	let currentStep = 1;
     let requestKey = makeRequestKey();
     let participantValues = [];
@@ -36,9 +40,7 @@
 	function updateBuyerStepHeading() {
 	  const heading = steps[2]?.querySelector('h2');
 	  if (!heading) return;
-	  heading.textContent = totalQuantity() === 1
-	    ? 'Completa i tuoi dati'
-	    : 'Abbiamo bisogno di qualche dato in più di almeno uno degli iscritti';
+	  heading.textContent = 'Qualche dato aggiuntivo';
 	}
 
     function makeRequestKey() {
@@ -110,7 +112,8 @@
 	  const quantity = totalQuantity();
 	  if (!stickySummary) return;
 	  const quantityLabel = quantity === 1 ? '1 iscrizione' : `${quantity} iscrizioni`;
-	  stickySummary.textContent = quantity ? `${quantityLabel}${config.event.pricing_mode === 'CALCULATED' ? ` · ${formatCurrency(totalCents())}` : ''}` : 'Nessuna iscrizione';
+	  const priceLabel = config.event.pricing_mode === 'CALCULATED' ? formatCurrency(totalCents()) : (config.event.pricing_mode === 'ZERO' ? 'evento gratuito' : '');
+	  stickySummary.textContent = quantity ? `${quantityLabel}${priceLabel ? ` · ${priceLabel}` : ''}` : 'Nessuna iscrizione';
 	  root.querySelectorAll('[data-mi-ticket]').forEach((input) => {
 		input.closest('.mi-registration__ticket')?.classList.toggle('is-selected', Number(input.value) > 0);
 	  });
@@ -145,13 +148,18 @@
 	}
 
     function captureParticipants() {
-      participantValues = Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).map((row) => ({
-        key: `${row.dataset.miTicketType}:${row.dataset.miTicketIndex}`,
+	  const previousValues = participantValues;
+      participantValues = Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).map((row) => {
+		const key = `${row.dataset.miTicketType}:${row.dataset.miTicketIndex}`;
+		const previous = previousValues.find((value) => value.key === key) || {};
+		return {
+        key,
         firstName: row.querySelector('[data-mi-first-name]')?.value || '',
         lastName: row.querySelector('[data-mi-last-name]')?.value || '',
-        fields: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-field]')).map((input) => [input.dataset.miParticipantField, input.value])),
-        options: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-option]')).map((input) => [input.dataset.miParticipantOption, input.value]))
-      }));
+		fields: previous.fields || {},
+		options: previous.options || {}
+		};
+	  });
     }
 
     function renderParticipants() {
@@ -172,31 +180,6 @@
         const selected = ticketSelection()[ticket.code] || 0;
         for (let position = 1; position <= selected; position += 1) tickets.push({ ...ticket, position });
       });
-      let additionalParticipants;
-      let additionalToggle;
-      if (tickets.length > 1) {
-        additionalParticipants = document.createElement('div');
-        additionalParticipants.className = 'mi-registration__additional-participants';
-        additionalParticipants.hidden = true;
-        additionalToggle = document.createElement('button');
-        additionalToggle.type = 'button';
-        additionalToggle.className = 'mi-registration__secondary-button';
-        additionalToggle.textContent = 'Aggiungi i dati degli altri partecipanti (facoltativo)';
-        additionalToggle.addEventListener('click', () => {
-          const first = participantsRoot.querySelector('.mi-registration__participant');
-          additionalParticipants.querySelectorAll('.mi-registration__participant').forEach((row) => {
-            const identifyingValues = Array.from(row.querySelectorAll('[data-mi-first-name], [data-mi-last-name], [data-mi-participant-field]')).some((input) => input.value.trim());
-            if (!identifyingValues && first) {
-              const sourceInputs = Array.from(first.querySelectorAll('[data-mi-first-name], [data-mi-last-name], [data-mi-participant-field], [data-mi-participant-option]'));
-              const targetInputs = Array.from(row.querySelectorAll('[data-mi-first-name], [data-mi-last-name], [data-mi-participant-field], [data-mi-participant-option]'));
-              targetInputs.forEach((input, position) => { input.value = sourceInputs[position]?.value || input.value; });
-            }
-          });
-          additionalParticipants.hidden = false;
-          additionalToggle.hidden = true;
-          additionalParticipants.querySelector('input, select, textarea')?.focus();
-        });
-      }
       tickets.forEach((ticket, index) => {
         const key = `${ticket.code}:${ticket.position}`;
         const previous = participantValues.find((value) => value.key === key) || {};
@@ -212,17 +195,9 @@
           participantField('Nome', 'given-name', 'firstName', previous.firstName || '', index),
           participantField('Cognome', 'family-name', 'lastName', previous.lastName || '', index)
         );
-		(config.event.participant_fields || []).forEach((field) => {
-		  grid.append(configuredParticipantField(field, previous.fields?.[field.key] || '', index));
-		});
-        (config.event.options || []).filter((option) => option.scope === 'TICKET').forEach((option) => {
-          grid.append(configuredParticipantOption(option, previous.options?.[option.code] || '0', index));
-        });
         row.append(legend, grid);
-        if (index === 0) participantsRoot.append(row);
-        else additionalParticipants.append(row);
+		participantsRoot.append(row);
       });
-      if (additionalParticipants) participantsRoot.append(additionalToggle, additionalParticipants);
       renderEconomicSummary();
       updateStickySummary();
     }
@@ -234,16 +209,73 @@
       input.name = `participant-${index}-${key}`;
       input.maxLength = 80;
       input.autocomplete = `section-participant-${index + 1} ${autocomplete}`;
-      input.required = index === 0;
+	  input.required = true;
       input.value = value;
       input.dataset[key === 'firstName' ? 'miFirstName' : 'miLastName'] = '';
       label.append(input);
       return label;
     }
 
-    function configuredParticipantField(field, value, index) {
+	function renderParticipantDetails() {
+	  captureParticipants();
+	  participantDetailsRoot.replaceChildren();
+	  const fields = config.event.participant_fields || [];
+	  const options = (config.event.options || []).filter((option) => option.scope === 'TICKET');
+	  if (!fields.length && !options.length) return;
+	  const allRequired = config.event.participant_extra_scope === 'ALL';
+	  const optionalRows = document.createElement('div');
+	  optionalRows.className = 'mi-registration__additional-participants';
+	  optionalRows.hidden = !allRequired;
+	  participantValues.forEach((participant, index) => {
+		const row = document.createElement('fieldset');
+		row.className = 'mi-registration__participant-detail';
+		row.dataset.miParticipantKey = participant.key;
+		const legend = document.createElement('legend');
+		legend.textContent = `Partecipante ${index + 1}: ${participant.firstName} ${participant.lastName}`.trim();
+		const grid = document.createElement('div');
+		grid.className = 'mi-registration__grid';
+		grid.append(identityDetailField('Nome', 'firstName', participant, index, allRequired || index === 0), identityDetailField('Cognome', 'lastName', participant, index, allRequired || index === 0));
+		fields.forEach((field) => grid.append(configuredParticipantField(field, participant.fields?.[field.key] || '', index, allRequired || index === 0)));
+		options.forEach((option) => grid.append(configuredParticipantOption(option, participant.options?.[option.code] || '0', index)));
+		row.append(legend, grid);
+		if (index === 0 || allRequired) participantDetailsRoot.append(row);
+		else optionalRows.append(row);
+	  });
+	  if (!allRequired && participantValues.length > 1) {
+		const toggle = document.createElement('button');
+		toggle.type = 'button';
+		toggle.className = 'mi-registration__secondary-button';
+		toggle.textContent = 'Aggiungi, se vuoi, anche i dati degli altri partecipanti';
+		toggle.addEventListener('click', () => { optionalRows.hidden = false; toggle.hidden = true; optionalRows.querySelector('input, select, textarea')?.focus(); });
+		participantDetailsRoot.append(toggle, optionalRows);
+	  } else participantDetailsRoot.append(optionalRows);
+	}
+
+	function identityDetailField(labelText, property, participant, index, required) {
+	  const label = document.createElement('label');
+	  label.textContent = labelText;
+	  const input = document.createElement('input');
+	  input.required = required;
+	  input.maxLength = 80;
+	  input.value = participant[property] || '';
+	  input.dataset.miDetailIdentity = property;
+	  input.autocomplete = `section-participant-details-${index + 1} ${property === 'firstName' ? 'given-name' : 'family-name'}`;
+	  input.addEventListener('input', () => {
+		participant[property] = input.value;
+		const sourceRow = Array.from(participantsRoot.querySelectorAll('.mi-registration__participant'))[index];
+		const selector = property === 'firstName' ? '[data-mi-first-name]' : '[data-mi-last-name]';
+		const sourceInput = sourceRow?.querySelector(selector);
+		if (sourceInput) sourceInput.value = input.value;
+		const legend = input.closest('fieldset')?.querySelector('legend');
+		if (legend) legend.textContent = `Partecipante ${index + 1}: ${participant.firstName} ${participant.lastName}`.trim();
+	  });
+	  label.append(input);
+	  return label;
+	}
+
+    function configuredParticipantField(field, value, index, required = false) {
       const label = document.createElement('label');
-      label.textContent = index === 0 ? `${field.label} *` : field.label;
+	  label.textContent = required && field.required ? `${field.label} *` : field.label;
       let input;
       if (field.type === 'select') {
         input = document.createElement('select');
@@ -265,7 +297,7 @@
         input.type = field.type === 'date' ? 'date' : 'text';
       }
       input.name = `participant-${index}-field-${field.key}`;
-      input.required = index === 0;
+	  input.required = required && Boolean(field.required);
       input.value = value;
       input.dataset.miParticipantField = field.key;
       if (field.max_length) input.maxLength = field.max_length;
@@ -296,14 +328,26 @@
     }
 
     function participantPayload() {
-      return Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).map((row) => ({
-        ticket_type_code: row.dataset.miTicketType,
-        ticket_index: Number(row.dataset.miTicketIndex),
-        first_name: row.querySelector('[data-mi-first-name]').value.trim(),
-        last_name: row.querySelector('[data-mi-last-name]').value.trim(),
-        fields: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-field]')).map((input) => [input.dataset.miParticipantField, input.value.trim()])),
-        options: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-option]')).map((input) => [input.dataset.miParticipantOption, core.clampQuantity(input.value, input.max)]))
-      }));
+	  captureParticipants();
+	  participantDetailsRoot.querySelectorAll('.mi-registration__participant-detail').forEach((row) => {
+		const participant = participantValues.find((value) => value.key === row.dataset.miParticipantKey);
+		if (!participant) return;
+		const identityInputs = row.querySelectorAll('[data-mi-detail-identity]');
+		identityInputs.forEach((input) => { participant[input.dataset.miDetailIdentity] = input.value.trim(); });
+		participant.fields = Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-field]')).map((input) => [input.dataset.miParticipantField, input.value.trim()]));
+		participant.options = Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-option]')).map((input) => [input.dataset.miParticipantOption, core.clampQuantity(input.value, input.max)]));
+	  });
+	  return participantValues.map((participant) => {
+		const [ticketTypeCode, ticketIndex] = participant.key.split(':');
+		return {
+		ticket_type_code: ticketTypeCode,
+		ticket_index: Number(ticketIndex),
+		first_name: participant.firstName.trim(),
+		last_name: participant.lastName.trim(),
+		fields: participant.fields || {},
+		options: participant.options || {}
+		};
+	  });
     }
 
     function showError(message) {
@@ -361,6 +405,8 @@
 	  if (!currentStepIsValid()) return;
 	  if (currentStep === 1) renderParticipants();
 	  if (currentStep === 2) {
+		captureParticipants();
+		renderParticipantDetails();
 		prefillBuyerFromFirstParticipant();
 		updateBuyerStepHeading();
 	  }

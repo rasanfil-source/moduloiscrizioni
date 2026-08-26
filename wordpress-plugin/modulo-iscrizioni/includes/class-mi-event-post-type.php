@@ -164,6 +164,12 @@ final class MI_Event_Post_Type {
 		</div>
 		<hr>
 		<h3>Dati dei partecipanti</h3>
+		<?php $participant_extra_scope = 'ALL' === strtoupper( (string) get_post_meta( $post->ID, '_mi_participant_extra_scope', true ) ) ? 'ALL' : 'ONE'; ?>
+		<fieldset><legend><strong>A chi chiedere i dati aggiuntivi</strong></legend>
+			<label><input type="radio" name="mi_participant_extra_scope" value="ONE" <?php checked( $participant_extra_scope, 'ONE' ); ?>> Solo a uno degli iscritti (il primo è selezionato automaticamente)</label><br>
+			<label><input type="radio" name="mi_participant_extra_scope" value="ALL" <?php checked( $participant_extra_scope, 'ALL' ); ?>> A tutti gli iscritti</label>
+		</fieldset>
+		<p class="description">Nome e cognome restano sempre obbligatori per ogni partecipante. Se scegli “solo a uno”, gli altri dati possono comunque essere aggiunti facoltativamente.</p>
 		<p><label for="mi_data_profile"><strong>Profilo iniziale</strong></label><br>
 		<select id="mi_data_profile" name="mi_data_profile">
 		<?php foreach ( $field_profiles as $profile_key => $profile ) : ?>
@@ -317,6 +323,8 @@ final class MI_Event_Post_Type {
 		update_post_meta( $post_id, '_mi_data_profile', $field_configuration['profile'] );
 		update_post_meta( $post_id, '_mi_participant_fields', $field_configuration['enabled'] );
 		update_post_meta( $post_id, '_mi_participant_required_fields', $field_configuration['required'] );
+		$participant_extra_scope = isset( $_POST['mi_participant_extra_scope'] ) ? strtoupper( sanitize_key( wp_unslash( $_POST['mi_participant_extra_scope'] ) ) ) : 'ONE';
+		update_post_meta( $post_id, '_mi_participant_extra_scope', 'ALL' === $participant_extra_scope ? 'ALL' : 'ONE' );
 
 		$codes = isset( $_POST['mi_ticket_code'] ) ? (array) wp_unslash( $_POST['mi_ticket_code'] ) : array();
 		$names = isset( $_POST['mi_ticket_name'] ) ? (array) wp_unslash( $_POST['mi_ticket_name'] ) : array();
