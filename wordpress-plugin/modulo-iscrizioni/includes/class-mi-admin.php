@@ -294,7 +294,7 @@ final class MI_Admin {
 		<tr><th scope="row">Referente</th><td><?php echo esc_html( $detail['buyer_first_name'] . ' ' . $detail['buyer_last_name'] ); ?></td></tr>
 		<tr><th scope="row">Email</th><td><?php echo esc_html( $detail['buyer_email'] ); ?></td></tr>
 		<tr><th scope="row">Cellulare</th><td><?php echo esc_html( $detail['buyer_phone'] ); ?></td></tr>
-		<tr><th scope="row">Gestione economica</th><td><?php echo esc_html( self::etichetta_modalita_economica( $detail['economic_mode'] ) ); ?></td></tr>
+		<tr><th scope="row">Modalità di pagamento richiesta</th><td><?php echo esc_html( self::etichetta_modalita_economica( $detail['economic_mode'] ) ); ?></td></tr>
 		<tr><th scope="row">Totale</th><td><?php echo esc_html( self::formatta_importo( $detail['total_cents'] ) ); ?></td></tr>
 		<tr><th scope="row">Primo versamento</th><td><?php echo esc_html( self::formatta_importo( $detail['initial_due_cents'] ) ); ?></td></tr>
 		<tr><th scope="row">Saldo successivo previsto</th><td><?php echo esc_html( self::formatta_importo( $detail['balance_cents'] ) ); ?></td></tr>
@@ -410,7 +410,7 @@ final class MI_Admin {
 				$extra_keys = array_values( array_unique( array_merge( $extra_keys, array_keys( $answers ) ) ) );
 			}
 		}
-		$headers = array( 'Codice iscrizione', 'Evento', 'Stato', 'Stato Workspace', 'Nome referente', 'Cognome referente', 'Email referente', 'Cellulare referente', 'Gestione economica', 'Totale centesimi', 'Primo versamento centesimi', 'Saldo centesimi', 'Opzioni ordine JSON', 'ID consenso privacy', 'Versione informativa', 'Accettazione privacy UTC', 'Data UTC', 'Tipologia', 'Nome partecipante', 'Cognome partecipante', 'Opzioni partecipante JSON' );
+		$headers = array( 'Codice iscrizione', 'Evento', 'Stato', 'Stato Workspace', 'Nome referente', 'Cognome referente', 'Email referente', 'Cellulare referente', 'Modalità di pagamento richiesta', 'Totale centesimi', 'Primo versamento centesimi', 'Saldo centesimi', 'Opzioni ordine JSON', 'ID consenso privacy', 'Versione informativa', 'Accettazione privacy UTC', 'Data UTC', 'Tipologia', 'Nome partecipante', 'Cognome partecipante', 'Opzioni partecipante JSON' );
 		foreach ( $extra_keys as $key ) {
 			$headers[] = isset( $catalog[ $key ]['label'] ) ? $catalog[ $key ]['label'] : 'Dato aggiuntivo';
 		}
@@ -479,8 +479,8 @@ final class MI_Admin {
 	}
 
 	private static function etichetta_modalita_economica( $mode ) {
-		$labels = array( 'REGISTRATION_ONLY' => 'Solo iscrizione', 'PRICE_ONLY' => 'Prezzo informativo', 'FULL_PAYMENT' => 'Versamento completo', 'DEPOSIT_BALANCE' => 'Caparra e saldo' );
-		return $labels[ $mode ] ?? 'Solo iscrizione';
+		$labels = array( 'REGISTRATION_ONLY' => 'Nessun pagamento previsto', 'PRICE_ONLY' => 'Prezzo solamente informativo', 'FULL_PAYMENT' => 'Pagamento completo richiesto', 'DEPOSIT_BALANCE' => 'Caparra richiesta, saldo successivo' );
+		return $labels[ $mode ] ?? 'Nessun pagamento previsto';
 	}
 
 	private static function etichetta_stato( $status ) {
@@ -599,7 +599,7 @@ final class MI_Admin {
 			if ( ! $activity_stable ) {
 				$message = 'Evento mantenuto in bozza: l’attività non può cambiare dopo la prima iscrizione senza una migrazione amministrativa esplicita.';
 			} elseif ( ! $valid_economic ) {
-				$message = 'Evento mantenuto in bozza: “Gratuito esplicito” richiede “Solo iscrizione”; le altre modalità economiche richiedono prezzi calcolati positivi e, quando previsto, almeno una fonte di pagamento.';
+				$message = 'Evento mantenuto in bozza: “Gratuito esplicito” richiede “Nessun pagamento previsto”; le altre modalità richiedono prezzi calcolati positivi e, quando previsto, almeno una fonte di pagamento.';
 			} elseif ( ! $privacy_valid ) {
 				$message = 'Evento mantenuto in bozza: configura la pagina privacy di WordPress, la versione dell’informativa e l’ID del consenso.';
 			} elseif ( ! $marketing_valid ) {

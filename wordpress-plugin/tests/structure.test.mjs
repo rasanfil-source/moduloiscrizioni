@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.4\.11/);
+  assert.match(source, /Version:\s+3\.4\.12/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -317,10 +317,10 @@ test('il QR grafico usa una libreria locale MIT senza servizi esterni', async ()
 test('la gestione economica distingue i quattro casi senza attivare riscossioni', async () => {
   const eventType = await read('includes/class-mi-event-post-type.php');
   const service = await read('includes/class-mi-registration-service.php');
-  assert.match(eventType, /Solo iscrizione/);
-  assert.match(eventType, /Prezzo informativo/);
-  assert.match(eventType, /Versamento completo/);
-  assert.match(eventType, /Caparra e saldo/);
+  assert.match(eventType, /Nessun pagamento previsto/);
+  assert.match(eventType, /Prezzo solamente informativo/);
+  assert.match(eventType, /Pagamento completo richiesto/);
+  assert.match(eventType, /Caparra richiesta, saldo successivo/);
   assert.match(eventType, /BANK_TRANSFER/);
   assert.match(eventType, /CARD/);
   assert.match(eventType, /CASH/);
@@ -346,7 +346,7 @@ test('la gratuità esplicita è visibile e compatibile soltanto con la sola iscr
   assert.match(shortcode, /'ZERO'.+<small>Gratuito<\/small>/);
   assert.match(admin, /registration_only_price/);
   assert.match(admin, /array\(\s*'NONE',\s*'ZERO'\s*\)/);
-  assert.match(admin, /Gratuito esplicito.+Solo iscrizione/);
+  assert.match(admin, /Gratuito esplicito.+Nessun pagamento previsto/);
   assert.match(script, /\['NONE', 'ZERO'\]\.includes/);
 });
 
