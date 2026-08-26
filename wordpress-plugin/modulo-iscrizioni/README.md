@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — versione 3.4.1
+# Modulo Iscrizioni — versione 3.4.2
 
 Plugin WordPress per attività ed eventi con modulo pubblico, registro locale autorevole e replica firmata verso Google Workspace.
 
@@ -18,6 +18,7 @@ Plugin WordPress per attività ed eventi con modulo pubblico, registro locale au
 - identificativo `NONE`, `TEXT`, `QR` o `BARCODE`, generato localmente anche nell’email;
 - replica Workspace asincrona e riconciliante, marcata `SYNCED` soltanto dopo verifica completa;
 - shortcode `[modulo_iscrizioni event="ID"]`, pagina concentrata e modulo Divi 4.
+- anteprima riservata isolata dalla toolbar e dagli hook amministrativi del tema.
 
 ## Limiti intenzionali
 
@@ -26,7 +27,7 @@ Il plugin non riscuote denaro e non conserva coordinate bancarie, numeri complet
 ## Installazione di prova
 
 1. Comprimere la cartella `modulo-iscrizioni` in uno ZIP e aggiornare il plugin nell’ambiente autorizzato.
-2. Verificare che l’upgrade abbia impostato `mi_db_version` a `3.4.1` e creato le nuove tabelle.
+2. Verificare che l’upgrade abbia impostato `mi_db_version` a `3.4.2` e creato le nuove tabelle.
 3. Aggiornare Apps Script allo schema `1.2.0`, eseguire `configuraCartellaDiLavoro()` e verificare lo schema dal pannello WordPress.
 4. Aprire e salvare gli eventi pubblicati per creare la prima revisione completa; ripubblicare quelli segnalati dopo modifiche all’attività.
 5. Collaudare capienza, retry, annullamento, scadenza, email e replica con sole identità fittizie.

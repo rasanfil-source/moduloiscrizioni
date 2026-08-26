@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.4\.1/);
+  assert.match(source, /Version:\s+3\.4\.2/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -107,6 +107,8 @@ test('l’anteprima riservata non invia iscrizioni e accetta le bozze autorizzat
   assert.match(shortcode, /admin_post_mi_anteprima_evento/);
   assert.match(shortcode, /check_admin_referer/);
   assert.match(shortcode, /MI_Access::can_access_event/);
+	assert.match(shortcode, /set_current_screen\( 'mi_event_preview' \)/);
+	assert.match(shortcode, /show_admin_bar\( false \)/);
   assert.match(service, /\$allow_unpublished/);
   assert.match(script, /if \(config\.preview\)/);
 });
@@ -544,4 +546,3 @@ test('il pannello verifica lo schema economico senza creare iscrizioni', async (
   assert.match(settings, /schema_version/);
   assert.match(client, /STATO_SCHEMA/);
 });
-
