@@ -247,9 +247,10 @@ final class MI_Event_Post_Type {
 		}
 		if ( $activity_id && self::ACTIVITY_TYPE === get_post_type( $activity_id ) ) {
 			if ( ! MI_Access::can_access_activity( $activity_id ) ) {
-				return;
+				$activity_id = $current_activity_id;
+				set_transient( 'mi_publication_error_' . get_current_user_id(), 'Attività non modificata: non disponi dell’autorizzazione necessaria. Le altre modifiche sono state salvate.', MINUTE_IN_SECONDS );
 			}
-			update_post_meta( $post_id, '_mi_activity_id', $activity_id );
+			if ( $activity_id ) update_post_meta( $post_id, '_mi_activity_id', $activity_id );
 		}
 
 		$capacity = isset( $_POST['mi_capacity'] ) ? min( 10000, max( 1, absint( $_POST['mi_capacity'] ) ) ) : 30;

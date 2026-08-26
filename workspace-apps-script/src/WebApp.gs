@@ -10,12 +10,24 @@ function doPost(event) {
     if (!verified.ok) return creaRispostaJson_({ ok: false, error: verified.error });
     if (envelope.action === 'PING') return creaRispostaJson_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, mode: 'PREVIEW' });
 	if (envelope.action === 'STATO_SCHEMA') return creaRispostaJson_({ ok: true, schema_version: MI_SCHEMA_VERSION, registration_headers: MI_HEADERS[MI_SHEETS.REGISTRATIONS], mode: 'PREVIEW' });
+    if (envelope.action === 'ELENCA_PAGAMENTI') return creaRispostaJson_(elencaPagamenti_(envelope.payload));
     if (envelope.action !== 'APPEND_REGISTRATION') return creaRispostaJson_({ ok: false, error: 'ACTION_NOT_ALLOWED' });
     return creaRispostaJson_(aggiungiIscrizione_(envelope.payload));
   } catch (error) {
 		try { aggiungiControllo_('WEBAPP_REQUEST', 'REQUEST', 'UNAVAILABLE', 'ERROR', 'WORDPRESS', 'UNHANDLED_ERROR', 'WORDPRESS_PROXY'); } catch (auditError) {}
     return creaRispostaJson_({ ok: false, error: 'REQUEST_FAILED' });
   }
+}
+
+function elencaPagamenti_(payload) {
+  const orderCodes = (Array.isArray(payload.order_codes) ? payload.order_codes : []).slice(0, 50).map(function (code) { return normalizzaTesto_(code, 64); }).filter(function (code) { return /^[A-Za-z0-9_-]{3,64}$/.test(code); });
+  if (!orderCodes.length) return { ok: false, error: 'ORDER_CODES_REQUIRED' };
+  const allowed = {};
+  orderCodes.forEach(function (code) { allowed[code] = true; });
+  const payments = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS)).filter(function (row) { return allowed[String(row.codice_ordine)] && String(row.canale_registrazione).toUpperCase() !== 'WORDPRESS'; }).slice(0, 500).map(function (row) {
+    return { id_pagamento: normalizzaTesto_(row.id_pagamento, 64), codice_ordine: normalizzaTesto_(row.codice_ordine, 64), tipo_movimento: normalizzaTesto_(row.tipo_movimento, 24), tipo_rata: normalizzaTesto_(row.tipo_rata, 24), data_effettiva: row.data_effettiva instanceof Date ? row.data_effettiva.toISOString() : normalizzaTesto_(row.data_effettiva, 40), importo_centesimi: Math.max(0, Math.round(Number(row.importo_centesimi) || 0)), fonte_pagamento: normalizzaTesto_(row.fonte_pagamento, 24), riferimento_esterno: normalizzaTesto_(row.riferimento_esterno, 120), etichetta_operatore: normalizzaTesto_(row.etichetta_operatore, 100), nota_amministrativa: normalizzaTesto_(row.nota_amministrativa, 500) };
+  });
+  return { ok: true, payments: payments };
 }
 
 function verificaBusta_(envelope) {
@@ -150,7 +162,11 @@ function aggiungiIscrizione_(payload) {
     const message = convertiRigheInOggetti_(outbox).find(function (row) { return String(row.codice_ordine) === orderCode && String(row.tipo_modello) === 'REGISTRATION_CONFIRMATION'; });
     const snapshotBuyer = snapshotData && snapshotData.buyer ? snapshotData.buyer : buyer;
     const originalRecipient = normalizzaTesto_(snapshotBuyer.email || buyer.email, 254);
-    const originalStatus = normalizzaValoreElenco_(snapshotData && snapshotData.status, ['CONFIRMED', 'WAITLISTED']) || normalizzaValoreElenco_(payload.status, ['CONFIRMED', 'WAITLISTED']) || 'CONFIRMED';
+    const currentStatus = normalizzaValoreElenco_(payload.status, ['CONFIRMED', 'WAITLISTED']);
+    // Una promozione aggiorna lo stato corrente pur conservando l'istantanea
+    // originaria WAITLISTED. Le cancellazioni continuano invece a usare lo
+    // stato dell'istantanea per non generare una nuova conferma.
+    const originalStatus = currentStatus === 'CONFIRMED' ? 'CONFIRMED' : normalizzaValoreElenco_(snapshotData && snapshotData.status, ['CONFIRMED', 'WAITLISTED']) || currentStatus || 'CONFIRMED';
     const messageValues = [message ? message.id_messaggio : creaIdentificativoOpaco_('msg'), neutralizzaFormula_(orderCode, 64), neutralizzaFormula_(originalRecipient, 254), 'REGISTRATION_CONFIRMATION', JSON.stringify({ order_code: orderCode, status: originalStatus }), 'PREVIEW', message && message.data_creazione ? message.data_creazione : new Date()];
     if (message) outbox.getRange(message._row, 1, 1, messageValues.length).setValues([messageValues]); else outbox.appendRow(messageValues);
     sincronizzaPagamenti_(orderCode, payload.payments);

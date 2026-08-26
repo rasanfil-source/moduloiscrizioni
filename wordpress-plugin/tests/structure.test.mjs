@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.4\.7/);
+  assert.match(source, /Version:\s+3\.4\.8/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -422,8 +422,8 @@ test('rimborsi concorrenti e codici grafici email hanno protezioni dedicate', as
   const images = await read('includes/class-mi-code-image.php');
   const publicScript = await read('assets/public.js');
 	const service = await read('includes/class-mi-registration-service.php');
-  assert.match(admin, /SELECT id, status, initial_due_cents FROM \{\$wpdb->prefix\}mi_registrations WHERE id = %d FOR UPDATE/);
-	assert.match(admin, /initial_due_cents FROM/);
+  assert.match(admin, /SELECT id, status, initial_due_cents, payment_deadline_at FROM \{\$wpdb->prefix\}mi_registrations WHERE id = %d FOR UPDATE/);
+  assert.match(admin, /initial_due_cents, payment_deadline_at FROM/);
 	assert.match(admin, /expires_at/);
 	assert.match(service, /'EXPIRED' === \$target_status[\s\S]+SUM\(CASE WHEN transaction_kind = 'REFUND'/);
   assert.match(sender, /addStringEmbeddedImage/);
@@ -470,11 +470,43 @@ test('il pannello riepiloga e filtra le repliche nel perimetro accessibile', asy
   assert.match(admin, /MI_Access::activity_ids/);
 });
 
-test('il registro pagamenti filtra l’intero archivio senza troncare ai primi cento movimenti', async () => {
+test('il registro pagamenti filtra in SQL, pagina la UI ed esporta a blocchi', async () => {
   const admin = await read('includes/class-mi-admin.php');
-  assert.doesNotMatch(admin, /ORDER BY p\.id DESC LIMIT 100/);
+  assert.match(admin, /payment_where/);
+  assert.match(admin, /LIMIT %d OFFSET %d/);
+  assert.match(admin, /LIMIT 500 OFFSET %d/);
   assert.match(admin, /payment_from/);
   assert.match(admin, /payment_to/);
+});
+
+test('rimborsi, scadenza originaria e lista attesa sono riconciliati', async () => {
+  const activator = await read('includes/class-mi-activator.php');
+  const service = await read('includes/class-mi-registration-service.php');
+  const admin = await read('includes/class-mi-admin.php');
+  assert.match(activator, /payment_deadline_at/);
+  assert.match(admin, /\$net_paid/);
+  assert.match(admin, /\$locked\['payment_deadline_at'\]/);
+  assert.match(service, /promote_waitlisted_locked/);
+  assert.match(service, /WAITLIST_PROMOTED/);
+  assert.match(service, /WAITLIST_PROMOTION/);
+  assert.match(service, /ORDER BY created_at, id FOR UPDATE/);
+});
+
+test('gli importi ambigui sono rifiutati e il nome completo è ricercabile', async () => {
+  const admin = await read('includes/class-mi-admin.php');
+  assert.match(admin, /parse_importo_centesimi/);
+  assert.doesNotMatch(admin, /str_replace\( ',', '\.', sanitize_text_field/);
+  assert.match(admin, /CONCAT\(buyer_first_name, ' ', buyer_last_name\)/);
+  assert.match(admin, /CONCAT\(r\.buyer_first_name, ' ', r\.buyer_last_name\)/);
+});
+
+test('i pagamenti Workspace possono essere riconciliati senza eco dei movimenti WordPress', async () => {
+  const activator = await read('includes/class-mi-activator.php');
+  const service = await read('includes/class-mi-registration-service.php');
+  assert.match(activator, /origin_payment/);
+  assert.match(service, /ELENCA_PAGAMENTI/);
+  assert.match(service, /INSERT IGNORE/);
+  assert.match(service, /origin_channel/);
 });
 
 test('il registro pagamenti rifiuta date effettive normalizzate silenziosamente', async () => {

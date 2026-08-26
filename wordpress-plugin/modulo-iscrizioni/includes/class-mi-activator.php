@@ -78,13 +78,15 @@ final class MI_Activator {
 			marketing_consent_id varchar(100) NULL,
 			marketing_accepted_at datetime NULL,
 			expires_at datetime NULL,
+			payment_deadline_at datetime NULL,
 			capacity_released_at datetime NULL,
 			created_at datetime NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY order_code (order_code),
 			UNIQUE KEY idempotency_key (event_id,idempotency_key),
 			KEY event_status (event_id,status),
-			KEY workspace_status (workspace_status)
+			KEY workspace_status (workspace_status),
+			KEY payment_deadline (status,payment_deadline_at)
 		) ENGINE=InnoDB {$charset};" );
 
 		dbDelta( "CREATE TABLE {$items} (
@@ -182,11 +184,15 @@ final class MI_Activator {
 			external_reference varchar(120) NULL,
 			operator_label varchar(120) NULL,
 			administrative_note text NULL,
+			origin_channel varchar(24) NOT NULL DEFAULT 'WORDPRESS',
+			origin_id varchar(120) NULL,
 			created_at datetime NOT NULL,
 			PRIMARY KEY (id),
 			KEY registration_id (registration_id),
-			KEY effective_at (effective_at)
+			KEY effective_at (effective_at),
+			UNIQUE KEY origin_payment (origin_channel,origin_id)
 		) ENGINE=InnoDB {$charset};" );
+		$wpdb->query( "UPDATE {$registrations} SET payment_deadline_at = expires_at WHERE payment_deadline_at IS NULL AND expires_at IS NOT NULL" );
 
 		self::backfill_ticket_counters( $ticket_counters, $registrations, $items );
 		update_option( 'mi_db_version', MI_VERSION, false );

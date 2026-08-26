@@ -339,6 +339,7 @@ final class MI_Registration_Service {
 					'marketing_consent_id' => $marketing_accepted ? sanitize_key( $event['marketing_consent_id'] ) : null,
 					'marketing_accepted_at' => $marketing_accepted ? $accepted_at : null,
 					'expires_at'      => $expires_at,
+					'payment_deadline_at' => $expires_at,
 					'idempotency_key' => $idempotency_key,
 					'created_at'      => $now,
 				),
@@ -550,6 +551,9 @@ final class MI_Registration_Service {
 		$registrations = $wpdb->prefix . 'mi_registrations';
 		$payments = $wpdb->prefix . 'mi_payments';
 		$now = current_time( 'mysql', true );
+		// La riconciliazione migliora la coerenza con Workspace, ma un endpoint GAS
+		// temporaneamente non aggiornato non deve sospendere le scadenze WordPress.
+		if ( MI_Workspace_Client::is_configured() ) self::reconcile_workspace_payments();
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
 				"SELECT r.id FROM {$registrations} r
@@ -564,6 +568,34 @@ final class MI_Registration_Service {
 		foreach ( $ids as $registration_id ) {
 			self::transition_registration_status( (int) $registration_id, 'EXPIRED', 'SYSTEM_CRON' );
 		}
+	}
+
+	public static function reconcile_workspace_payments() {
+		global $wpdb;
+		$registrations = $wpdb->prefix . 'mi_registrations';
+		$payments_table = $wpdb->prefix . 'mi_payments';
+		$orders = $wpdb->get_results( "SELECT id, order_code FROM {$registrations} WHERE status = 'CONFIRMED' AND capacity_released_at IS NULL ORDER BY id LIMIT 50", ARRAY_A );
+		if ( ! $orders ) return 0;
+		$result = MI_Workspace_Client::request( 'ELENCA_PAGAMENTI', array( 'order_codes' => array_column( $orders, 'order_code' ) ) );
+		if ( is_wp_error( $result ) || ! isset( $result['payments'] ) || ! is_array( $result['payments'] ) ) return new WP_Error( 'mi_workspace_payment_reconciliation_failed', 'Riconciliazione pagamenti Workspace non disponibile.' );
+		$by_code = array(); foreach ( $orders as $order ) $by_code[ $order['order_code'] ] = (int) $order['id'];
+		$kind_map = array( 'INCASSO' => 'PAYMENT', 'RIMBORSO' => 'REFUND', 'STORNO' => 'REFUND' );
+		$installment_map = array( 'CAPARRA' => 'DEPOSIT', 'SALDO' => 'BALANCE', 'INTERO' => 'FULL', 'INTERMEDIO' => 'OTHER', 'NON_ASSEGNATO' => 'OTHER' );
+		$source_map = array( 'BONIFICO' => 'BANK_TRANSFER', 'CARTA' => 'CARD', 'CONTANTE' => 'CASH' );
+		$inserted = 0;
+		foreach ( array_slice( $result['payments'], 0, 500 ) as $payment ) {
+			$order_code = sanitize_text_field( $payment['codice_ordine'] ?? '' );
+			$origin_id = sanitize_text_field( $payment['id_pagamento'] ?? '' );
+			$kind = $kind_map[ strtoupper( sanitize_key( $payment['tipo_movimento'] ?? '' ) ) ] ?? '';
+			$installment = $installment_map[ strtoupper( sanitize_key( $payment['tipo_rata'] ?? '' ) ) ] ?? '';
+			$source = $source_map[ strtoupper( sanitize_key( $payment['fonte_pagamento'] ?? '' ) ) ] ?? '';
+			$amount = absint( $payment['importo_centesimi'] ?? 0 );
+			$date = strtotime( (string) ( $payment['data_effettiva'] ?? '' ) );
+			if ( ! isset( $by_code[ $order_code ] ) || ! $origin_id || ! $kind || ! $installment || ! $source || $amount < 1 || false === $date ) continue;
+			$result_insert = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$payments_table} (registration_id, transaction_kind, installment_kind, effective_at, amount_cents, payment_source, external_reference, operator_label, administrative_note, origin_channel, origin_id, created_at) VALUES (%d,%s,%s,%s,%d,%s,%s,%s,%s,'WORKSPACE',%s,%s)", $by_code[ $order_code ], $kind, $installment, gmdate( 'Y-m-d H:i:s', $date ), $amount, $source, sanitize_text_field( $payment['riferimento_esterno'] ?? '' ), sanitize_text_field( $payment['etichetta_operatore'] ?? '' ), sanitize_textarea_field( $payment['nota_amministrativa'] ?? '' ), $origin_id, current_time( 'mysql', true ) ) );
+			if ( $result_insert ) $inserted++;
+		}
+		return $inserted;
 	}
 
 	public static function cancel_registration( $registration_id, $actor_label = 'ADMIN' ) {
@@ -618,13 +650,62 @@ final class MI_Registration_Service {
 			if ( false === $updated || ! self::append_registration_event( $registration_id, $target_status, $registration['status'], $target_status, $actor_label ) ) {
 				throw new RuntimeException( 'Stato non aggiornato.' );
 			}
+			$promoted = 'CONFIRMED' === $registration['status'] ? self::promote_waitlisted_locked( $event_id, $now ) : array();
 			$wpdb->query( 'COMMIT' );
 			self::accoda_sincronizzazione_workspace( $registration_id, 'PENDING' );
+			foreach ( $promoted as $promoted_id ) self::accoda_sincronizzazione_workspace( $promoted_id, 'PENDING' );
+			if ( $promoted ) MI_Spedizione_Email::pianifica_spedizione();
 			return $target_status;
 		} catch ( Throwable $error ) {
 			$wpdb->query( 'ROLLBACK' );
 			return new WP_Error( 'mi_status_transition_failed', 'Impossibile aggiornare lo stato dell’iscrizione.' );
 		}
+	}
+
+	private static function promote_waitlisted_locked( $event_id, $now ) {
+		global $wpdb;
+		$registrations = $wpdb->prefix . 'mi_registrations';
+		$items_table = $wpdb->prefix . 'mi_registration_items';
+		$counters = $wpdb->prefix . 'mi_event_counters';
+		$ticket_counters = $wpdb->prefix . 'mi_ticket_counters';
+		$outbox = $wpdb->prefix . 'mi_email_outbox';
+		$event = self::public_event( $event_id, true );
+		if ( is_wp_error( $event ) || empty( $event['waitlist_enabled'] ) ) return array();
+		$counter = $wpdb->get_row( $wpdb->prepare( "SELECT confirmed_count, waitlisted_count FROM {$counters} WHERE event_id = %d FOR UPDATE", $event_id ), ARRAY_A );
+		if ( ! $counter ) return array();
+		$type_limits = array();
+		foreach ( $event['ticket_types'] as $ticket ) $type_limits[ $ticket['code'] ] = absint( $ticket['capacity'] ?? 0 );
+		$type_counts = array();
+		foreach ( $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code, confirmed_count, waitlisted_count FROM {$ticket_counters} WHERE event_id = %d ORDER BY ticket_type_code FOR UPDATE", $event_id ), ARRAY_A ) as $row ) $type_counts[ $row['ticket_type_code'] ] = $row;
+		$candidates = $wpdb->get_results( $wpdb->prepare( "SELECT id, total_qty, total_cents, buyer_first_name, buyer_last_name, buyer_email, order_code FROM {$registrations} WHERE event_id = %d AND status = 'WAITLISTED' AND capacity_released_at IS NULL ORDER BY created_at, id FOR UPDATE", $event_id ), ARRAY_A );
+		$promoted = array();
+		foreach ( $candidates as $candidate ) {
+			if ( (int) $counter['confirmed_count'] + (int) $candidate['total_qty'] > (int) $event['capacity'] ) continue;
+			$items = $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code, quantity FROM {$items_table} WHERE registration_id = %d ORDER BY ticket_type_code", $candidate['id'] ), ARRAY_A );
+			$fits = true;
+			foreach ( $items as $item ) {
+				$limit = (int) ( $type_limits[ $item['ticket_type_code'] ] ?? 0 );
+				$current = (int) ( $type_counts[ $item['ticket_type_code'] ]['confirmed_count'] ?? 0 );
+				if ( $limit && $current + (int) $item['quantity'] > $limit ) { $fits = false; break; }
+			}
+			if ( ! $fits ) continue;
+			$economic = self::riepilogo_economico( $event, (int) $candidate['total_cents'], 'CONFIRMED' );
+			$deadline = self::registration_expiry( $event, 'CONFIRMED', $now );
+			$wpdb->update( $registrations, array( 'status' => 'CONFIRMED', 'initial_due_cents' => $economic['initial_due_cents'], 'balance_cents' => $economic['balance_cents'], 'expires_at' => $deadline, 'payment_deadline_at' => $deadline, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'waitlist_promoted' ), array( 'id' => $candidate['id'] ), array( '%s', '%d', '%d', '%s', '%s', '%s', '%s' ), array( '%d' ) );
+			$wpdb->query( $wpdb->prepare( "UPDATE {$counters} SET waitlisted_count = GREATEST(0, waitlisted_count - %d), confirmed_count = confirmed_count + %d, updated_at = %s WHERE event_id = %d", $candidate['total_qty'], $candidate['total_qty'], $now, $event_id ) );
+			$counter['confirmed_count'] += (int) $candidate['total_qty'];
+			foreach ( $items as $item ) {
+				$wpdb->query( $wpdb->prepare( "UPDATE {$ticket_counters} SET waitlisted_count = GREATEST(0, waitlisted_count - %d), confirmed_count = confirmed_count + %d, updated_at = %s WHERE event_id = %d AND ticket_type_code = %s", $item['quantity'], $item['quantity'], $now, $event_id, $item['ticket_type_code'] ) );
+				$type_counts[ $item['ticket_type_code'] ]['confirmed_count'] = (int) ( $type_counts[ $item['ticket_type_code'] ]['confirmed_count'] ?? 0 ) + (int) $item['quantity'];
+			}
+			self::append_registration_event( (int) $candidate['id'], 'WAITLIST_PROMOTED', 'WAITLISTED', 'CONFIRMED', 'SYSTEM', array( 'expires_at' => $deadline ) );
+			$email_values = array( '{{evento.titolo}}' => $event['title'], '{{attivita.nome}}' => $event['activity'], '{{ordine.codice}}' => $candidate['order_code'], '{{ordine.stato}}' => 'Confermata', '{{ordine.partecipanti}}' => (string) $candidate['total_qty'], '{{referente.nome_completo}}' => $candidate['buyer_first_name'] . ' ' . $candidate['buyer_last_name'] );
+			$email_snapshot = MI_Modello_Email::crea_istantanea( $event_id, $email_values );
+			$email_status = MI_Spedizione_Email::stato_nuova_email( $email_snapshot );
+			$wpdb->insert( $outbox, array( 'registration_id' => $candidate['id'], 'recipient' => $candidate['buyer_email'], 'template_type' => 'WAITLIST_PROMOTION', 'payload_json' => wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $candidate['order_code'], 'status' => 'CONFIRMED', 'email_preview' => $email_snapshot ) ), 'status' => $email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) );
+			$promoted[] = (int) $candidate['id'];
+		}
+		return $promoted;
 	}
 
 	public static function sincronizza_iscrizione_workspace( $registration_id ) {

@@ -69,7 +69,7 @@ final class MI_Admin {
 		$source = strtoupper( sanitize_key( wp_unslash( $_POST['payment_source'] ?? '' ) ) );
 		$kind = strtoupper( sanitize_key( wp_unslash( $_POST['installment_kind'] ?? 'FULL' ) ) );
 		$transaction = strtoupper( sanitize_key( wp_unslash( $_POST['transaction_kind'] ?? 'PAYMENT' ) ) );
-		$amount = round( max( 0, (float) str_replace( ',', '.', sanitize_text_field( wp_unslash( $_POST['amount'] ?? '0' ) ) ) ) * 100 );
+		$amount = self::parse_importo_centesimi( wp_unslash( $_POST['amount'] ?? '' ) );
 		$effective_raw = sanitize_text_field( wp_unslash( $_POST['effective_at'] ?? '' ) );
 		$effective_at = current_time( 'mysql' );
 		if ( $effective_raw ) {
@@ -77,12 +77,12 @@ final class MI_Admin {
 			if ( ! $effective_date || $effective_date->format( 'Y-m-d\\TH:i' ) !== $effective_raw ) { wp_die( esc_html__( 'Data effettiva non valida.', 'modulo-iscrizioni' ) ); }
 			$effective_at = $effective_date->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
 		}
-		if ( ! in_array( $source, array( 'BANK_TRANSFER', 'CARD', 'CASH' ), true ) || ! in_array( $kind, array( 'DEPOSIT', 'BALANCE', 'FULL', 'OTHER' ), true ) || ! in_array( $transaction, array( 'PAYMENT', 'REFUND' ), true ) || $amount < 1 ) { wp_die( esc_html__( 'Dati del versamento non validi.', 'modulo-iscrizioni' ) ); }
+		if ( ! in_array( $source, array( 'BANK_TRANSFER', 'CARD', 'CASH' ), true ) || ! in_array( $kind, array( 'DEPOSIT', 'BALANCE', 'FULL', 'OTHER' ), true ) || ! in_array( $transaction, array( 'PAYMENT', 'REFUND' ), true ) || null === $amount ) { wp_die( esc_html__( 'Dati del versamento non validi.', 'modulo-iscrizioni' ) ); }
 		$external_reference = sanitize_text_field( wp_unslash( $_POST['external_reference'] ?? '' ) );
 		$administrative_note = sanitize_textarea_field( wp_unslash( $_POST['administrative_note'] ?? '' ) );
 		if ( self::contiene_numero_carta( $external_reference ) || self::contiene_numero_carta( $administrative_note ) ) { wp_die( esc_html__( 'Non inserire numeri completi di carta.', 'modulo-iscrizioni' ) ); }
 		$wpdb->query( 'START TRANSACTION' );
-		$locked = $wpdb->get_row( $wpdb->prepare( "SELECT id, status, initial_due_cents FROM {$wpdb->prefix}mi_registrations WHERE id = %d FOR UPDATE", $registration_id ), ARRAY_A );
+		$locked = $wpdb->get_row( $wpdb->prepare( "SELECT id, status, initial_due_cents, payment_deadline_at FROM {$wpdb->prefix}mi_registrations WHERE id = %d FOR UPDATE", $registration_id ), ARRAY_A );
 		if ( ! $locked ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Iscrizione non disponibile.', 'modulo-iscrizioni' ) ); }
 		if ( 'PAYMENT' === $transaction && in_array( $locked['status'], array( 'CANCELLED', 'EXPIRED' ), true ) ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Non è possibile registrare un nuovo versamento su un’iscrizione annullata o scaduta.', 'modulo-iscrizioni' ) ); }
 		if ( 'REFUND' === $transaction && $amount > self::totale_pagamenti( $registration_id ) ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Il rimborso non può superare il totale già versato.', 'modulo-iscrizioni' ) ); }
@@ -90,7 +90,14 @@ final class MI_Admin {
 		if ( false === $inserted ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Il movimento non è stato salvato. Riprova.', 'modulo-iscrizioni' ) ); }
 		$registration_changes = array( 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_changed' );
 		$registration_formats = array( '%s', '%s' );
-		if ( 'PAYMENT' === $transaction && self::totale_pagamenti( $registration_id ) >= (int) $locked['initial_due_cents'] ) { $registration_changes['expires_at'] = null; $registration_formats[] = '%s'; }
+		$net_paid = self::totale_pagamenti( $registration_id );
+		if ( $net_paid >= (int) $locked['initial_due_cents'] ) {
+			$registration_changes['expires_at'] = null;
+			$registration_formats[] = '%s';
+		} elseif ( 'CONFIRMED' === $locked['status'] && $locked['payment_deadline_at'] ) {
+			$registration_changes['expires_at'] = $locked['payment_deadline_at'];
+			$registration_formats[] = '%s';
+		}
 		$marked_pending = $wpdb->update( $wpdb->prefix . 'mi_registrations', $registration_changes, array( 'id' => $registration_id ), $registration_formats, array( '%d' ) );
 		if ( false === $marked_pending ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Il movimento non è stato accodato per Workspace. Riprova.', 'modulo-iscrizioni' ) ); }
 		$wpdb->query( 'COMMIT' );
@@ -115,15 +122,18 @@ final class MI_Admin {
 	public static function payments_page() {
 		if ( ! current_user_can( 'mi_view_registrations' ) ) { wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) ); }
 		global $wpdb;
-		$rows = $wpdb->get_results( "SELECT p.*, r.order_code, r.event_id FROM {$wpdb->prefix}mi_payments p INNER JOIN {$wpdb->prefix}mi_registrations r ON r.id = p.registration_id ORDER BY p.id DESC", ARRAY_A );
-		$rows = array_values( array_filter( $rows, static function ( $row ) { return MI_Access::can_access_event( (int) $row['event_id'] ); } ) );
 		$filter_event = isset( $_GET['payment_event_id'] ) ? absint( $_GET['payment_event_id'] ) : 0;
 		$filter_source = strtoupper( sanitize_key( wp_unslash( $_GET['payment_source'] ?? '' ) ) );
 		$filter_transaction = strtoupper( sanitize_key( wp_unslash( $_GET['transaction_kind'] ?? '' ) ) );
 		$filter_from = preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) ( $_GET['payment_from'] ?? '' ) ) ? sanitize_text_field( wp_unslash( $_GET['payment_from'] ) ) : '';
 		$filter_to = preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) ( $_GET['payment_to'] ?? '' ) ) ? sanitize_text_field( wp_unslash( $_GET['payment_to'] ) ) : '';
 		if ( $filter_from && $filter_to && $filter_from > $filter_to ) { $filter_from = ''; $filter_to = ''; }
-		$rows = array_values( array_filter( $rows, static function ( $row ) use ( $filter_event, $filter_source, $filter_transaction, $filter_from, $filter_to ) { $date = substr( (string) $row['effective_at'], 0, 10 ); return ( ! $filter_event || (int) $row['event_id'] === $filter_event ) && ( ! $filter_source || $row['payment_source'] === $filter_source ) && ( ! $filter_transaction || $row['transaction_kind'] === $filter_transaction ) && ( ! $filter_from || $date >= $filter_from ) && ( ! $filter_to || $date <= $filter_to ); } ) );
+		list( $payment_where, $payment_parameters ) = self::payment_where( $filter_event, $filter_source, $filter_transaction, $filter_from, $filter_to );
+		$page = max( 1, absint( $_GET['paged'] ?? 1 ) );
+		$per_page = 100;
+		$offset = ( $page - 1 ) * $per_page;
+		$query = "SELECT p.*, r.order_code, r.event_id FROM {$wpdb->prefix}mi_payments p INNER JOIN {$wpdb->prefix}mi_registrations r ON r.id = p.registration_id {$payment_where} ORDER BY p.id DESC LIMIT %d OFFSET %d";
+		$rows = $wpdb->get_results( $wpdb->prepare( $query, array_merge( $payment_parameters, array( $per_page, $offset ) ) ), ARRAY_A );
 		$labels = array( 'BANK_TRANSFER' => 'Bonifico', 'CARD' => 'Carta', 'CASH' => 'Contante' );
 		$export_url = wp_nonce_url( add_query_arg( array( 'action' => 'mi_export_payments', 'payment_event_id' => $filter_event, 'payment_source' => $filter_source, 'transaction_kind' => $filter_transaction, 'payment_from' => $filter_from, 'payment_to' => $filter_to ), admin_url( 'admin-post.php' ) ), 'mi_export_payments' );
 		if ( ! current_user_can( 'mi_manage_payments' ) ) { echo '<p class="notice notice-info"><strong>Consultazione soltanto:</strong> non disponi del permesso per registrare versamenti o rimborsi.</p>'; }
@@ -141,20 +151,24 @@ final class MI_Admin {
 		if ( ! current_user_can( 'mi_view_registrations' ) ) { wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) ); }
 		check_admin_referer( 'mi_export_payments' );
 		global $wpdb;
-		$rows = $wpdb->get_results( "SELECT p.*, r.order_code, r.event_id FROM {$wpdb->prefix}mi_payments p INNER JOIN {$wpdb->prefix}mi_registrations r ON r.id = p.registration_id ORDER BY p.effective_at, p.id", ARRAY_A );
-		$rows = array_values( array_filter( $rows, static function ( $row ) { return MI_Access::can_access_event( (int) $row['event_id'] ); } ) );
 		$filter_event = isset( $_GET['payment_event_id'] ) ? absint( $_GET['payment_event_id'] ) : 0;
 		$filter_source = strtoupper( sanitize_key( wp_unslash( $_GET['payment_source'] ?? '' ) ) );
 		$filter_transaction = strtoupper( sanitize_key( wp_unslash( $_GET['transaction_kind'] ?? '' ) ) );
 		$filter_from = preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) ( $_GET['payment_from'] ?? '' ) ) ? sanitize_text_field( wp_unslash( $_GET['payment_from'] ) ) : '';
 		$filter_to = preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) ( $_GET['payment_to'] ?? '' ) ) ? sanitize_text_field( wp_unslash( $_GET['payment_to'] ) ) : '';
 		if ( $filter_from && $filter_to && $filter_from > $filter_to ) { $filter_from = ''; $filter_to = ''; }
-		$rows = array_values( array_filter( $rows, static function ( $row ) use ( $filter_event, $filter_source, $filter_transaction, $filter_from, $filter_to ) { $date = substr( (string) $row['effective_at'], 0, 10 ); return ( ! $filter_event || (int) $row['event_id'] === $filter_event ) && ( ! $filter_source || $row['payment_source'] === $filter_source ) && ( ! $filter_transaction || $row['transaction_kind'] === $filter_transaction ) && ( ! $filter_from || $date >= $filter_from ) && ( ! $filter_to || $date <= $filter_to ); } ) );
+		list( $payment_where, $payment_parameters ) = self::payment_where( $filter_event, $filter_source, $filter_transaction, $filter_from, $filter_to );
 		$labels = array( 'BANK_TRANSFER' => 'Bonifico', 'CARD' => 'Carta', 'CASH' => 'Contante' );
 		header( 'Content-Type: text/csv; charset=UTF-8' ); header( 'Content-Disposition: attachment; filename="pagamenti-' . gmdate( 'Y-m-d' ) . '.csv"' );
 		$output = fopen( 'php://output', 'w' ); fwrite( $output, "\xEF\xBB\xBF" );
 		fputcsv( $output, array( 'Data UTC', 'Codice iscrizione', 'Evento', 'Tipo transazione', 'Rata', 'Importo centesimi', 'Fonte pagamento', 'Riferimento esterno', 'Operatore', 'Nota amministrativa' ), ';' );
-		foreach ( $rows as $row ) { $line = array( $row['effective_at'], $row['order_code'], get_the_title( (int) $row['event_id'] ), $row['transaction_kind'], $row['installment_kind'], $row['amount_cents'], $labels[ $row['payment_source'] ] ?? $row['payment_source'], $row['external_reference'], $row['operator_label'], $row['administrative_note'] ); fputcsv( $output, array_map( array( __CLASS__, 'safe_csv_value' ), $line ), ';' ); }
+		$offset = 0;
+		do {
+			$query = "SELECT p.*, r.order_code, r.event_id FROM {$wpdb->prefix}mi_payments p INNER JOIN {$wpdb->prefix}mi_registrations r ON r.id = p.registration_id {$payment_where} ORDER BY p.effective_at, p.id LIMIT 500 OFFSET %d";
+			$rows = $wpdb->get_results( $wpdb->prepare( $query, array_merge( $payment_parameters, array( $offset ) ) ), ARRAY_A );
+			foreach ( $rows as $row ) { $line = array( $row['effective_at'], $row['order_code'], get_the_title( (int) $row['event_id'] ), $row['transaction_kind'], $row['installment_kind'], $row['amount_cents'], $labels[ $row['payment_source'] ] ?? $row['payment_source'], $row['external_reference'], $row['operator_label'], $row['administrative_note'] ); fputcsv( $output, array_map( array( __CLASS__, 'safe_csv_value' ), $line ), ';' ); }
+			$offset += count( $rows );
+		} while ( count( $rows ) === 500 );
 		fclose( $output ); exit;
 	}
 
@@ -189,8 +203,8 @@ final class MI_Admin {
 		$parameters = $scope_parameters;
 		if ( '' !== $search ) {
 			$like = '%' . $wpdb->esc_like( $search ) . '%';
-			$conditions[] = '(order_code LIKE %s OR buyer_first_name LIKE %s OR buyer_last_name LIKE %s OR buyer_email LIKE %s)';
-			$parameters = array_merge( $parameters, array( $like, $like, $like, $like ) );
+			$conditions[] = "(order_code LIKE %s OR buyer_first_name LIKE %s OR buyer_last_name LIKE %s OR CONCAT(buyer_first_name, ' ', buyer_last_name) LIKE %s OR buyer_email LIKE %s)";
+			$parameters = array_merge( $parameters, array( $like, $like, $like, $like, $like ) );
 		}
 		if ( $workspace_filter ) {
 			$conditions[] = 'workspace_status = %s';
@@ -366,8 +380,8 @@ final class MI_Admin {
 		}
 		if ( '' !== $search ) {
 			$like = '%' . $wpdb->esc_like( $search ) . '%';
-			$conditions[] = '(r.order_code LIKE %s OR r.buyer_first_name LIKE %s OR r.buyer_last_name LIKE %s OR r.buyer_email LIKE %s)';
-			$parameters = array_merge( $parameters, array( $like, $like, $like, $like ) );
+			$conditions[] = "(r.order_code LIKE %s OR r.buyer_first_name LIKE %s OR r.buyer_last_name LIKE %s OR CONCAT(r.buyer_first_name, ' ', r.buyer_last_name) LIKE %s OR r.buyer_email LIKE %s)";
+			$parameters = array_merge( $parameters, array( $like, $like, $like, $like, $like ) );
 		}
 		$where = $conditions ? 'WHERE ' . implode( ' AND ', $conditions ) : '';
 		if ( $parameters ) {
@@ -413,6 +427,31 @@ final class MI_Admin {
 
 	private static function formatta_importo( $cents ) {
 		return number_format_i18n( max( 0, (int) $cents ) / 100, 2 ) . ' €';
+	}
+
+	private static function parse_importo_centesimi( $raw ) {
+		$value = trim( sanitize_text_field( (string) $raw ) );
+		if ( ! preg_match( '/^(?:0|[1-9]\d{0,6})(?:[.,]\d{1,2})?$/', $value ) ) return null;
+		$amount = (float) str_replace( ',', '.', $value );
+		return $amount > 0 && $amount <= 1000000 ? (int) round( $amount * 100 ) : null;
+	}
+
+	private static function payment_where( $event_id, $source, $transaction, $from, $to ) {
+		$scope = MI_Access::activity_ids();
+		$conditions = array();
+		$parameters = array();
+		if ( $event_id ) {
+			if ( ! MI_Access::can_access_event( $event_id ) ) return array( 'WHERE 1 = 0', array() );
+			$conditions[] = 'r.event_id = %d'; $parameters[] = $event_id;
+		} elseif ( 'ALL' !== $scope ) {
+			$allowed = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids', 'meta_query' => array( array( 'key' => '_mi_activity_id', 'value' => $scope ?: array( 0 ), 'compare' => 'IN', 'type' => 'NUMERIC' ) ) ) );
+			$conditions[] = 'r.event_id IN (' . implode( ',', array_map( 'absint', $allowed ?: array( 0 ) ) ) . ')';
+		}
+		if ( $source ) { $conditions[] = 'p.payment_source = %s'; $parameters[] = $source; }
+		if ( $transaction ) { $conditions[] = 'p.transaction_kind = %s'; $parameters[] = $transaction; }
+		if ( $from ) { $conditions[] = 'p.effective_at >= %s'; $parameters[] = $from . ' 00:00:00'; }
+		if ( $to ) { $conditions[] = 'p.effective_at <= %s'; $parameters[] = $to . ' 23:59:59'; }
+		return array( $conditions ? 'WHERE ' . implode( ' AND ', $conditions ) : '', $parameters );
 	}
 
 	private static function totale_pagamenti( $registration_id ) {

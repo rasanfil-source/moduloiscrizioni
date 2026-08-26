@@ -1,4 +1,4 @@
-# Backend Google Workspace — schema 1.2.1
+# Backend Google Workspace — schema 1.2.2
 
 Progetto Google Apps Script associato a uno spreadsheet dedicato. Il repository non contiene ID del foglio, URL di deployment, destinatari reali, coordinate bancarie o segreti.
 
