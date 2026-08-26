@@ -35,7 +35,7 @@ final class MI_Workspace_Settings {
 			<?php if ( 'salvato' === $notice ) : ?><div class="notice notice-success"><p>Configurazione salvata.</p></div><?php endif; ?>
 			<?php if ( 'ping_ok' === $notice ) : ?><div class="notice notice-success"><p>Collegamento firmato verificato. Workspace è in modalità ANTEPRIMA.</p></div><?php endif; ?>
 			<?php if ( 'ping_errore' === $notice ) : ?><div class="notice notice-error"><p>Collegamento non riuscito. Codice diagnostico: <code><?php echo esc_html( $error_code ?: 'non_disponibile' ); ?></code>.</p></div><?php endif; ?>
-			<?php if ( 'schema_ok' === $notice ) : ?><div class="notice notice-success"><p>Schema Workspace 1.1.0 verificato: le colonne economiche italiane sono disponibili.</p></div><?php endif; ?>
+			<?php if ( 'schema_ok' === $notice ) : ?><div class="notice notice-success"><p>Schema Workspace 1.2.0 verificato: revisioni, consensi, tipologie e colonne economiche sono disponibili.</p></div><?php endif; ?>
 			<?php if ( 'schema_errore' === $notice ) : ?><div class="notice notice-error"><p>Schema Workspace non allineato. Aggiorna il deployment e la struttura del foglio.</p></div><?php endif; ?>
 			<p>Il segreto salvato non viene mai mostrato. Inseriscilo nuovamente soltanto per sostituirlo.</p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
@@ -93,9 +93,9 @@ final class MI_Workspace_Settings {
 	public static function test_schema() {
 		self::authorize( 'mi_test_workspace_schema' );
 		$result = MI_Workspace_Client::stato_schema();
-		$required = array( 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json' );
+		$required = array( 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'opzioni_ordine_json', 'id_consenso_marketing' );
 		$headers = is_wp_error( $result ) ? array() : (array) ( $result['registration_headers'] ?? array() );
-		$valid = ! is_wp_error( $result ) && '1.1.0' === ( $result['schema_version'] ?? '' ) && ! array_diff( $required, $headers );
+		$valid = ! is_wp_error( $result ) && '1.2.0' === ( $result['schema_version'] ?? '' ) && ! array_diff( $required, $headers );
 		wp_safe_redirect( self::page_url( $valid ? 'schema_ok' : 'schema_errore' ) );
 		exit;
 	}

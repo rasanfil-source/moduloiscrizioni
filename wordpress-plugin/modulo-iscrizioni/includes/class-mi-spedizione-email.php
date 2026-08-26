@@ -7,6 +7,7 @@ final class MI_Spedizione_Email {
 	const OPZIONE_DESTINATARIO_PROVA = 'mi_destinatario_prova_email';
 	const OPZIONE_PROVA_VERIFICATA = 'mi_prova_email_verificata';
 	private static $nome_mittente = '';
+	private static $codice_incorporato = '';
 
 	public static function avvia() {
 		add_action( 'admin_menu', array( __CLASS__, 'aggiungi_pagina' ) );
@@ -154,15 +155,29 @@ final class MI_Spedizione_Email {
 		$corpo = $preheader . wp_kses_post( $istantanea['html'] ?? '' ) . '<hr><p>' . nl2br( esc_html( $istantanea['footer'] ?? '' ) ) . '</p>';
 		if ( isset( $istantanea['identificativo'] ) && is_array( $istantanea['identificativo'] ) && in_array( $istantanea['identificativo']['modalita'] ?? 'NONE', array( 'TEXT', 'QR', 'BARCODE' ), true ) ) {
 			$corpo .= '<p><strong>Codice:</strong> <code>' . esc_html( $istantanea['identificativo']['codice'] ?? '' ) . '</code></p>';
+			if ( in_array( $istantanea['identificativo']['modalita'], array( 'QR', 'BARCODE' ), true ) ) {
+				$code_payload = 'QR' === $istantanea['identificativo']['modalita'] ? ( $istantanea['identificativo']['payload_qr'] ?? '' ) : ( $istantanea['identificativo']['codice'] ?? '' );
+				self::$codice_incorporato = MI_Code_Image::svg( $istantanea['identificativo']['modalita'], $code_payload );
+				add_action( 'phpmailer_init', array( __CLASS__, 'incorpora_codice' ) );
+				$corpo .= '<p><img src="cid:mi-registration-code" alt="Codice grafico dell’iscrizione" style="max-width:280px;height:auto"></p>';
+			}
 		}
 		self::$nome_mittente = sanitize_text_field( $identita['nome_mittente'] ?? '' );
 		if ( self::$nome_mittente ) {
 			add_filter( 'wp_mail_from_name', array( __CLASS__, 'filtra_nome_mittente' ) );
 		}
 		$inviata = wp_mail( sanitize_email( $destinatario ), sanitize_text_field( $istantanea['oggetto'] ), $corpo, $intestazioni );
+		remove_action( 'phpmailer_init', array( __CLASS__, 'incorpora_codice' ) );
 		remove_filter( 'wp_mail_from_name', array( __CLASS__, 'filtra_nome_mittente' ) );
 		self::$nome_mittente = '';
+		self::$codice_incorporato = '';
 		return $inviata;
+	}
+
+	public static function incorpora_codice( $phpmailer ) {
+		if ( self::$codice_incorporato && method_exists( $phpmailer, 'addStringEmbeddedImage' ) ) {
+			$phpmailer->addStringEmbeddedImage( self::$codice_incorporato, 'mi-registration-code', 'codice-iscrizione.svg', 'base64', 'image/svg+xml' );
+		}
 	}
 
 	public static function filtra_nome_mittente( $nome_corrente ) {

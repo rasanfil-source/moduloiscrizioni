@@ -52,12 +52,26 @@ test('le funzioni Apps Script applicative hanno nomi italiani', () => {
 });
 
 test('la migrazione aggiunge il riepilogo economico alle iscrizioni', () => {
-  assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.1\.0'/);
+  assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.2\.0'/);
   assert.match(sources['Config.gs'], /modalita_economica/);
   assert.match(sources['Config.gs'], /primo_versamento_centesimi/);
   assert.match(sources['Config.gs'], /saldo_centesimi/);
   assert.match(sources['Setup.gs'], /MI_INTESTAZIONI_PRECEDENTI/);
   assert.match(sources['WebApp.gs'], /payment_methods/);
+});
+
+test('la replica è riconciliante e viene confermata solo quando completa', () => {
+  assert.match(sources['WebApp.gs'], /IDEMPOTENCY_CONFLICT/);
+  assert.match(sources['WebApp.gs'], /participantSheet\.deleteRow/);
+  assert.match(sources['WebApp.gs'], /participantCount === participants\.length/);
+  assert.match(sources['WebApp.gs'], /complete:\s*complete/);
+  assert.match(sources['WebApp.gs'], /existing && existing\.data_creazione/);
+});
+
+test('revisioni, consensi, tipologie e opzioni hanno colonne esplicite', () => {
+  for (const token of ['id_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'id_consenso_marketing', 'opzioni_ordine_json', 'codice_tipologia', 'indice_tipologia', 'opzioni_json']) assert.match(sources['Config.gs'], new RegExp(token));
+  assert.match(sources['Setup.gs'], /usesItalianPrevious \|\| usesPreviousHeaders/);
+  assert.match(sources['WebApp.gs'], /marketing_accepted_at/);
 });
 
 test('APPEND_REGISTRATION replica i movimenti pagamento senza duplicarli', () => {

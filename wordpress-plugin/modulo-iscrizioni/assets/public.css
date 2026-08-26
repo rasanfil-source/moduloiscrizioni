@@ -45,3 +45,5 @@
 @media (prefers-reduced-motion:reduce) { .mi-registration * { scroll-behavior: auto !important; transition: none !important; } }
 .mi-registration__qr { margin-top: 1rem; max-width: 220px; }
 .mi-registration__qr svg { display: block; width: 100%; height: auto; }
+.mi-registration__barcode { margin-top: 1rem; max-width: 360px; }
+.mi-registration__barcode svg { display: block; width: 100%; height: auto; }

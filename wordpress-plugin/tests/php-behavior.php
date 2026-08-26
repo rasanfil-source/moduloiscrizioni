@@ -16,9 +16,11 @@ function sanitize_textarea_field( $value ) { return trim( strip_tags( (string) $
 function sanitize_email( $value ) { return filter_var( (string) $value, FILTER_SANITIZE_EMAIL ); }
 function is_email( $value ) { return false !== filter_var( $value, FILTER_VALIDATE_EMAIL ); }
 function wp_timezone() { return new DateTimeZone( 'Europe/Rome' ); }
+function esc_html( $value ) { return htmlspecialchars( (string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8' ); }
 
 require_once __DIR__ . '/../modulo-iscrizioni/includes/class-mi-field-schema.php';
 require_once __DIR__ . '/../modulo-iscrizioni/includes/class-mi-registration-service.php';
+require_once __DIR__ . '/../modulo-iscrizioni/includes/class-mi-code-image.php';
 
 function invoke_private( $name, array $arguments ) {
 	$method = new ReflectionMethod( MI_Registration_Service::class, $name );
@@ -36,8 +38,8 @@ function expect( $condition, $message ) {
 $event = array(
 	'pricing_mode' => 'CALCULATED',
 	'ticket_types' => array(
-		array( 'code' => 'intero', 'price_cents' => 1200, 'max_per_order' => 4 ),
-		array( 'code' => 'gratuito', 'price_cents' => 0, 'max_per_order' => 2 ),
+		array( 'code' => 'intero', 'name' => 'Intero', 'price_cents' => 1200, 'max_per_order' => 4, 'capacity' => 10 ),
+		array( 'code' => 'gratuito', 'name' => 'Gratuito', 'price_cents' => 0, 'max_per_order' => 2, 'capacity' => 0 ),
 	),
 );
 
@@ -53,21 +55,45 @@ expect( ! is_wp_error( $free_selection ) && 0 === $free_selection['total_cents']
 
 $too_many = invoke_private( 'validate_selection', array( $event, array( 'intero' => 5 ) ) );
 expect( is_wp_error( $too_many ) && 'mi_ticket_limit' === $too_many->code, 'limite quota non applicato' );
+$fractional = invoke_private( 'validate_selection', array( $event, array( 'intero' => 1.5 ) ) );
+expect( is_wp_error( $fractional ) && 'mi_ticket_quantity_invalid' === $fractional->code, 'quantità frazionaria accettata' );
 
-$participants = invoke_private( 'validate_participants', array( array( array( 'first_name' => 'Persona', 'last_name' => 'Demo' ) ), 1, array() ) );
+$one_selection = invoke_private( 'validate_selection', array( $event, array( 'intero' => 1 ) ) );
+$participants = invoke_private( 'validate_participants', array( array( array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Persona', 'last_name' => 'Demo' ) ), $one_selection, array(), array() ) );
 expect( ! is_wp_error( $participants ) && 1 === count( $participants ), 'partecipante minimo non accettato' );
 
 $extended_fields = array(
 	array( 'key' => 'birth_date', 'type' => 'date', 'required' => true ),
 	array( 'key' => 'tshirt_size', 'type' => 'select', 'required' => false, 'options' => array( 'S', 'M', 'L' ) ),
 );
-$extended = invoke_private( 'validate_participants', array( array( array( 'first_name' => 'Persona', 'last_name' => 'Demo', 'fields' => array( 'birth_date' => '2000-01-02', 'tshirt_size' => 'M', 'ignored' => 'no' ) ) ), 1, $extended_fields ) );
+$extended = invoke_private( 'validate_participants', array( array( array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Persona', 'last_name' => 'Demo', 'fields' => array( 'birth_date' => '2000-01-02', 'tshirt_size' => 'M', 'ignored' => 'no' ) ) ), $one_selection, $extended_fields, array() ) );
 expect( ! is_wp_error( $extended ) && ! isset( $extended[0]['fields']['ignored'] ), 'allowlist campi estesi non applicata' );
-$missing_required = invoke_private( 'validate_participants', array( array( array( 'first_name' => 'Persona', 'last_name' => 'Demo', 'fields' => array() ) ), 1, $extended_fields ) );
+$missing_required = invoke_private( 'validate_participants', array( array( array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Persona', 'last_name' => 'Demo', 'fields' => array() ) ), $one_selection, $extended_fields, array() ) );
 expect( is_wp_error( $missing_required ), 'campo esteso obbligatorio non applicato' );
 
-$implausible_birth_date = invoke_private( 'validate_participants', array( array( array( 'first_name' => 'Persona', 'last_name' => 'Demo', 'fields' => array( 'birth_date' => '1800-01-01' ) ) ), 1, $extended_fields ) );
+$implausible_birth_date = invoke_private( 'validate_participants', array( array( array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Persona', 'last_name' => 'Demo', 'fields' => array( 'birth_date' => '1800-01-01' ) ) ), $one_selection, $extended_fields, array() ) );
 expect( is_wp_error( $implausible_birth_date ), 'data di nascita anteriore a 120 anni accettata' );
+
+$two_selection = invoke_private( 'validate_selection', array( $event, array( 'intero' => 2 ) ) );
+$duplicate_ticket_index = invoke_private( 'validate_participants', array( array(
+	array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Uno', 'last_name' => 'Demo' ),
+	array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Due', 'last_name' => 'Demo' ),
+), $two_selection, array(), array() ) );
+expect( is_wp_error( $duplicate_ticket_index ), 'indice tipologia duplicato accettato' );
+
+$options = array(
+	array( 'code' => 'pranzo', 'name' => 'Pranzo', 'scope' => 'ORDER', 'price_cents' => 500, 'max_quantity' => 2 ),
+	array( 'code' => 'maglia', 'name' => 'Maglia', 'scope' => 'TICKET', 'price_cents' => 800, 'max_quantity' => 1 ),
+);
+$order_options = invoke_private( 'validate_options', array( array( 'pranzo' => 2 ), $options, 'ORDER' ) );
+$ticket_options = invoke_private( 'validate_options', array( array( 'maglia' => 1 ), $options, 'TICKET' ) );
+expect( ! is_wp_error( $order_options ) && 1 === count( $order_options ), 'opzione ordine valida rifiutata' );
+$options_total = invoke_private( 'options_total', array( $order_options, array( array( 'options' => $ticket_options ) ) ) );
+expect( 1800 === $options_total, 'totale opzioni server-side errato' );
+$cross_scope = invoke_private( 'validate_options', array( array( 'maglia' => 1 ), $options, 'ORDER' ) );
+expect( is_wp_error( $cross_scope ), 'opzione partecipante accettata a livello ordine' );
+$fractional_option = invoke_private( 'validate_options', array( array( 'pranzo' => 1.5 ), $options, 'ORDER' ) );
+expect( is_wp_error( $fractional_option ), 'quantità opzione frazionaria accettata' );
 
 $buyer = invoke_private( 'validate_buyer', array( array( 'first_name' => 'Referente', 'last_name' => 'Demo', 'email' => 'referente@example.invalid', 'phone' => '+39 000 0000000' ) ) );
 expect( ! is_wp_error( $buyer ), 'referente dimostrativo valido rifiutato' );
@@ -77,5 +103,10 @@ expect( is_wp_error( $bad_buyer ), 'referente non valido accettato' );
 
 $state = MI_Registration_Service::registration_state( array( 'opens_at' => '2030-02-02T10:00', 'closes_at' => '2030-02-01T10:00' ) );
 expect( 'MISCONFIGURED' === $state, 'finestra temporale inversa non rilevata' );
+
+$qr_svg = MI_Code_Image::svg( 'QR', 'modulo-iscrizioni|evento:42|ordine:MI-260826-DEMO1234' );
+expect( false !== strpos( $qr_svg, '<svg' ) && false !== strpos( $qr_svg, 'viewBox="0 0 45 45"' ), 'QR locale non generato' );
+$barcode_svg = MI_Code_Image::svg( 'BARCODE', 'MI-260826-DEMO1234' );
+expect( false !== strpos( $barcode_svg, '<svg' ) && false !== strpos( $barcode_svg, 'MI-260826-DEMO1234' ), 'barcode locale non generato' );
 
 fwrite( STDOUT, "PHP behavior tests: OK\n" );

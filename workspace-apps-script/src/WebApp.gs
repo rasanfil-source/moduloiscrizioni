@@ -48,24 +48,54 @@ function aggiungiIscrizione_(payload) {
   const idempotencyKey = normalizzaTesto_(payload.idempotency_key, 64);
   const buyer = payload.buyer || {};
   const participants = Array.isArray(payload.participants) ? payload.participants : [];
-  if (!orderCode || !eventId || idempotencyKey.length < 16 || participants.length < 1 || participants.length > 20) return { ok: false, error: 'INVALID_REGISTRATION' };
+	const tickets = Array.isArray(payload.tickets) ? payload.tickets : [];
+  const snapshotJson = String(payload.snapshot_json || '');
+	const revisionId = normalizzaTesto_(payload.event_revision_id, 40);
+	const revisionHash = normalizzaTesto_(payload.event_revision_hash, 64);
+	const registrationStatus = normalizzaValoreElenco_(payload.status, ['CONFIRMED', 'WAITLISTED', 'CANCELLED', 'EXPIRED']);
+	const economicMode = normalizzaValoreElenco_(payload.economic_mode, ['REGISTRATION_ONLY', 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE']);
+  if (!/^[A-Za-z0-9_-]{3,64}$/.test(orderCode) || !/^\d+$/.test(eventId) || !/^[A-Za-z0-9_-]{16,64}$/.test(idempotencyKey) || !registrationStatus || !economicMode || participants.length < 1 || participants.length > 20) return { ok: false, error: 'INVALID_REGISTRATION' };
+	if (!/^\d+$/.test(revisionId) || !/^[a-f0-9]{64}$/i.test(revisionHash) || !normalizzaTesto_(payload.privacy_consent_id, 100) || !normalizzaTesto_(payload.privacy_policy_version, 64) || !normalizzaTesto_(payload.privacy_accepted_at, 40)) return { ok: false, error: 'INVALID_REVISION_OR_CONSENT' };
+	if (!snapshotJson || snapshotJson.length > 45000) return { ok: false, error: snapshotJson ? 'SNAPSHOT_TOO_LARGE' : 'SNAPSHOT_REQUIRED' };
+	let snapshotData;
+	try { snapshotData = JSON.parse(snapshotJson); } catch (snapshotError) { return { ok: false, error: 'INVALID_SNAPSHOT' }; }
+	if (!snapshotData || typeof snapshotData !== 'object' || Array.isArray(snapshotData)) return { ok: false, error: 'INVALID_SNAPSHOT' };
 	if (!normalizzaTesto_(buyer.first_name, 80) || !normalizzaTesto_(buyer.last_name, 80) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(buyer.email || ''))) return { ok: false, error: 'INVALID_BUYER' };
+	const ticketCounts = {};
+	let ticketQuantity = 0;
+	if (!tickets.length || tickets.some(function (ticket) {
+		const code = normalizzaTesto_(ticket.ticket_type_code || ticket.code, 64);
+		const quantity = Number(ticket.quantity);
+		if (!/^[A-Za-z0-9_-]{1,64}$/.test(code) || !Number.isInteger(quantity) || quantity < 1 || quantity > 20 || ticketCounts[code]) return true;
+		ticketCounts[code] = quantity;
+		ticketQuantity += quantity;
+		return false;
+	}) || ticketQuantity !== participants.length) return { ok: false, error: 'INVALID_TICKETS' };
+	const participantIndexes = {};
 	if (participants.some(function (participant) {
 		const fieldsJson = JSON.stringify(participant.fields || {});
-		return !normalizzaTesto_(participant.first_name, 80) || !normalizzaTesto_(participant.last_name, 80) || fieldsJson.length > 5000;
+		const optionsJson = JSON.stringify(participant.options || []);
+		const code = normalizzaTesto_(participant.ticket_type_code, 64);
+		const ticketIndex = Number(participant.ticket_index);
+		const indexKey = code + ':' + ticketIndex;
+		if (!/^[A-Za-z0-9_-]{1,64}$/.test(code) || !Number.isInteger(ticketIndex) || ticketIndex < 1 || ticketIndex > Number(ticketCounts[code] || 0) || participantIndexes[indexKey]) return true;
+		participantIndexes[indexKey] = true;
+		return !normalizzaTesto_(participant.first_name, 80) || !normalizzaTesto_(participant.last_name, 80) || fieldsJson.length > 5000 || optionsJson.length > 5000;
 	})) return { ok: false, error: 'INVALID_PARTICIPANTS' };
 
   const lock = LockService.getDocumentLock();
   lock.waitLock(30000);
   try {
     const registrations = ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS);
-    const existing = convertiRigheInOggetti_(registrations).find(function (item) { return String(item.chiave_idempotenza) === idempotencyKey || String(item.codice_ordine) === orderCode; });
-    if (existing) { sincronizzaPagamenti_(orderCode, payload.payments); return { ok: true, replayed: true, order_code: orderCode }; }
-
-    registrations.appendRow([
+    const registrationRows = convertiRigheInOggetti_(registrations);
+    const byKey = registrationRows.find(function (item) { return String(item.chiave_idempotenza) === idempotencyKey; });
+    const byCode = registrationRows.find(function (item) { return String(item.codice_ordine) === orderCode; });
+    if ((byKey && String(byKey.codice_ordine) !== orderCode) || (byCode && String(byCode.chiave_idempotenza) !== idempotencyKey)) return { ok: false, error: 'IDEMPOTENCY_CONFLICT' };
+    const existing = byKey || byCode;
+    const registrationValues = [
       neutralizzaFormula_(orderCode, 64),
       neutralizzaFormula_(eventId, 64),
-      normalizzaValoreElenco_(payload.status, ['CONFIRMED', 'WAITLISTED']) || 'CONFIRMED',
+      registrationStatus,
       neutralizzaFormula_(buyer.first_name, 80),
       neutralizzaFormula_(buyer.last_name, 80),
       neutralizzaFormula_(buyer.email, 254),
@@ -73,27 +103,54 @@ function aggiungiIscrizione_(payload) {
       participants.length,
       Math.max(0, Math.round(Number(payload.total_cents) || 0)),
       neutralizzaFormula_(idempotencyKey, 64),
-	  new Date(),
-	  normalizzaValoreElenco_(payload.economic_mode, ['REGISTRATION_ONLY', 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE']) || 'REGISTRATION_ONLY',
+	  existing && existing.data_creazione ? existing.data_creazione : new Date(),
+	  economicMode,
 	  Math.max(0, Math.round(Number(payload.initial_due_cents) || 0)),
 	  Math.max(0, Math.round(Number(payload.balance_cents) || 0)),
-	  JSON.stringify((Array.isArray(payload.payment_methods) ? payload.payment_methods : []).filter(function (method) { return ['BANK_TRANSFER', 'CARD', 'CASH'].indexOf(method) >= 0; }))
-    ]);
+	  JSON.stringify((Array.isArray(payload.payment_methods) ? payload.payment_methods : []).filter(function (method) { return ['BANK_TRANSFER', 'CARD', 'CASH'].indexOf(method) >= 0; })),
+      neutralizzaFormula_(revisionId, 40),
+      revisionHash,
+      snapshotJson,
+      normalizzaTesto_(payload.privacy_consent_id, 100),
+      normalizzaTesto_(payload.privacy_policy_version, 64),
+	  normalizzaTesto_(payload.privacy_accepted_at, 40),
+	  JSON.stringify(tickets),
+	  normalizzaTesto_(payload.marketing_consent_id, 100),
+	  normalizzaTesto_(payload.marketing_accepted_at, 40),
+	  JSON.stringify(Array.isArray(payload.order_options) ? payload.order_options : [])
+    ];
+    if (existing) registrations.getRange(existing._row, 1, 1, registrationValues.length).setValues([registrationValues]);
+    else registrations.appendRow(registrationValues);
 
     const participantRows = participants.map(function (participant, index) {
       return [
         neutralizzaFormula_(orderCode, 64),
         index + 1,
+        neutralizzaFormula_(participant.ticket_type_code, 64),
+        Math.max(1, Math.round(Number(participant.ticket_index) || 1)),
         neutralizzaFormula_(participant.first_name, 80),
         neutralizzaFormula_(participant.last_name, 80),
-        JSON.stringify(participant.fields || {})
+        JSON.stringify(participant.fields || {}),
+        JSON.stringify(participant.options || [])
       ];
     });
-    ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS).getRange(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS).getLastRow() + 1, 1, participantRows.length, participantRows[0].length).setValues(participantRows);
-    ottieniSchedaObbligatoria_(MI_SHEETS.EMAIL_OUTBOX).appendRow([creaIdentificativoOpaco_('msg'), neutralizzaFormula_(orderCode, 64), neutralizzaFormula_(buyer.email, 254), 'REGISTRATION_CONFIRMATION', JSON.stringify({ order_code: orderCode, status: payload.status }), 'PREVIEW', new Date()]);
+    const participantSheet = ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS);
+    convertiRigheInOggetti_(participantSheet).filter(function (row) { return String(row.codice_ordine) === orderCode; }).sort(function (a, b) { return b._row - a._row; }).forEach(function (row) { participantSheet.deleteRow(row._row); });
+    participantSheet.getRange(participantSheet.getLastRow() + 1, 1, participantRows.length, participantRows[0].length).setValues(participantRows);
+    const outbox = ottieniSchedaObbligatoria_(MI_SHEETS.EMAIL_OUTBOX);
+    const message = convertiRigheInOggetti_(outbox).find(function (row) { return String(row.codice_ordine) === orderCode && String(row.tipo_modello) === 'REGISTRATION_CONFIRMATION'; });
+    const snapshotBuyer = snapshotData && snapshotData.buyer ? snapshotData.buyer : buyer;
+    const originalRecipient = normalizzaTesto_(snapshotBuyer.email || buyer.email, 254);
+    const originalStatus = normalizzaValoreElenco_(snapshotData && snapshotData.status, ['CONFIRMED', 'WAITLISTED']) || normalizzaValoreElenco_(payload.status, ['CONFIRMED', 'WAITLISTED']) || 'CONFIRMED';
+    const messageValues = [message ? message.id_messaggio : creaIdentificativoOpaco_('msg'), neutralizzaFormula_(orderCode, 64), neutralizzaFormula_(originalRecipient, 254), 'REGISTRATION_CONFIRMATION', JSON.stringify({ order_code: orderCode, status: originalStatus }), 'PREVIEW', message && message.data_creazione ? message.data_creazione : new Date()];
+    if (message) outbox.getRange(message._row, 1, 1, messageValues.length).setValues([messageValues]); else outbox.appendRow(messageValues);
     sincronizzaPagamenti_(orderCode, payload.payments);
+    const registrationComplete = convertiRigheInOggetti_(registrations).some(function (row) { return String(row.codice_ordine) === orderCode && String(row.chiave_idempotenza) === idempotencyKey && String(row.hash_revisione_evento) === revisionHash && String(row.snapshot_json) === snapshotJson; });
+    const participantCount = convertiRigheInOggetti_(participantSheet).filter(function (row) { return String(row.codice_ordine) === orderCode; }).length;
+    const outboxComplete = convertiRigheInOggetti_(outbox).some(function (row) { return String(row.codice_ordine) === orderCode && String(row.tipo_modello) === 'REGISTRATION_CONFIRMATION' && String(row.destinatario) === originalRecipient; });
+    const complete = registrationComplete && participantCount === participants.length && outboxComplete;
     aggiungiControllo_('APPEND_REGISTRATION', 'REGISTRATION', orderCode, 'SUCCESS', 'WORDPRESS', 'REGISTRATION_RECORDED', 'WORDPRESS_PROXY');
-    return { ok: true, replayed: false, order_code: orderCode };
+    return { ok: complete, complete: complete, replayed: Boolean(existing), order_code: orderCode, error: complete ? undefined : 'INCOMPLETE_REPLICA' };
   } finally {
     lock.releaseLock();
   }

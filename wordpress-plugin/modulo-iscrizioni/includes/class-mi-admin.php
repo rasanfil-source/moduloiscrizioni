@@ -10,6 +10,7 @@ final class MI_Admin {
 		add_action( 'admin_post_mi_retry_workspace', array( __CLASS__, 'riaccoda_workspace' ) );
 		add_action( 'admin_post_mi_add_payment', array( __CLASS__, 'add_payment' ) );
 		add_action( 'admin_post_mi_export_payments', array( __CLASS__, 'export_payments' ) );
+		add_action( 'admin_post_mi_cancel_registration', array( __CLASS__, 'cancel_registration' ) );
 		add_filter( 'post_row_actions', array( __CLASS__, 'event_row_actions' ), 10, 2 );
 		add_filter( 'wp_insert_post_data', array( __CLASS__, 'guard_publication' ), 20, 2 );
 		add_action( 'admin_notices', array( __CLASS__, 'publication_notice' ) );
@@ -57,16 +58,35 @@ final class MI_Admin {
 		$external_reference = sanitize_text_field( wp_unslash( $_POST['external_reference'] ?? '' ) );
 		$administrative_note = sanitize_textarea_field( wp_unslash( $_POST['administrative_note'] ?? '' ) );
 		if ( self::contiene_numero_carta( $external_reference ) || self::contiene_numero_carta( $administrative_note ) ) { wp_die( esc_html__( 'Non inserire numeri completi di carta.', 'modulo-iscrizioni' ) ); }
-		if ( 'REFUND' === $transaction && $amount > self::totale_pagamenti( $registration_id ) ) { wp_die( esc_html__( 'Il rimborso non può superare il totale già versato.', 'modulo-iscrizioni' ) ); }
 		$wpdb->query( 'START TRANSACTION' );
+		$locked = $wpdb->get_row( $wpdb->prepare( "SELECT id, status, initial_due_cents FROM {$wpdb->prefix}mi_registrations WHERE id = %d FOR UPDATE", $registration_id ), ARRAY_A );
+		if ( ! $locked ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Iscrizione non disponibile.', 'modulo-iscrizioni' ) ); }
+		if ( 'PAYMENT' === $transaction && in_array( $locked['status'], array( 'CANCELLED', 'EXPIRED' ), true ) ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Non è possibile registrare un nuovo versamento su un’iscrizione annullata o scaduta.', 'modulo-iscrizioni' ) ); }
+		if ( 'REFUND' === $transaction && $amount > self::totale_pagamenti( $registration_id ) ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Il rimborso non può superare il totale già versato.', 'modulo-iscrizioni' ) ); }
 		$inserted = $wpdb->insert( $wpdb->prefix . 'mi_payments', array( 'registration_id' => $registration_id, 'transaction_kind' => $transaction, 'installment_kind' => $kind, 'effective_at' => $effective_at, 'amount_cents' => $amount, 'payment_source' => $source, 'external_reference' => $external_reference, 'operator_label' => wp_get_current_user()->display_name, 'administrative_note' => $administrative_note, 'created_at' => current_time( 'mysql', true ) ), array( '%d', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s' ) );
 		if ( false === $inserted ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Il movimento non è stato salvato. Riprova.', 'modulo-iscrizioni' ) ); }
-		$marked_pending = $wpdb->update( $wpdb->prefix . 'mi_registrations', array( 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_changed' ), array( 'id' => $registration_id ), array( '%s', '%s' ), array( '%d' ) );
+		$registration_changes = array( 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_changed' );
+		$registration_formats = array( '%s', '%s' );
+		if ( 'PAYMENT' === $transaction && self::totale_pagamenti( $registration_id ) >= (int) $locked['initial_due_cents'] ) { $registration_changes['expires_at'] = null; $registration_formats[] = '%s'; }
+		$marked_pending = $wpdb->update( $wpdb->prefix . 'mi_registrations', $registration_changes, array( 'id' => $registration_id ), $registration_formats, array( '%d' ) );
 		if ( false === $marked_pending ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Il movimento non è stato accodato per Workspace. Riprova.', 'modulo-iscrizioni' ) ); }
 		$wpdb->query( 'COMMIT' );
 		MI_Registration_Service::accoda_iscrizione_workspace( $registration_id );
 		$url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-registrations', 'registration_id' => $registration_id, 'mi_payment_added' => '1' ), admin_url( 'edit.php' ) );
 		wp_safe_redirect( $url ); exit;
+	}
+
+	public static function cancel_registration() {
+		if ( ! current_user_can( 'mi_manage_events' ) ) { wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) ); }
+		$registration_id = absint( $_POST['registration_id'] ?? 0 );
+		check_admin_referer( 'mi_cancel_registration_' . $registration_id );
+		global $wpdb;
+		$event_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$wpdb->prefix}mi_registrations WHERE id = %d", $registration_id ) );
+		if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) { wp_die( esc_html__( 'Iscrizione non accessibile.', 'modulo-iscrizioni' ) ); }
+		$result = MI_Registration_Service::cancel_registration( $registration_id, wp_get_current_user()->display_name );
+		if ( is_wp_error( $result ) ) { wp_die( esc_html( $result->get_error_message() ) ); }
+		wp_safe_redirect( add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-registrations', 'registration_id' => $registration_id, 'mi_cancelled' => '1' ), admin_url( 'edit.php' ) ) );
+		exit;
 	}
 
 	public static function payments_page() {
@@ -171,17 +191,21 @@ final class MI_Admin {
 		$visible_events = 'ALL' === $scope ? get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) ) : get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'post__in' => $allowed_events ?: array( 0 ), 'orderby' => 'title', 'order' => 'ASC' ) );
 		$detail = null;
 		$participants = array();
+		$registration_items = array();
+		$registration_events = array();
 		if ( $detail_id ) {
 			$detail = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $detail_id ), ARRAY_A );
 			if ( ! $detail || ! MI_Access::can_access_event( (int) $detail['event_id'] ) ) {
 				wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) );
 			}
 			$participants_table = $wpdb->prefix . 'mi_participants';
-			$participants = $wpdb->get_results( $wpdb->prepare( "SELECT id, first_name, last_name, extra_json FROM {$participants_table} WHERE registration_id = %d ORDER BY id", $detail_id ), ARRAY_A );
+			$participants = $wpdb->get_results( $wpdb->prepare( "SELECT id, ticket_type_code, ticket_index, first_name, last_name, extra_json, options_json FROM {$participants_table} WHERE registration_id = %d ORDER BY id", $detail_id ), ARRAY_A );
+			$registration_items = $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code, ticket_type_name, quantity, unit_price_cents, options_json FROM {$wpdb->prefix}mi_registration_items WHERE registration_id = %d ORDER BY id", $detail_id ), ARRAY_A );
+			$registration_events = $wpdb->get_results( $wpdb->prepare( "SELECT event_type, from_status, to_status, actor_label, detail_json, created_at FROM {$wpdb->prefix}mi_registration_events WHERE registration_id = %d ORDER BY id", $detail_id ), ARRAY_A );
 		}
 		?>
 		<div class="wrap"><h1>Iscrizioni</h1>
-		<p>Registro locale con replica firmata sul registro Workspace. Le email restano soltanto in anteprima.</p>
+		<p>Registro locale autorevole con replica firmata sul registro Workspace. La spedizione segue la modalità email configurata dall’amministratore.</p>
 		<ul class="subsubsub" aria-label="Riepilogo repliche Workspace"><li><strong><?php echo esc_html( 'Sincronizzate: ' . $workspace_counts['SYNCED'] ); ?></strong> | </li><li><strong><?php echo esc_html( 'In attesa: ' . $workspace_counts['PENDING'] ); ?></strong></li></ul><div class="clear"></div>
 		<?php if ( isset( $_GET['mi_workspace_retry'] ) ) : ?>
 		<?php $retry_result = sanitize_key( wp_unslash( $_GET['mi_workspace_retry'] ) ); ?>
@@ -217,6 +241,11 @@ final class MI_Admin {
 		<tr><th scope="row">Tentativi Workspace</th><td><?php echo esc_html( (string) (int) $detail['workspace_attempts'] ); ?></td></tr>
 		<tr><th scope="row">Ultimo errore Workspace</th><td><?php echo esc_html( $detail['workspace_last_error'] ?: 'Nessuno' ); ?></td></tr>
 		<tr><th scope="row">Sincronizzata il</th><td><?php echo esc_html( $detail['workspace_synced_at'] ?: 'Non ancora sincronizzata' ); ?></td></tr>
+		<tr><th scope="row">Revisione evento</th><td><?php echo esc_html( $detail['event_revision_id'] ?: 'Storica non disponibile' ); ?><?php if ( $detail['event_revision_hash'] ) : ?> · <code><?php echo esc_html( substr( $detail['event_revision_hash'], 0, 16 ) ); ?></code><?php endif; ?></td></tr>
+		<tr><th scope="row">Consenso privacy</th><td><?php echo esc_html( $detail['privacy_consent_id'] ?: 'Storico non disponibile' ); ?> · versione <?php echo esc_html( $detail['privacy_policy_version'] ?: '—' ); ?> · <?php echo esc_html( $detail['privacy_accepted_at'] ?: '—' ); ?></td></tr>
+		<tr><th scope="row">Consenso marketing</th><td><?php echo esc_html( $detail['marketing_consent_id'] ? $detail['marketing_consent_id'] . ' · ' . $detail['marketing_accepted_at'] : 'Non prestato' ); ?></td></tr>
+		<tr><th scope="row">Scadenza prenotazione</th><td><?php echo esc_html( $detail['expires_at'] ?: 'Non prevista' ); ?></td></tr>
+		<tr><th scope="row">Posti liberati il</th><td><?php echo esc_html( $detail['capacity_released_at'] ?: 'Non liberati' ); ?></td></tr>
 		<tr><th scope="row">Referente</th><td><?php echo esc_html( $detail['buyer_first_name'] . ' ' . $detail['buyer_last_name'] ); ?></td></tr>
 		<tr><th scope="row">Email</th><td><?php echo esc_html( $detail['buyer_email'] ); ?></td></tr>
 		<tr><th scope="row">Cellulare</th><td><?php echo esc_html( $detail['buyer_phone'] ); ?></td></tr>
@@ -228,7 +257,12 @@ final class MI_Admin {
 		</tbody></table>
 		<?php $payment_rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_payments WHERE registration_id = %d ORDER BY effective_at", $detail_id ), ARRAY_A ); ?>
 		<h3>Versamenti registrati</h3><?php if ( ! $payment_rows ) : ?><p>Nessun versamento registrato.</p><?php else : ?><table class="widefat striped" style="max-width:900px"><thead><tr><th>Data</th><th>Rata</th><th>Importo</th><th>Fonte</th><th>Riferimento</th><th>Nota</th></tr></thead><tbody><?php $payment_labels = array( 'BANK_TRANSFER' => 'Bonifico', 'CARD' => 'Carta', 'CASH' => 'Contante' ); foreach ( $payment_rows as $payment ) : ?><tr><td><?php echo esc_html( $payment['effective_at'] ); ?></td><td><?php echo esc_html( $payment['installment_kind'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $payment['amount_cents'] ) ); ?></td><td><?php echo esc_html( $payment_labels[ $payment['payment_source'] ] ?? $payment['payment_source'] ); ?></td><td><?php echo esc_html( $payment['external_reference'] ?: '—' ); ?></td><td><?php echo esc_html( $payment['administrative_note'] ?: '—' ); ?></td></tr><?php endforeach; ?></tbody></table><?php endif; ?>
-		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="max-width:900px;margin:16px 0"><input type="hidden" name="action" value="mi_add_payment"><input type="hidden" name="registration_id" value="<?php echo esc_attr( $detail_id ); ?>"><?php wp_nonce_field( 'mi_add_payment_' . $detail_id ); ?><fieldset><legend><strong>Registra movimento</strong></legend><label>Movimento <select name="transaction_kind"><option value="PAYMENT">Versamento</option><option value="REFUND">Rimborso</option></select></label> <label>Data e ora effettive <input type="datetime-local" name="effective_at" value="<?php echo esc_attr( wp_date( 'Y-m-d\\TH:i' ) ); ?>"></label> <label>Importo (€) <input required type="number" min="0.01" step="0.01" name="amount"></label> <label>Rata <select name="installment_kind"><option value="DEPOSIT">Caparra</option><option value="BALANCE">Saldo</option><option value="FULL">Completo</option><option value="OTHER">Altro</option></select></label> <label>Fonte <select required name="payment_source"><option value="BANK_TRANSFER">Bonifico</option><option value="CARD">Carta</option><option value="CASH">Contante</option></select></label><br><label>Riferimento esterno <input type="text" name="external_reference" maxlength="120"></label> <label>Nota amministrativa <input type="text" name="administrative_note" maxlength="500"></label> <button class="button button-primary">Registra movimento</button></fieldset></form>
+		<?php if ( current_user_can( 'mi_manage_payments' ) ) : ?><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="max-width:900px;margin:16px 0"><input type="hidden" name="action" value="mi_add_payment"><input type="hidden" name="registration_id" value="<?php echo esc_attr( $detail_id ); ?>"><?php wp_nonce_field( 'mi_add_payment_' . $detail_id ); ?><fieldset><legend><strong>Registra movimento</strong></legend><label>Movimento <select name="transaction_kind"><option value="PAYMENT">Versamento</option><option value="REFUND">Rimborso</option></select></label> <label>Data e ora effettive <input type="datetime-local" name="effective_at" value="<?php echo esc_attr( wp_date( 'Y-m-d\\TH:i' ) ); ?>"></label> <label>Importo (€) <input required type="number" min="0.01" step="0.01" name="amount"></label> <label>Rata <select name="installment_kind"><option value="DEPOSIT">Caparra</option><option value="BALANCE">Saldo</option><option value="FULL">Completo</option><option value="OTHER">Altro</option></select></label> <label>Fonte <select required name="payment_source"><option value="BANK_TRANSFER">Bonifico</option><option value="CARD">Carta</option><option value="CASH">Contante</option></select></label><br><label>Riferimento esterno <input type="text" name="external_reference" maxlength="120"></label> <label>Nota amministrativa <input type="text" name="administrative_note" maxlength="500"></label> <button class="button button-primary">Registra movimento</button></fieldset></form><?php endif; ?>
+		<h3>Tipologie e opzioni ordine</h3>
+		<?php $detail_order_options = json_decode( (string) ( $detail['order_options_json'] ?? '' ), true ); if ( ! is_array( $detail_order_options ) && $registration_items ) { $detail_order_options = json_decode( (string) $registration_items[0]['options_json'], true ); } $detail_order_options = is_array( $detail_order_options ) ? $detail_order_options : array(); ?>
+		<?php if ( $detail_order_options ) : ?><p><strong>Opzioni ordine:</strong> <?php echo esc_html( implode( ', ', array_map( static function ( $option ) { return ( $option['name'] ?? $option['code'] ?? 'Opzione' ) . ' × ' . absint( $option['quantity'] ?? 0 ); }, $detail_order_options ) ) ); ?></p><?php else : ?><p>Nessuna opzione ordine.</p><?php endif; ?>
+		<?php if ( ! $registration_items ) : ?><p>Nessuna tipologia storica disponibile.</p><?php else : ?><table class="widefat striped" style="max-width:900px"><thead><tr><th>Codice</th><th>Nome</th><th>Quantità</th><th>Prezzo unitario</th></tr></thead><tbody><?php foreach ( $registration_items as $registration_item ) : ?><tr><td><code><?php echo esc_html( $registration_item['ticket_type_code'] ); ?></code></td><td><?php echo esc_html( $registration_item['ticket_type_name'] ?: 'Nome storico non disponibile' ); ?></td><td><?php echo esc_html( $registration_item['quantity'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $registration_item['unit_price_cents'] ) ); ?></td></tr><?php endforeach; ?></tbody></table><?php endif; ?>
+		<?php if ( current_user_can( 'mi_manage_events' ) && in_array( $detail['status'], array( 'CONFIRMED', 'WAITLISTED' ), true ) ) : ?><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" onsubmit="return confirm('Annullare questa iscrizione e liberare i posti?');"><input type="hidden" name="action" value="mi_cancel_registration"><input type="hidden" name="registration_id" value="<?php echo esc_attr( $detail_id ); ?>"><?php wp_nonce_field( 'mi_cancel_registration_' . $detail_id ); ?><button class="button button-secondary">Annulla iscrizione e libera posti</button></form><?php endif; ?>
 		<?php if ( 'SYNCED' !== $detail['workspace_status'] ) : ?>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin:16px 0">
 		<input type="hidden" name="action" value="mi_retry_workspace">
@@ -237,12 +271,15 @@ final class MI_Admin {
 		<button class="button button-secondary">Riaccoda replica Workspace</button>
 		</form>
 		<?php endif; ?>
+		<h3>Storico stato</h3>
+		<?php if ( ! $registration_events ) : ?><p>Nessun evento di audit disponibile per questa iscrizione storica.</p><?php else : ?><table class="widefat striped" style="max-width:900px"><thead><tr><th>Data UTC</th><th>Evento</th><th>Da</th><th>A</th><th>Attore</th></tr></thead><tbody><?php foreach ( $registration_events as $registration_event ) : ?><tr><td><?php echo esc_html( $registration_event['created_at'] ); ?></td><td><?php echo esc_html( strtoupper( $registration_event['event_type'] ) ); ?></td><td><?php echo esc_html( strtoupper( $registration_event['from_status'] ?: '—' ) ); ?></td><td><?php echo esc_html( strtoupper( $registration_event['to_status'] ?: '—' ) ); ?></td><td><?php echo esc_html( $registration_event['actor_label'] ?: '—' ); ?></td></tr><?php endforeach; ?></tbody></table><?php endif; ?>
 		<h3>Partecipanti</h3>
 		<?php if ( ! $participants ) : ?><p>Nessun partecipante associato.</p><?php endif; ?>
 		<?php $catalog = MI_Field_Schema::catalog(); ?>
 		<?php foreach ( $participants as $position => $participant ) : ?>
-		<?php $answers = json_decode( (string) $participant['extra_json'], true ); $answers = is_array( $answers ) ? $answers : array(); ?>
-		<h4><?php echo esc_html( ( $position + 1 ) . '. ' . $participant['first_name'] . ' ' . $participant['last_name'] ); ?></h4>
+		<?php $answers = json_decode( (string) $participant['extra_json'], true ); $answers = is_array( $answers ) ? $answers : array(); $participant_options = json_decode( (string) $participant['options_json'], true ); $participant_options = is_array( $participant_options ) ? $participant_options : array(); ?>
+		<h4><?php echo esc_html( ( $position + 1 ) . '. ' . $participant['first_name'] . ' ' . $participant['last_name'] . ' — ' . ( $participant['ticket_type_code'] ?: 'tipologia storica non disponibile' ) . ( $participant['ticket_index'] ? ' #' . $participant['ticket_index'] : '' ) ); ?></h4>
+		<?php if ( $participant_options ) : ?><p><strong>Opzioni:</strong> <?php echo esc_html( implode( ', ', array_map( static function ( $option ) { return ( $option['name'] ?? $option['code'] ?? 'Opzione' ) . ' × ' . absint( $option['quantity'] ?? 0 ); }, $participant_options ) ) ); ?></p><?php endif; ?>
 		<?php if ( ! $answers ) : ?><p>Nessun dato aggiuntivo raccolto.</p><?php else : ?>
 		<table class="widefat striped" style="max-width:900px"><tbody>
 		<?php foreach ( $answers as $key => $value ) : ?>
@@ -315,7 +352,7 @@ final class MI_Admin {
 		}
 		$registrations = $wpdb->prefix . 'mi_registrations';
 		$participants = $wpdb->prefix . 'mi_participants';
-		$rows = $wpdb->get_results( "SELECT r.order_code, r.event_id, r.status, r.workspace_status, r.buyer_first_name, r.buyer_last_name, r.buyer_email, r.buyer_phone, r.economic_mode, r.total_cents, r.initial_due_cents, r.balance_cents, r.created_at, p.first_name, p.last_name, p.extra_json FROM {$registrations} r LEFT JOIN {$participants} p ON p.registration_id = r.id {$where} ORDER BY r.id DESC, p.id ASC", ARRAY_A );
+		$rows = $wpdb->get_results( "SELECT r.order_code, r.event_id, r.status, r.workspace_status, r.buyer_first_name, r.buyer_last_name, r.buyer_email, r.buyer_phone, r.economic_mode, r.total_cents, r.initial_due_cents, r.balance_cents, r.order_options_json, r.privacy_consent_id, r.privacy_policy_version, r.privacy_accepted_at, r.created_at, p.ticket_type_code, p.first_name, p.last_name, p.extra_json, p.options_json FROM {$registrations} r LEFT JOIN {$participants} p ON p.registration_id = r.id {$where} ORDER BY r.id DESC, p.id ASC", ARRAY_A );
 		header( 'Content-Type: text/csv; charset=UTF-8' );
 		header( 'Content-Disposition: attachment; filename="iscrizioni-' . gmdate( 'Y-m-d' ) . '.csv"' );
 		$output = fopen( 'php://output', 'w' );
@@ -328,7 +365,7 @@ final class MI_Admin {
 				$extra_keys = array_values( array_unique( array_merge( $extra_keys, array_keys( $answers ) ) ) );
 			}
 		}
-		$headers = array( 'Codice iscrizione', 'Evento', 'Stato', 'Stato Workspace', 'Nome referente', 'Cognome referente', 'Email referente', 'Cellulare referente', 'Gestione economica', 'Totale centesimi', 'Primo versamento centesimi', 'Saldo centesimi', 'Data UTC', 'Nome partecipante', 'Cognome partecipante' );
+		$headers = array( 'Codice iscrizione', 'Evento', 'Stato', 'Stato Workspace', 'Nome referente', 'Cognome referente', 'Email referente', 'Cellulare referente', 'Gestione economica', 'Totale centesimi', 'Primo versamento centesimi', 'Saldo centesimi', 'Opzioni ordine JSON', 'ID consenso privacy', 'Versione informativa', 'Accettazione privacy UTC', 'Data UTC', 'Tipologia', 'Nome partecipante', 'Cognome partecipante', 'Opzioni partecipante JSON' );
 		foreach ( $extra_keys as $key ) {
 			$headers[] = isset( $catalog[ $key ]['label'] ) ? $catalog[ $key ]['label'] : 'Dato aggiuntivo';
 		}
@@ -336,7 +373,7 @@ final class MI_Admin {
 		foreach ( $rows as $row ) {
 			$answers = json_decode( (string) $row['extra_json'], true );
 			$answers = is_array( $answers ) ? $answers : array();
-			$line = array( $row['order_code'], get_the_title( (int) $row['event_id'] ), $row['status'], $row['workspace_status'], $row['buyer_first_name'], $row['buyer_last_name'], $row['buyer_email'], $row['buyer_phone'], self::etichetta_modalita_economica( $row['economic_mode'] ), $row['total_cents'], $row['initial_due_cents'], $row['balance_cents'], $row['created_at'], $row['first_name'], $row['last_name'] );
+			$line = array( $row['order_code'], get_the_title( (int) $row['event_id'] ), $row['status'], $row['workspace_status'], $row['buyer_first_name'], $row['buyer_last_name'], $row['buyer_email'], $row['buyer_phone'], self::etichetta_modalita_economica( $row['economic_mode'] ), $row['total_cents'], $row['initial_due_cents'], $row['balance_cents'], $row['order_options_json'], $row['privacy_consent_id'], $row['privacy_policy_version'], $row['privacy_accepted_at'], $row['created_at'], $row['ticket_type_code'], $row['first_name'], $row['last_name'], $row['options_json'] );
 			foreach ( $extra_keys as $key ) {
 				$line[] = isset( $answers[ $key ] ) ? $answers[ $key ] : '';
 			}
@@ -449,6 +486,13 @@ final class MI_Admin {
 			return $data;
 		}
 		$activity_id = isset( $_POST['mi_activity_id'] ) ? absint( $_POST['mi_activity_id'] ) : 0;
+		$post_id = absint( $postarr['ID'] ?? 0 );
+		$current_activity_id = $post_id ? absint( get_post_meta( $post_id, '_mi_activity_id', true ) ) : 0;
+		$activity_stable = true;
+		if ( $post_id && $current_activity_id && $activity_id !== $current_activity_id ) {
+			global $wpdb;
+			$activity_stable = ! (bool) $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$wpdb->prefix}mi_registrations WHERE event_id = %d LIMIT 1", $post_id ) );
+		}
 		$opens = isset( $_POST['mi_registration_opens_at'] ) ? sanitize_text_field( wp_unslash( $_POST['mi_registration_opens_at'] ) ) : '';
 		$closes = isset( $_POST['mi_registration_closes_at'] ) ? sanitize_text_field( wp_unslash( $_POST['mi_registration_closes_at'] ) ) : '';
 		$valid_dates = preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $opens ) && preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $closes ) && $closes > $opens;
@@ -456,17 +500,37 @@ final class MI_Admin {
 		$economic_mode = isset( $_POST['mi_economic_mode'] ) ? strtoupper( sanitize_key( wp_unslash( $_POST['mi_economic_mode'] ) ) ) : 'REGISTRATION_ONLY';
 		$pricing_mode = isset( $_POST['mi_pricing_mode'] ) ? strtoupper( sanitize_key( wp_unslash( $_POST['mi_pricing_mode'] ) ) ) : 'NONE';
 		$prices = isset( $_POST['mi_ticket_price'] ) ? array_map( 'floatval', (array) wp_unslash( $_POST['mi_ticket_price'] ) ) : array();
+		$option_prices = isset( $_POST['mi_option_price'] ) ? array_map( 'floatval', (array) wp_unslash( $_POST['mi_option_price'] ) ) : array();
+		$all_prices = array_merge( $prices, $option_prices );
 		$payment_methods = isset( $_POST['mi_payment_methods'] ) ? (array) wp_unslash( $_POST['mi_payment_methods'] ) : array();
+		$privacy_version = sanitize_text_field( wp_unslash( $_POST['mi_privacy_policy_version'] ?? '' ) );
+		$privacy_consent_id = sanitize_key( wp_unslash( $_POST['mi_privacy_consent_id'] ?? '' ) );
+		$field_configuration = MI_Field_Schema::sanitize_configuration(
+			wp_unslash( $_POST['mi_data_profile'] ?? 'MINIMAL' ),
+			(array) wp_unslash( $_POST['mi_participant_fields'] ?? array() ),
+			(array) wp_unslash( $_POST['mi_participant_required'] ?? array() )
+		);
+		$high_impact_valid = ! MI_Field_Schema::has_high_impact_fields( $field_configuration ) || isset( $_POST['mi_high_impact_approved'] );
+		$privacy_valid = '' !== $privacy_version && '' !== $privacy_consent_id && (bool) get_privacy_policy_url();
+		$marketing_valid = ! isset( $_POST['mi_marketing_enabled'] ) || '' !== sanitize_key( wp_unslash( $_POST['mi_marketing_consent_id'] ?? '' ) );
 		$uses_price = in_array( $economic_mode, array( 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 		$collects_payment = in_array( $economic_mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
-		$registration_only_price = 'REGISTRATION_ONLY' === $economic_mode && in_array( $pricing_mode, array( 'NONE', 'ZERO' ), true );
-		$calculated_price = $uses_price && 'CALCULATED' === $pricing_mode && max( array_merge( array( 0 ), $prices ) ) > 0;
+		$registration_only_price = 'REGISTRATION_ONLY' === $economic_mode && in_array( $pricing_mode, array( 'NONE', 'ZERO' ), true ) && max( array_merge( array( 0 ), $all_prices ) ) <= 0;
+		$calculated_price = $uses_price && 'CALCULATED' === $pricing_mode && max( array_merge( array( 0 ), $all_prices ) ) > 0;
 		$valid_economic = ( $registration_only_price || $calculated_price ) && ( ! $collects_payment || ! empty( $payment_methods ) );
-		if ( ! $activity_id || MI_Event_Post_Type::ACTIVITY_TYPE !== get_post_type( $activity_id ) || ! $valid_dates || ! $has_ticket || ! $valid_economic ) {
+		if ( ! $activity_id || MI_Event_Post_Type::ACTIVITY_TYPE !== get_post_type( $activity_id ) || ! $activity_stable || ! $valid_dates || ! $has_ticket || ! $valid_economic || ! $privacy_valid || ! $marketing_valid || ! $high_impact_valid ) {
 			$data['post_status'] = 'draft';
 			$message = 'Evento mantenuto in bozza: completa attività, date e tipologie.';
-			if ( ! $valid_economic ) {
+			if ( ! $activity_stable ) {
+				$message = 'Evento mantenuto in bozza: l’attività non può cambiare dopo la prima iscrizione senza una migrazione amministrativa esplicita.';
+			} elseif ( ! $valid_economic ) {
 				$message = 'Evento mantenuto in bozza: “Gratuito esplicito” richiede “Solo iscrizione”; le altre modalità economiche richiedono prezzi calcolati positivi e, quando previsto, almeno una fonte di pagamento.';
+			} elseif ( ! $privacy_valid ) {
+				$message = 'Evento mantenuto in bozza: configura la pagina privacy di WordPress, la versione dell’informativa e l’ID del consenso.';
+			} elseif ( ! $marketing_valid ) {
+				$message = 'Evento mantenuto in bozza: il consenso marketing facoltativo richiede un ID specifico.';
+			} elseif ( ! $high_impact_valid ) {
+				$message = 'Evento mantenuto in bozza: i campi ad alto impatto richiedono un’approvazione privacy esplicita.';
 			}
 			set_transient( 'mi_publication_error_' . get_current_user_id(), $message, MINUTE_IN_SECONDS );
 		}

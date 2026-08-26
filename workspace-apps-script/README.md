@@ -1,4 +1,4 @@
-# Backend Google Workspace — Fase 2
+# Backend Google Workspace — schema 1.2.0
 
 Progetto Google Apps Script associato a uno spreadsheet dedicato. Il repository non contiene ID del foglio, URL di deployment, destinatari reali, coordinate bancarie o segreti.
 
@@ -9,7 +9,10 @@ Progetto Google Apps Script associato a uno spreadsheet dedicato. Il repository 
 - `convalidaPagamentiInAttesa()` elabora tutte le righe nuove;
 - `doPost()` accetta soltanto richieste firmate provenienti dal proxy WordPress;
 - l'azione firmata `PING` verifica firma e anti-replay senza leggere o scrivere dati personali;
-- l'outbox email resta sempre nello stato `PREVIEW`.
+- `APPEND_REGISTRATION` riconcilia iscrizione, partecipanti, outbox e pagamenti senza duplicati;
+- revisioni, snapshot, consensi, tipologie e opzioni vengono conservati in colonne esplicite;
+- la risposta dichiara `complete: true` soltanto dopo aver verificato tutte le proiezioni;
+- l'outbox Workspace resta nello stato `PREVIEW` perché la spedizione effettiva è responsabilità di WordPress.
 
 ## Replica dei pagamenti
 
@@ -28,7 +31,8 @@ registrazione; la modalità resta sempre `PREVIEW`.
 3. Copiare i file di `src/` nel progetto e sostituire il manifest con `appsscript.json`.
 4. Eseguire `configuraCartellaDiLavoro()` e concedere esclusivamente le autorizzazioni richieste da Sheets.
 5. Nelle proprietà dello script creare `MI_SHARED_SECRET` con almeno 32 caratteri casuali. Non copiarlo nel repository o nel browser pubblico.
-6. Mantenere lo spreadsheet privato e concedere l'accesso soltanto agli operatori autorizzati.
+6. Ridistribuire la Web App mantenendo invariati URL e autorizzazioni, quindi usare “Verifica schema economico” da WordPress.
+7. Mantenere lo spreadsheet privato e concedere l'accesso soltanto agli operatori autorizzati.
 
 La Web App non deve ricevere iscrizioni finché non è stato completato prima il collaudo `PING` firmato e poi un collaudo con identità fittizie.
 
