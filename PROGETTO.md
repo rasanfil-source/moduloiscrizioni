@@ -1,9 +1,9 @@
 # Progetto: sistema multi-evento di iscrizione e pagamento
 
-Stato: bozza funzionale e tecnica 0.7  
-Data: 24 agosto 2026
+Stato: implementazione revisionata — WordPress 3.4.1 / Workspace 1.2.0
+Data: 26 agosto 2026
 
-Esito Fase A: completata. Fase 2: WordPress 0.7.2 e Apps Script 1.1.0 installati e collegati; la 0.8.0 è in preparazione per la spedizione controllata delle conferme. Stato operativo, integrazione Divi, anteprima riservata e riaccodamento Workspace sono stati collaudati senza creare iscrizioni. Il collegamento firmato allo schema `1.1.0` resta valido. La modalità email predefinita resta `ANTEPRIMA`; `PROVA` usa soltanto dati sintetici e `OPERATIVO` è bloccata fino a una prova accettata dal sistema di posta. Non contiene coordinate operative e non riscuote pagamenti.
+Esito revisione del codice: il repository contiene WordPress `3.4.1` e Apps Script `1.2.0`. Sono implementati revisioni e snapshot immutabili, ACL per attività, idempotenza anticipata, capienza globale/per tipologia, mapping partecipanti, opzioni, consensi versionati, scadenza e annullamento con rilascio posti, rimborsi serializzati, QR/barcode locali e replica Workspace riconciliante. La modalità email predefinita resta `ANTEPRIMA`; `PROVA` usa soltanto dati sintetici e `OPERATIVO` è bloccata fino a una prova accettata dal sistema di posta. Il codice non contiene coordinate operative e non riscuote pagamenti. L’installazione in produzione e il collaudo end-to-end dello schema aggiornato restano operazioni di deploy separate dal repository.
 
 Backend Workspace: il progetto Apps Script `MODULI` è installato nell'account Workspace organizzativo definitivo e collegato allo spreadsheet riservato `DB_MODULI`. Il setup e la migrazione linguistica hanno creato otto schede operative con nomi, intestazioni e valori in italiano: `Configurazione`, `Eventi`, `Iscrizioni`, `Partecipanti`, `Inserimento pagamenti`, `Pagamenti`, `Coda email` e `Registro controlli`. La Web App è distribuita dall'account organizzativo e il controllo `PING` firmato con HMAC e anti-replay è stato verificato da WordPress anche dopo l'installazione della replica delle iscrizioni. Una registrazione interamente sintetica ha collaudato salvataggio locale, replica in `Iscrizioni` e `Partecipanti`, outbox locale, `Coda email` in `PREVIEW` e replay idempotente senza duplicati. L'evento usato per la prova è stato subito riportato in bozza con finestra iscrizioni vuota; nessuna email è stata inviata. Il repository non contiene ID, URL di distribuzione, segreti, codici di collaudo o destinatari operativi.
 
@@ -39,7 +39,7 @@ Il sistema deve partire da uno schema iniziale ben progettato. L'amministratore 
 
 ## 2. Architettura consigliata
 
-La scelta confermata resta essenziale: plugin monolitico WordPress sul sito esistente, un solo progetto Apps Script e un solo spreadsheet Google Workspace. Non sono previsti microservizi, container, bilanciatori, code cloud esterne, cluster o un secondo database applicativo. Il database MySQL di WordPress conserva configurazione, ruoli e ACL del plugin; Sheets/GAS gestisce il registro operativo previsto dal progetto.
+La scelta confermata resta essenziale: plugin monolitico WordPress sul sito esistente, un solo progetto Apps Script e un solo spreadsheet Google Workspace. Non sono previsti microservizi, container, bilanciatori, code cloud esterne, cluster o un secondo database applicativo. Il database MySQL di WordPress è autorevole per configurazione, revisioni, iscrizioni, ruoli, ACL e movimenti registrati dal pannello; Sheets/GAS mantiene una proiezione operativa riconciliante e l’area separata di inserimento manuale dei pagamenti.
 
 Spostare il registro nel solo database WordPress avrebbe senso soltanto se venisse abbandonato l'uso operativo del foglio. Finché il foglio resta il canale richiesto per consultazione e inserimento manuale dei versamenti, una sincronizzazione bidirezionale MySQL ↔ Sheets aumenterebbe la complessità.
 
@@ -57,15 +57,15 @@ Piccolo plugin WordPress
   - API REST proxy
   - autenticazione amministratori
   - rate limit / CAPTCHA
+  - revisioni, prezzi, capienza e idempotenza autorevoli
         |
         | richiesta server-to-server firmata
         v
 Google Apps Script Web App
-  - configurazione eventi
-  - validazione e prezzi
-  - capienza e idempotenza
-  - scrittura ordini
-  - coda email
+  - riconciliazione delle proiezioni ordine/partecipanti
+  - verifica di completezza e idempotenza della replica
+  - inserimento e convalida pagamenti manuali nel foglio
+  - outbox di consultazione in anteprima
         |
         v
 Google Sheets privato
@@ -780,7 +780,7 @@ Il nuovo ordine viene prima registrato in modo autorevole e riceve un codice uni
 
 - editor attività e anteprima del branding ereditato;
 - editor eventi e schermate;
-- editor e anteprima email: editor per evento completato nella 0.3.0 con segnaposto italiani, HTML limitato, testo semplice e dati sintetici; istantanea risolta e impronta della revisione nell'outbox completate nella 0.3.1; identità storica dell'attività completata nella 0.3.2; anteprima dinamica e validazione dei segnaposto completate nella 0.3.3; identità email configurabile completata nella 0.3.4; prova controllata resta un incremento successivo;
+- editor e anteprima email: editor per evento, segnaposto italiani, HTML limitato, testo semplice, anteprima sintetica, snapshot, identità storica, prova controllata e modalità operativa protetta sono implementati; QR e barcode vengono incorporati localmente;
 - coda, retry e notifiche interne;
 - elenco ordini ed esportazione;
 - dettaglio dei partecipanti nel pannello e risposte configurabili conservate in `mi_participants.extra_json`: visualizzazione con etichette leggibili completata nella 0.2.8; ricerca, filtro evento ed esportazione CSV coerenti con capability e ambito attività completati nella 0.2.9;
@@ -809,7 +809,7 @@ Il nuovo ordine viene prima registrato in modo autorevole e riceve un codice uni
 - La lingua operativa e di manutenzione del progetto è l'italiano. Etichette dell'interfaccia, nomi e intestazioni delle schede Google, messaggi, commenti e funzioni del codice applicativo devono essere in italiano. Sono ammesse eccezioni soltanto per nomi riservati o contratti tecnici imposti dalle piattaforme e dai protocolli esterni, per esempio `onOpen`, `doGet`, `doPost`, hook WordPress, chiavi JSON di API già pubblicate o codici standard; ogni eccezione deve restare circoscritta e documentata. I controlli automatici devono impedire la reintroduzione dei precedenti nomi inglesi nelle parti visibili e nelle funzioni Apps Script non riservate.
 - I riferimenti stilistici pubblici approvati sono elencati separatamente in `docs/RIFERIMENTI_E_LINEE_GUIDA.md` e non vengono usati come fonte di dati o configurazioni operative.
 - WordPress consente il caricamento di plugin ZIP dal computer: il prodotto verrà quindi consegnato come plugin personalizzato installabile.
-- La pagina pubblicata conferma l'approccio precedente: HTML e JavaScript sono inseriti direttamente in WordPress e chiamano un endpoint GAS con `fetch`; il modulo non è ospitato in un iframe GAS.
+- La pagina pubblicata usa HTML e JavaScript serviti da WordPress e chiama con `fetch` un endpoint REST sullo stesso dominio; soltanto il server WordPress comunica con GAS tramite richieste firmate. Il modulo non è ospitato in un iframe GAS.
 - Nel primo rilascio il pagamento carta usa soltanto un link esterno, senza API merchant e senza conferma automatica.
 - Il link di pagamento è una proprietà del singolo evento e non una costante globale.
 - Referente: nome, cognome, email e cellulare obbligatori.

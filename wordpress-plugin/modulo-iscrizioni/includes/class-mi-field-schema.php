@@ -11,6 +11,7 @@ final class MI_Field_Schema {
 				'type'         => 'date',
 				'autocomplete' => 'bday',
 				'help'         => 'Raccogli soltanto se necessaria per l’attività.',
+				'high_impact'  => true,
 			),
 			'nationality' => array(
 				'key'          => 'nationality',
@@ -19,6 +20,7 @@ final class MI_Field_Schema {
 				'max_length'   => 80,
 				'autocomplete' => 'country-name',
 				'help'         => 'Non sostituisce i dati di un documento di viaggio.',
+				'high_impact'  => true,
 			),
 			'postal_address' => array(
 				'key'          => 'postal_address',
@@ -41,6 +43,7 @@ final class MI_Field_Schema {
 				'type'       => 'textarea',
 				'max_length' => 300,
 				'help'       => 'Può contenere dati particolari: attivare soltanto dopo verifica privacy.',
+				'high_impact'=> true,
 			),
 		);
 	}
@@ -117,6 +120,16 @@ final class MI_Field_Schema {
 			$fields[] = $field;
 		}
 		return $fields;
+	}
+
+	public static function has_high_impact_fields( $configuration ) {
+		$catalog = self::catalog();
+		foreach ( (array) ( $configuration['enabled'] ?? array() ) as $key ) {
+			if ( ! empty( $catalog[ $key ]['high_impact'] ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public static function validate_answers( $raw, $fields ) {

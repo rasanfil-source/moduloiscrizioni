@@ -12,6 +12,7 @@ final class MI_Access {
 		add_action( 'edit_user_profile_update', array( __CLASS__, 'save_profile_scope' ) );
 		add_filter( 'login_redirect', array( __CLASS__, 'login_redirect' ), 10, 3 );
 		add_action( 'admin_menu', array( __CLASS__, 'trim_delegate_menu' ), 999 );
+		add_filter( 'map_meta_cap', array( __CLASS__, 'map_event_meta_cap' ), 10, 4 );
 	}
 
 	public static function is_global_manager( $user_id = 0 ) {
@@ -35,6 +36,27 @@ final class MI_Access {
 
 	public static function can_access_event( $event_id, $user_id = 0 ) {
 		return self::can_access_activity( absint( get_post_meta( $event_id, '_mi_activity_id', true ) ), $user_id );
+	}
+
+	public static function map_event_meta_cap( $caps, $cap, $user_id, $args ) {
+		if ( ! in_array( $cap, array( 'edit_mi_event', 'read_mi_event', 'delete_mi_event' ), true ) || empty( $args[0] ) ) {
+			return $caps;
+		}
+		$event_id = absint( $args[0] );
+		if ( MI_Event_Post_Type::EVENT_TYPE !== get_post_type( $event_id ) ) {
+			return array( 'do_not_allow' );
+		}
+		$event = get_post( $event_id );
+		if ( $event && 'auto-draft' === $event->post_status && (int) $event->post_author === (int) $user_id ) {
+			return 'read_mi_event' === $cap ? array( 'read' ) : array( 'mi_manage_events' );
+		}
+		if ( ! self::can_access_event( $event_id, $user_id ) ) {
+			return array( 'do_not_allow' );
+		}
+		if ( 'read_mi_event' === $cap ) {
+			return array( 'read' );
+		}
+		return array( 'mi_manage_events' );
 	}
 
 	public static function scope_event_list( $query ) {

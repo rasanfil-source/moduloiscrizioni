@@ -102,9 +102,19 @@
 
   addButton.addEventListener('click', () => {
     const row = document.createElement('tr');
-    row.innerHTML = '<td><input name="mi_ticket_code[]" pattern="[a-z0-9-]+" required></td><td><input name="mi_ticket_name[]" required></td><td><input name="mi_ticket_price[]" type="number" min="0" step="0.01" value="0.00" required></td><td><input name="mi_ticket_max[]" type="number" min="1" max="20" value="5" required></td><td><button type="button" class="button mi-remove-ticket">Rimuovi</button></td>';
+    row.innerHTML = '<td><input name="mi_ticket_code[]" pattern="[a-z0-9-]+" required></td><td><input name="mi_ticket_name[]" required></td><td><input name="mi_ticket_price[]" type="number" min="0" step="0.01" value="0.00" required></td><td><input name="mi_ticket_max[]" type="number" min="1" max="20" value="5" required></td><td><input name="mi_ticket_capacity[]" type="number" min="0" max="10000" value="0"><small>0 = capienza evento</small></td><td><button type="button" class="button mi-remove-ticket">Rimuovi</button></td>';
     table.tBodies[0].append(row);
     row.querySelector('input').focus();
+  });
+
+  const optionTable = document.querySelector('#mi-options tbody');
+  document.querySelector('#mi-add-option')?.addEventListener('click', () => {
+    const row = document.createElement('tr');
+    row.innerHTML = '<td><input name="mi_option_code[]" pattern="[a-z0-9-]+" required></td><td><input name="mi_option_name[]" required></td><td><select name="mi_option_scope[]"><option value="ORDER">Ordine</option><option value="TICKET">Partecipante</option></select></td><td><input name="mi_option_price[]" type="number" min="0" step="0.01" value="0.00"></td><td><input name="mi_option_max[]" type="number" min="1" max="20" value="1"></td><td><button type="button" class="button mi-remove-option">Rimuovi</button></td>';
+    optionTable?.append(row);
+  });
+  optionTable?.addEventListener('click', (event) => {
+    if (event.target.closest('.mi-remove-option')) event.target.closest('tr')?.remove();
   });
 
   table.addEventListener('click', (event) => {

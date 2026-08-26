@@ -28,6 +28,7 @@ final class MI_Plugin {
 		MI_Integrazione_Divi::avvia();
 		add_action( 'mi_sync_workspace_pending', array( 'MI_Registration_Service', 'sync_pending_workspace' ) );
 		add_action( 'mi_sync_workspace_registration', array( 'MI_Registration_Service', 'sincronizza_iscrizione_workspace' ) );
+		add_action( 'mi_expire_registrations', array( 'MI_Registration_Service', 'expire_due_registrations' ) );
 	}
 
 	public function load_textdomain() {

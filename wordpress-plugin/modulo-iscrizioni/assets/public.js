@@ -46,7 +46,15 @@
 
     function totalCents() {
       const prices = Object.fromEntries((config.event.ticket_types || []).map((ticket) => [ticket.code, Number(ticket.price_cents) || 0]));
-      return Object.entries(ticketSelection()).reduce((total, [code, quantity]) => total + (prices[code] || 0) * quantity, 0);
+      const optionPrices = Object.fromEntries((config.event.options || []).map((option) => [option.code, Number(option.price_cents) || 0]));
+      const ticketTotal = Object.entries(ticketSelection()).reduce((total, [code, quantity]) => total + (prices[code] || 0) * quantity, 0);
+      const orderTotal = Object.entries(orderOptionSelection()).reduce((total, [code, quantity]) => total + (optionPrices[code] || 0) * quantity, 0);
+      const participantTotal = Array.from(participantsRoot.querySelectorAll('[data-mi-participant-option]')).reduce((total, input) => total + (optionPrices[input.dataset.miParticipantOption] || 0) * (Number.parseInt(input.value, 10) || 0), 0);
+      return ticketTotal + orderTotal + participantTotal;
+    }
+
+    function orderOptionSelection() {
+      return Object.fromEntries(Array.from(root.querySelectorAll('[data-mi-order-option]')).map((input) => [input.dataset.miOrderOption, core.clampQuantity(input.value, input.max)]));
     }
 
     function renderEconomicSummary() {
@@ -118,9 +126,11 @@
 
     function captureParticipants() {
       participantValues = Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).map((row) => ({
+        key: `${row.dataset.miTicketType}:${row.dataset.miTicketIndex}`,
         firstName: row.querySelector('[data-mi-first-name]')?.value || '',
         lastName: row.querySelector('[data-mi-last-name]')?.value || '',
-        fields: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-field]')).map((input) => [input.dataset.miParticipantField, input.value]))
+        fields: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-field]')).map((input) => [input.dataset.miParticipantField, input.value])),
+        options: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-option]')).map((input) => [input.dataset.miParticipantOption, input.value]))
       }));
     }
 
@@ -137,23 +147,37 @@
         participantsRoot.append(hint);
         return;
       }
-      for (let index = 0; index < quantity; index += 1) {
+      const tickets = [];
+      (config.event.ticket_types || []).forEach((ticket) => {
+        const selected = ticketSelection()[ticket.code] || 0;
+        for (let position = 1; position <= selected; position += 1) tickets.push({ ...ticket, position });
+      });
+      tickets.forEach((ticket, index) => {
+        const key = `${ticket.code}:${ticket.position}`;
+        const previous = participantValues.find((value) => value.key === key) || {};
         const row = document.createElement('fieldset');
         row.className = 'mi-registration__participant';
+        row.dataset.miTicketType = ticket.code;
+        row.dataset.miTicketIndex = String(ticket.position);
         const legend = document.createElement('legend');
-        legend.textContent = `Partecipante ${index + 1}`;
+        legend.textContent = `Partecipante ${index + 1} · ${ticket.name}`;
         const grid = document.createElement('div');
         grid.className = 'mi-registration__grid';
         grid.append(
-          participantField('Nome', 'given-name', 'firstName', participantValues[index]?.firstName || '', index),
-          participantField('Cognome', 'family-name', 'lastName', participantValues[index]?.lastName || '', index)
+          participantField('Nome', 'given-name', 'firstName', previous.firstName || '', index),
+          participantField('Cognome', 'family-name', 'lastName', previous.lastName || '', index)
         );
 		(config.event.participant_fields || []).forEach((field) => {
-		  grid.append(configuredParticipantField(field, participantValues[index]?.fields?.[field.key] || '', index));
+		  grid.append(configuredParticipantField(field, previous.fields?.[field.key] || '', index));
 		});
+        (config.event.options || []).filter((option) => option.scope === 'TICKET').forEach((option) => {
+          grid.append(configuredParticipantOption(option, previous.options?.[option.code] || '0', index));
+        });
         row.append(legend, grid);
         participantsRoot.append(row);
-      }
+      });
+      renderEconomicSummary();
+      updateStickySummary();
     }
 
     function participantField(labelText, autocomplete, key, value, index) {
@@ -209,11 +233,29 @@
       return label;
     }
 
+    function configuredParticipantOption(option, value, index) {
+      const label = document.createElement('label');
+      label.textContent = `${option.name}${Number(option.price_cents) > 0 ? ` · ${formatCurrency(option.price_cents)}` : ''}`;
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.min = '0';
+      input.max = String(option.max_quantity || 1);
+      input.value = value;
+      input.name = `participant-${index}-option-${option.code}`;
+      input.dataset.miParticipantOption = option.code;
+      input.addEventListener('input', () => { renderEconomicSummary(); updateStickySummary(); });
+      label.append(input);
+      return label;
+    }
+
     function participantPayload() {
       return Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).map((row) => ({
+        ticket_type_code: row.dataset.miTicketType,
+        ticket_index: Number(row.dataset.miTicketIndex),
         first_name: row.querySelector('[data-mi-first-name]').value.trim(),
         last_name: row.querySelector('[data-mi-last-name]').value.trim(),
-        fields: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-field]')).map((input) => [input.dataset.miParticipantField, input.value.trim()]))
+        fields: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-field]')).map((input) => [input.dataset.miParticipantField, input.value.trim()])),
+        options: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-option]')).map((input) => [input.dataset.miParticipantOption, core.clampQuantity(input.value, input.max)]))
       }));
     }
 
@@ -223,8 +265,49 @@
       errorBox.focus?.();
     }
 
+    function createBarcode(code) {
+      const patterns = {
+        0: 'nnnwwnwnn', 1: 'wnnwnnnnw', 2: 'nnwwnnnnw', 3: 'wnwwnnnnn', 4: 'nnnwwnnnw', 5: 'wnnwwnnnn', 6: 'nnwwwnnnn', 7: 'nnnwnnwnw', 8: 'wnnwnnwnn', 9: 'nnwwnnwnn',
+        A: 'wnnnnwnnw', B: 'nnwnnwnnw', C: 'wnwnnwnnn', D: 'nnnnwwnnw', E: 'wnnnwwnnn', F: 'nnwnwwnnn', G: 'nnnnnwwnw', H: 'wnnnnwwnn', I: 'nnwnnwwnn', J: 'nnnnwwwnn',
+        K: 'wnnnnnnww', L: 'nnwnnnnww', M: 'wnwnnnnwn', N: 'nnnnwnnww', O: 'wnnnwnnwn', P: 'nnwnwnnwn', Q: 'nnnnnnwww', R: 'wnnnnnwwn', S: 'nnwnnnwwn', T: 'nnnnwnwwn',
+        U: 'wwnnnnnnw', V: 'nwwnnnnnw', W: 'wwwnnnnnn', X: 'nwnnwnnnw', Y: 'wwnnwnnnn', Z: 'nwwnwnnnn', '-': 'nwnnnnwnw', '.': 'wwnnnnwnn', ' ': 'nwwnnnwnn', '*': 'nwnnwnwnn'
+      };
+      const text = String(code).toUpperCase().replace(/[^0-9A-Z. -]/g, '');
+      const bars = [];
+      let x = 10;
+      `*${text}*`.split('').forEach((character) => {
+        patterns[character].split('').forEach((width, index) => {
+          const units = width === 'w' ? 3 : 1;
+          if (index % 2 === 0) bars.push({ x, width: units });
+          x += units;
+        });
+        x += 1;
+      });
+      const namespace = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(namespace, 'svg');
+      svg.setAttribute('viewBox', `0 0 ${x + 10} 82`);
+      svg.setAttribute('role', 'img');
+      svg.setAttribute('aria-label', `Codice a barre ${text}`);
+      const background = document.createElementNS(namespace, 'rect');
+      background.setAttribute('width', '100%'); background.setAttribute('height', '100%'); background.setAttribute('fill', 'white');
+      svg.append(background);
+      bars.forEach((bar) => {
+        const rect = document.createElementNS(namespace, 'rect');
+        rect.setAttribute('x', String(bar.x)); rect.setAttribute('y', '5'); rect.setAttribute('width', String(bar.width)); rect.setAttribute('height', '60');
+        svg.append(rect);
+      });
+      const label = document.createElementNS(namespace, 'text');
+      label.setAttribute('x', '50%'); label.setAttribute('y', '78'); label.setAttribute('text-anchor', 'middle'); label.setAttribute('font-family', 'monospace'); label.setAttribute('font-size', '10');
+      label.textContent = text;
+      svg.append(label);
+      return svg;
+    }
+
     root.querySelectorAll('[data-mi-ticket]').forEach((input) => {
       input.addEventListener('input', renderParticipants);
+    });
+    root.querySelectorAll('[data-mi-order-option]').forEach((input) => {
+      input.addEventListener('input', () => { renderEconomicSummary(); updateStickySummary(); });
     });
 
 	nextButton.addEventListener('click', () => {
@@ -258,7 +341,9 @@
         started_at: config.startedAt,
         website: formData.get('website') || '',
         privacy_accepted: formData.get('privacyAccepted') === 'on',
+		marketing_accepted: formData.get('marketingAccepted') === 'on',
         tickets: ticketSelection(),
+		order_options: orderOptionSelection(),
         participants: participantPayload(),
         buyer: {
           first_name: String(formData.get('buyerFirstName') || '').trim(),
@@ -295,6 +380,11 @@
           qrBox.setAttribute('aria-label', 'Codice QR dell’iscrizione');
           qrBox.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4 });
           successBox.appendChild(qrBox);
+		} else if (config.event.identifier_display === 'BARCODE') {
+		  const barcodeBox = document.createElement('div');
+		  barcodeBox.className = 'mi-registration__barcode';
+		  barcodeBox.appendChild(createBarcode(result.order_code));
+		  successBox.appendChild(barcodeBox);
         }
         successBox.focus();
       } catch (error) {

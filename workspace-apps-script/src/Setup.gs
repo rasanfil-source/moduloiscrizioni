@@ -47,11 +47,18 @@ function inizializzaScheda_(sheet, headers) {
   const current = sheet.getRange(1, 1, 1, headers.length).getDisplayValues()[0];
   const hasData = sheet.getLastRow() > 1;
   const previous = MI_LEGACY_HEADERS[sheet.getName()] || [];
-  const usesPreviousHeaders = current.join('|') === previous.join('|');
+	const usesPreviousHeaders = previous.length > 0 && current.slice(0, previous.length).join('|') === previous.join('|') && current.slice(previous.length).every(function (value) { return value === ''; });
 	const italianPrevious = MI_INTESTAZIONI_PRECEDENTI[sheet.getName()] || [];
 	const usesItalianPrevious = italianPrevious.length > 0 && current.slice(0, italianPrevious.length).join('|') === italianPrevious.join('|') && current.slice(italianPrevious.length).every(function (value) { return value === ''; });
-  if (hasData && current.join('|') !== headers.join('|') && !usesPreviousHeaders && !usesItalianPrevious) {
+	const immediatelyPrevious = sheet.getName() === MI_SHEETS.REGISTRATIONS ? headers.slice(0, -1) : [];
+	const usesImmediatelyPrevious = immediatelyPrevious.length > 0 && current.slice(0, immediatelyPrevious.length).join('|') === immediatelyPrevious.join('|') && current.slice(immediatelyPrevious.length).every(function (value) { return value === ''; });
+  if (hasData && current.join('|') !== headers.join('|') && !usesPreviousHeaders && !usesItalianPrevious && !usesImmediatelyPrevious) {
     throw new Error('Intestazioni inattese nel foglio ' + sheet.getName() + '. Intervento manuale richiesto.');
+  }
+  if (hasData && sheet.getName() === MI_SHEETS.PARTICIPANTS && (usesItalianPrevious || usesPreviousHeaders)) {
+    const oldRows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
+    const migratedRows = oldRows.map(function (row) { return [row[0], row[1], '', 0, row[2], row[3], row[4], '[]']; });
+    sheet.getRange(2, 1, migratedRows.length, headers.length).clearContent().setValues(migratedRows);
   }
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.setFrozenRows(1);
@@ -69,7 +76,8 @@ function inizializzaConfigurazione_() {
   const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.CONFIG);
 	if (sheet.getLastRow() > 1) {
 		const keys = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getDisplayValues().map(function (row) { return String(row[0]); });
-		const versionIndex = keys.indexOf('versione_schema');
+		let versionIndex = keys.indexOf('versione_schema');
+		if (versionIndex < 0) versionIndex = keys.indexOf('schema_version');
 		if (versionIndex >= 0) sheet.getRange(versionIndex + 2, 2).setValue(MI_SCHEMA_VERSION);
 		return;
 	}

@@ -12,9 +12,9 @@ La parrocchia è l'ente base. Ogni attività può avere logo, colori e contatti 
 
 ## Stato
 
-La versione WordPress `0.7.2` e Apps Script `1.1.0` sono installate e collegate. La `0.8.0` è in preparazione e introduce la spedizione email controllata: parte sempre in `ANTEPRIMA`, consente una prova esclusivamente sintetica e sblocca `OPERATIVO` soltanto dopo una prova accettata dal sistema di posta. Non vengono memorizzati IBAN o collegamenti carta e non esiste alcuna riscossione.
+Il repository contiene il plugin WordPress `3.4.1` e lo schema Apps Script `1.2.0`. Il modulo conserva revisioni e snapshot immutabili, applica ACL per attività anche alle capability WordPress, gestisce capienza globale e per tipologia, opzioni per ordine o partecipante, consensi versionati, scadenza/annullamento con rilascio dei posti, pagamenti manuali auditabili e replica Workspace riconciliante. Email, QR e barcode sono generati localmente; la modalità email iniziale resta `ANTEPRIMA` e `OPERATIVO` richiede una prova sintetica accettata dal sistema di posta.
 
-Il backend Google Workspace in `workspace-apps-script/` è installato come progetto `MODULI` sullo spreadsheet riservato `DB_MODULI`: crea le schede operative, convalida i pagamenti manuali, conserva audit e outbox in anteprima e accetta soltanto richieste WordPress firmate. Il controllo `PING` e una registrazione sintetica end-to-end sono stati verificati, compreso il replay idempotente senza duplicati. L'evento di prova è tornato in bozza e nessuna email è stata inviata. Il repository resta sanitizzato e non contiene ID del foglio, URL di distribuzione, segreti, codici di collaudo o destinatari reali.
+Il codice non memorizza IBAN, numeri completi di carta, link operativi, ID del foglio, URL di distribuzione, segreti o destinatari reali. L’aggiornamento del repository non equivale a un deploy: prima dell’uso occorre aggiornare il plugin, eseguire `configuraCartellaDiLavoro()` sul progetto Apps Script aggiornato e collaudare in ambiente autorizzato con sole identità fittizie.
 
 - [Progetto funzionale e tecnico](PROGETTO.md)
 - [Decisioni della Fase A](docs/DECISIONI_FASE_A.md)

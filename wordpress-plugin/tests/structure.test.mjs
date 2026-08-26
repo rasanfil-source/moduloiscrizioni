@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.4\.0/);
+  assert.match(source, /Version:\s+3\.4\.1/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -281,7 +281,7 @@ test('il QR grafico usa una libreria locale MIT senza servizi esterni', async ()
   assert.match(script, /window\.qrcode/);
   assert.match(library, /qrcode/);
   assert.match(licence, /MIT/i);
-  assert.doesNotMatch(script, /https?:\/\//);
+  assert.doesNotMatch(script.replaceAll('http://www.w3.org/2000/svg', ''), /https?:\/\//);
 });
 
 test('la gestione economica distingue i quattro casi senza attivare riscossioni', async () => {
@@ -334,7 +334,81 @@ test('i valori dei segnaposto email sono protetti in base al contesto', async ()
   assert.match(model, /'html' === \$source/);
   assert.match(model, /sanitize_text_field\(\s*\(string\) \$value\s*\)/);
   const service = await read('includes/class-mi-registration-service.php');
-  assert.match(service, /crea_istantanea\(\s*\$event_id,\s*array_map\(\s*'esc_html'/);
+  assert.match(service, /crea_istantanea\(\s*\$event_id,\s*\$email_values\s*\)/);
+  assert.doesNotMatch(service, /array_map\(\s*'esc_html'\s*,\s*\$email_values/);
+});
+
+test('l’idempotenza viene risolta prima dello stato evento e dei limiti anti abuso', async () => {
+  const service = await read('includes/class-mi-registration-service.php');
+  const create = service.slice(service.indexOf('public static function create'), service.indexOf('public static function riepilogo_economico'));
+  assert.ok(create.indexOf('SELECT id, order_code, status') < create.indexOf('public_event( $event_id )'));
+  assert.ok(create.indexOf("'replayed' => true") < create.indexOf('registration_state( $event )'));
+  assert.ok(create.indexOf("'replayed' => true") < create.indexOf('set_transient'));
+});
+
+test('revisioni, snapshot e consensi sono immutabili e replicati', async () => {
+  const activator = await read('includes/class-mi-activator.php');
+  const service = await read('includes/class-mi-registration-service.php');
+  const eventType = await read('includes/class-mi-event-post-type.php');
+  for (const token of ['mi_event_revisions', 'event_revision_hash', 'snapshot_json', 'privacy_consent_id', 'marketing_consent_id', 'order_options_json', 'mi_registration_events']) assert.match(activator + service, new RegExp(token));
+  assert.match(eventType, /ensure_published_revision/);
+  assert.match(service, /stable_json/);
+  assert.match(service, /build_order_snapshot/);
+	assert.match(service, /true !== \( \$payload\['privacy_accepted'\]/);
+	assert.match(service, /strlen\( \$snapshot_json \) > 45000/);
+  assert.match(service, /empty\( \$result\['complete'\] \)/);
+});
+
+test('l’ACL per attività è applicata alle capability meta di WordPress', async () => {
+  const access = await read('includes/class-mi-access.php');
+  const postType = await read('includes/class-mi-event-post-type.php');
+  assert.match(access, /add_filter\( 'map_meta_cap'/);
+  assert.match(access, /can_access_event\( \$event_id, \$user_id \)/);
+  assert.match(access, /do_not_allow/);
+  assert.match(postType, /'map_meta_cap'\s*=>\s*true/);
+  assert.match(postType, /'edit_post'\s*=>\s*'edit_mi_event'/);
+	assert.match(postType, /Attività non modificata/);
+	assert.match(postType, /mi_registrations WHERE event_id/);
+	assert.match((await read('includes/class-mi-admin.php')), /activity_stable/);
+});
+
+test('capienza per tipologia e partecipanti mappati sono protetti nella transazione', async () => {
+  const service = await read('includes/class-mi-registration-service.php');
+  const activator = await read('includes/class-mi-activator.php');
+  assert.match(service, /mi_ticket_counters/);
+  assert.match(service, /ticket_type_code = %s FOR UPDATE/);
+  assert.match(service, /ticket_index/);
+  assert.match(service, /seen_indexes/);
+	assert.match(service, /ticket_slots/);
+  assert.match(activator, /PRIMARY KEY \(event_id,ticket_type_code\)/);
+});
+
+test('scadenza e annullamento liberano una sola volta tutti i contatori', async () => {
+  const service = await read('includes/class-mi-registration-service.php');
+  const plugin = await read('includes/class-mi-plugin.php');
+  const activator = await read('includes/class-mi-activator.php');
+  assert.match(service, /expire_due_registrations/);
+  assert.match(service, /capacity_released_at IS NULL/);
+  assert.match(service, /GREATEST\(0, \{\$counter_field\} - %d\)/);
+  assert.match(service, /cancel_registration/);
+  assert.match(plugin, /mi_expire_registrations/);
+  assert.match(activator, /wp_schedule_event[\s\S]+mi_expire_registrations/);
+});
+
+test('rimborsi concorrenti e codici grafici email hanno protezioni dedicate', async () => {
+  const admin = await read('includes/class-mi-admin.php');
+  const sender = await read('includes/class-mi-spedizione-email.php');
+  const images = await read('includes/class-mi-code-image.php');
+  const publicScript = await read('assets/public.js');
+	const service = await read('includes/class-mi-registration-service.php');
+  assert.match(admin, /SELECT id, status, initial_due_cents FROM \{\$wpdb->prefix\}mi_registrations WHERE id = %d FOR UPDATE/);
+	assert.match(admin, /initial_due_cents FROM/);
+	assert.match(admin, /expires_at/);
+	assert.match(service, /'EXPIRED' === \$target_status[\s\S]+SUM\(CASE WHEN transaction_kind = 'REFUND'/);
+  assert.match(sender, /addStringEmbeddedImage/);
+  assert.match(images, /reed_solomon/);
+  assert.match(images, /barcode_svg/);
+  assert.match(publicScript, /createBarcode/);
 });
 
 test('la replica Workspace è accodata dopo il commit senza bloccare la risposta', async () => {
