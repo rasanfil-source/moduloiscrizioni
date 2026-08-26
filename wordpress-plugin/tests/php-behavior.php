@@ -17,10 +17,19 @@ function sanitize_email( $value ) { return filter_var( (string) $value, FILTER_S
 function is_email( $value ) { return false !== filter_var( $value, FILTER_VALIDATE_EMAIL ); }
 function wp_timezone() { return new DateTimeZone( 'Europe/Rome' ); }
 function esc_html( $value ) { return htmlspecialchars( (string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8' ); }
+function esc_attr( $value ) { return esc_html( $value ); }
+function esc_url( $value ) { return filter_var( (string) $value, FILTER_SANITIZE_URL ); }
+function esc_url_raw( $value ) { return esc_url( $value ); }
+function sanitize_hex_color( $value ) { return preg_match( '/^#[0-9a-f]{6}$/i', (string) $value ) ? strtolower( (string) $value ) : null; }
+function wp_date( $format, $timestamp, $timezone = null ) { $date = new DateTimeImmutable( '@' . $timestamp ); return $date->setTimezone( $timezone ?: wp_timezone() )->format( $format ); }
+function wp_kses_allowed_html( $context ) { return array( 'p' => array( 'style' => true ), 'table' => array( 'style' => true ), 'tr' => array( 'style' => true ), 'td' => array( 'style' => true ), 'a' => array( 'href' => true, 'style' => true ), 'div' => array( 'style' => true ), 'strong' => array(), 'code' => array(), 'br' => array(), 'img' => array( 'src' => true, 'alt' => true, 'style' => true ) ); }
+function wp_kses_post( $value ) { return (string) $value; }
+function wp_kses( $value, $allowed ) { return (string) $value; }
 
 require_once __DIR__ . '/../modulo-iscrizioni/includes/class-mi-field-schema.php';
 require_once __DIR__ . '/../modulo-iscrizioni/includes/class-mi-registration-service.php';
 require_once __DIR__ . '/../modulo-iscrizioni/includes/class-mi-code-image.php';
+require_once __DIR__ . '/../modulo-iscrizioni/includes/class-mi-modello-email.php';
 
 function invoke_private( $name, array $arguments ) {
 	$method = new ReflectionMethod( MI_Registration_Service::class, $name );
@@ -108,5 +117,32 @@ $qr_svg = MI_Code_Image::svg( 'QR', 'modulo-iscrizioni|evento:42|ordine:MI-26082
 expect( false !== strpos( $qr_svg, '<svg' ) && false !== strpos( $qr_svg, 'viewBox="0 0 45 45"' ), 'QR locale non generato' );
 $barcode_svg = MI_Code_Image::svg( 'BARCODE', 'MI-260826-DEMO1234' );
 expect( false !== strpos( $barcode_svg, '<svg' ) && false !== strpos( $barcode_svg, 'MI-260826-DEMO1234' ), 'barcode locale non generato' );
+
+$email_event = array(
+	'title' => 'Evento Demo',
+	'activity' => 'Attività Demo',
+	'event_starts_at' => '2030-05-04T09:30',
+	'event_location' => 'Oratorio',
+	'payment_deadline_at' => '2030-05-01T23:59',
+	'privacy_url' => 'https://example.invalid/privacy',
+);
+$email_economic = array( 'total_cents' => 5000, 'initial_due_cents' => 2000, 'balance_cents' => 3000, 'payment_methods' => array( 'BANK_TRANSFER' ) );
+$email_values = MI_Modello_Email::valori_ordine( $email_event, 'MI-DEMO-1', 'In attesa di pagamento', 2, 'Persona Demo', $email_economic, array( array( 'name' => 'Quota', 'quantity' => 2 ) ) );
+expect( 'Oratorio' === $email_values['{{evento.luogo}}'], 'luogo evento assente dai segnaposto email' );
+expect( false !== strpos( $email_values['{{ordine.riepilogo_economico}}'], '50,00 €' ), 'riepilogo economico email errato' );
+expect( false !== strpos( $email_values['{{pagamento.istruzioni}}'], 'Bonifico' ), 'istruzioni di pagamento email assenti' );
+
+$email_html = MI_Modello_Email::componi_html( array(
+	'preheader' => 'Anteprima nascosta',
+	'html' => '<p>Contenuto</p>',
+	'footer' => 'Un saluto',
+	'identita' => array( 'nome_attivita' => 'Attività Demo', 'primary_color' => '#151b38', 'secondary_color' => '#337ab7', 'primary_text_color' => '#ffffff', 'secondary_text_color' => '#ffffff' ),
+	'identita_email' => array( 'indirizzo_risposte' => 'assistenza@example.invalid' ),
+	'evento' => array( 'titolo' => 'Evento Demo', 'url' => 'https://example.invalid/evento' ),
+) );
+expect( false !== strpos( $email_html, 'max-width:600px' ), 'card email da 600px assente' );
+expect( false !== strpos( $email_html, 'opacity:0;color:transparent' ), 'preheader nascosto incompleto' );
+expect( false !== strpos( $email_html, 'role="presentation"' ) && false !== strpos( $email_html, 'cellpadding="0"' ) && false !== strpos( $email_html, 'bgcolor="#151b38"' ), 'markup email-safe incompleto' );
+expect( false !== strpos( $email_html, 'Assistenza' ) && false !== strpos( $email_html, 'border-radius:12px' ) && false !== strpos( $email_html, 'font-style:italic' ), 'componenti del restyling email assenti' );
 
 fwrite( STDOUT, "PHP behavior tests: OK\n" );

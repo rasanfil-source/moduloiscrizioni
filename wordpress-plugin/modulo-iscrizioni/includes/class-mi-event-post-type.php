@@ -212,17 +212,24 @@ final class MI_Event_Post_Type {
 
 	public static function render_activity_box( $post ) {
 		wp_nonce_field( 'mi_save_activity', 'mi_activity_nonce' );
-		$accent_color = sanitize_hex_color( get_post_meta( $post->ID, '_mi_accent_color', true ) ) ?: '#c43b2f';
-		echo '<p>Usa l’immagine in evidenza come logo dell’attività. Logo e colore vengono ereditati dai suoi eventi.</p>';
-		echo '<p><label for="mi_accent_color"><strong>Colore principale dei moduli</strong></label><br><input id="mi_accent_color" name="mi_accent_color" type="color" value="' . esc_attr( $accent_color ) . '"></p>';
-		echo '<p class="description">Il colore viene applicato soltanto a pulsanti, focus e stati attivi del modulo.</p>';
+		$primary_color = sanitize_hex_color( get_post_meta( $post->ID, '_mi_primary_color', true ) ) ?: ( sanitize_hex_color( get_post_meta( $post->ID, '_mi_accent_color', true ) ) ?: '#151b38' );
+		$secondary_color = sanitize_hex_color( get_post_meta( $post->ID, '_mi_secondary_color', true ) ) ?: '#337ab7';
+		echo '<p>Usa l’immagine in evidenza come logo dell’attività. Logo e colori vengono ereditati dai suoi eventi e dalle email.</p>';
+		echo '<p><label for="mi_primary_color"><strong>Colore primario</strong></label><br><input id="mi_primary_color" name="mi_primary_color" type="color" value="' . esc_attr( $primary_color ) . '"></p>';
+		echo '<p><label for="mi_secondary_color"><strong>Colore secondario / CTA</strong></label><br><input id="mi_secondary_color" name="mi_secondary_color" type="color" value="' . esc_attr( $secondary_color ) . '"></p>';
+		echo '<p class="description">Il primario identifica intestazioni e stati attivi; il secondario viene usato per pulsanti e link. Il testo email sceglie automaticamente bianco o scuro per il contrasto.</p>';
 	}
 
 	public static function save_activity( $post_id, $post ) {
 		if ( ! isset( $_POST['mi_activity_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['mi_activity_nonce'] ) ), 'mi_save_activity' ) ) return;
 		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) || ! current_user_can( 'manage_options' ) ) return;
-		$accent_color = isset( $_POST['mi_accent_color'] ) ? sanitize_hex_color( wp_unslash( $_POST['mi_accent_color'] ) ) : '';
-		update_post_meta( $post_id, '_mi_accent_color', $accent_color ?: '#c43b2f' );
+		$primary_color = isset( $_POST['mi_primary_color'] ) ? sanitize_hex_color( wp_unslash( $_POST['mi_primary_color'] ) ) : '';
+		$secondary_color = isset( $_POST['mi_secondary_color'] ) ? sanitize_hex_color( wp_unslash( $_POST['mi_secondary_color'] ) ) : '';
+		$primary_color = $primary_color ?: '#151b38';
+		$secondary_color = $secondary_color ?: '#337ab7';
+		update_post_meta( $post_id, '_mi_primary_color', $primary_color );
+		update_post_meta( $post_id, '_mi_secondary_color', $secondary_color );
+		update_post_meta( $post_id, '_mi_accent_color', $primary_color );
 		$dependent_events = get_posts( array( 'post_type' => self::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => -1, 'fields' => 'ids', 'meta_key' => '_mi_activity_id', 'meta_value' => $post_id ) );
 		foreach ( $dependent_events as $event_id ) update_post_meta( $event_id, '_mi_needs_republish', '1' );
 	}
