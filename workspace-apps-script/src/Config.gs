@@ -1,4 +1,4 @@
-const MI_SCHEMA_VERSION = '1.2.0';
+const MI_SCHEMA_VERSION = '1.2.1';
 const MI_SHEETS = Object.freeze({
   CONFIG: 'Configurazione',
   EVENTS: 'Eventi',
@@ -16,7 +16,7 @@ const MI_HEADERS = Object.freeze({
   'Iscrizioni': ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'hash_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'versione_informativa_privacy', 'data_accettazione_privacy', 'biglietti_json', 'id_consenso_marketing', 'data_accettazione_marketing', 'opzioni_ordine_json'],
   'Partecipanti': ['codice_ordine', 'numero_partecipante', 'codice_tipologia', 'indice_tipologia', 'nome', 'cognome', 'dati_aggiuntivi_json', 'opzioni_json'],
   'Inserimento pagamenti': ['id_inserimento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'nota_amministrativa', 'stato_convalida', 'messaggio_convalida', 'data_convalida'],
-  'Pagamenti': ['id_pagamento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo_centesimi', 'valuta', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'canale_registrazione', 'id_inserimento_origine', 'data_creazione'],
+  'Pagamenti': ['id_pagamento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo_centesimi', 'valuta', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'canale_registrazione', 'id_inserimento_origine', 'data_creazione', 'nota_amministrativa'],
   'Coda email': ['id_messaggio', 'codice_ordine', 'destinatario', 'tipo_modello', 'contenuto_json', 'stato', 'data_creazione'],
   'Registro controlli': ['id_controllo', 'data_evento', 'canale', 'azione', 'tipo_entita', 'riferimento_entita', 'esito', 'etichetta_attore', 'codice_dettaglio']
 });
@@ -34,7 +34,8 @@ const MI_LEGACY_SHEET_NAMES = Object.freeze({
 
 const MI_INTESTAZIONI_PRECEDENTI = Object.freeze({
   'Iscrizioni': ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json'],
-  'Partecipanti': ['codice_ordine', 'numero_partecipante', 'nome', 'cognome', 'dati_aggiuntivi_json']
+  'Partecipanti': ['codice_ordine', 'numero_partecipante', 'nome', 'cognome', 'dati_aggiuntivi_json'],
+  'Pagamenti': ['id_pagamento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo_centesimi', 'valuta', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'canale_registrazione', 'id_inserimento_origine', 'data_creazione']
 });
 
 const MI_LEGACY_HEADERS = Object.freeze({
@@ -70,4 +71,10 @@ function ottieniSegretoScript_() {
   const secret = PropertiesService.getScriptProperties().getProperty('MI_SHARED_SECRET');
   if (!secret || secret.length < 32) throw new Error('MI_SHARED_SECRET non configurato o troppo corto.');
   return secret;
+}
+
+function ottieniConfigurazione_(key, fallback) {
+  const rows = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.CONFIG));
+  const row = rows.find(function (item) { return String(item.chiave || item.key) === key; });
+  return row ? String(row.valore == null ? row.value : row.valore).trim() : fallback;
 }

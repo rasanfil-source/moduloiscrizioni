@@ -36,6 +36,8 @@ final class MI_Shortcode {
 	}
 
 	public static function render( $attributes ) {
+		if ( ! headers_sent() ) nocache_headers();
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) define( 'DONOTCACHEPAGE', true );
 		$attributes = shortcode_atts( array( 'event' => 0, 'anteprima' => 0 ), $attributes, 'modulo_iscrizioni' );
 		$event_id = absint( $attributes['event'] );
 		$is_preview = ! empty( $attributes['anteprima'] ) && current_user_can( 'mi_manage_events' ) && MI_Access::can_access_event( $event_id );

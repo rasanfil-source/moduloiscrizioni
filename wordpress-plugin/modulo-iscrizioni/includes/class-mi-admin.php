@@ -52,7 +52,7 @@ final class MI_Admin {
 		if ( $effective_raw ) {
 			$effective_date = DateTimeImmutable::createFromFormat( 'Y-m-d\\TH:i', $effective_raw, wp_timezone() );
 			if ( ! $effective_date || $effective_date->format( 'Y-m-d\\TH:i' ) !== $effective_raw ) { wp_die( esc_html__( 'Data effettiva non valida.', 'modulo-iscrizioni' ) ); }
-			$effective_at = $effective_date->format( 'Y-m-d H:i:s' );
+			$effective_at = $effective_date->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
 		}
 		if ( ! in_array( $source, array( 'BANK_TRANSFER', 'CARD', 'CASH' ), true ) || ! in_array( $kind, array( 'DEPOSIT', 'BALANCE', 'FULL', 'OTHER' ), true ) || ! in_array( $transaction, array( 'PAYMENT', 'REFUND' ), true ) || $amount < 1 ) { wp_die( esc_html__( 'Dati del versamento non validi.', 'modulo-iscrizioni' ) ); }
 		$external_reference = sanitize_text_field( wp_unslash( $_POST['external_reference'] ?? '' ) );

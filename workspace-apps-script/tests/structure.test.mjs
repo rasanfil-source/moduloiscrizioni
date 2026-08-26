@@ -52,12 +52,20 @@ test('le funzioni Apps Script applicative hanno nomi italiani', () => {
 });
 
 test('la migrazione aggiunge il riepilogo economico alle iscrizioni', () => {
-  assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.2\.0'/);
+  assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.2\.1'/);
   assert.match(sources['Config.gs'], /modalita_economica/);
   assert.match(sources['Config.gs'], /primo_versamento_centesimi/);
   assert.match(sources['Config.gs'], /saldo_centesimi/);
   assert.match(sources['Setup.gs'], /MI_INTESTAZIONI_PRECEDENTI/);
   assert.match(sources['WebApp.gs'], /payment_methods/);
+});
+
+test('la modalità email GAS è fail-closed e sostituisce sempre il destinatario', () => {
+  assert.match(sources['Email.gs'], /modalita_email/);
+  assert.match(sources['Email.gs'], /MI_EMAIL_TEST_RECIPIENT/);
+  assert.match(sources['Email.gs'], /MailApp\.sendEmail/);
+  assert.match(sources['Email.gs'], /to:\s*recipient/);
+  assert.doesNotMatch(sources['Email.gs'], /to:\s*row\.destinatario/);
 });
 
 test('la replica è riconciliante e viene confermata solo quando completa', () => {

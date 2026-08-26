@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.4\.2/);
+  assert.match(source, /Version:\s+3\.4\.3/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 

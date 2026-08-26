@@ -13,9 +13,6 @@ function convalidaPagamentiInAttesa() {
 }
 
 function convalidaRighePagamento_(startRow, rowCount, pendingOnly) {
-  const lock = LockService.getDocumentLock();
-  lock.waitLock(30000);
-  try {
     const intake = ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENT_INTAKE);
     const index = creaIndiceIntestazioni_(intake);
     const rows = intake.getRange(startRow, 1, rowCount, intake.getLastColumn()).getValues();
@@ -30,9 +27,6 @@ function convalidaRighePagamento_(startRow, rowCount, pendingOnly) {
       intake.getRange(rowNumber, index.data_convalida + 1).setValue(new Date());
     });
     SpreadsheetApp.flush();
-  } finally {
-    lock.releaseLock();
-  }
 }
 
 function convalidaRigaPagamento_(row, index) {
@@ -66,13 +60,16 @@ function convalidaRigaPagamento_(row, index) {
   if (!registration) return reject('ORDER_NOT_FOUND', 'Ordine non trovato.');
   if (['ANNULLATO', 'SCADUTO', 'CANCELLED', 'EXPIRED'].indexOf(String(registration.stato).toUpperCase()) >= 0) return reject('ORDER_REVIEW', 'Ordine da verificare manualmente.', 'DA_VERIFICARE');
 
-  const payments = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS));
-  if (payments.some(function (item) { return String(item.id_inserimento_origine) === intakeId; })) {
-    return { intakeId: intakeId, status: 'CONVALIDATO', message: 'Movimento già acquisito.' };
-  }
-
-  const paymentId = creaIdentificativoOpaco_('pay');
-  ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS).appendRow([
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(5000);
+  try {
+    const paymentSheet = ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS);
+    const payments = convertiRigheInOggetti_(paymentSheet);
+    if (payments.some(function (item) { return String(item.id_inserimento_origine) === intakeId; })) {
+      return { intakeId: intakeId, status: 'CONVALIDATO', message: 'Movimento già acquisito.' };
+    }
+    const paymentId = creaIdentificativoOpaco_('pay');
+    paymentSheet.appendRow([
     paymentId,
     neutralizzaFormula_(orderCode, 64),
     transactionKind,
@@ -85,8 +82,12 @@ function convalidaRigaPagamento_(row, index) {
     operatorLabel,
     'MANUAL_SHEET',
     intakeId,
-    new Date()
-  ]);
-  aggiungiControllo_('VALIDATE_PAYMENT', 'PAYMENT', paymentId, 'SUCCESS', operatorLabel, 'PAYMENT_RECORDED', 'MANUAL_SHEET');
-  return { intakeId: intakeId, status: 'CONVALIDATO', message: 'Movimento acquisito.' };
+      new Date(),
+      neutralizzaFormula_(administrativeNote, 500)
+    ]);
+    aggiungiControllo_('VALIDATE_PAYMENT', 'PAYMENT', paymentId, 'SUCCESS', operatorLabel, 'PAYMENT_RECORDED', 'MANUAL_SHEET');
+    return { intakeId: intakeId, status: 'CONVALIDATO', message: 'Movimento acquisito.' };
+  } finally {
+    lock.releaseLock();
+  }
 }

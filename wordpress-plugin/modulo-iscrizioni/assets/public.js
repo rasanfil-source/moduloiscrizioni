@@ -338,7 +338,7 @@
       submitButton.textContent = 'Invio in corso…';
       const formData = new FormData(form);
       const payload = {
-        started_at: config.startedAt,
+        started_at: Math.floor(Date.now() / 1000),
         website: formData.get('website') || '',
         privacy_accepted: formData.get('privacyAccepted') === 'on',
 		marketing_accepted: formData.get('marketingAccepted') === 'on',
