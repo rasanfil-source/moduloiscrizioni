@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — versione 3.4.13
+# Modulo Iscrizioni — versione 3.4.14
 
 Plugin WordPress per attività ed eventi con modulo pubblico, registro locale autorevole e replica firmata verso Google Workspace.
 
@@ -19,6 +19,10 @@ Plugin WordPress per attività ed eventi con modulo pubblico, registro locale au
 - replica Workspace asincrona e riconciliante, marcata `SYNCED` soltanto dopo verifica completa;
 - shortcode `[modulo_iscrizioni event="ID"]`, pagina concentrata e modulo Divi 4.
 - anteprima riservata isolata dalla toolbar e dagli hook amministrativi del tema.
+
+## Migrazione amministrativa dell’attività
+
+Quando un evento possiede già iscrizioni, il normale editor impedisce di cambiarne l’attività. Un amministratore può usare **Modulo iscrizioni → Migrazione attività**: l’azione richiede evento, attività di destinazione e una frase di conferma che contiene entrambi gli ID. La migrazione aggiorna soltanto il collegamento dell’evento, verifica il numero di iscrizioni prima e dopo, conserva revisioni e istantanee storiche, registra un audit nei metadati e non pubblica contenuti né invia email.
 
 ## Limiti intenzionali
 
