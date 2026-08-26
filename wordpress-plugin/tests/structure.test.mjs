@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.4\.6/);
+  assert.match(source, /Version:\s+3\.4\.7/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -94,6 +94,16 @@ test('il percorso pubblico è progressivo e dispone di un modello concentrato', 
   assert.match(script, /sourceInputs/);
   assert.match(template, /wp_head/);
   assert.doesNotMatch(template, /get_header|get_sidebar/);
+});
+
+test('la bacheca offre ai delegati un accesso diretto al servizio moduli', async () => {
+  const admin = await read('includes/class-mi-admin.php');
+  const access = await read('includes/class-mi-access.php');
+  assert.match(admin, /wp_dashboard_setup/);
+  assert.match(admin, /Servizio moduli iscrizioni/);
+  assert.match(admin, /Apri il servizio moduli/);
+  assert.match(admin, /mi_view_registrations/);
+  assert.doesNotMatch(access, /remove_menu_page\( 'index\.php' \)/);
 });
 
 test('l’integrazione Divi è facoltativa e riusa il motore dello shortcode', async () => {
