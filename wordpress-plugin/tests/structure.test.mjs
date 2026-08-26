@@ -112,6 +112,12 @@ test('la barra mobile è compatta e indica esplicitamente gli eventi gratuiti', 
 	assert.match(style, /min-height: 44px/);
 });
 
+test('checkbox e radio del pannello evento mantengono dimensioni compatte', async () => {
+	const style = await read('assets/admin.css');
+	assert.match(style, /input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\)/);
+	assert.match(style, /input\[type="checkbox"\][\s\S]*width: 1rem/);
+});
+
 test('la bacheca offre ai delegati un accesso diretto al servizio moduli', async () => {
   const admin = await read('includes/class-mi-admin.php');
   const access = await read('includes/class-mi-access.php');

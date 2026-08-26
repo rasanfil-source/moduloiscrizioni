@@ -3,9 +3,11 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0 1.25rem;
 }
-.post-type-mi_event .mi-admin-grid input,
+.post-type-mi_event .mi-admin-grid input:not([type="checkbox"]):not([type="radio"]),
 .post-type-mi_event .mi-admin-grid select,
 .post-type-mi_event #mi-ticket-types input { width: 100%; }
+.post-type-mi_event .mi-admin-grid input[type="checkbox"],
+.post-type-mi_event .mi-admin-grid input[type="radio"] { width: 1rem; min-width: 1rem; height: 1rem; margin-right: .35rem; vertical-align: middle; }
 .post-type-mi_event .mi-field-config { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; margin: 1rem 0; }
 .post-type-mi_event .mi-field-config__item { display: grid; grid-template-columns: 1fr auto; gap: .35rem 1rem; padding: .85rem; border: 1px solid #c3c4c7; border-radius: 6px; background: #fff; }
 .post-type-mi_event .mi-field-config__item small { grid-column: 1 / -1; color: #50575e; }
