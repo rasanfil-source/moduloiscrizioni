@@ -13,6 +13,8 @@
     const successBox = root.querySelector('[data-mi-success]');
     const submitButton = root.querySelector('.mi-registration__submit');
     const economicSummary = root.querySelector('[data-mi-economic-summary]');
+	const buyerFirstName = form.elements.namedItem('buyerFirstName');
+	const buyerLastName = form.elements.namedItem('buyerLastName');
 	const steps = Array.from(root.querySelectorAll('[data-mi-step]'));
 	const nextButton = root.querySelector('[data-mi-next]');
 	const backButton = root.querySelector('[data-mi-back]');
@@ -20,6 +22,16 @@
 	let currentStep = 1;
     let requestKey = makeRequestKey();
     let participantValues = [];
+	const buyerEdited = { firstName: false, lastName: false };
+	buyerFirstName?.addEventListener('input', () => { buyerEdited.firstName = true; });
+	buyerLastName?.addEventListener('input', () => { buyerEdited.lastName = true; });
+
+	function prefillBuyerFromFirstParticipant() {
+	  const firstParticipant = participantsRoot.querySelector('.mi-registration__participant');
+	  if (!firstParticipant) return;
+	  if (!buyerEdited.firstName && buyerFirstName) buyerFirstName.value = firstParticipant.querySelector('[data-mi-first-name]')?.value.trim() || '';
+	  if (!buyerEdited.lastName && buyerLastName) buyerLastName.value = firstParticipant.querySelector('[data-mi-last-name]')?.value.trim() || '';
+	}
 
     function makeRequestKey() {
       if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
@@ -313,6 +325,7 @@
 	nextButton.addEventListener('click', () => {
 	  if (!currentStepIsValid()) return;
 	  if (currentStep === 1) renderParticipants();
+	  if (currentStep === 2) prefillBuyerFromFirstParticipant();
 	  showStep(currentStep + 1);
 	});
 	backButton.addEventListener('click', () => showStep(currentStep - 1));
