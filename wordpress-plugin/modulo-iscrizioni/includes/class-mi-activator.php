@@ -86,6 +86,7 @@ final class MI_Activator {
 			UNIQUE KEY order_code (order_code),
 			UNIQUE KEY idempotency_key (event_id,idempotency_key),
 			KEY event_status (event_id,status),
+			KEY event_created (event_id,created_at),
 			KEY workspace_status (workspace_status),
 			KEY payment_deadline (status,payment_deadline_at)
 		) ENGINE=InnoDB {$charset};" );

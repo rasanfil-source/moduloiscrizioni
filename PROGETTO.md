@@ -1,11 +1,11 @@
 # Progetto: sistema multi-evento di iscrizione e pagamento
 
-Stato: implementazione revisionata — WordPress 3.5.1 / Workspace 1.5.0
+Stato: implementazione revisionata — WordPress 3.5.2 / Workspace 1.5.0
 Data: 27 agosto 2026
 
 Per lo stato puntuale delle funzioni confermate, parziali e fuori scope della v1 si applica `docs/ALLINEAMENTO_CODICE_DOCUMENTAZIONE.md`.
 
-Esito revisione del codice: il repository contiene WordPress `3.5.1` e Apps Script `1.5.0`. WordPress ospita il portale autenticato, configura e pubblica il modulo, raccoglie l’iscrizione iniziale e la consegna in modo firmato a Workspace. Sheets offre schede personali ed elenchi operativi configurabili per evento, compreso lo stato individuale; i fogli tecnici restano sottostanti. La modalità email predefinita resta `ANTEPRIMA`; `PROVA` usa soltanto dati sintetici e `OPERATIVO` è bloccata fino a una prova accettata dal sistema di posta.
+Esito revisione del codice: il repository contiene WordPress `3.5.2` e Apps Script `1.5.0`. WordPress ospita il portale autenticato, configura e pubblica il modulo, raccoglie l’iscrizione iniziale e la consegna in modo firmato a Workspace. Il portale tecnico viene servito con un guscio autonomo leggero e query aggregate, senza avviare il front-end Divi. Sheets offre schede personali ed elenchi operativi configurabili per evento, compreso lo stato individuale; i fogli tecnici restano sottostanti. La modalità email predefinita resta `ANTEPRIMA`; `PROVA` usa soltanto dati sintetici e `OPERATIVO` è bloccata fino a una prova accettata dal sistema di posta.
 
 Backend Workspace: il progetto Apps Script `MODULI` è installato nell'account Workspace organizzativo definitivo e collegato allo spreadsheet riservato `DB_MODULI`. Il setup e la migrazione linguistica hanno creato otto schede operative con nomi, intestazioni e valori in italiano: `Configurazione`, `Eventi`, `Iscrizioni`, `Partecipanti`, `Inserimento pagamenti`, `Pagamenti`, `Coda email` e `Registro controlli`. La Web App è distribuita dall'account organizzativo e il controllo `PING` firmato con HMAC e anti-replay è stato verificato da WordPress anche dopo l'installazione della replica delle iscrizioni. Una registrazione interamente sintetica ha collaudato salvataggio locale, replica in `Iscrizioni` e `Partecipanti`, outbox locale, `Coda email` in `PREVIEW` e replay idempotente senza duplicati. L'evento usato per la prova è stato subito riportato in bozza con finestra iscrizioni vuota; nessuna email è stata inviata. Il repository non contiene ID, URL di distribuzione, segreti, codici di collaudo o destinatari operativi.
 

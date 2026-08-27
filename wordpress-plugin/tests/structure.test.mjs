@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.5\.1/);
+	assert.match(source, /Version:\s+3\.5\.2/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -147,6 +147,18 @@ test('il portale web riusa WordPress e limita operatori ed eventi sul server', a
   assert.match(eventType, /wp_create_user/);
   assert.match(eventType, /strlen\( \$password \) >= 12/);
   assert.match(script, /reportValidity/);
+});
+
+test('il portale tecnico evita Divi e aggrega i dati della dashboard', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const activator = await read('includes/class-mi-activator.php');
+  assert.doesNotMatch(portal, /wp_head\(\)|wp_footer\(\)/);
+  assert.match(portal, /assets\/portal\.css\?ver=/);
+  assert.match(portal, /assets\/portal\.js\?ver=/);
+  assert.match(portal, /SELECT event_id,confirmed_count/);
+  assert.match(portal, /JOIN \{\$wpdb->posts\} events/);
+  assert.doesNotMatch(portal, /SELECT COALESCE\(SUM\(total_qty\)/);
+  assert.match(activator, /KEY event_created \(event_id,created_at\)/);
 });
 
 test('il wizard è breve, crea solo bozze e rende gli alloggi condizionali', async () => {
