@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.5\.2/);
+	assert.match(source, /Version:\s+3\.5\.3/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -159,6 +159,34 @@ test('il portale tecnico evita Divi e aggrega i dati della dashboard', async () 
   assert.match(portal, /JOIN \{\$wpdb->posts\} events/);
   assert.doesNotMatch(portal, /SELECT COALESCE\(SUM\(total_qty\)/);
   assert.match(activator, /KEY event_created \(event_id,created_at\)/);
+});
+
+test('il portale resta utilizzabile fra telefono e tablet', async () => {
+  const css = await read('assets/portal.css');
+  assert.match(css, /mi-portal-header[^}]+flex-wrap:wrap/);
+  assert.match(css, /mi-portal-switcher[^}]+flex-wrap:wrap/);
+  assert.match(css, /min-height:44px/);
+  assert.match(css, /@media\(max-width:760px\)/);
+  assert.match(css, /overflow-wrap:anywhere/);
+  assert.match(css, /overflow-x:auto/);
+});
+
+test('WooCommerce viene alleggerito soltanto fuori dai percorsi commerciali', async () => {
+  const bootstrap = await read('modulo-iscrizioni.php');
+  const plugin = await read('includes/class-mi-plugin.php');
+  const performance = await read('includes/class-mi-site-performance.php');
+  assert.match(bootstrap, /class-mi-site-performance\.php/);
+  assert.match(plugin, /MI_Site_Performance::boot/);
+  assert.match(performance, /wp_enqueue_scripts[^\n]+200/);
+  assert.match(performance, /is_woocommerce/);
+  assert.match(performance, /is_cart/);
+  assert.match(performance, /is_checkout/);
+  assert.match(performance, /is_account_page/);
+  assert.match(performance, /wc-ajax/);
+  assert.match(performance, /wp:woocommerce\//);
+  assert.match(performance, /woocommerce-general/);
+  assert.match(performance, /wc-cart-fragments/);
+  assert.match(performance, /wc-order-attribution/);
 });
 
 test('il wizard è breve, crea solo bozze e rende gli alloggi condizionali', async () => {
