@@ -276,10 +276,14 @@ final class MI_Modello_Email {
 	}
 
 	private static function url_pubblica_evento( $event_id ) {
+		static $resolved = array();
 		$event_id = absint( $event_id );
 		if ( ! $event_id ) {
 			return '';
 		}
+		if ( array_key_exists( $event_id, $resolved ) ) return $resolved[ $event_id ];
+		$page_id = absint( get_post_meta( $event_id, '_mi_registration_page_id', true ) );
+		if ( $page_id && 'publish' === get_post_status( $page_id ) ) return $resolved[ $event_id ] = esc_url_raw( get_permalink( $page_id ) );
 		$pages = get_posts( array(
 			'post_type'              => 'page',
 			'post_status'            => 'publish',
@@ -302,11 +306,11 @@ final class MI_Modello_Email {
 				}
 				$attributes = shortcode_parse_atts( $match[3] ?? '' );
 				if ( $event_id === absint( $attributes['event'] ?? 0 ) ) {
-					return esc_url_raw( get_permalink( $page->ID ) );
+					return $resolved[ $event_id ] = esc_url_raw( get_permalink( $page->ID ) );
 				}
 			}
 		}
-		return '';
+		return $resolved[ $event_id ] = '';
 	}
 
 	public static function salva( $post_id, $post ) {

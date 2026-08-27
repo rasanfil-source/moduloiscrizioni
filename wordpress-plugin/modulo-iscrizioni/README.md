@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — versione 3.5.1
+# Modulo Iscrizioni — versione 3.5.9
 
 Plugin WordPress per configurare e pubblicare moduli, raccogliere iscrizioni e consegnarle in modo firmato alla console operativa Google Workspace.
 
@@ -31,8 +31,8 @@ Il plugin non riscuote denaro e non conserva coordinate bancarie, numeri complet
 ## Installazione di prova
 
 1. Comprimere la cartella `modulo-iscrizioni` in uno ZIP e aggiornare il plugin nell’ambiente autorizzato.
-2. Verificare che l’upgrade abbia impostato `mi_db_version` a `3.4.3` e creato le nuove tabelle.
-3. Aggiornare Apps Script allo schema `1.2.0`, eseguire `configuraCartellaDiLavoro()` e verificare lo schema dal pannello WordPress.
+2. Verificare che l’upgrade abbia impostato `mi_db_version` alla stessa versione del plugin e aggiornato tabelle e indici.
+3. Aggiornare Apps Script allo schema `1.5.0`, eseguire `configuraCartellaDiLavoro()` e verificare lo schema dal pannello WordPress.
 4. Aprire e salvare gli eventi pubblicati per creare la prima revisione completa; ripubblicare quelli segnalati dopo modifiche all’attività.
 5. Collaudare capienza, retry, annullamento, scadenza, email e replica con sole identità fittizie.
 

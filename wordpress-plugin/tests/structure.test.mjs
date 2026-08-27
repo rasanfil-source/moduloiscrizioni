@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.5\.1/);
+	assert.match(source, /Version:\s+3\.5\.9/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -69,10 +69,37 @@ test('la registrazione usa transazione, lock di riga e idempotenza', async () =>
   assert.match(source, /COMMIT/);
 });
 
+test('anti replay e limiti pubblici sono atomici anche fra richieste concorrenti', async () => {
+  const service = await read('includes/class-mi-registration-service.php');
+  const rest = await read('includes/class-mi-rest-controller.php');
+  assert.match(service, /consume_registration_rate_limit/);
+  assert.match(service, /SELECT GET_LOCK/);
+  assert.match(service, /SELECT RELEASE_LOCK/);
+  assert.match(service, /'email\|'/);
+  assert.match(rest, /mi_ws_nonce_/);
+  assert.match(rest, /mi_ws_draft_/);
+  assert.match(rest, /SELECT GET_LOCK/);
+  assert.match(rest, /finally/);
+});
+
 test('gli asset pubblici sono caricati soltanto in presenza dello shortcode', async () => {
   const source = await read('includes/class-mi-shortcode.php');
   assert.match(source, /has_shortcode/);
   assert.match(source, /wp_enqueue_scripts/);
+  assert.match(source, /maybe_disable_page_cache/);
+  assert.match(source, /DONOTCACHEPAGE/);
+});
+
+test('il controllo temporale misura la sessione browser e il QR viene caricato solo quando serve', async () => {
+  const script = await read('assets/public.js');
+  const shortcode = await read('includes/class-mi-shortcode.php');
+  assert.match(script, /const startedAt = Math\.floor\(Date\.now\(\) \/ 1000\)/);
+  assert.match(script, /started_at: startedAt/);
+  assert.doesNotMatch(script, /started_at: Math\.floor\(Date\.now\(\) \/ 1000\)/);
+  assert.match(script, /ensureQrGenerator/);
+  assert.match(script, /data-mi-qrcode-generator/);
+  assert.match(script, /catch \(qrError\)/);
+  assert.doesNotMatch(shortcode, /wp_enqueue_script\(\s*'mi-qrcode-generator'/);
 });
 
 test('il percorso pubblico è progressivo e dispone di un modello concentrato', async () => {
@@ -147,6 +174,67 @@ test('il portale web riusa WordPress e limita operatori ed eventi sul server', a
   assert.match(eventType, /wp_create_user/);
   assert.match(eventType, /strlen\( \$password \) >= 12/);
   assert.match(script, /reportValidity/);
+});
+
+test('il portale tecnico evita Divi e aggrega i dati della dashboard', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const activator = await read('includes/class-mi-activator.php');
+  assert.doesNotMatch(portal, /wp_head\(\)|wp_footer\(\)/);
+  assert.match(portal, /assets\/portal\.css\?ver=/);
+  assert.match(portal, /assets\/portal\.js\?ver=/);
+  assert.match(portal, /SELECT event_id,confirmed_count/);
+  assert.match(portal, /JOIN \{\$wpdb->posts\} events/);
+  assert.doesNotMatch(portal, /SELECT COALESCE\(SUM\(total_qty\)/);
+  assert.match(activator, /KEY event_created \(event_id,created_at\)/);
+  assert.match(portal, /mi_event_revisions/);
+  assert.match(portal, /posti occupati/);
+  assert.match(portal, /createFromFormat\( '!Y-m-d\\TH:i'/);
+  assert.match(portal, /new DateTimeZone\( 'UTC' \)/);
+});
+
+test('il portale resta utilizzabile fra telefono e tablet', async () => {
+  const css = await read('assets/portal.css');
+  assert.match(css, /mi-portal-header[^}]+flex-wrap:wrap/);
+  assert.match(css, /mi-portal-switcher[^}]+flex-wrap:wrap/);
+  assert.match(css, /min-height:44px/);
+  assert.match(css, /@media\(max-width:760px\)/);
+  assert.match(css, /overflow-wrap:anywhere/);
+  assert.match(css, /overflow-x:auto/);
+});
+
+test('WooCommerce viene alleggerito soltanto fuori dai percorsi commerciali', async () => {
+  const bootstrap = await read('modulo-iscrizioni.php');
+  const plugin = await read('includes/class-mi-plugin.php');
+  const performance = await read('includes/class-mi-site-performance.php');
+  assert.match(bootstrap, /class-mi-site-performance\.php/);
+  assert.match(plugin, /MI_Site_Performance::boot/);
+  assert.match(performance, /wp_print_styles/);
+  assert.match(performance, /wp_enqueue_scripts[^\n]+200/);
+  assert.match(performance, /style_loader_tag/);
+  assert.match(performance, /script_loader_tag/);
+  assert.match(performance, /filter_unused_woocommerce_style/);
+  assert.match(performance, /is_woocommerce/);
+  assert.match(performance, /is_cart/);
+  assert.match(performance, /is_checkout/);
+  assert.match(performance, /is_account_page/);
+  assert.match(performance, /wc-ajax/);
+  assert.match(performance, /wp:woocommerce\//);
+  assert.match(performance, /woocommerce-general/);
+  assert.match(performance, /wc-cart-fragments/);
+  assert.match(performance, /wc-order-attribution/);
+});
+
+test('i dati dimostrativi sono riservati a bozze, amministratori ed email in anteprima', async () => {
+  const admin = await read('includes/class-mi-admin.php');
+  const registration = await read('includes/class-mi-registration-service.php');
+  assert.match(admin, /admin_post_mi_seed_demo_registrations/);
+  assert.match(admin, /current_user_can\(\s*'manage_options'\s*\)/);
+  assert.match(admin, /'ANTEPRIMA'\s*!==\s*MI_Spedizione_Email::modalita/);
+  assert.match(admin, /array\(\s*'draft',\s*'private'\s*\)/);
+  assert.match(admin, /'ADMIN_DEMO'/);
+  assert.match(registration, /\$allow_unpublished\s*=\s*false/);
+  assert.match(registration, /!\s*\$allow_unpublished\s*&&\s*'OPEN'\s*!==\s*self::registration_state/);
+  assert.match(registration, /!\s*\$allow_unpublished\s*&&\s*'OPEN'\s*!==\s*self::registration_time_state/);
 });
 
 test('il wizard è breve, crea solo bozze e rende gli alloggi condizionali', async () => {
@@ -267,10 +355,13 @@ test('i documenti sono raccolti solo come dati testuali e mai come foto o scansi
 
 test('il pannello mostra partecipanti e dati aggiuntivi con etichette leggibili', async () => {
   const source = await read('includes/class-mi-admin.php');
-  assert.match(source, /Dettaglio iscrizione/);
+  assert.match(source, /mi-booking-title/);
   assert.match(source, /MI_Field_Schema::catalog/);
   assert.match(source, /extra_json/);
   assert.match(source, /Nessun dato aggiuntivo raccolto/);
+  assert.match(source, /detail_field_labels/);
+  assert.match(source, /snapshot_json/);
+  assert.match(source, /if \( \$detail\['special_requests'\] \)/);
 });
 
 test('il dettaglio iscrizione separa le azioni dai dati tecnici', async () => {
@@ -580,7 +671,7 @@ test('i valori dei segnaposto email sono protetti in base al contesto', async ()
 test('l’idempotenza viene risolta prima dello stato evento e dei limiti anti abuso', async () => {
   const service = await read('includes/class-mi-registration-service.php');
   const create = service.slice(service.indexOf('public static function create'), service.indexOf('public static function riepilogo_economico'));
-  assert.ok(create.indexOf('SELECT id, order_code, status') < create.indexOf('public_event( $event_id )'));
+  assert.ok(create.indexOf('SELECT id, order_code, status') < create.indexOf('public_event( $event_id,'));
   assert.ok(create.indexOf("'replayed' => true") < create.indexOf('registration_state( $event )'));
   assert.ok(create.indexOf("'replayed' => true") < create.indexOf('set_transient'));
 });
@@ -695,6 +786,9 @@ test('il registro pagamenti filtra in SQL, pagina la UI ed esporta a blocchi', a
   assert.match(admin, /LIMIT 500 OFFSET %d/);
   assert.match(admin, /payment_from/);
   assert.match(admin, /payment_to/);
+  assert.match(admin, /SELECT COUNT\(\*\)/);
+  assert.match(admin, /paginate_links/);
+  assert.match(admin, /Riepilogo filtro/);
 });
 
 test('rimborsi, scadenza originaria e lista attesa sono riconciliati', async () => {
@@ -708,6 +802,16 @@ test('rimborsi, scadenza originaria e lista attesa sono riconciliati', async () 
   assert.match(service, /WAITLIST_PROMOTED/);
   assert.match(service, /WAITLIST_PROMOTION/);
   assert.match(service, /ORDER BY created_at, id FOR UPDATE/);
+  assert.match(service, /'publish' !== get_post_status\( \$event_id \)/);
+  assert.match(service, /participant_cancel_url/);
+  assert.match(service, /\$email_values\['_participant_management'\]/);
+});
+
+test('la rimozione dei dati di solo transito usa lo schema storico dell’iscrizione', async () => {
+  const service = await read('includes/class-mi-registration-service.php');
+  assert.match(service, /SELECT snapshot_json/);
+  assert.match(service, /\$snapshot\['event'\]\['participant_fields'\]/);
+  assert.match(service, /scrub_relay_only_fields/);
 });
 
 test('la scadenza dei pagamenti usa una data e ora esplicita', async () => {
@@ -719,10 +823,11 @@ test('la scadenza dei pagamenti usa una data e ora esplicita', async () => {
   assert.match(service, /setTimezone\( new DateTimeZone\( 'UTC' \) \)/);
 });
 
-test('gli importi ambigui sono rifiutati e il nome completo è ricercabile', async () => {
+test('gli importi italiani con migliaia sono normalizzati e il nome completo è ricercabile', async () => {
   const admin = await read('includes/class-mi-admin.php');
   assert.match(admin, /parse_importo_centesimi/);
   assert.doesNotMatch(admin, /str_replace\( ',', '\.', sanitize_text_field/);
+  assert.match(admin, /str_replace\( array\( '\.', ',' \), array\( '', '\.' \), \$value \)/);
   assert.match(admin, /CONCAT\(buyer_first_name, ' ', buyer_last_name\)/);
   assert.match(admin, /CONCAT\(r\.buyer_first_name, ' ', r\.buyer_last_name\)/);
 });
@@ -840,4 +945,35 @@ test('il pannello verifica lo schema economico senza creare iscrizioni', async (
   assert.match(settings, /Verifica schema economico/);
   assert.match(settings, /schema_version/);
   assert.match(client, /STATO_SCHEMA/);
+});
+
+test('l’elenco e la scheda prenotazione usano una presentazione operativa e responsive', async () => {
+  const admin = await read('includes/class-mi-admin.php');
+  const css = await read('assets/admin.css');
+  assert.match(admin, /mi-bookings-table/);
+  assert.match(admin, /mi-booking-hero/);
+  assert.match(admin, /mi-participants-overview/);
+  assert.match(admin, /Evento gratuito/);
+  assert.match(admin, /Dati dei partecipanti/);
+  assert.match(css, /\.mi-responsive-table/);
+  assert.match(css, /@media \(max-width: 960px\)/);
+  assert.match(css, /@media \(max-width: 782px\)/);
+});
+
+test('la scheda prenotazione si apre in un popup accessibile con fallback', async () => {
+  const admin = await read('includes/class-mi-admin.php');
+  const script = await read('assets/admin.js');
+  const css = await read('assets/admin.css');
+  assert.match(admin, /data-mi-booking-open/);
+  assert.match(admin, /id="mi-booking-detail"/);
+  assert.match(script, /role="dialog" aria-modal="true"/);
+  assert.match(script, /fetch\(link\.href/);
+  assert.match(script, /DOMParser/);
+  assert.match(script, /'Escape'/);
+  assert.match(script, /'Tab'/);
+  assert.match(script, /AbortController/);
+  assert.match(script, /replaceState/);
+  assert.match(script, /window\.location\.assign\(link\.href\)/);
+  assert.match(css, /\.mi-booking-modal__backdrop/);
+  assert.match(css, /min-height: 100vh/);
 });

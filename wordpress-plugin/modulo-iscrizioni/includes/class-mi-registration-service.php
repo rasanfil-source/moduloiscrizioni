@@ -206,7 +206,7 @@ final class MI_Registration_Service {
 		return array( 'capacity' => $capacity, 'confirmed' => $confirmed, 'waitlisted' => $waitlisted, 'remaining' => $remaining, 'full' => 0 === $remaining || ( ! empty( $event['ticket_types'] ) && ! $any_ticket_available ), 'ticket_types' => $ticket_availability );
 	}
 
-	public static function create( $event_id, $payload, $idempotency_key ) {
+	public static function create( $event_id, $payload, $idempotency_key, $allow_unpublished = false, $audit_actor = 'PUBLIC_FORM' ) {
 		global $wpdb;
 		$event_id = absint( $event_id );
 		$idempotency_key = preg_replace( '/[^a-zA-Z0-9_-]/', '', (string) $idempotency_key );
@@ -220,11 +220,11 @@ final class MI_Registration_Service {
 			return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'workspace_status' => $workspace_status, 'economic_summary' => self::riepilogo_salvato( $existing ), 'replayed' => true );
 		}
 
-		$event = self::public_event( $event_id );
+		$event = self::public_event( $event_id, (bool) $allow_unpublished );
 		if ( is_wp_error( $event ) ) {
 			return $event;
 		}
-		if ( 'OPEN' !== self::registration_state( $event ) ) {
+		if ( ! $allow_unpublished && 'OPEN' !== self::registration_state( $event ) ) {
 			return new WP_Error( 'mi_registration_closed', 'Le iscrizioni non sono aperte.', array( 'status' => 409 ) );
 		}
 
@@ -235,13 +235,6 @@ final class MI_Registration_Service {
 		if ( ! $started_at || time() - $started_at < 2 || time() - $started_at > DAY_IN_SECONDS ) {
 			return new WP_Error( 'mi_form_timing', 'Aggiorna la pagina e riprova.', array( 'status' => 400 ) );
 		}
-
-		$rate_key = 'mi_rate_' . hash( 'sha256', (string) ( $_SERVER['REMOTE_ADDR'] ?? 'unknown' ) . '|' . $event_id );
-		$attempts = absint( get_transient( $rate_key ) );
-		if ( $attempts >= 12 ) {
-			return new WP_Error( 'mi_rate_limited', 'Troppi tentativi. Riprova più tardi.', array( 'status' => 429 ) );
-		}
-		set_transient( $rate_key, $attempts + 1, HOUR_IN_SECONDS );
 
 		$selection = self::validate_selection( $event, $payload['tickets'] ?? array() );
 		if ( is_wp_error( $selection ) ) {
@@ -268,6 +261,10 @@ final class MI_Registration_Service {
 			return new WP_Error( 'mi_marketing_misconfigured', 'Il consenso marketing dell’evento non è configurato.', array( 'status' => 409 ) );
 		}
 		$marketing_accepted = ! empty( $event['marketing_enabled'] ) && true === ( $payload['marketing_accepted'] ?? false );
+		if ( ! $allow_unpublished ) {
+			$rate_limit = self::consume_registration_rate_limit( $event_id, $buyer['email'] );
+			if ( is_wp_error( $rate_limit ) ) return $rate_limit;
+		}
 
 		$counters_table = $wpdb->prefix . 'mi_event_counters';
 		$ticket_counters_table = $wpdb->prefix . 'mi_ticket_counters';
@@ -286,7 +283,7 @@ final class MI_Registration_Service {
 			if ( ! $counter ) {
 				throw new RuntimeException( 'Contatore non disponibile.' );
 			}
-			if ( 'OPEN' !== self::registration_time_state( $event ) ) {
+			if ( ! $allow_unpublished && 'OPEN' !== self::registration_time_state( $event ) ) {
 				$wpdb->query( 'ROLLBACK' );
 				return new WP_Error( 'mi_registration_closed', 'Le iscrizioni sono state chiuse. Aggiorna la pagina.', array( 'status' => 409 ) );
 			}
@@ -394,7 +391,7 @@ final class MI_Registration_Service {
 					throw new RuntimeException( 'Contatore tipologia non aggiornato.' );
 				}
 			}
-			if ( ! self::append_registration_event( $registration_id, 'CREATED', '', $status, 'PUBLIC_FORM', array( 'expires_at' => $expires_at ) ) ) {
+			if ( ! self::append_registration_event( $registration_id, 'CREATED', '', $status, sanitize_key( $audit_actor ), array( 'expires_at' => $expires_at ) ) ) {
 				throw new RuntimeException( 'Evento di audit non salvato.' );
 			}
 			$email_items = array_merge( $selection['items'], $order_options );
@@ -416,6 +413,35 @@ final class MI_Registration_Service {
 			$wpdb->query( 'ROLLBACK' );
 			return new WP_Error( 'mi_storage_error', 'Non è stato possibile completare l’iscrizione.', array( 'status' => 500 ) );
 		}
+	}
+
+	/**
+	 * Incrementa i limiti sotto un named lock MySQL: get/set_transient da soli
+	 * non sono atomici. Il limite per IP è volutamente più ampio per non
+	 * penalizzare gruppi collegati dalla stessa rete; quello per email frena
+	 * invece le ripetizioni sulla stessa identità.
+	 */
+	private static function consume_registration_rate_limit( $event_id, $email ) {
+		global $wpdb;
+		$identities = array(
+			array( 'ip|' . (string) ( $_SERVER['REMOTE_ADDR'] ?? 'unknown' ), 60 ),
+			array( 'email|' . strtolower( (string) $email ), 12 ),
+		);
+		foreach ( $identities as $identity ) {
+			$hash = hash( 'sha256', $identity[0] . '|' . absint( $event_id ) );
+			$transient_key = 'mi_rate_' . $hash;
+			$lock_name = 'mi_rate_' . substr( $hash, 0, 48 );
+			$locked = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 2)', $lock_name ) );
+			if ( 1 !== $locked ) return new WP_Error( 'mi_rate_busy', 'Servizio momentaneamente occupato. Riprova.', array( 'status' => 503 ) );
+			try {
+				$attempts = absint( get_transient( $transient_key ) );
+				if ( $attempts >= (int) $identity[1] ) return new WP_Error( 'mi_rate_limited', 'Troppi tentativi. Riprova più tardi.', array( 'status' => 429 ) );
+				set_transient( $transient_key, $attempts + 1, HOUR_IN_SECONDS );
+			} finally {
+				$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+			}
+		}
+		return true;
 	}
 
 	public static function riepilogo_economico( $event, $total_cents, $status ) {
@@ -768,7 +794,7 @@ final class MI_Registration_Service {
 		$counters = $wpdb->prefix . 'mi_event_counters';
 		$ticket_counters = $wpdb->prefix . 'mi_ticket_counters';
 		$outbox = $wpdb->prefix . 'mi_email_outbox';
-		$event = self::public_event( $event_id, true );
+		$event = self::public_event( $event_id, 'publish' !== get_post_status( $event_id ) );
 		if ( is_wp_error( $event ) || empty( $event['waitlist_enabled'] ) ) return array();
 		$counter = $wpdb->get_row( $wpdb->prepare( "SELECT confirmed_count, waitlisted_count FROM {$counters} WHERE event_id = %d FOR UPDATE", $event_id ), ARRAY_A );
 		if ( ! $counter ) return array();
@@ -810,6 +836,15 @@ final class MI_Registration_Service {
 				}
 			}
 			$email_values = MI_Modello_Email::valori_ordine( $event, $candidate['order_code'], 'PENDING_PAYMENT' === $promoted_status ? 'In attesa di pagamento' : 'Confermata', $active_qty, $candidate['buyer_first_name'] . ' ' . $candidate['buyer_last_name'], $economic, $email_items );
+			$participant_management = array();
+			$active_participants = $wpdb->get_results( $wpdb->prepare( "SELECT id,first_name,last_name FROM {$participants} WHERE registration_id=%d AND status='ACTIVE' ORDER BY id", $candidate['id'] ), ARRAY_A );
+			foreach ( $active_participants as $active_participant ) {
+				$cancel_token = bin2hex( random_bytes( 32 ) );
+				$updated_token = $wpdb->update( $participants, array( 'cancellation_token_hash' => hash( 'sha256', $cancel_token ) ), array( 'id' => (int) $active_participant['id'], 'status' => 'ACTIVE' ), array( '%s' ), array( '%d', '%s' ) );
+				if ( false === $updated_token ) throw new RuntimeException( 'Collegamento partecipante non aggiornato.' );
+				$participant_management[] = array( 'name' => trim( $active_participant['first_name'] . ' ' . $active_participant['last_name'] ), 'url' => MI_Portal::participant_cancel_url( (int) $active_participant['id'], $cancel_token ) );
+			}
+			$email_values['_participant_management'] = $participant_management;
 			$email_snapshot = MI_Modello_Email::crea_istantanea( $event_id, $email_values );
 			$email_status = MI_Spedizione_Email::stato_nuova_email( $email_snapshot );
 			$wpdb->insert( $outbox, array( 'registration_id' => $candidate['id'], 'recipient' => $candidate['buyer_email'], 'template_type' => 'WAITLIST_PROMOTION', 'payload_json' => wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $candidate['order_code'], 'status' => $promoted_status, 'email_preview' => $email_snapshot ) ), 'status' => $email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) );
@@ -1021,9 +1056,15 @@ final class MI_Registration_Service {
 
 	private static function scrub_relay_only_fields( $registration_id, $event_id ) {
 		global $wpdb;
-		$event = self::public_event( $event_id, true );
-		if ( is_wp_error( $event ) ) return;
-		$relay_keys = MI_Field_Schema::relay_only_keys( $event['participant_fields'] ?? array() );
+		$snapshot_json = (string) $wpdb->get_var( $wpdb->prepare( "SELECT snapshot_json FROM {$wpdb->prefix}mi_registrations WHERE id = %d", $registration_id ) );
+		$snapshot = json_decode( $snapshot_json, true );
+		$historical_fields = is_array( $snapshot ) ? (array) ( $snapshot['event']['participant_fields'] ?? array() ) : array();
+		if ( ! $historical_fields ) {
+			$event = self::public_event( $event_id, true );
+			if ( is_wp_error( $event ) ) return;
+			$historical_fields = (array) ( $event['participant_fields'] ?? array() );
+		}
+		$relay_keys = MI_Field_Schema::relay_only_keys( $historical_fields );
 		if ( ! $relay_keys ) return;
 		$table = $wpdb->prefix . 'mi_participants';
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, extra_json FROM {$table} WHERE registration_id = %d", $registration_id ), ARRAY_A );

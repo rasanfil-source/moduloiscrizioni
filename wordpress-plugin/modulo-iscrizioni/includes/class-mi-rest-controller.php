@@ -52,6 +52,7 @@ final class MI_REST_Controller {
 	}
 
 	private static function verify_workspace_envelope( array $envelope ) {
+		global $wpdb;
 		$timestamp = isset( $envelope['timestamp'] ) ? (int) $envelope['timestamp'] : 0;
 		$nonce = preg_replace( '/[^A-Za-z0-9_-]/', '', (string) ( $envelope['nonce'] ?? '' ) );
 		$action = strtoupper( sanitize_key( (string) ( $envelope['action'] ?? '' ) ) );
@@ -63,15 +64,27 @@ final class MI_REST_Controller {
 		$expected = rtrim( strtr( base64_encode( hash_hmac( 'sha256', $message, $secret, true ) ), '+/', '-_' ), '=' );
 		if ( ! hash_equals( $expected, $signature ) ) return new WP_Error( 'mi_workspace_signature_invalid', 'Firma Workspace non valida.', array( 'status' => 401 ) );
 		$nonce_key = 'mi_workspace_command_nonce_' . hash( 'sha256', $nonce );
-		if ( get_transient( $nonce_key ) ) return new WP_Error( 'mi_workspace_replay', 'Richiesta Workspace già utilizzata.', array( 'status' => 409 ) );
-		set_transient( $nonce_key, 1, 3 * MINUTE_IN_SECONDS );
+		$lock_name = 'mi_ws_nonce_' . substr( hash( 'sha256', $nonce ), 0, 48 );
+		$locked = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 2)', $lock_name ) );
+		if ( 1 !== $locked ) return new WP_Error( 'mi_workspace_busy', 'Verifica Workspace momentaneamente occupata.', array( 'status' => 503 ) );
+		try {
+			if ( get_transient( $nonce_key ) ) return new WP_Error( 'mi_workspace_replay', 'Richiesta Workspace già utilizzata.', array( 'status' => 409 ) );
+			set_transient( $nonce_key, 1, 3 * MINUTE_IN_SECONDS );
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+		}
 		return true;
 	}
 
 	private static function create_event_draft_from_workspace( array $payload ) {
+		global $wpdb;
 		$title = mb_substr( sanitize_text_field( $payload['title'] ?? '' ), 0, 160 );
 		$draft_id = sanitize_key( $payload['draft_id'] ?? '' );
 		if ( ! $title || ! $draft_id ) return new WP_Error( 'mi_workspace_event_invalid', 'Nome o identificativo della bozza mancante.', array( 'status' => 400 ) );
+		$lock_name = 'mi_ws_draft_' . substr( hash( 'sha256', $draft_id ), 0, 48 );
+		$locked = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 3)', $lock_name ) );
+		if ( 1 !== $locked ) return new WP_Error( 'mi_workspace_busy', 'Creazione bozza momentaneamente occupata.', array( 'status' => 503 ) );
+		try {
 		$existing = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => 1, 'meta_key' => '_mi_workspace_draft_id', 'meta_value' => $draft_id ) );
 		if ( $existing ) return rest_ensure_response( self::event_draft_response( (int) $existing[0]->ID ) );
 		$copy_id = absint( $payload['copy_event_id'] ?? 0 );
@@ -101,6 +114,9 @@ final class MI_REST_Controller {
 		$page_id = wp_insert_post( array( 'post_type' => 'page', 'post_status' => 'draft', 'post_title' => $title, 'post_content' => '[modulo_iscrizioni event="' . (int) $event_id . '"]' ), true );
 		if ( ! is_wp_error( $page_id ) ) { update_post_meta( $page_id, '_wp_page_template', MI_Shortcode::FOCUSED_TEMPLATE ); update_post_meta( $event_id, '_mi_registration_page_id', (int) $page_id ); }
 		return rest_ensure_response( self::event_draft_response( $event_id ) );
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+		}
 	}
 
 	private static function event_draft_response( $event_id ) {

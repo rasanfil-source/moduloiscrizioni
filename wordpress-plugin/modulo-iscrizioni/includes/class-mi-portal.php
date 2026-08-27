@@ -66,9 +66,11 @@ final class MI_Portal {
 	}
 
 	public static function url() {
+		static $resolved_url = null;
+		if ( null !== $resolved_url ) return $resolved_url;
 		$pages = get_posts( array( 'post_type' => 'page', 'post_status' => 'publish', 'numberposts' => -1, 's' => '[' . self::SHORTCODE ) );
-		foreach ( $pages as $page ) if ( has_shortcode( $page->post_content, self::SHORTCODE ) ) return get_permalink( $page->ID );
-		return add_query_arg( 'mi_portal', '1', home_url( '/' ) );
+		foreach ( $pages as $page ) if ( has_shortcode( $page->post_content, self::SHORTCODE ) ) return $resolved_url = get_permalink( $page->ID );
+		return $resolved_url = add_query_arg( 'mi_portal', '1', home_url( '/' ) );
 	}
 
 	public static function participant_cancel_url( $participant_id, $token ) {
@@ -77,8 +79,10 @@ final class MI_Portal {
 
 	public static function render_virtual_page() {
 		if ( empty( $_GET['mi_portal'] ) ) return;
-		status_header( 200 ); nocache_headers(); self::assets();
-		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><?php wp_head(); ?></head><body class="mi-portal-standalone"><?php echo self::render(); wp_footer(); ?></body></html><?php
+		status_header( 200 );
+		nocache_headers();
+		$asset_version = rawurlencode( MI_VERSION );
+		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><title><?php echo esc_html( get_bloginfo( 'name' ) . ' — Gestione iscrizioni' ); ?></title><link rel="stylesheet" href="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal.css?ver=' . $asset_version ); ?>"></head><body class="mi-portal-standalone"><?php echo self::render(); ?><script defer src="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal.js?ver=' . $asset_version ); ?>"></script></body></html><?php
 		exit;
 	}
 
@@ -116,7 +120,7 @@ final class MI_Portal {
 		$view = sanitize_key( wp_unslash( $_GET['mi_portal_view'] ?? 'manage' ) );
 		$can_create = current_user_can( 'mi_create_events' ) || current_user_can( 'manage_options' );
 		ob_start();
-		?><main class="mi-portal"><header class="mi-portal-header"><div><span class="mi-portal-eyebrow">Servizio iscrizioni</span><h1>Gestione eventi</h1></div><a class="mi-portal-logout" href="<?php echo esc_url( wp_logout_url( get_permalink() ) ); ?>">Esci</a></header>
+		?><main class="mi-portal"><header class="mi-portal-header"><div><span class="mi-portal-eyebrow">Servizio iscrizioni</span><h1>Gestione eventi</h1></div><a class="mi-portal-logout" href="<?php echo esc_url( wp_logout_url( self::base_url() ) ); ?>">Esci</a></header>
 		<nav class="mi-portal-switcher" aria-label="Vista portale"><?php if ( $can_create ) : ?><a class="<?php echo 'create' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'create' ) ); ?>">Crea evento</a><?php endif; ?><a class="<?php echo 'create' !== $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'manage' ) ); ?>"><?php echo esc_html( self::manage_label() ); ?></a></nav>
 		<?php self::notice(); ?>
 		<?php if ( 'create' === $view && $can_create ) self::create_view(); else self::manage_view(); ?>
@@ -134,7 +138,7 @@ final class MI_Portal {
 	}
 
 	private static function login_view() {
-		ob_start(); ?><section class="mi-portal mi-portal-login"><span class="mi-portal-eyebrow">Area riservata</span><h1>Gestione iscrizioni</h1><p>Accedi come segretario o operatore. Se sei già autenticato in WordPress entrerai direttamente.</p><?php wp_login_form( array( 'redirect' => get_permalink(), 'label_username' => 'Utente', 'label_password' => 'Parola d’accesso', 'label_log_in' => 'Accedi', 'remember' => true ) ); ?></section><?php return ob_get_clean();
+		ob_start(); ?><section class="mi-portal mi-portal-login"><span class="mi-portal-eyebrow">Area riservata</span><h1>Gestione iscrizioni</h1><p>Accedi come segretario o operatore. Se sei già autenticato in WordPress entrerai direttamente.</p><?php wp_login_form( array( 'redirect' => self::base_url(), 'label_username' => 'Utente', 'label_password' => 'Parola d’accesso', 'label_log_in' => 'Accedi', 'remember' => true ) ); ?></section><?php return ob_get_clean();
 	}
 
 	private static function manage_label() {
@@ -144,23 +148,38 @@ final class MI_Portal {
 		return 'Gestisci eventi';
 	}
 
-	private static function accessible_event_ids() {
-		$scope = MI_Access::event_ids();
-		if ( 'ALL' !== $scope ) return $scope;
-		return get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => -1, 'fields' => 'ids' ) );
-	}
-
 	private static function manage_view() {
 		global $wpdb;
-		$ids = self::accessible_event_ids();
-		if ( ! $ids ) { echo '<section class="mi-portal-empty"><div class="mi-portal-bubble">Na⁺</div><h2>C’è qualcuno qui…?</h2><p>Al momento non ti è stato assegnato nessun evento. Chiedi all’amministratore o al segretario di associarti a un evento.</p></section>'; return; }
-		$events = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'post__in' => $ids, 'numberposts' => -1, 'orderby' => 'date', 'order' => 'DESC' ) );
+		$scope = MI_Access::event_ids();
+		if ( 'ALL' !== $scope && ! $scope ) { echo '<section class="mi-portal-empty"><div class="mi-portal-bubble">Na⁺</div><h2>C’è qualcuno qui…?</h2><p>Al momento non ti è stato assegnato nessun evento. Chiedi all’amministratore o al segretario di associarti a un evento.</p></section>'; return; }
+		$query = array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => -1, 'orderby' => 'date', 'order' => 'DESC', 'update_post_term_cache' => false );
+		if ( 'ALL' !== $scope ) $query['post__in'] = $scope;
+		$events = get_posts( $query );
+		$ids = wp_list_pluck( $events, 'ID' );
+		if ( ! $ids ) { echo '<section class="mi-portal-empty"><div class="mi-portal-bubble">Na⁺</div><h2>C’è qualcuno qui…?</h2><p>Non ci sono eventi visibili.</p></section>'; return; }
+		$safe_ids = implode( ',', array_map( 'absint', $ids ) );
+		$counts = array();
+		foreach ( $wpdb->get_results( "SELECT event_id,confirmed_count FROM {$wpdb->prefix}mi_event_counters WHERE event_id IN ({$safe_ids})", ARRAY_A ) as $counter ) $counts[ (int) $counter['event_id'] ] = (int) $counter['confirmed_count'];
+		$published_summaries = array();
+		$revision_ids = array();
+		foreach ( $events as $event ) if ( 'publish' === $event->post_status ) { $revision_id = absint( get_post_meta( $event->ID, '_mi_published_revision_id', true ) ); if ( $revision_id ) $revision_ids[] = $revision_id; }
+		if ( $revision_ids ) {
+			$revision_list = implode( ',', array_map( 'absint', array_unique( $revision_ids ) ) );
+			foreach ( $wpdb->get_results( "SELECT event_id,config_json FROM {$wpdb->prefix}mi_event_revisions WHERE id IN ({$revision_list})", ARRAY_A ) as $revision ) {
+				$config = json_decode( (string) $revision['config_json'], true );
+				if ( is_array( $config ) ) $published_summaries[ (int) $revision['event_id'] ] = $config;
+			}
+		}
+		$base_url = self::base_url();
 		echo '<section><h2>Eventi</h2><div class="mi-event-grid">';
 		foreach ( $events as $event ) {
-			$count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(total_qty),0) FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status IN ('CONFIRMED','PENDING_PAYMENT')", $event->ID ) );
-			$capacity = max( 1, absint( get_post_meta( $event->ID, '_mi_capacity', true ) ) );
-			$url = add_query_arg( array( 'mi_portal_view' => 'manage', 'mi_portal_event' => $event->ID ), get_permalink() );
-			echo '<a class="mi-event-card" href="' . esc_url( $url ) . '"><strong>' . esc_html( $event->post_title ) . '</strong><small>' . esc_html( self::format_date( get_post_meta( $event->ID, '_mi_event_starts_at', true ) ) ) . '</small><small>' . esc_html( $count . ' / ' . $capacity . ' prenotazioni · ' . ( 'publish' === $event->post_status ? 'Attivo' : 'Bozza' ) ) . '</small><small>Scadenza: ' . esc_html( self::format_date( get_post_meta( $event->ID, '_mi_registration_closes_at', true ) ) ) . '</small></a>';
+			$count = (int) ( $counts[ $event->ID ] ?? 0 );
+			$published = (array) ( $published_summaries[ $event->ID ] ?? array() );
+			$capacity = max( 1, absint( $published['capacity'] ?? get_post_meta( $event->ID, '_mi_capacity', true ) ) );
+			$starts_at = (string) ( $published['event_starts_at'] ?? get_post_meta( $event->ID, '_mi_event_starts_at', true ) );
+			$closes_at = (string) ( $published['closes_at'] ?? get_post_meta( $event->ID, '_mi_registration_closes_at', true ) );
+			$url = add_query_arg( array( 'mi_portal_view' => 'manage', 'mi_portal_event' => $event->ID ), $base_url );
+			echo '<a class="mi-event-card" href="' . esc_url( $url ) . '"><strong>' . esc_html( $event->post_title ) . '</strong><small>' . esc_html( self::format_date( $starts_at ) ) . '</small><small>' . esc_html( $count . ' / ' . $capacity . ' posti occupati · ' . ( 'publish' === $event->post_status ? 'Attivo' : 'Bozza' ) ) . '</small><small>Scadenza: ' . esc_html( self::format_date( $closes_at ) ) . '</small></a>';
 		}
 		echo '</div></section>';
 		$selected = absint( $_GET['mi_portal_event'] ?? 0 );
@@ -170,9 +189,10 @@ final class MI_Portal {
 	private static function registrations_view( $event_id = 0, $event_ids = array() ) {
 		global $wpdb;
 		if ( $event_id ) { $where = $wpdb->prepare( 'r.event_id=%d', $event_id ); } else { $safe = array_values( array_filter( array_map( 'absint', $event_ids ) ) ); $where = 'r.event_id IN (' . implode( ',', $safe ) . ')'; }
-		$rows = $wpdb->get_results( "SELECT r.id registration_id,r.event_id,r.created_at,r.buyer_email,p.id participant_id,p.first_name,p.last_name FROM {$wpdb->prefix}mi_registrations r JOIN {$wpdb->prefix}mi_participants p ON p.registration_id=r.id WHERE {$where} ORDER BY r.created_at DESC,p.id ASC LIMIT 10", ARRAY_A );
+		$rows = $wpdb->get_results( "SELECT r.id registration_id,r.event_id,r.created_at,r.buyer_email,p.id participant_id,p.first_name,p.last_name,events.post_title event_title FROM {$wpdb->prefix}mi_registrations r JOIN {$wpdb->prefix}mi_participants p ON p.registration_id=r.id JOIN {$wpdb->posts} events ON events.ID=r.event_id WHERE {$where} ORDER BY r.created_at DESC,p.id ASC LIMIT 10", ARRAY_A );
+		$base_url = self::base_url();
 		echo '<section><h2>Ultime iscrizioni</h2><div class="mi-booking-list">';
-		foreach ( $rows as $index => $row ) { $url = add_query_arg( array( 'mi_portal_view' => 'manage', 'mi_portal_booking' => $row['registration_id'] ), get_permalink() ); echo '<a href="' . esc_url( $url ) . '"><span>' . esc_html( $index + 1 ) . '</span><strong>' . esc_html( $row['first_name'] . ' ' . $row['last_name'] ) . '</strong><small>' . esc_html( get_the_title( $row['event_id'] ) . ' · ' . $row['created_at'] . ' · ' . $row['buyer_email'] ) . '</small></a>'; }
+		foreach ( $rows as $index => $row ) { $url = add_query_arg( array( 'mi_portal_view' => 'manage', 'mi_portal_booking' => $row['registration_id'] ), $base_url ); echo '<a href="' . esc_url( $url ) . '"><span>' . esc_html( $index + 1 ) . '</span><strong>' . esc_html( $row['first_name'] . ' ' . $row['last_name'] ) . '</strong><small>' . esc_html( $row['event_title'] . ' · ' . self::format_utc_date( $row['created_at'] ) . ' · ' . $row['buyer_email'] ) . '</small></a>'; }
 		if ( ! $rows ) echo '<p class="mi-portal-muted">Nessuna iscrizione presente.</p>';
 		echo '</div></section>';
 		$booking_id = absint( $_GET['mi_portal_booking'] ?? 0 ); if ( $booking_id ) self::booking_detail( $booking_id );
@@ -182,11 +202,14 @@ final class MI_Portal {
 		global $wpdb; $registration = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_registrations WHERE id=%d", $registration_id ), ARRAY_A );
 		if ( ! $registration || ! MI_Access::can_access_event( (int) $registration['event_id'] ) ) return;
 		$participants = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_participants WHERE registration_id=%d ORDER BY id", $registration_id ), ARRAY_A );
+		$snapshot = json_decode( (string) ( $registration['snapshot_json'] ?? '' ), true );
+		$field_labels = array();
+		foreach ( (array) ( $snapshot['event']['participant_fields'] ?? array() ) as $field ) { $key = sanitize_key( $field['key'] ?? '' ); $label = sanitize_text_field( $field['label'] ?? '' ); if ( $key && $label ) $field_labels[ $key ] = $label; }
 		echo '<section class="mi-booking-detail"><h2>Prenotazione ' . esc_html( $registration['order_code'] ) . '</h2><p><strong>Referente:</strong> ' . esc_html( $registration['buyer_first_name'] . ' ' . $registration['buyer_last_name'] ) . '<br>' . esc_html( $registration['buyer_email'] . ' · ' . $registration['buyer_phone'] ) . '</p>';
 		foreach ( $participants as $participant ) {
 			echo '<article><h3>' . esc_html( $participant['first_name'] . ' ' . $participant['last_name'] ) . ( 'CANCELLED' === $participant['status'] ? ' <small>— Annullata</small>' : '' ) . '</h3>';
 			$fields = json_decode( (string) $participant['extra_json'], true );
-			foreach ( (array) $fields as $key => $value ) if ( '' !== (string) $value ) echo '<p><span>' . esc_html( ucfirst( str_replace( '_', ' ', preg_replace( '/^custom_/', '', $key ) ) ) ) . '</span><strong>' . esc_html( is_scalar( $value ) ? (string) $value : wp_json_encode( $value ) ) . '</strong></p>';
+			foreach ( (array) $fields as $key => $value ) if ( '' !== (string) $value ) echo '<p><span>' . esc_html( $field_labels[ $key ] ?? ucfirst( str_replace( '_', ' ', preg_replace( '/^custom_/', '', $key ) ) ) ) . '</span><strong>' . esc_html( is_scalar( $value ) ? (string) $value : wp_json_encode( $value ) ) . '</strong></p>';
 			if ( 'ACTIVE' === ( $participant['status'] ?: 'ACTIVE' ) ) {
 				echo '<form method="post" onsubmit="return confirm(\'Annullare la partecipazione di questa persona?\')"><input type="hidden" name="mi_portal_action" value="cancel_participant_portal"><input type="hidden" name="participant_id" value="' . esc_attr( $participant['id'] ) . '">';
 				wp_nonce_field( 'mi_cancel_participant_portal_' . $participant['id'], 'mi_portal_nonce' );
@@ -209,6 +232,16 @@ final class MI_Portal {
 		<div class="mi-wizard-actions"><button type="button" class="mi-secondary" data-mi-back disabled>Indietro</button><button type="button" class="mi-primary" data-mi-next>Continua</button></div></form><?php
 	}
 
-	private static function format_date( $value ) { if ( ! $value ) return 'Data da definire'; $time = strtotime( str_replace( 'T', ' ', $value ) ); return $time ? wp_date( 'd/m/Y H:i', $time ) : $value; }
+	private static function format_date( $value ) {
+		if ( ! $value ) return 'Data da definire';
+		$date = DateTimeImmutable::createFromFormat( '!Y-m-d\TH:i', (string) $value, wp_timezone() );
+		return $date instanceof DateTimeImmutable ? wp_date( 'd/m/Y H:i', $date->getTimestamp(), wp_timezone() ) : (string) $value;
+	}
+	private static function format_utc_date( $value ) {
+		if ( ! $value ) return 'Data non disponibile';
+		$date = DateTimeImmutable::createFromFormat( '!Y-m-d H:i:s', (string) $value, new DateTimeZone( 'UTC' ) );
+		return $date instanceof DateTimeImmutable ? wp_date( 'd/m/Y H:i', $date->getTimestamp(), wp_timezone() ) : (string) $value;
+	}
+	private static function base_url() { return ! empty( $_GET['mi_portal'] ) ? add_query_arg( 'mi_portal', '1', home_url( '/' ) ) : get_permalink(); }
 	private static function notice() { if ( empty( $_GET['mi_portal_message'] ) ) return; $error = ! empty( $_GET['mi_portal_error'] ); echo '<div class="mi-portal-notice ' . ( $error ? 'mi-portal-error' : '' ) . '">' . esc_html( sanitize_text_field( wp_unslash( $_GET['mi_portal_message'] ) ) ) . '</div>'; }
 }
