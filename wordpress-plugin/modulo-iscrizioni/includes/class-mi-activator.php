@@ -57,6 +57,7 @@ final class MI_Activator {
 			buyer_last_name varchar(80) NOT NULL,
 			buyer_email varchar(254) NOT NULL,
 			buyer_phone varchar(32) NOT NULL,
+			special_requests text NULL,
 			total_qty smallint(5) unsigned NOT NULL,
 			economic_mode varchar(24) NOT NULL DEFAULT 'REGISTRATION_ONLY',
 			total_cents int(10) unsigned NOT NULL DEFAULT 0,
@@ -110,8 +111,13 @@ final class MI_Activator {
 			last_name varchar(80) NOT NULL,
 			extra_json longtext NULL,
 			options_json longtext NULL,
+			status varchar(24) NOT NULL DEFAULT 'ACTIVE',
+			cancellation_token_hash char(64) NULL,
+			cancelled_at datetime NULL,
+			cancellation_actor varchar(120) NULL,
 			PRIMARY KEY  (id),
-			KEY registration_id (registration_id)
+			KEY registration_id (registration_id),
+			KEY participant_status (registration_id,status)
 		) ENGINE=InnoDB {$charset};" );
 
 		dbDelta( "CREATE TABLE {$counters} (
@@ -228,6 +234,8 @@ final class MI_Activator {
 		);
 
 		add_role( 'mi_event_manager', 'Gestore iscrizioni', $capabilities );
+		add_role( 'mi_secretary', 'Segretario iscrizioni', array( 'read' => true, 'mi_portal_access' => true, 'mi_manage_all_events' => true, 'mi_create_events' => true, 'mi_view_registrations' => true ) );
+		add_role( 'mi_event_operator', 'Operatore evento', array( 'read' => true, 'mi_portal_access' => true, 'mi_view_registrations' => true ) );
 		$manager = get_role( 'mi_event_manager' );
 		if ( $manager ) {
 			foreach ( $capabilities as $capability => $grant ) {
@@ -236,9 +244,13 @@ final class MI_Activator {
 		}
 		$administrator = get_role( 'administrator' );
 		if ( $administrator ) {
-			foreach ( array_keys( $capabilities ) as $capability ) {
+			foreach ( array_merge( array_keys( $capabilities ), array( 'mi_portal_access', 'mi_manage_all_events', 'mi_create_events' ) ) as $capability ) {
 				$administrator->add_cap( $capability );
 			}
 		}
+		$secretary = get_role( 'mi_secretary' );
+		if ( $secretary ) foreach ( array( 'read', 'mi_portal_access', 'mi_manage_all_events', 'mi_create_events', 'mi_view_registrations' ) as $capability ) $secretary->add_cap( $capability );
+		$operator = get_role( 'mi_event_operator' );
+		if ( $operator ) foreach ( array( 'read', 'mi_portal_access', 'mi_view_registrations' ) as $capability ) $operator->add_cap( $capability );
 	}
 }

@@ -30,7 +30,7 @@ class FakeSheet {
 
 function environment() {
   const headers = {
-    Iscrizioni: ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'hash_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'versione_informativa_privacy', 'data_accettazione_privacy', 'biglietti_json', 'id_consenso_marketing', 'data_accettazione_marketing', 'opzioni_ordine_json'],
+    Iscrizioni: ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'richieste_particolari', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'hash_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'versione_informativa_privacy', 'data_accettazione_privacy', 'biglietti_json', 'id_consenso_marketing', 'data_accettazione_marketing', 'opzioni_ordine_json'],
     Partecipanti: ['codice_ordine', 'numero_partecipante', 'codice_tipologia', 'indice_tipologia', 'nome', 'cognome', 'dati_aggiuntivi_json', 'opzioni_json'],
     Pagamenti: ['id_pagamento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo_centesimi', 'valuta', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'canale_registrazione', 'id_inserimento_origine', 'data_creazione', 'nota_amministrativa'],
     'Coda email': ['id_messaggio', 'codice_ordine', 'destinatario', 'tipo_modello', 'contenuto_json', 'stato', 'data_creazione'],
@@ -74,7 +74,7 @@ test('APPEND_REGISTRATION riconcilia retry e ripara una proiezione partecipanti 
   assert.equal(first.ok, true);
   assert.equal(sheets.Iscrizioni.rows.length, 2);
   assert.equal(sheets.Partecipanti.rows.length, 3);
-  const createdAt = sheets.Iscrizioni.rows[1][10].getTime();
+  const createdAt = sheets.Iscrizioni.rows[1][11].getTime();
   const messageCreatedAt = sheets['Coda email'].rows[1][6].getTime();
 
   sheets.Partecipanti.deleteRow(3);
@@ -87,7 +87,7 @@ test('APPEND_REGISTRATION riconcilia retry e ripara una proiezione partecipanti 
   assert.equal(sheets.Iscrizioni.rows.length, 2);
   assert.equal(sheets.Partecipanti.rows.length, 3);
   assert.equal(sheets.Partecipanti.rows[2][5], 'Due aggiornata');
-  assert.equal(sheets.Iscrizioni.rows[1][10].getTime(), createdAt);
+  assert.equal(sheets.Iscrizioni.rows[1][11].getTime(), createdAt);
   assert.equal(sheets['Coda email'].rows[1][6].getTime(), messageCreatedAt);
 
   const cancelled = context.aggiungiIscrizione_(payload({ status: 'CANCELLED' }));
@@ -104,9 +104,9 @@ test('APPEND_REGISTRATION rifiuta conflitti e mapping partecipanti non biunivoci
   assert.equal(context.aggiungiIscrizione_(invalid).error, 'INVALID_PARTICIPANTS');
 });
 
-test('APPEND_REGISTRATION accetta partecipanti secondari lasciati facoltativamente vuoti', () => {
+test('APPEND_REGISTRATION richiede nome e cognome per ogni partecipante', () => {
   const { context } = environment();
   const optional = payload();
   optional.participants[1] = { ticket_type_code: 'standard', ticket_index: 2, first_name: '', last_name: '', fields: {}, options: [] };
-  assert.equal(context.aggiungiIscrizione_(optional).ok, true);
+  assert.equal(context.aggiungiIscrizione_(optional).error, 'INVALID_PARTICIPANTS');
 });

@@ -82,8 +82,8 @@ final class MI_Modello_Email {
 		<p><label for="mi_email_sender_name"><strong>Nome visualizzato del mittente</strong></label><br><input class="widefat" id="mi_email_sender_name" name="mi_email_sender_name" maxlength="120" value="<?php echo esc_attr( $settings['sender_name'] ); ?>" placeholder="Lascia vuoto per usare il valore organizzativo"></p>
 		<p><label for="mi_email_reply_to"><strong>Indirizzo per le risposte</strong></label><br><input class="widefat" id="mi_email_reply_to" name="mi_email_reply_to" type="email" value="<?php echo esc_attr( $settings['reply_to'] ); ?>" placeholder="Lascia vuoto per usare il valore organizzativo"></p>
 		</div>
-		<p><label for="mi_email_internal_recipients"><strong>Destinatari interni in anteprima</strong></label><br><textarea class="widefat" id="mi_email_internal_recipients" name="mi_email_internal_recipients" rows="2" placeholder="Un indirizzo per riga, massimo 10"><?php echo esc_textarea( implode( "\n", (array) $settings['internal_recipients'] ) ); ?></textarea></p>
-		<p class="description">Questi indirizzi vengono soltanto validati e conservati nella configurazione riservata. Nessun messaggio viene inviato.</p>
+		<p><label for="mi_email_internal_recipients"><strong>Indirizzi interni per le email di prova</strong></label><br><textarea class="widefat" id="mi_email_internal_recipients" name="mi_email_internal_recipients" rows="2" placeholder="Un indirizzo per riga, massimo 10"><?php echo esc_textarea( implode( "\n", (array) $settings['internal_recipients'] ) ); ?></textarea></p>
+		<p class="description">Sono gli indirizzi interni riservati alle prove. In modalità Anteprima nessuna email viene inviata; gli indirizzi vengono soltanto validati e conservati nella configurazione riservata.</p>
 		<p><label for="mi_email_subject"><strong>Oggetto</strong></label><br><input class="widefat" id="mi_email_subject" name="mi_email_subject" maxlength="180" value="<?php echo esc_attr( $settings['subject'] ); ?>"></p>
 		<p><label for="mi_email_preheader"><strong>Preheader</strong></label><br><input class="widefat" id="mi_email_preheader" name="mi_email_preheader" maxlength="240" value="<?php echo esc_attr( $settings['preheader'] ); ?>"></p>
 		<p><label for="mi_email_html"><strong>Corpo HTML</strong></label><br><textarea class="widefat" id="mi_email_html" name="mi_email_html" rows="8"><?php echo esc_textarea( $settings['html'] ); ?></textarea></p>
@@ -97,6 +97,8 @@ final class MI_Modello_Email {
 
 	public static function crea_istantanea( $event_id, $values ) {
 		$settings = self::impostazioni( $event_id );
+		$participant_management = isset( $values['_participant_management'] ) && is_array( $values['_participant_management'] ) ? $values['_participant_management'] : array();
+		unset( $values['_participant_management'] );
 		$snapshot = array( 'attivo' => '1' === $settings['enabled'] );
 		foreach ( array( 'subject' => 'oggetto', 'preheader' => 'preheader', 'html' => 'html', 'text' => 'testo', 'footer' => 'footer' ) as $source => $destination ) {
 			$snapshot[ $destination ] = 'html' === $source ? self::renderizza_html( $settings[ $source ], $values ) : self::renderizza( $settings[ $source ], $values );
@@ -132,6 +134,11 @@ final class MI_Modello_Email {
 			'codice'   => (string) ( $values['{{ordine.codice}}'] ?? '' ),
 			'payload_qr' => 'modulo-iscrizioni|evento:' . absint( $event_id ) . '|ordine:' . sanitize_text_field( (string) ( $values['{{ordine.codice}}'] ?? '' ) ),
 		);
+		$snapshot['gestione_partecipanti'] = array_values( array_filter( array_map( static function ( $item ) {
+			$name = sanitize_text_field( (string) ( $item['name'] ?? '' ) );
+			$url = esc_url_raw( (string) ( $item['url'] ?? '' ) );
+			return $name && $url ? array( 'nome' => $name, 'url' => $url ) : null;
+		}, $participant_management ) ) );
 		$snapshot['revisione'] = hash( 'sha256', wp_json_encode( $settings ) );
 		return $snapshot;
 	}
@@ -225,6 +232,12 @@ final class MI_Modello_Email {
 		$activity_name = sanitize_text_field( (string) ( $identity['nome_attivita'] ?? '' ) );
 		$title = sanitize_text_field( (string) ( $event['titolo'] ?? '' ) );
 		$body = self::sanitizza_html_email( $istantanea['html'] ?? '' );
+		$management_html = '';
+		if ( ! empty( $istantanea['gestione_partecipanti'] ) && is_array( $istantanea['gestione_partecipanti'] ) ) {
+			$management_html = '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin-top:20px;border-top:1px solid #e4e8ef;"><tr><td style="padding-top:18px"><div style="font-size:15px;font-weight:700;margin-bottom:8px;">Gestisci le partecipazioni</div><div style="font-size:13px;color:#666;margin-bottom:10px;">Ogni collegamento riguarda una sola persona e richiede una conferma.</div>';
+			foreach ( $istantanea['gestione_partecipanti'] as $item ) $management_html .= '<div style="margin:8px 0"><a href="' . esc_url( $item['url'] ?? '' ) . '" style="color:' . esc_attr( $secondary ) . ';font-weight:700;text-decoration:none;">Annulla la partecipazione di ' . esc_html( $item['nome'] ?? '' ) . '</a></div>';
+			$management_html .= '</td></tr></table>';
+		}
 		$footer = nl2br( esc_html( $istantanea['footer'] ?? '' ) );
 		$code = (string) $codice_html;
 
@@ -235,7 +248,7 @@ final class MI_Modello_Email {
 			. '<div style="font-size:18px;font-weight:700;line-height:1.3;">' . esc_html( $title ?: 'Conferma iscrizione' ) . '</div>'
 			. ( $activity_name ? '<div style="font-size:13px;line-height:1.4;margin-top:5px;opacity:0.9;">' . esc_html( $activity_name ) . '</div>' : '' )
 			. '</td></tr><tr><td style="padding:24px 20px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#333333;font-size:16px;line-height:1.6;">'
-			. $body . $code . $cta
+			. $body . $code . $cta . $management_html
 			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#eef2ff" style="width:100%;margin-top:20px;background:#eef2ff;border-radius:14px;"><tr><td style="padding:16px 20px;font-family:Arial,Helvetica,sans-serif;color:#333333;"><div style="font-size:15px;font-weight:700;margin-bottom:8px;">Assistenza</div><div style="font-size:14px;line-height:1.7;">' . $assistance . '</div></td></tr></table>'
 			. '<div style="font-family:Arial,Helvetica,sans-serif;color:' . esc_attr( $secondary ) . ';font-size:14px;font-style:italic;font-weight:700;margin-top:18px;text-align:right;">' . $footer . '</div>'
 			. '</td></tr></table>'
@@ -247,12 +260,15 @@ final class MI_Modello_Email {
 		$identity = isset( $istantanea['identita'] ) && is_array( $istantanea['identita'] ) ? $istantanea['identita'] : array();
 		$email_identity = isset( $istantanea['identita_email'] ) && is_array( $istantanea['identita_email'] ) ? $istantanea['identita_email'] : array();
 		$event = isset( $istantanea['evento'] ) && is_array( $istantanea['evento'] ) ? $istantanea['evento'] : array();
+		$management_lines = array();
+		foreach ( (array) ( $istantanea['gestione_partecipanti'] ?? array() ) as $item ) if ( ! empty( $item['nome'] ) && ! empty( $item['url'] ) ) $management_lines[] = 'Annulla la partecipazione di ' . sanitize_text_field( $item['nome'] ) . ': ' . esc_url_raw( $item['url'] );
 		$parts = array_filter( array(
 			sanitize_text_field( (string) ( $event['titolo'] ?? '' ) ),
 			sanitize_text_field( (string) ( $identity['nome_attivita'] ?? '' ) ),
 			sanitize_textarea_field( (string) ( $istantanea['testo'] ?? '' ) ),
 			! empty( $istantanea['identificativo']['codice'] ) ? 'Codice: ' . sanitize_text_field( $istantanea['identificativo']['codice'] ) : '',
 			! empty( $event['url'] ) ? 'Pagina evento: ' . esc_url_raw( $event['url'] ) : '',
+			$management_lines ? "Gestisci le partecipazioni:\n" . implode( "\n", $management_lines ) : '',
 			! empty( $email_identity['indirizzo_risposte'] ) ? 'Assistenza: ' . sanitize_email( $email_identity['indirizzo_risposte'] ) : 'Assistenza: rispondi a questa email.',
 			sanitize_textarea_field( (string) ( $istantanea['footer'] ?? '' ) ),
 		) );

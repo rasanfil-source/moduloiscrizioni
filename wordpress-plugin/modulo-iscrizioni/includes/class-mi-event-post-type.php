@@ -94,7 +94,19 @@ final class MI_Event_Post_Type {
 	public static function add_meta_boxes() {
 		add_meta_box( 'mi_event_configuration', 'Configurazione iscrizioni', array( __CLASS__, 'render_event_box' ), self::EVENT_TYPE, 'normal', 'high' );
 		add_meta_box( 'mi_event_shortcode', 'Pubblicazione nel sito', array( __CLASS__, 'render_shortcode_box' ), self::EVENT_TYPE, 'side', 'default' );
+		add_meta_box( 'mi_event_operators', 'Operatori dell’evento', array( __CLASS__, 'render_operators_box' ), self::EVENT_TYPE, 'side', 'default' );
 		add_meta_box( 'mi_activity_branding', 'Identità attività', array( __CLASS__, 'render_activity_box' ), self::ACTIVITY_TYPE, 'side', 'default' );
+	}
+
+	public static function render_operators_box( $post ) {
+		if ( ! current_user_can( 'manage_options' ) ) { echo '<p>Solo l’amministratore può modificare gli operatori.</p>'; return; }
+		$operators = get_users( array( 'role' => 'mi_event_operator', 'orderby' => 'display_name' ) );
+		echo '<p class="description">Un operatore può essere associato a più eventi. La password è gestita da WordPress e non viene salvata nell’evento.</p>';
+		foreach ( $operators as $operator ) {
+			$scope = MI_Access::event_ids( $operator->ID );
+			echo '<label style="display:block;margin:6px 0"><input type="checkbox" name="mi_event_operators[]" value="' . esc_attr( $operator->ID ) . '" ' . checked( in_array( $post->ID, (array) $scope, true ), true, false ) . '> ' . esc_html( $operator->display_name . ' (' . $operator->user_login . ')' ) . '</label>';
+		}
+		echo '<details style="margin-top:12px"><summary>Crea un nuovo operatore</summary><p><label>Nome utente<br><input name="mi_new_operator_login" autocomplete="off"></label></p><p><label>Password iniziale<br><input type="password" name="mi_new_operator_password" autocomplete="new-password"></label></p><p class="description">Almeno 12 caratteri con maiuscola, minuscola, numero e simbolo. Esempi deboli come “Francesco:26” vengono rifiutati.</p></details>';
 	}
 
 	public static function render_event_box( $post ) {
@@ -107,17 +119,16 @@ final class MI_Event_Post_Type {
 		$capacity = max( 1, absint( get_post_meta( $post->ID, '_mi_capacity', true ) ?: 30 ) );
 		$waitlist = '1' === get_post_meta( $post->ID, '_mi_waitlist_enabled', true );
 		$pricing_mode = get_post_meta( $post->ID, '_mi_pricing_mode', true ) ?: 'NONE';
+		$fixed_price_cents = max( 0, (int) get_post_meta( $post->ID, '_mi_fixed_price_cents', true ) );
 		$economic_mode = get_post_meta( $post->ID, '_mi_economic_mode', true ) ?: 'REGISTRATION_ONLY';
 		$deposit_percentage = min( 99, max( 1, absint( get_post_meta( $post->ID, '_mi_deposit_percentage', true ) ?: 30 ) ) );
 		$payment_methods = get_post_meta( $post->ID, '_mi_payment_methods', true );
 		$payment_methods = is_array( $payment_methods ) ? $payment_methods : array();
 		$identifier_display = get_post_meta( $post->ID, '_mi_identifier_display', true ) ?: 'TEXT';
 		$payment_deadline_at = (string) get_post_meta( $post->ID, '_mi_payment_deadline_at', true );
-		$privacy_policy_version = (string) get_post_meta( $post->ID, '_mi_privacy_policy_version', true );
-		$privacy_consent_id = (string) ( get_post_meta( $post->ID, '_mi_privacy_consent_id', true ) ?: 'privacy-' . $post->ID );
 		$marketing_enabled = '1' === get_post_meta( $post->ID, '_mi_marketing_enabled', true );
-		$marketing_consent_id = (string) ( get_post_meta( $post->ID, '_mi_marketing_consent_id', true ) ?: 'marketing-' . $post->ID );
-		$high_impact_approved = '1' === get_post_meta( $post->ID, '_mi_high_impact_approved', true );
+		$custom_participant_fields = MI_Field_Schema::sanitize_custom_fields( get_post_meta( $post->ID, '_mi_custom_participant_fields', true ) );
+		$special_requests_enabled = '1' === get_post_meta( $post->ID, '_mi_special_requests_enabled', true );
 		$ticket_types = get_post_meta( $post->ID, '_mi_ticket_types', true );
 		$options = get_post_meta( $post->ID, '_mi_options', true );
 		$options = is_array( $options ) ? $options : array();
@@ -134,7 +145,7 @@ final class MI_Event_Post_Type {
 		}
 		?>
 		<div class="mi-admin-grid">
-			<p><label for="mi_activity_id"><strong>Attività organizzatrice</strong></label><br>
+			<p><label for="mi_activity_id"><strong>Attività</strong></label><br>
 			<select id="mi_activity_id" name="mi_activity_id" required>
 				<option value="">Seleziona attività</option>
 				<?php foreach ( $activities as $activity ) : ?>
@@ -149,21 +160,25 @@ final class MI_Event_Post_Type {
 			<p><label><input name="mi_waitlist_enabled" type="checkbox" value="1" <?php checked( $waitlist ); ?>> Attiva automaticamente la lista d’attesa a esaurimento posti</label></p>
 			<p><label for="mi_payment_deadline_at"><strong>Scadenza prenotazioni non saldate</strong></label><br><input id="mi_payment_deadline_at" name="mi_payment_deadline_at" type="datetime-local" value="<?php echo esc_attr( $payment_deadline_at ); ?>"></p>
 			<p class="description">Lascia vuoto per non applicare una scadenza automatica. È usata soltanto per gli eventi con versamenti tracciati.</p>
-			<p><label for="mi_pricing_mode"><strong>Prezzo</strong></label><br><select id="mi_pricing_mode" name="mi_pricing_mode"><option value="NONE" <?php selected( $pricing_mode, 'NONE' ); ?>>Nessun prezzo</option><option value="ZERO" <?php selected( $pricing_mode, 'ZERO' ); ?>>Gratuito esplicito</option><option value="CALCULATED" <?php selected( $pricing_mode, 'CALCULATED' ); ?>>Calcolato dalle quote</option></select></p>
+			<p><label for="mi_pricing_mode"><strong>Prezzo</strong></label><br><select id="mi_pricing_mode" name="mi_pricing_mode"><option value="NONE" <?php selected( $pricing_mode, 'NONE' ); ?>>Nessun prezzo</option><option value="ZERO" <?php selected( $pricing_mode, 'ZERO' ); ?>>Gratuito</option><option value="FIXED" <?php selected( $pricing_mode, 'FIXED' ); ?>>Quota di partecipazione uguale per tutti</option><option value="CALCULATED" <?php selected( $pricing_mode, 'CALCULATED' ); ?>>Prezzi diversi secondo la tipologia</option></select></p>
+			<p data-mi-fixed-price><label for="mi_fixed_price"><strong>Quota di partecipazione per persona</strong></label><br><input id="mi_fixed_price" name="mi_fixed_price" type="number" min="0.01" step="0.01" value="<?php echo esc_attr( number_format( $fixed_price_cents / 100, 2, '.', '' ) ); ?>"> €</p>
 			<p><label for="mi_economic_mode"><strong>Modalità di pagamento richiesta</strong></label><br><select id="mi_economic_mode" name="mi_economic_mode"><option value="REGISTRATION_ONLY" <?php selected( $economic_mode, 'REGISTRATION_ONLY' ); ?>>Nessun pagamento previsto</option><option value="PRICE_ONLY" <?php selected( $economic_mode, 'PRICE_ONLY' ); ?>>Prezzo solamente informativo</option><option value="FULL_PAYMENT" <?php selected( $economic_mode, 'FULL_PAYMENT' ); ?>>Pagamento completo richiesto</option><option value="DEPOSIT_BALANCE" <?php selected( $economic_mode, 'DEPOSIT_BALANCE' ); ?>>Caparra richiesta, saldo successivo</option></select></p>
 			<p data-mi-economic-deposit><label for="mi_deposit_percentage"><strong>Caparra percentuale</strong></label><br><input id="mi_deposit_percentage" name="mi_deposit_percentage" type="number" min="1" max="99" value="<?php echo esc_attr( $deposit_percentage ); ?>"> %</p>
 			<fieldset data-mi-economic-payments><legend><strong>Fonti di pagamento ammesse</strong></legend><label><input type="checkbox" name="mi_payment_methods[]" value="BANK_TRANSFER" <?php checked( in_array( 'BANK_TRANSFER', $payment_methods, true ) ); ?>> Bonifico</label><br><label><input type="checkbox" name="mi_payment_methods[]" value="CARD" <?php checked( in_array( 'CARD', $payment_methods, true ) ); ?>> Carta</label><br><label><input type="checkbox" name="mi_payment_methods[]" value="CASH" <?php checked( in_array( 'CASH', $payment_methods, true ) ); ?>> Contante</label></fieldset>
 			<p class="description" data-mi-economic-help aria-live="polite"></p>
 			<p><label for="mi_identifier_display"><strong>Identificativo nell’email</strong></label><br><select id="mi_identifier_display" name="mi_identifier_display"><option value="NONE" <?php selected( $identifier_display, 'NONE' ); ?>>Non mostrare</option><option value="TEXT" <?php selected( $identifier_display, 'TEXT' ); ?>>Testo</option><option value="QR" <?php selected( $identifier_display, 'QR' ); ?>>QR facoltativo</option><option value="BARCODE" <?php selected( $identifier_display, 'BARCODE' ); ?>>Barcode facoltativo</option></select></p>
 			<p class="description">QR e barcode sono scelte dell’organizzatore. Il payload resta legato all’evento e al codice ordine, senza dati personali.</p>
-			<p><label for="mi_privacy_policy_version"><strong>Versione informativa privacy</strong></label><br><input id="mi_privacy_policy_version" name="mi_privacy_policy_version" maxlength="64" value="<?php echo esc_attr( $privacy_policy_version ); ?>" placeholder="Es. 2026-08"></p>
-			<p><label for="mi_privacy_consent_id"><strong>ID consenso privacy</strong></label><br><input id="mi_privacy_consent_id" name="mi_privacy_consent_id" maxlength="100" value="<?php echo esc_attr( $privacy_consent_id ); ?>"></p>
-			<p><label><input name="mi_marketing_enabled" type="checkbox" value="1" <?php checked( $marketing_enabled ); ?>> Mostra il campo facoltativo “Comunicazioni su future iniziative”</label></p>
-			<p><label for="mi_marketing_consent_id"><strong>ID del consenso alle comunicazioni</strong></label><br><input id="mi_marketing_consent_id" name="mi_marketing_consent_id" maxlength="100" value="<?php echo esc_attr( $marketing_consent_id ); ?>"></p>
-			<p><label><input name="mi_high_impact_approved" type="checkbox" value="1" <?php checked( $high_impact_approved ); ?>> La verifica privacy per campi ad alto impatto è stata approvata</label></p>
+			<p><label><input name="mi_marketing_enabled" type="checkbox" value="1" <?php checked( $marketing_enabled ); ?>> Chiedi: “Vuoi essere avvisato delle future iniziative?”</label></p>
+			<p><label><input name="mi_special_requests_enabled" type="checkbox" value="1" <?php checked( $special_requests_enabled ); ?>> Mostra il campo facoltativo “Richieste particolari”</label></p>
 		</div>
 		<hr>
 		<h3>Dati dei partecipanti</h3>
+		<?php $participant_extra_scope = 'ALL' === strtoupper( (string) get_post_meta( $post->ID, '_mi_participant_extra_scope', true ) ) ? 'ALL' : 'ONE'; ?>
+		<fieldset><legend><strong>A chi chiedere i dati aggiuntivi</strong></legend>
+			<label><input type="radio" name="mi_participant_extra_scope" value="ONE" <?php checked( $participant_extra_scope, 'ONE' ); ?>> Solo a uno degli iscritti (il primo è selezionato automaticamente)</label><br>
+			<label><input type="radio" name="mi_participant_extra_scope" value="ALL" <?php checked( $participant_extra_scope, 'ALL' ); ?>> A tutti gli iscritti</label>
+		</fieldset>
+		<p class="description">Nome e cognome restano sempre obbligatori per ogni partecipante. Se scegli “solo a uno”, gli altri dati possono comunque essere aggiunti facoltativamente.</p>
 		<p><label for="mi_data_profile"><strong>Profilo iniziale</strong></label><br>
 		<select id="mi_data_profile" name="mi_data_profile">
 		<?php foreach ( $field_profiles as $profile_key => $profile ) : ?>
@@ -184,6 +199,14 @@ final class MI_Event_Post_Type {
 			<strong>Anteprima partecipante</strong>
 			<ul data-mi-field-preview></ul>
 		</div>
+		<h3>Domande personalizzate</h3>
+		<p class="description">Aggiungi domande specifiche per questo evento. Le risposte seguiranno la scelta “solo uno” oppure “tutti gli iscritti”.</p>
+		<table class="widefat striped" id="mi-custom-fields"><thead><tr><th>Codice</th><th>Domanda</th><th>Tipo risposta</th><th>Scelte</th><th>Conservazione</th><th>Obbligatoria</th><th></th></tr></thead><tbody>
+		<?php foreach ( $custom_participant_fields as $custom_index => $field ) : ?>
+			<tr><td><input name="mi_custom_field_key[<?php echo esc_attr( $custom_index ); ?>]" value="<?php echo esc_attr( preg_replace( '/^custom_/', '', $field['key'] ) ); ?>" pattern="[a-z0-9_-]+"></td><td><input name="mi_custom_field_label[<?php echo esc_attr( $custom_index ); ?>]" value="<?php echo esc_attr( $field['label'] ); ?>" required></td><td><select name="mi_custom_field_type[<?php echo esc_attr( $custom_index ); ?>]"><?php foreach ( array( 'text' => 'Risposta breve', 'textarea' => 'Risposta lunga', 'date' => 'Data', 'select' => 'Scelta singola', 'email' => 'Email', 'tel' => 'Cellulare' ) as $type => $label ) : ?><option value="<?php echo esc_attr( $type ); ?>" <?php selected( $field['type'], $type ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select></td><td><input name="mi_custom_field_options[<?php echo esc_attr( $custom_index ); ?>]" value="<?php echo esc_attr( implode( ' | ', $field['options'] ?? array() ) ); ?>" placeholder="Opzione A | Opzione B"></td><td><select name="mi_custom_field_retention[<?php echo esc_attr( $custom_index ); ?>]"><option value="STANDARD">WordPress e Sheets</option><option value="SHEETS_ONLY" <?php selected( $field['retention'] ?? '', 'SHEETS_ONLY' ); ?>>Solo passaggio a Sheets</option></select></td><td><input type="hidden" name="mi_custom_field_required[<?php echo esc_attr( $custom_index ); ?>]" value="0"><input name="mi_custom_field_required[<?php echo esc_attr( $custom_index ); ?>]" type="checkbox" value="1" <?php checked( ! empty( $field['required'] ) ); ?>></td><td><button type="button" class="button mi-remove-custom-field">Rimuovi</button></td></tr>
+		<?php endforeach; ?>
+		</tbody></table>
+		<p><button type="button" class="button" id="mi-add-custom-field">Aggiungi domanda</button></p>
 		<h3>Tipologie di iscrizione</h3>
 		<table class="widefat striped" id="mi-ticket-types"><thead><tr><th>Codice</th><th>Nome</th><th>Prezzo €</th><th>Massimo per ordine</th><th>Capienza tipo</th><th></th></tr></thead><tbody>
 		<?php foreach ( $ticket_types as $index => $ticket ) : ?>
@@ -241,6 +264,7 @@ final class MI_Event_Post_Type {
 		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) || ! current_user_can( 'mi_manage_events' ) ) {
 			return;
 		}
+		if ( current_user_can( 'manage_options' ) ) self::save_event_operators( $post_id );
 
 		$activity_id = isset( $_POST['mi_activity_id'] ) ? absint( $_POST['mi_activity_id'] ) : 0;
 		$current_activity_id = absint( get_post_meta( $post_id, '_mi_activity_id', true ) );
@@ -268,11 +292,11 @@ final class MI_Event_Post_Type {
 			update_post_meta( $post_id, '_mi_payment_deadline_at', $payment_deadline_at );
 			delete_post_meta( $post_id, '_mi_reservation_minutes' );
 		}
-		update_post_meta( $post_id, '_mi_privacy_policy_version', sanitize_text_field( wp_unslash( $_POST['mi_privacy_policy_version'] ?? '' ) ) );
-		update_post_meta( $post_id, '_mi_privacy_consent_id', sanitize_key( wp_unslash( $_POST['mi_privacy_consent_id'] ?? '' ) ) );
+		if ( ! get_post_meta( $post_id, '_mi_privacy_policy_version', true ) ) update_post_meta( $post_id, '_mi_privacy_policy_version', wp_date( 'Y-m' ) );
+		if ( ! get_post_meta( $post_id, '_mi_privacy_consent_id', true ) ) update_post_meta( $post_id, '_mi_privacy_consent_id', 'privacy-' . $post_id );
 		update_post_meta( $post_id, '_mi_marketing_enabled', isset( $_POST['mi_marketing_enabled'] ) ? '1' : '0' );
-		update_post_meta( $post_id, '_mi_marketing_consent_id', sanitize_key( wp_unslash( $_POST['mi_marketing_consent_id'] ?? '' ) ) );
-		update_post_meta( $post_id, '_mi_high_impact_approved', isset( $_POST['mi_high_impact_approved'] ) ? '1' : '0' );
+		if ( ! get_post_meta( $post_id, '_mi_marketing_consent_id', true ) ) update_post_meta( $post_id, '_mi_marketing_consent_id', 'marketing-' . $post_id );
+		update_post_meta( $post_id, '_mi_special_requests_enabled', isset( $_POST['mi_special_requests_enabled'] ) ? '1' : '0' );
 
 		foreach ( array( 'opens_at', 'closes_at' ) as $field ) {
 			$key = 'mi_registration_' . $field;
@@ -290,8 +314,11 @@ final class MI_Event_Post_Type {
 
 		$pricing_mode = isset( $_POST['mi_pricing_mode'] ) ? sanitize_key( wp_unslash( $_POST['mi_pricing_mode'] ) ) : 'none';
 		$pricing_mode = strtoupper( $pricing_mode );
-		$pricing_mode = in_array( $pricing_mode, array( 'NONE', 'ZERO', 'CALCULATED' ), true ) ? $pricing_mode : 'NONE';
+		$pricing_mode = in_array( $pricing_mode, array( 'NONE', 'ZERO', 'FIXED', 'CALCULATED' ), true ) ? $pricing_mode : 'NONE';
 		update_post_meta( $post_id, '_mi_pricing_mode', $pricing_mode );
+		$fixed_price_raw = isset( $_POST['mi_fixed_price'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['mi_fixed_price'] ) ) ) : '';
+		$fixed_price = preg_match( '/^\d+(?:[\.,]\d{1,2})?$/', $fixed_price_raw ) ? (float) str_replace( ',', '.', $fixed_price_raw ) : 0;
+		update_post_meta( $post_id, '_mi_fixed_price_cents', 'FIXED' === $pricing_mode ? max( 0, (int) round( $fixed_price * 100 ) ) : 0 );
 
 		$economic_mode = isset( $_POST['mi_economic_mode'] ) ? strtoupper( sanitize_key( wp_unslash( $_POST['mi_economic_mode'] ) ) ) : 'REGISTRATION_ONLY';
 		$economic_modes = array( 'REGISTRATION_ONLY', 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE' );
@@ -317,6 +344,18 @@ final class MI_Event_Post_Type {
 		update_post_meta( $post_id, '_mi_data_profile', $field_configuration['profile'] );
 		update_post_meta( $post_id, '_mi_participant_fields', $field_configuration['enabled'] );
 		update_post_meta( $post_id, '_mi_participant_required_fields', $field_configuration['required'] );
+		$custom_keys = (array) wp_unslash( $_POST['mi_custom_field_key'] ?? array() );
+		$custom_labels = (array) wp_unslash( $_POST['mi_custom_field_label'] ?? array() );
+		$custom_types = (array) wp_unslash( $_POST['mi_custom_field_type'] ?? array() );
+		$custom_options = (array) wp_unslash( $_POST['mi_custom_field_options'] ?? array() );
+		$custom_retention = (array) wp_unslash( $_POST['mi_custom_field_retention'] ?? array() );
+		$custom_required = (array) wp_unslash( $_POST['mi_custom_field_required'] ?? array() );
+		$custom_rows = array();
+		foreach ( $custom_labels as $index => $label ) $custom_rows[] = array( 'key' => $custom_keys[ $index ] ?? '', 'label' => $label, 'type' => $custom_types[ $index ] ?? 'text', 'options' => $custom_options[ $index ] ?? '', 'retention' => $custom_retention[ $index ] ?? 'STANDARD', 'required' => ! empty( $custom_required[ $index ] ) );
+		update_post_meta( $post_id, '_mi_custom_participant_fields', MI_Field_Schema::sanitize_custom_fields( $custom_rows ) );
+		update_post_meta( $post_id, '_mi_high_impact_approved', MI_Field_Schema::has_high_impact_fields( $field_configuration ) ? '1' : '0' );
+		$participant_extra_scope = isset( $_POST['mi_participant_extra_scope'] ) ? strtoupper( sanitize_key( wp_unslash( $_POST['mi_participant_extra_scope'] ) ) ) : 'ONE';
+		update_post_meta( $post_id, '_mi_participant_extra_scope', 'ALL' === $participant_extra_scope ? 'ALL' : 'ONE' );
 
 		$codes = isset( $_POST['mi_ticket_code'] ) ? (array) wp_unslash( $_POST['mi_ticket_code'] ) : array();
 		$names = isset( $_POST['mi_ticket_name'] ) ? (array) wp_unslash( $_POST['mi_ticket_name'] ) : array();
@@ -369,6 +408,28 @@ final class MI_Event_Post_Type {
 			);
 		}
 		update_post_meta( $post_id, '_mi_options', $options );
+	}
+
+	private static function save_event_operators( $event_id ) {
+		$selected = array_values( array_unique( array_filter( array_map( 'absint', (array) wp_unslash( $_POST['mi_event_operators'] ?? array() ) ) ) ) );
+		$login = sanitize_user( wp_unslash( $_POST['mi_new_operator_login'] ?? '' ), true );
+		$password = (string) wp_unslash( $_POST['mi_new_operator_password'] ?? '' );
+		if ( $login || $password ) {
+			$strong = strlen( $password ) >= 12 && preg_match( '/[a-z]/', $password ) && preg_match( '/[A-Z]/', $password ) && preg_match( '/\d/', $password ) && preg_match( '/[^A-Za-z0-9]/', $password );
+			if ( ! $login || ! $strong || username_exists( $login ) ) {
+				set_transient( 'mi_publication_error_' . get_current_user_id(), 'Nuovo operatore non creato: controlla nome utente, unicità e robustezza della password.', MINUTE_IN_SECONDS );
+			} else {
+				$user_id = wp_create_user( $login, $password );
+				if ( ! is_wp_error( $user_id ) ) { ( new WP_User( $user_id ) )->set_role( 'mi_event_operator' ); $selected[] = (int) $user_id; }
+			}
+		}
+		$operators = get_users( array( 'role' => 'mi_event_operator', 'fields' => 'ID' ) );
+		foreach ( $operators as $operator_id ) {
+			$scope = MI_Access::event_ids( (int) $operator_id );
+			$scope = is_array( $scope ) ? $scope : array();
+			if ( in_array( (int) $operator_id, $selected, true ) ) $scope[] = $event_id; else $scope = array_values( array_diff( $scope, array( $event_id ) ) );
+			update_user_meta( (int) $operator_id, '_mi_event_scope', array_values( array_unique( array_map( 'absint', $scope ) ) ) );
+		}
 	}
 
 	public static function publish_revision( $post_id, $post ) {

@@ -5,6 +5,22 @@ defined( 'ABSPATH' ) || exit;
 final class MI_Field_Schema {
 	public static function catalog() {
 		return array(
+			'email' => array(
+				'key'          => 'email',
+				'label'        => 'Email del partecipante',
+				'type'         => 'email',
+				'max_length'   => 254,
+				'autocomplete' => 'email',
+				'help'         => 'Può essere diversa dall’email del referente.',
+			),
+			'phone' => array(
+				'key'          => 'phone',
+				'label'        => 'Cellulare del partecipante',
+				'type'         => 'tel',
+				'max_length'   => 32,
+				'autocomplete' => 'tel',
+				'help'         => 'Inserire il prefisso internazionale, per esempio +39.',
+			),
 			'birth_date' => array(
 				'key'          => 'birth_date',
 				'label'        => 'Data di nascita',
@@ -21,6 +37,22 @@ final class MI_Field_Schema {
 				'autocomplete' => 'country-name',
 				'help'         => 'Non sostituisce i dati di un documento di viaggio.',
 				'high_impact'  => true,
+			),
+			'document_type' => array(
+				'key' => 'document_type', 'label' => 'Tipo di documento', 'type' => 'select',
+				'options' => array( 'Carta di identità', 'Passaporto' ), 'help' => 'Non caricare fotografie o scansioni.', 'high_impact' => true, 'retention' => 'SHEETS_ONLY',
+			),
+			'document_number' => array(
+				'key' => 'document_number', 'label' => 'Numero del documento', 'type' => 'text', 'max_length' => 80,
+				'help' => 'Viene trasferito a Sheets e rimosso da WordPress dopo la consegna.', 'high_impact' => true, 'retention' => 'SHEETS_ONLY',
+			),
+			'document_country' => array(
+				'key' => 'document_country', 'label' => 'Paese di rilascio del documento', 'type' => 'text', 'max_length' => 80,
+				'help' => 'Viene trasferito a Sheets e rimosso da WordPress dopo la consegna.', 'high_impact' => true, 'retention' => 'SHEETS_ONLY',
+			),
+			'document_expiry' => array(
+				'key' => 'document_expiry', 'label' => 'Scadenza del documento', 'type' => 'date', 'date_rule' => 'future',
+				'help' => 'Viene trasferita a Sheets e rimossa da WordPress dopo la consegna.', 'high_impact' => true, 'retention' => 'SHEETS_ONLY',
 			),
 			'postal_address' => array(
 				'key'          => 'postal_address',
@@ -114,6 +146,29 @@ final class MI_Field_Schema {
 		return $fields;
 	}
 
+	public static function sanitize_custom_fields( $raw_fields ) {
+		$result = array();
+		$seen = array();
+		foreach ( array_slice( (array) $raw_fields, 0, 20 ) as $index => $raw ) {
+			if ( ! is_array( $raw ) ) continue;
+			$label = mb_substr( sanitize_text_field( $raw['label'] ?? '' ), 0, 120 );
+			$key = sanitize_key( $raw['key'] ?? '' );
+			$key = $key ? 'custom_' . preg_replace( '/^custom_/', '', $key ) : 'custom_domanda_' . ( $index + 1 );
+			$type = in_array( $raw['type'] ?? '', array( 'text', 'textarea', 'date', 'select', 'email', 'tel' ), true ) ? $raw['type'] : 'text';
+			if ( ! $label || isset( $seen[ $key ] ) ) continue;
+			$seen[ $key ] = true;
+			$retention = 'SHEETS_ONLY' === strtoupper( sanitize_key( $raw['retention'] ?? '' ) ) ? 'SHEETS_ONLY' : 'STANDARD';
+			$field = array( 'key' => $key, 'label' => $label, 'type' => $type, 'required' => ! empty( $raw['required'] ), 'max_length' => 'textarea' === $type ? 1000 : ( 'email' === $type ? 254 : 180 ), 'help' => '', 'retention' => $retention );
+			if ( 'select' === $type ) {
+				$options = array_values( array_unique( array_filter( array_map( 'sanitize_text_field', preg_split( '/[\r\n|]+/', (string) ( $raw['options'] ?? '' ) ) ) ) ) );
+				if ( count( $options ) < 2 ) continue;
+				$field['options'] = array_slice( $options, 0, 30 );
+			}
+			$result[] = $field;
+		}
+		return $result;
+	}
+
 	public static function has_high_impact_fields( $configuration ) {
 		$catalog = self::catalog();
 		foreach ( (array) ( $configuration['enabled'] ?? array() ) as $key ) {
@@ -140,11 +195,21 @@ final class MI_Field_Schema {
 				}
 				continue;
 			}
-			if ( 'date' === $field['type'] ) {
+			if ( 'email' === $field['type'] ) {
+				$value = sanitize_email( $value );
+				if ( ! is_email( $value ) ) return new WP_Error( 'mi_participant_email_invalid', 'Controlla le email dei partecipanti.', array( 'status' => 400 ) );
+				$answers[ $key ] = $value;
+			} elseif ( 'tel' === $field['type'] ) {
+				$value = preg_replace( '/[^0-9+().\s-]/', '', $value );
+				if ( ! preg_match( '/^\+[1-9][0-9().\s-]{6,30}$/', $value ) ) return new WP_Error( 'mi_participant_phone_invalid', 'Controlla i cellulari dei partecipanti.', array( 'status' => 400 ) );
+				$answers[ $key ] = $value;
+			} elseif ( 'date' === $field['type'] ) {
 				$date = DateTimeImmutable::createFromFormat( '!Y-m-d', $value );
 				$today = new DateTimeImmutable( 'today' );
 				$oldest = $today->modify( '-120 years' );
-				if ( ! $date || $date->format( 'Y-m-d' ) !== $value || $date > $today || $date < $oldest ) {
+				$future_rule = 'future' === ( $field['date_rule'] ?? '' );
+				$invalid_date = ! $date || $date->format( 'Y-m-d' ) !== $value || ( $future_rule ? $date < $today || $date > $today->modify( '+20 years' ) : $date > $today || $date < $oldest );
+				if ( $invalid_date ) {
 					return new WP_Error( 'mi_participant_date_invalid', 'Controlla le date dei partecipanti.', array( 'status' => 400 ) );
 				}
 				$answers[ $key ] = $value;
@@ -162,5 +227,9 @@ final class MI_Field_Schema {
 			}
 		}
 		return $answers;
+	}
+
+	public static function relay_only_keys( $fields ) {
+		return array_values( array_map( static function ( $field ) { return $field['key']; }, array_filter( (array) $fields, static function ( $field ) { return 'SHEETS_ONLY' === ( $field['retention'] ?? 'STANDARD' ); } ) ) );
 	}
 }

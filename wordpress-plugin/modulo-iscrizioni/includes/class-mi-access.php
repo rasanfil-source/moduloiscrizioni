@@ -35,7 +35,21 @@ final class MI_Access {
 	}
 
 	public static function can_access_event( $event_id, $user_id = 0 ) {
+		$user = $user_id ? get_user_by( 'id', $user_id ) : wp_get_current_user();
+		if ( $user && user_can( $user, 'mi_manage_all_events' ) ) return true;
+		if ( $user && in_array( 'mi_event_operator', (array) $user->roles, true ) ) {
+			$scope = self::event_ids( $user->ID );
+			return in_array( absint( $event_id ), $scope, true );
+		}
 		return self::can_access_activity( absint( get_post_meta( $event_id, '_mi_activity_id', true ) ), $user_id );
+	}
+
+	public static function event_ids( $user_id = 0 ) {
+		$user_id = $user_id ?: get_current_user_id();
+		$user = get_user_by( 'id', $user_id );
+		if ( $user && ( user_can( $user, 'manage_options' ) || user_can( $user, 'mi_manage_all_events' ) ) ) return 'ALL';
+		$scope = get_user_meta( $user_id, '_mi_event_scope', true );
+		return array_values( array_unique( array_filter( array_map( 'absint', is_array( $scope ) ? $scope : array() ) ) ) );
 	}
 
 	public static function map_event_meta_cap( $caps, $cap, $user_id, $args ) {

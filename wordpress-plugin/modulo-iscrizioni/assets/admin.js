@@ -79,16 +79,22 @@
   const modalitaPrezzo = document.getElementById('mi_pricing_mode');
   const riquadroCaparra = document.querySelector('[data-mi-economic-deposit]');
   const riquadroPagamenti = document.querySelector('[data-mi-economic-payments]');
+	const riquadroPrezzoFisso = document.querySelector('[data-mi-fixed-price]');
   const aiutoEconomico = document.querySelector('[data-mi-economic-help]');
   if (modalitaEconomica && modalitaPrezzo && riquadroCaparra && riquadroPagamenti && aiutoEconomico) {
     const aggiornaConfigurazioneEconomica = () => {
       const modalita = modalitaEconomica.value;
       const incassa = ['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(modalita);
-      const prezzoCoerente = modalita === 'REGISTRATION_ONLY' ? ['NONE', 'ZERO'].includes(modalitaPrezzo.value) : modalitaPrezzo.value === 'CALCULATED';
+	  const prezzoCoerente = modalita === 'REGISTRATION_ONLY' ? ['NONE', 'ZERO'].includes(modalitaPrezzo.value) : ['FIXED', 'CALCULATED'].includes(modalitaPrezzo.value);
+	  if (riquadroPrezzoFisso) {
+		riquadroPrezzoFisso.hidden = modalitaPrezzo.value !== 'FIXED';
+		const campoPrezzoFisso = riquadroPrezzoFisso.querySelector('input');
+		if (campoPrezzoFisso) { campoPrezzoFisso.required = modalitaPrezzo.value === 'FIXED'; campoPrezzoFisso.disabled = modalitaPrezzo.value !== 'FIXED'; }
+	  }
       riquadroCaparra.hidden = modalita !== 'DEPOSIT_BALANCE';
       riquadroPagamenti.hidden = !incassa;
       Array.from(riquadroPagamenti.querySelectorAll('input')).forEach((campo) => { campo.disabled = !incassa; });
-      modalitaPrezzo.setCustomValidity(prezzoCoerente ? '' : modalita === 'REGISTRATION_ONLY' ? 'Per la sola iscrizione scegli “Nessun prezzo” oppure “Gratuito esplicito”.' : 'Seleziona “Calcolato dalle quote” per questa modalità economica.');
+	  modalitaPrezzo.setCustomValidity(prezzoCoerente ? '' : modalita === 'REGISTRATION_ONLY' ? 'Per la sola iscrizione scegli “Nessun prezzo” oppure “Gratuito”.' : 'Seleziona una quota uguale per tutti oppure prezzi diversi secondo la tipologia.');
       aiutoEconomico.textContent = modalita === 'REGISTRATION_ONLY' ? (modalitaPrezzo.value === 'ZERO' ? 'L’evento è dichiarato esplicitamente gratuito.' : 'Il modulo raccoglie soltanto le iscrizioni senza dichiarare un prezzo.') : modalita === 'PRICE_ONLY' ? 'Il prezzo viene mostrato, ma non vengono richieste fonti di pagamento.' : modalita === 'FULL_PAYMENT' ? 'È richiesto il versamento dell’intero importo tramite almeno una fonte ammessa.' : 'Sono previsti una caparra percentuale e il successivo saldo.';
     };
     modalitaEconomica.addEventListener('change', aggiornaConfigurazioneEconomica);
@@ -116,6 +122,18 @@
   optionTable?.addEventListener('click', (event) => {
     if (event.target.closest('.mi-remove-option')) event.target.closest('tr')?.remove();
   });
+
+	const customFieldTable = document.querySelector('#mi-custom-fields tbody');
+	document.getElementById('mi-add-custom-field')?.addEventListener('click', () => {
+	  const index = `new_${Date.now()}_${customFieldTable?.rows.length || 0}`;
+	  const row = document.createElement('tr');
+	  row.innerHTML = `<td><input name="mi_custom_field_key[${index}]" pattern="[a-z0-9_-]+" placeholder="es. parrocchia"></td><td><input name="mi_custom_field_label[${index}]" required placeholder="Scrivi la domanda"></td><td><select name="mi_custom_field_type[${index}]"><option value="text">Risposta breve</option><option value="textarea">Risposta lunga</option><option value="date">Data</option><option value="select">Scelta singola</option><option value="email">Email</option><option value="tel">Cellulare</option></select></td><td><input name="mi_custom_field_options[${index}]" placeholder="Opzione A | Opzione B"></td><td><select name="mi_custom_field_retention[${index}]"><option value="STANDARD">WordPress e Sheets</option><option value="SHEETS_ONLY">Solo passaggio a Sheets</option></select></td><td><input type="hidden" name="mi_custom_field_required[${index}]" value="0"><input name="mi_custom_field_required[${index}]" type="checkbox" value="1"></td><td><button type="button" class="button mi-remove-custom-field">Rimuovi</button></td>`;
+	  customFieldTable?.append(row);
+	  row.querySelector('input')?.focus();
+	});
+	customFieldTable?.addEventListener('click', (event) => {
+	  if (event.target.closest('.mi-remove-custom-field')) event.target.closest('tr')?.remove();
+	});
 
   table.addEventListener('click', (event) => {
     const button = event.target.closest('.mi-remove-ticket');

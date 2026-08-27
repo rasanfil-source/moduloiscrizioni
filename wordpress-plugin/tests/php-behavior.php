@@ -62,6 +62,12 @@ $free_event['pricing_mode'] = 'ZERO';
 $free_selection = invoke_private( 'validate_selection', array( $free_event, array( 'intero' => 2 ) ) );
 expect( ! is_wp_error( $free_selection ) && 0 === $free_selection['total_cents'], 'evento gratuito con totale diverso da zero' );
 
+$fixed_event = $event;
+$fixed_event['pricing_mode'] = 'FIXED';
+$fixed_event['fixed_price_cents'] = 1500;
+$fixed_selection = invoke_private( 'validate_selection', array( $fixed_event, array( 'intero' => 2 ) ) );
+expect( ! is_wp_error( $fixed_selection ) && 3000 === $fixed_selection['total_cents'] && 1500 === $fixed_selection['items'][0]['unit_price_cents'], 'quota uguale per tutti non applicata' );
+
 $too_many = invoke_private( 'validate_selection', array( $event, array( 'intero' => 5 ) ) );
 expect( is_wp_error( $too_many ) && 'mi_ticket_limit' === $too_many->code, 'limite quota non applicato' );
 $fractional = invoke_private( 'validate_selection', array( $event, array( 'intero' => 1.5 ) ) );
@@ -83,12 +89,41 @@ expect( is_wp_error( $missing_required ), 'campo esteso obbligatorio non applica
 $implausible_birth_date = invoke_private( 'validate_participants', array( array( array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Persona', 'last_name' => 'Demo', 'fields' => array( 'birth_date' => '1800-01-01' ) ) ), $one_selection, $extended_fields, array() ) );
 expect( is_wp_error( $implausible_birth_date ), 'data di nascita anteriore a 120 anni accettata' );
 
+$contact_fields = array(
+	array( 'key' => 'email', 'type' => 'email', 'required' => true ),
+	array( 'key' => 'phone', 'type' => 'tel', 'required' => true ),
+);
+$valid_contacts = invoke_private( 'validate_participants', array( array( array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Persona', 'last_name' => 'Demo', 'fields' => array( 'email' => 'persona@example.invalid', 'phone' => '+39 333 1234567' ) ) ), $one_selection, $contact_fields, array() ) );
+expect( ! is_wp_error( $valid_contacts ), 'contatti partecipante validi rifiutati' );
+$invalid_contacts = invoke_private( 'validate_participants', array( array( array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Persona', 'last_name' => 'Demo', 'fields' => array( 'email' => 'non-valida', 'phone' => '333' ) ) ), $one_selection, $contact_fields, array() ) );
+expect( is_wp_error( $invalid_contacts ), 'contatti partecipante non validi accettati' );
+
+$custom_fields = MI_Field_Schema::sanitize_custom_fields( array( array( 'key' => 'parrocchia', 'label' => 'Parrocchia di provenienza', 'type' => 'text', 'required' => true ) ) );
+expect( 1 === count( $custom_fields ) && 'custom_parrocchia' === $custom_fields[0]['key'] && true === $custom_fields[0]['required'], 'domanda personalizzata non normalizzata' );
+
 $two_selection = invoke_private( 'validate_selection', array( $event, array( 'intero' => 2 ) ) );
 $duplicate_ticket_index = invoke_private( 'validate_participants', array( array(
 	array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Uno', 'last_name' => 'Demo' ),
 	array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Due', 'last_name' => 'Demo' ),
 ), $two_selection, array(), array() ) );
 expect( is_wp_error( $duplicate_ticket_index ), 'indice tipologia duplicato accettato' );
+
+$missing_second_name = invoke_private( 'validate_participants', array( array(
+	array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Uno', 'last_name' => 'Demo' ),
+	array( 'ticket_type_code' => 'intero', 'ticket_index' => 2, 'first_name' => '', 'last_name' => '' ),
+), $two_selection, array(), array(), 'ONE' ) );
+expect( is_wp_error( $missing_second_name ), 'nome e cognome del secondo partecipante non richiesti' );
+
+$one_scope = invoke_private( 'validate_participants', array( array(
+	array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Uno', 'last_name' => 'Demo', 'fields' => array( 'birth_date' => '2000-01-02' ) ),
+	array( 'ticket_type_code' => 'intero', 'ticket_index' => 2, 'first_name' => 'Due', 'last_name' => 'Demo', 'fields' => array() ),
+), $two_selection, $extended_fields, array(), 'ONE' ) );
+expect( ! is_wp_error( $one_scope ), 'ambito dati aggiuntivi ONE non rispettato' );
+$all_scope = invoke_private( 'validate_participants', array( array(
+	array( 'ticket_type_code' => 'intero', 'ticket_index' => 1, 'first_name' => 'Uno', 'last_name' => 'Demo', 'fields' => array( 'birth_date' => '2000-01-02' ) ),
+	array( 'ticket_type_code' => 'intero', 'ticket_index' => 2, 'first_name' => 'Due', 'last_name' => 'Demo', 'fields' => array() ),
+), $two_selection, $extended_fields, array(), 'ALL' ) );
+expect( is_wp_error( $all_scope ), 'ambito dati aggiuntivi ALL non applicato' );
 
 $options = array(
 	array( 'code' => 'pranzo', 'name' => 'Pranzo', 'scope' => 'ORDER', 'price_cents' => 500, 'max_quantity' => 2 ),

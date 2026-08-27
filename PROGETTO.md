@@ -1,9 +1,11 @@
 # Progetto: sistema multi-evento di iscrizione e pagamento
 
-Stato: implementazione revisionata — WordPress 3.4.2 / Workspace 1.2.0
-Data: 26 agosto 2026
+Stato: implementazione revisionata — WordPress 3.5.1 / Workspace 1.5.0
+Data: 27 agosto 2026
 
-Esito revisione del codice: il repository contiene WordPress `3.4.2` e Apps Script `1.2.0`. Sono implementati revisioni e snapshot immutabili, ACL per attività, idempotenza anticipata, capienza globale/per tipologia, mapping partecipanti, opzioni, consensi versionati, scadenza e annullamento con rilascio posti, rimborsi serializzati, QR/barcode locali e replica Workspace riconciliante. La modalità email predefinita resta `ANTEPRIMA`; `PROVA` usa soltanto dati sintetici e `OPERATIVO` è bloccata fino a una prova accettata dal sistema di posta. L’anteprima riservata isola inoltre toolbar e hook amministrativi del tema. Il codice non contiene coordinate operative e non riscuote pagamenti. L’installazione in produzione e il collaudo end-to-end dello schema aggiornato restano operazioni di deploy separate dal repository.
+Per lo stato puntuale delle funzioni confermate, parziali e fuori scope della v1 si applica `docs/ALLINEAMENTO_CODICE_DOCUMENTAZIONE.md`.
+
+Esito revisione del codice: il repository contiene WordPress `3.5.1` e Apps Script `1.5.0`. WordPress ospita il portale autenticato, configura e pubblica il modulo, raccoglie l’iscrizione iniziale e la consegna in modo firmato a Workspace. Sheets offre schede personali ed elenchi operativi configurabili per evento, compreso lo stato individuale; i fogli tecnici restano sottostanti. La modalità email predefinita resta `ANTEPRIMA`; `PROVA` usa soltanto dati sintetici e `OPERATIVO` è bloccata fino a una prova accettata dal sistema di posta.
 
 Backend Workspace: il progetto Apps Script `MODULI` è installato nell'account Workspace organizzativo definitivo e collegato allo spreadsheet riservato `DB_MODULI`. Il setup e la migrazione linguistica hanno creato otto schede operative con nomi, intestazioni e valori in italiano: `Configurazione`, `Eventi`, `Iscrizioni`, `Partecipanti`, `Inserimento pagamenti`, `Pagamenti`, `Coda email` e `Registro controlli`. La Web App è distribuita dall'account organizzativo e il controllo `PING` firmato con HMAC e anti-replay è stato verificato da WordPress anche dopo l'installazione della replica delle iscrizioni. Una registrazione interamente sintetica ha collaudato salvataggio locale, replica in `Iscrizioni` e `Partecipanti`, outbox locale, `Coda email` in `PREVIEW` e replay idempotente senza duplicati. L'evento usato per la prova è stato subito riportato in bozza con finestra iscrizioni vuota; nessuna email è stata inviata. Il repository non contiene ID, URL di distribuzione, segreti, codici di collaudo o destinatari operativi.
 
@@ -39,7 +41,7 @@ Il sistema deve partire da uno schema iniziale ben progettato. L'amministratore 
 
 ## 2. Architettura consigliata
 
-La scelta confermata resta essenziale: plugin monolitico WordPress sul sito esistente, un solo progetto Apps Script e un solo spreadsheet Google Workspace. Non sono previsti microservizi, container, bilanciatori, code cloud esterne, cluster o un secondo database applicativo. Il database MySQL di WordPress è autorevole per configurazione, revisioni, iscrizioni, ruoli, ACL e movimenti registrati dal pannello; Sheets/GAS mantiene una proiezione operativa riconciliante e l’area separata di inserimento manuale dei pagamenti.
+La scelta confermata resta essenziale: plugin monolitico WordPress sul sito esistente e un progetto Apps Script collegato alla console Workspace. WordPress è autorevole per configurazione pubblica, revisioni, raccolta iniziale, ruoli e ACL; dopo la consegna dell’iscrizione, Sheets/GAS è autorevole per l’intero flusso operativo della segreteria. WordPress non conserva camere, pasti, trasporti, pagamenti o documenti integrati successivamente.
 
 Spostare il registro nel solo database WordPress avrebbe senso soltanto se venisse abbandonato l'uso operativo del foglio. Finché il foglio resta il canale richiesto per consultazione e inserimento manuale dei versamenti, una sincronizzazione bidirezionale MySQL ↔ Sheets aumenterebbe la complessità.
 
