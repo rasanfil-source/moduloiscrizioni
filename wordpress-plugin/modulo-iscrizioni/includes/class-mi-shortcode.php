@@ -8,9 +8,18 @@ final class MI_Shortcode {
 	public static function boot() {
 		add_shortcode( 'modulo_iscrizioni', array( __CLASS__, 'render' ) );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'maybe_enqueue_assets' ) );
+		add_action( 'template_redirect', array( __CLASS__, 'maybe_disable_page_cache' ), 0 );
 		add_filter( 'theme_page_templates', array( __CLASS__, 'register_focused_template' ) );
 		add_filter( 'template_include', array( __CLASS__, 'use_focused_template' ) );
 		add_action( 'admin_post_mi_anteprima_evento', array( __CLASS__, 'mostra_anteprima_riservata' ) );
+	}
+
+	public static function maybe_disable_page_cache() {
+		if ( ! is_singular() ) return;
+		$post = get_post();
+		if ( ! $post || ( ! has_shortcode( $post->post_content, 'modulo_iscrizioni' ) && ! has_shortcode( $post->post_content, 'mi_divi_modulo_iscrizioni' ) ) ) return;
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) define( 'DONOTCACHEPAGE', true );
+		nocache_headers();
 	}
 
 	public static function register_focused_template( $templates ) {
@@ -31,8 +40,7 @@ final class MI_Shortcode {
 	private static function enqueue_assets() {
 		wp_enqueue_style( 'mi-public', MI_PLUGIN_URL . 'assets/public.css', array(), MI_VERSION );
 		wp_enqueue_script( 'mi-core', MI_PLUGIN_URL . 'assets/core.js', array(), MI_VERSION, true );
-		wp_enqueue_script( 'mi-qrcode-generator', MI_PLUGIN_URL . 'assets/qrcode-generator-2.0.4.js', array(), '2.0.4', true );
-		wp_enqueue_script( 'mi-public', MI_PLUGIN_URL . 'assets/public.js', array( 'mi-core', 'mi-qrcode-generator' ), MI_VERSION, true );
+		wp_enqueue_script( 'mi-public', MI_PLUGIN_URL . 'assets/public.js', array( 'mi-core' ), MI_VERSION, true );
 	}
 
 	public static function render( $attributes ) {
@@ -46,7 +54,7 @@ final class MI_Shortcode {
 		self::$rendered++;
 		$instance_id = 'mi-registration-' . self::$rendered . '-' . $event_id;
 		self::enqueue_assets();
-		$config = array( 'event' => $event, 'state' => $is_preview ? 'OPEN' : MI_Registration_Service::registration_state( $event ), 'preview' => $is_preview, 'endpoint' => esc_url_raw( rest_url( MI_REST_Controller::NAMESPACE . '/events/' . $event_id . '/registrations' ) ), 'instanceId' => $instance_id, 'startedAt' => time(), 'privacyUrl' => $event['privacy_url'] );
+		$config = array( 'event' => $event, 'state' => $is_preview ? 'OPEN' : MI_Registration_Service::registration_state( $event ), 'preview' => $is_preview, 'endpoint' => esc_url_raw( rest_url( MI_REST_Controller::NAMESPACE . '/events/' . $event_id . '/registrations' ) ), 'instanceId' => $instance_id, 'privacyUrl' => $event['privacy_url'], 'qrScriptUrl' => esc_url_raw( MI_PLUGIN_URL . 'assets/qrcode-generator-2.0.4.js?ver=2.0.4' ) );
 		$formatted_date = self::formatted_event_date( $event['event_starts_at'] );
 		$formatted_closes = self::formatted_event_date( $event['closes_at'] );
 		ob_start(); ?>

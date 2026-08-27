@@ -75,6 +75,77 @@
     aggiornaAnteprimaEmail();
   }
 
+  const bookingLinks = Array.from(document.querySelectorAll('[data-mi-booking-open]'));
+  if (bookingLinks.length) {
+    const listUrl = new URL(window.location.href);
+    listUrl.searchParams.delete('registration_id');
+    const modal = document.createElement('div');
+    modal.className = 'mi-booking-modal';
+    modal.hidden = true;
+    modal.innerHTML = '<div class="mi-booking-modal__backdrop" data-mi-booking-close></div><section class="mi-booking-modal__dialog" role="dialog" aria-modal="true" aria-label="Scheda prenotazione"><button type="button" class="mi-booking-modal__close" data-mi-booking-close aria-label="Chiudi la scheda">×</button><div class="mi-booking-modal__content" aria-live="polite"></div></section>';
+    document.body.append(modal);
+    const content = modal.querySelector('.mi-booking-modal__content');
+    const closeButton = modal.querySelector('.mi-booking-modal__close');
+    let previousFocus = null;
+    let activeRequest = null;
+
+    const closeBooking = (replaceHistory = true) => {
+      if (modal.hidden) return;
+      activeRequest?.abort();
+      activeRequest = null;
+      modal.hidden = true;
+      content.replaceChildren();
+      document.body.classList.remove('mi-booking-modal-open');
+      if (replaceHistory) window.history.replaceState({}, '', listUrl);
+      previousFocus?.focus();
+    };
+    const openBooking = async (link) => {
+      activeRequest?.abort();
+      const request = new AbortController();
+      activeRequest = request;
+      previousFocus = link;
+      modal.hidden = false;
+      document.body.classList.add('mi-booking-modal-open');
+      content.innerHTML = '<p class="mi-booking-modal__loading">Apertura della prenotazione…</p>';
+      closeButton.focus();
+      try {
+        const response = await fetch(link.href, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' }, signal: request.signal });
+        if (!response.ok) throw new Error('detail_unavailable');
+        const documentDetail = new DOMParser().parseFromString(await response.text(), 'text/html');
+        const detail = documentDetail.getElementById('mi-booking-detail');
+        if (!detail) throw new Error('detail_missing');
+        detail.querySelector('[data-mi-booking-close]')?.remove();
+        content.replaceChildren(detail);
+        window.history.pushState({}, '', link.href);
+      } catch (error) {
+        if ('AbortError' === error.name) return;
+        window.location.assign(link.href);
+      } finally {
+        if (activeRequest === request) activeRequest = null;
+      }
+    };
+    bookingLinks.forEach((link) => link.addEventListener('click', (event) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      openBooking(link);
+    }));
+    modal.addEventListener('click', (event) => {
+      if (event.target.closest('[data-mi-booking-close]')) closeBooking();
+    });
+    document.addEventListener('keydown', (event) => {
+      if ('Escape' === event.key && !modal.hidden) closeBooking();
+      if ('Tab' === event.key && !modal.hidden) {
+        const focusable = Array.from(modal.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter((element) => !element.hidden && null !== element.offsetParent);
+        if (!focusable.length) { event.preventDefault(); closeButton.focus(); return; }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    });
+    window.addEventListener('popstate', () => closeBooking(false));
+  }
+
   const modalitaEconomica = document.getElementById('mi_economic_mode');
   const modalitaPrezzo = document.getElementById('mi_pricing_mode');
   const riquadroCaparra = document.querySelector('[data-mi-economic-deposit]');

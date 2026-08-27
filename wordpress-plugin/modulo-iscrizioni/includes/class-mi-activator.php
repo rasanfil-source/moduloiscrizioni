@@ -88,6 +88,8 @@ final class MI_Activator {
 			KEY event_status (event_id,status),
 			KEY event_created (event_id,created_at),
 			KEY workspace_status (workspace_status),
+			KEY workspace_queue (workspace_status,workspace_attempts,id),
+			KEY waitlist_queue (event_id,status,capacity_released_at,created_at),
 			KEY payment_deadline (status,payment_deadline_at)
 		) ENGINE=InnoDB {$charset};" );
 
@@ -177,7 +179,8 @@ final class MI_Activator {
 			created_at datetime NOT NULL,
 			PRIMARY KEY  (id),
 			KEY registration_id (registration_id),
-			KEY status (status)
+			KEY status (status),
+			KEY dispatch_queue (status,attempts,id)
 		) ENGINE=InnoDB {$charset};" );
 
 		dbDelta( "CREATE TABLE {$payments} (

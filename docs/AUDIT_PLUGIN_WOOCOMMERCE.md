@@ -27,7 +27,7 @@ Prima di disattivare uno dei due occorre verificare lo storico dei pagamenti e d
 
 ## Ottimizzazione sicura adottata
 
-La versione 3.5.3 rimuove CSS e JavaScript WooCommerce soltanto dalle pagine informative. L'ottimizzazione non si applica a:
+La versione 3.5.6 rimuove CSS e JavaScript WooCommerce soltanto dalle pagine informative, ripetendo la pulizia anche immediatamente prima della stampa per intercettare gli stili accodati tardivamente. L'ottimizzazione non si applica a:
 
 - prodotti e pagina donazioni;
 - negozio e archivi WooCommerce;

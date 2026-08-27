@@ -1,12 +1,17 @@
 (function () {
   'use strict';
 
+  let qrGeneratorPromise = null;
+
   document.querySelectorAll('.mi-registration[data-mi-config]').forEach((root) => {
     const core = globalThis.MIRegistrationCore;
     if (!core) throw new Error('Modulo iscrizioni: funzioni di base non disponibili.');
     const config = JSON.parse(root.dataset.miConfig || '{}');
     const form = root.querySelector('.mi-registration__form');
     if (!form) return;
+    // Misura il tempo dalla reale inizializzazione nel browser. Il timestamp
+    // inserito nell'HTML può diventare vecchio se una cache serve la pagina.
+    const startedAt = Math.floor(Date.now() / 1000);
 
     const participantsRoot = root.querySelector('[data-mi-participants]');
     const errorBox = root.querySelector('[data-mi-error]');
@@ -64,6 +69,31 @@
       }
       return `${Date.now()}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;
     }
+
+	function ensureQrGenerator() {
+	  if (typeof globalThis.qrcode === 'function') return Promise.resolve();
+	  if (qrGeneratorPromise) return qrGeneratorPromise;
+	  const source = String(config.qrScriptUrl || '');
+	  if (!source) return Promise.reject(new Error('Generatore QR non disponibile.'));
+	  qrGeneratorPromise = new Promise((resolve, reject) => {
+		const existing = document.querySelector('script[data-mi-qrcode-generator]');
+		if (existing) existing.remove();
+		const script = document.createElement('script');
+		script.src = source;
+		script.async = true;
+		script.dataset.miQrcodeGenerator = '';
+		script.addEventListener('load', () => {
+		  if (typeof globalThis.qrcode === 'function') resolve();
+		  else reject(new Error('Generatore QR non disponibile.'));
+		}, { once: true });
+		script.addEventListener('error', () => reject(new Error('Generatore QR non disponibile.')), { once: true });
+		document.head.append(script);
+	  }).catch((error) => {
+		qrGeneratorPromise = null;
+		throw error;
+	  });
+	  return qrGeneratorPromise;
+	}
 
     function ticketSelection() {
       const tickets = {};
@@ -450,7 +480,7 @@
       submitButton.textContent = 'Invio in corso…';
       const formData = new FormData(form);
       const payload = {
-        started_at: Math.floor(Date.now() / 1000),
+        started_at: startedAt,
         website: formData.get('website') || '',
         privacy_accepted: formData.get('privacyAccepted') === 'on',
 		marketing_accepted: formData.get('marketingAccepted') === 'on',
@@ -486,15 +516,21 @@
 			? `Prenotazione registrata e in attesa di pagamento. Codice: ${result.order_code}. Importo da versare: ${formatCurrency(result.economic_summary.initial_due_cents)}`
 			: `Iscrizione confermata. Codice: ${result.order_code}`;
         successBox.textContent = successText;
-        if (config.event.identifier_display === 'QR' && typeof window.qrcode === 'function') {
-          const qr = window.qrcode(0, 'M');
-          qr.addData(`modulo-iscrizioni|evento:${config.event.id}|ordine:${result.order_code}`);
-          qr.make();
-          const qrBox = document.createElement('div');
-          qrBox.className = 'mi-registration__qr';
-          qrBox.setAttribute('aria-label', 'Codice QR dell’iscrizione');
-          qrBox.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4 });
-          successBox.appendChild(qrBox);
+        if (config.event.identifier_display === 'QR') {
+		  try {
+			await ensureQrGenerator();
+			const qr = window.qrcode(0, 'M');
+			qr.addData(`modulo-iscrizioni|evento:${config.event.id}|ordine:${result.order_code}`);
+			qr.make();
+			const qrBox = document.createElement('div');
+			qrBox.className = 'mi-registration__qr';
+			qrBox.setAttribute('aria-label', 'Codice QR dell’iscrizione');
+			qrBox.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4 });
+			successBox.appendChild(qrBox);
+		  } catch (qrError) {
+			// L'iscrizione è già salvata: un problema grafico non deve mai
+			// trasformare il successo del server in un falso errore di invio.
+		  }
 		} else if (config.event.identifier_display === 'BARCODE') {
 		  const barcodeBox = document.createElement('div');
 		  barcodeBox.className = 'mi-registration__barcode';
