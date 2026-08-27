@@ -7,6 +7,7 @@ const sourceDir = new URL('../src/', import.meta.url);
 const files = (await readdir(sourceDir)).filter((name) => name.endsWith('.gs'));
 const sources = Object.fromEntries(await Promise.all(files.map(async (name) => [name, await readFile(new URL(name, sourceDir), 'utf8')])));
 const combined = Object.values(sources).join('\n');
+const segreteriaHtml = await readFile(new URL('Segreteria.html', sourceDir), 'utf8');
 
 test('tutti i file Apps Script hanno sintassi valida', () => {
   for (const [name, source] of Object.entries(sources)) assert.doesNotThrow(() => new vm.Script(source, { filename: name }));
@@ -55,12 +56,39 @@ test('le funzioni Apps Script applicative hanno nomi italiani', () => {
 });
 
 test('la migrazione aggiunge il riepilogo economico alle iscrizioni', () => {
-	assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.2\.4'/);
+	assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.5\.0'/);
   assert.match(sources['Config.gs'], /modalita_economica/);
   assert.match(sources['Config.gs'], /primo_versamento_centesimi/);
   assert.match(sources['Config.gs'], /saldo_centesimi/);
   assert.match(sources['Setup.gs'], /MI_INTESTAZIONI_PRECEDENTI/);
   assert.match(sources['WebApp.gs'], /payment_methods/);
+});
+
+test('la console Sheets consulta prenotazioni e genera elenchi operativi per evento', () => {
+	assert.match(sources['Setup.gs'], /Apri scheda prenotazione/);
+	assert.match(sources['Setup.gs'], /Configura elenco operativo/);
+	assert.match(sources['Segreteria.gs'], /showSidebar/);
+	assert.doesNotMatch(sources['Segreteria.gs'], /SpreadsheetApp\.create/);
+	assert.doesNotMatch(sources['Segreteria.gs'], /creaIniziativaGuidata|CREATE_EVENT_DRAFT/);
+	assert.match(sources['Config.gs'], /Operazioni segreteria/);
+	assert.match(sources['Segreteria.gs'], /MI_SHEETS\.SECRETARY_OPERATIONS/);
+	assert.match(sources['Segreteria.gs'], /MI_SHEETS\.OPERATIONAL_VIEWS/);
+	assert.match(sources['Segreteria.gs'], /generaElencoOperativo_/);
+	assert.match(segreteriaHtml, /Conferma modifiche/);
+});
+
+test('lo stato individuale dei partecipanti arriva nelle schede e negli elenchi', () => {
+	assert.match(sources['Config.gs'], /stato_partecipante/);
+	assert.match(sources['Config.gs'], /data_annullamento/);
+	assert.match(sources['WebApp.gs'], /participant\.status/);
+	assert.match(sources['WebApp.gs'], /participant\.cancelled_at/);
+	assert.match(sources['Segreteria.gs'], /row\.stato_partecipante/);
+});
+
+test('la console non richiede mai foto o scansioni dei documenti', () => {
+	assert.doesNotMatch(segreteriaHtml, /type\s*=\s*["']file["']/i);
+	assert.doesNotMatch(segreteriaHtml, /foto(?:grafia)?\s+(?:del|di)\s+document|scansione\s+(?:del|di)\s+document/i);
+	assert.doesNotMatch(combined, /DriveApp\.createFile|Utilities\.newBlob/);
 });
 
 test('la modalità email GAS è fail-closed e sostituisce sempre il destinatario', () => {

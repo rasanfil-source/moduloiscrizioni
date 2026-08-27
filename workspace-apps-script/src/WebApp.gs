@@ -162,7 +162,9 @@ function aggiungiIscrizione_(payload) {
         neutralizzaFormula_(participant.first_name, 80),
         neutralizzaFormula_(participant.last_name, 80),
         JSON.stringify(participant.fields || {}),
-        JSON.stringify(participant.options || [])
+        JSON.stringify(participant.options || []),
+        normalizzaValoreElenco_(participant.status, ['ACTIVE', 'CANCELLED']) || 'ACTIVE',
+        normalizzaTesto_(participant.cancelled_at, 40)
       ];
     });
     const participantSheet = ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS);

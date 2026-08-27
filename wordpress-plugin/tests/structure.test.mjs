@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.4\.18/);
+	assert.match(source, /Version:\s+3\.5\.1/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -128,6 +128,73 @@ test('la bacheca offre ai delegati un accesso diretto al servizio moduli', async
   assert.doesNotMatch(access, /remove_menu_page\( 'index\.php' \)/);
 });
 
+test('il portale web riusa WordPress e limita operatori ed eventi sul server', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const access = await read('includes/class-mi-access.php');
+  const activator = await read('includes/class-mi-activator.php');
+  const eventType = await read('includes/class-mi-event-post-type.php');
+  const script = await read('assets/portal.js');
+  assert.match(portal, /mi_portale_gestione/);
+  assert.match(portal, /wp_login_form/);
+  assert.match(portal, /Crea evento/);
+  assert.match(portal, /Gestisci eventi/);
+  assert.match(portal, /C’è qualcuno qui/);
+  assert.match(portal, /MI_Access::can_access_event/);
+  assert.match(access, /_mi_event_scope/);
+  assert.match(activator, /mi_secretary/);
+  assert.match(activator, /mi_event_operator/);
+  assert.match(eventType, /Operatori dell’evento/);
+  assert.match(eventType, /wp_create_user/);
+  assert.match(eventType, /strlen\( \$password \) >= 12/);
+  assert.match(script, /reportValidity/);
+});
+
+test('il wizard è breve, crea solo bozze e rende gli alloggi condizionali', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  assert.match(portal, /1 di 5/);
+  assert.match(portal, /5 di 5/);
+  assert.match(portal, /post_status' => 'draft'/);
+  assert.match(portal, /Vuoi partire da un evento precedente/);
+  assert.match(portal, /data-mi-overnight/);
+  assert.match(portal, /data-mi-accommodations hidden/);
+  assert.match(script, /rooms\.hidden=!overnight\.checked/);
+  assert.doesNotMatch(portal, /wp_insert_post\([\s\S]{0,300}post_status' => 'publish'/);
+});
+
+test('ogni partecipante dispone di annullamento individuale confermato e auditabile', async () => {
+  const activator = await read('includes/class-mi-activator.php');
+  const service = await read('includes/class-mi-registration-service.php');
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(activator, /cancellation_token_hash char\(64\)/);
+  assert.match(activator, /cancelled_at datetime/);
+  assert.match(service, /random_bytes\( 32 \)/);
+  assert.match(service, /hash\( 'sha256', \$cancel_token \)/);
+  assert.match(service, /PARTICIPANT_CANCELLED/);
+  assert.match(service, /GREATEST\(0,\{\$counter_field\}-1\)/);
+  assert.match(service, /remaining_participants/);
+  assert.match(service, /promote_waitlisted_locked/);
+  assert.match(portal, /cancel_participant_public/);
+  assert.match(portal, /Referrer-Policy: no-referrer/);
+  assert.match(service, /cancellation_token_hash=NULL/);
+  assert.match(service, /status = 'ACTIVE' GROUP BY ticket_type_code/);
+  assert.match(portal, /cancel_participant_portal/);
+  assert.match(portal, /Conferma richiesta/);
+  assert.match(portal, /Eventuali rimborsi devono essere concordati separatamente/);
+});
+
+test('le email includono collegamenti personali senza inviare in modalità anteprima', async () => {
+  const service = await read('includes/class-mi-registration-service.php');
+  const model = await read('includes/class-mi-modello-email.php');
+  const sender = await read('includes/class-mi-spedizione-email.php');
+  assert.match(service, /participant_cancel_url/);
+  assert.match(service, /_participant_management/);
+  assert.match(model, /gestione_partecipanti/);
+  assert.match(model, /Annulla la partecipazione di/);
+  assert.match(sender, /get_option\( self::OPZIONE_MODALITA, 'ANTEPRIMA' \)/);
+  assert.match(sender, /'OPERATIVO' === self::modalita\(\)/);
+});
+
 test('l’integrazione Divi è facoltativa e riusa il motore dello shortcode', async () => {
   const integration = await read('includes/class-mi-integrazione-divi.php');
   const module = await read('includes/class-mi-divi-modulo-iscrizioni.php');
@@ -182,12 +249,37 @@ test('i campi partecipante usano profili, allowlist e validazione server', async
   assert.match(activator, /maybe_upgrade/);
 });
 
+test('i documenti sono raccolti solo come dati testuali e mai come foto o scansioni', async () => {
+  const schema = await read('includes/class-mi-field-schema.php');
+  const eventType = await read('includes/class-mi-event-post-type.php');
+  const adminScript = await read('assets/admin.js');
+  const service = await read('includes/class-mi-registration-service.php');
+  for (const key of ['document_type', 'document_number', 'document_country', 'document_expiry']) {
+    assert.match(schema, new RegExp(`'${key}'`));
+  }
+  assert.match(schema, /Non caricare fotografie o scansioni/);
+  assert.match(schema, /'retention'\s*=>\s*'SHEETS_ONLY'/);
+  assert.match(service, /scrub_relay_only_fields/);
+  assert.match(service, /MI_Field_Schema::relay_only_keys/);
+  assert.doesNotMatch(schema + eventType + adminScript, /type=["']file["']/i);
+  assert.doesNotMatch(eventType + adminScript, /<option value=["']file["']/i);
+});
+
 test('il pannello mostra partecipanti e dati aggiuntivi con etichette leggibili', async () => {
   const source = await read('includes/class-mi-admin.php');
   assert.match(source, /Dettaglio iscrizione/);
   assert.match(source, /MI_Field_Schema::catalog/);
   assert.match(source, /extra_json/);
   assert.match(source, /Nessun dato aggiuntivo raccolto/);
+});
+
+test('il dettaglio iscrizione separa le azioni dai dati tecnici', async () => {
+	const admin = await readFile(new URL('../modulo-iscrizioni/includes/class-mi-admin.php', import.meta.url), 'utf8');
+	const style = await readFile(new URL('../modulo-iscrizioni/assets/admin.css', import.meta.url), 'utf8');
+	assert.match(admin, /Dati utili alla gestione/);
+	assert.match(admin, /<details class="mi-registration-technical">/);
+	assert.match(admin, /<summary>Dettagli tecnici<\/summary>/);
+	assert.match(style, /\.mi-registration-technical/);
 });
 
 test('filtri ed esportazione rispettano accessi e neutralizzano formule CSV', async () => {
@@ -341,7 +433,8 @@ test('l’identità email valida reply-to e destinatari senza spedire', async ()
   const model = await read('includes/class-mi-modello-email.php');
   assert.match(model, /Nome visualizzato del mittente/);
   assert.match(model, /Indirizzo per le risposte/);
-  assert.match(model, /Destinatari interni in anteprima/);
+	assert.match(model, /Indirizzi interni per le email di prova/);
+	assert.match(model, /In modalità Anteprima nessuna email viene inviata/);
   assert.match(model, /count\(\s*\$recipients\s*\) > 10/);
   assert.match(model, /identita_email/);
   assert.doesNotMatch(model, /wp_mail\s*\(/);

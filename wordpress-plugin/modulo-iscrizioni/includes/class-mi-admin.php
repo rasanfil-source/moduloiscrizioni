@@ -279,36 +279,46 @@ final class MI_Admin {
 		</tbody></table>
 		<?php if ( $detail ) : ?>
 		<hr><h2>Dettaglio iscrizione <code><?php echo esc_html( $detail['order_code'] ); ?></code></h2>
-		<table class="widefat striped" style="max-width:900px"><tbody>
+		<div class="mi-registration-workspace">
+		<h3>Dati utili alla gestione</h3>
+		<table class="widefat striped mi-registration-summary"><tbody>
 		<tr><th scope="row">Evento</th><td><?php echo esc_html( get_the_title( (int) $detail['event_id'] ) ); ?></td></tr>
 		<tr><th scope="row">Stato</th><td><?php echo esc_html( self::etichetta_stato( $detail['status'] ) ); ?></td></tr>
-		<tr><th scope="row">Workspace</th><td><?php echo esc_html( $detail['workspace_status'] ); ?></td></tr>
-		<tr><th scope="row">Tentativi Workspace</th><td><?php echo esc_html( (string) (int) $detail['workspace_attempts'] ); ?></td></tr>
-		<tr><th scope="row">Ultimo errore Workspace</th><td><?php echo esc_html( $detail['workspace_last_error'] ?: 'Nessuno' ); ?></td></tr>
-		<tr><th scope="row">Sincronizzata il</th><td><?php echo esc_html( $detail['workspace_synced_at'] ?: 'Non ancora sincronizzata' ); ?></td></tr>
-		<tr><th scope="row">Revisione evento</th><td><?php echo esc_html( $detail['event_revision_id'] ?: 'Storica non disponibile' ); ?><?php if ( $detail['event_revision_hash'] ) : ?> · <code><?php echo esc_html( substr( $detail['event_revision_hash'], 0, 16 ) ); ?></code><?php endif; ?></td></tr>
-		<tr><th scope="row">Consenso privacy</th><td><?php echo esc_html( $detail['privacy_consent_id'] ?: 'Storico non disponibile' ); ?> · versione <?php echo esc_html( $detail['privacy_policy_version'] ?: '—' ); ?> · <?php echo esc_html( $detail['privacy_accepted_at'] ?: '—' ); ?></td></tr>
-		<tr><th scope="row">Comunicazioni su future iniziative</th><td><?php echo esc_html( $detail['marketing_consent_id'] ? $detail['marketing_consent_id'] . ' · ' . $detail['marketing_accepted_at'] : 'Consenso non prestato' ); ?></td></tr>
 		<tr><th scope="row">Scadenza prenotazione</th><td><?php echo esc_html( $detail['expires_at'] ?: 'Non prevista' ); ?></td></tr>
-		<tr><th scope="row">Posti liberati il</th><td><?php echo esc_html( $detail['capacity_released_at'] ?: 'Non liberati' ); ?></td></tr>
 		<tr><th scope="row">Referente</th><td><?php echo esc_html( $detail['buyer_first_name'] . ' ' . $detail['buyer_last_name'] ); ?></td></tr>
 		<tr><th scope="row">Email</th><td><?php echo esc_html( $detail['buyer_email'] ); ?></td></tr>
 		<tr><th scope="row">Cellulare</th><td><?php echo esc_html( $detail['buyer_phone'] ); ?></td></tr>
 		<tr><th scope="row">Richieste particolari</th><td><?php echo nl2br( esc_html( $detail['special_requests'] ?: 'Nessuna' ) ); ?></td></tr>
+		<tr><th scope="row">Future iniziative</th><td><?php echo esc_html( $detail['marketing_consent_id'] ? 'Consenso prestato' : 'Consenso non prestato' ); ?></td></tr>
 		<tr><th scope="row">Modalità di pagamento richiesta</th><td><?php echo esc_html( self::etichetta_modalita_economica( $detail['economic_mode'] ) ); ?></td></tr>
 		<tr><th scope="row">Totale</th><td><?php echo esc_html( self::formatta_importo( $detail['total_cents'] ) ); ?></td></tr>
 		<tr><th scope="row">Primo versamento</th><td><?php echo esc_html( self::formatta_importo( $detail['initial_due_cents'] ) ); ?></td></tr>
 		<tr><th scope="row">Saldo successivo previsto</th><td><?php echo esc_html( self::formatta_importo( $detail['balance_cents'] ) ); ?></td></tr>
 		<?php $detail_paid_cents = self::totale_pagamenti( $detail_id ); ?><tr><th scope="row">Versato manualmente</th><td><?php echo esc_html( self::formatta_importo( $detail_paid_cents ) ); ?></td></tr><tr><th scope="row">Residuo calcolato</th><td><strong><?php echo esc_html( self::formatta_importo( max( 0, (int) $detail['total_cents'] - $detail_paid_cents ) ) ); ?></strong></td></tr>
 		</tbody></table>
+		</div>
+		<details class="mi-registration-technical">
+		<summary>Dettagli tecnici</summary>
+		<p>Informazioni utili per assistenza, controlli e sincronizzazione. Non servono per la gestione ordinaria.</p>
+		<table class="widefat striped"><tbody>
+		<tr><th scope="row">Codice iscrizione</th><td><code><?php echo esc_html( $detail['order_code'] ); ?></code></td></tr>
+		<tr><th scope="row">Workspace</th><td><?php echo esc_html( $detail['workspace_status'] ); ?></td></tr>
+		<tr><th scope="row">Tentativi Workspace</th><td><?php echo esc_html( (string) (int) $detail['workspace_attempts'] ); ?></td></tr>
+		<tr><th scope="row">Ultimo errore Workspace</th><td><?php echo esc_html( $detail['workspace_last_error'] ?: 'Nessuno' ); ?></td></tr>
+		<tr><th scope="row">Sincronizzata il</th><td><?php echo esc_html( $detail['workspace_synced_at'] ?: 'Non ancora sincronizzata' ); ?></td></tr>
+		<tr><th scope="row">Revisione evento</th><td><?php echo esc_html( $detail['event_revision_id'] ?: 'Storica non disponibile' ); ?><?php if ( $detail['event_revision_hash'] ) : ?> · <code><?php echo esc_html( substr( $detail['event_revision_hash'], 0, 16 ) ); ?></code><?php endif; ?></td></tr>
+		<tr><th scope="row">Consenso privacy</th><td><?php echo esc_html( $detail['privacy_consent_id'] ?: 'Storico non disponibile' ); ?> · versione <?php echo esc_html( $detail['privacy_policy_version'] ?: '—' ); ?> · <?php echo esc_html( $detail['privacy_accepted_at'] ?: '—' ); ?></td></tr>
+		<tr><th scope="row">Consenso future iniziative</th><td><?php echo esc_html( $detail['marketing_consent_id'] ? $detail['marketing_consent_id'] . ' · ' . $detail['marketing_accepted_at'] : 'Non prestato' ); ?></td></tr>
+		<tr><th scope="row">Posti liberati il</th><td><?php echo esc_html( $detail['capacity_released_at'] ?: 'Non liberati' ); ?></td></tr>
+		</tbody></table>
+		</details>
 		<?php $payment_rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_payments WHERE registration_id = %d ORDER BY effective_at", $detail_id ), ARRAY_A ); ?>
 		<h3>Versamenti registrati</h3><?php if ( ! $payment_rows ) : ?><p>Nessun versamento registrato.</p><?php else : ?><table class="widefat striped" style="max-width:900px"><thead><tr><th>Data</th><th>Rata</th><th>Importo</th><th>Fonte</th><th>Riferimento</th><th>Nota</th></tr></thead><tbody><?php $payment_labels = array( 'BANK_TRANSFER' => 'Bonifico', 'CARD' => 'Carta', 'CASH' => 'Contante' ); foreach ( $payment_rows as $payment ) : ?><tr><td><?php echo esc_html( $payment['effective_at'] ); ?></td><td><?php echo esc_html( $payment['installment_kind'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $payment['amount_cents'] ) ); ?></td><td><?php echo esc_html( $payment_labels[ $payment['payment_source'] ] ?? $payment['payment_source'] ); ?></td><td><?php echo esc_html( $payment['external_reference'] ?: '—' ); ?></td><td><?php echo esc_html( $payment['administrative_note'] ?: '—' ); ?></td></tr><?php endforeach; ?></tbody></table><?php endif; ?>
-		<?php if ( current_user_can( 'mi_manage_payments' ) ) : ?><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="max-width:900px;margin:16px 0"><input type="hidden" name="action" value="mi_add_payment"><input type="hidden" name="registration_id" value="<?php echo esc_attr( $detail_id ); ?>"><?php wp_nonce_field( 'mi_add_payment_' . $detail_id ); ?><fieldset><legend><strong>Registra movimento</strong></legend><label>Movimento <select name="transaction_kind"><option value="PAYMENT">Versamento</option><option value="REFUND">Rimborso</option></select></label> <label>Data e ora effettive <input type="datetime-local" name="effective_at" value="<?php echo esc_attr( wp_date( 'Y-m-d\\TH:i' ) ); ?>"></label> <label>Importo (€) <input required type="number" min="0.01" step="0.01" name="amount"></label> <label>Rata <select name="installment_kind"><option value="DEPOSIT">Caparra</option><option value="BALANCE">Saldo</option><option value="FULL">Completo</option><option value="OTHER">Altro</option></select></label> <label>Fonte <select required name="payment_source"><option value="BANK_TRANSFER">Bonifico</option><option value="CARD">Carta</option><option value="CASH">Contante</option></select></label><br><label>Riferimento esterno <input type="text" name="external_reference" maxlength="120"></label> <label>Nota amministrativa <input type="text" name="administrative_note" maxlength="500"></label> <button class="button button-primary">Registra movimento</button></fieldset></form><?php endif; ?>
+		<p class="notice notice-info" style="max-width:900px;padding:12px"><strong>Operazioni di segreteria in Google Sheets.</strong> Pagamenti, rimborsi, variazioni, ritiri e integrazioni si registrano dal menu <em>Modulo iscrizioni → Gestisci un’iscrizione</em> nel foglio di lavoro.</p>
 		<h3>Tipologie e opzioni ordine</h3>
 		<?php $detail_order_options = json_decode( (string) ( $detail['order_options_json'] ?? '' ), true ); if ( ! is_array( $detail_order_options ) && $registration_items ) { $detail_order_options = json_decode( (string) $registration_items[0]['options_json'], true ); } $detail_order_options = is_array( $detail_order_options ) ? $detail_order_options : array(); ?>
 		<?php if ( $detail_order_options ) : ?><p><strong>Opzioni ordine:</strong> <?php echo esc_html( implode( ', ', array_map( static function ( $option ) { return ( $option['name'] ?? $option['code'] ?? 'Opzione' ) . ' × ' . absint( $option['quantity'] ?? 0 ); }, $detail_order_options ) ) ); ?></p><?php else : ?><p>Nessuna opzione ordine.</p><?php endif; ?>
 		<?php if ( ! $registration_items ) : ?><p>Nessuna tipologia storica disponibile.</p><?php else : ?><table class="widefat striped" style="max-width:900px"><thead><tr><th>Codice</th><th>Nome</th><th>Quantità</th><th>Prezzo unitario</th></tr></thead><tbody><?php foreach ( $registration_items as $registration_item ) : ?><tr><td><code><?php echo esc_html( $registration_item['ticket_type_code'] ); ?></code></td><td><?php echo esc_html( $registration_item['ticket_type_name'] ?: 'Nome storico non disponibile' ); ?></td><td><?php echo esc_html( $registration_item['quantity'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $registration_item['unit_price_cents'] ) ); ?></td></tr><?php endforeach; ?></tbody></table><?php endif; ?>
-		<?php if ( current_user_can( 'mi_manage_events' ) && in_array( $detail['status'], array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED' ), true ) ) : ?><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" onsubmit="return confirm('Annullare questa iscrizione e liberare i posti?');"><input type="hidden" name="action" value="mi_cancel_registration"><input type="hidden" name="registration_id" value="<?php echo esc_attr( $detail_id ); ?>"><?php wp_nonce_field( 'mi_cancel_registration_' . $detail_id ); ?><button class="button button-secondary">Annulla iscrizione e libera posti</button></form><?php endif; ?>
 		<?php if ( 'SYNCED' !== $detail['workspace_status'] ) : ?>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin:16px 0">
 		<input type="hidden" name="action" value="mi_retry_workspace">
