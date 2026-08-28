@@ -23,7 +23,7 @@ Verifica sistematica aggiornata per WordPress 3.7.0 e Workspace 1.8.0. Questo do
 | Consultazione autonoma di stato e saldo | Implementato | codice/email o collegamento HMAC, limite tentativi, pagina `noindex` priva di dati personali |
 | Promemoria prima dell'evento e del saldo | Implementato | selezione destinatari in Sheets e accodamento firmato in WordPress; bozze sempre `PREVIEW` |
 | Scheda segreteria rapida | Implementato | lista a card, dialogo dettaglio, versamenti con validatore condiviso e sistemazioni con capienza |
-| Elenco operativo stampabile | Implementato | colonne per evento, campi personalizzati raccolti, PDF A4 e neutralizzazione formule |
+| Viste ed elenco operativo | Implementato | profili per evento, dettagli comprimibili, approvazione e conservazione materializzata per apertura rapida, aggiornamento dati separato dalla rigenerazione della struttura, PDF A4 e neutralizzazione formule |
 | Gruppi con logo e immagine ereditabili | Implementato | catalogo condiviso WordPress/Workspace, valori iniziali e creazione controllata da entrambe le interfacce |
 | Report standard e personalizzati riutilizzabili | Implementato | modelli protetti, scelta colonne, ordinamento, generazione per evento e salvataggio configurazione |
 | Assegnazioni collettive di camere e pullman | Implementato | vista per evento, modifica multipla auditabile e controllo della capienza finale |

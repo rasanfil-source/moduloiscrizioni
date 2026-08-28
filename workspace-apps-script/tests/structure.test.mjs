@@ -132,6 +132,14 @@ test('la console Sheets consulta prenotazioni e genera elenchi operativi per eve
 
 test('le viste operative seguono il tipo di evento e comprimono il dettaglio degli incassi', () => {
 	assert.match(sources['Segreteria.gs'], /function caricaVistaOperativaEvento/);
+	assert.match(sources['Segreteria.gs'], /function approvaVistaOperativaEvento/);
+	assert.match(sources['Segreteria.gs'], /function aggiornaDatiVistaOperativaEvento/);
+	assert.match(sources['Segreteria.gs'], /function rigeneraStrutturaVistaOperativaEvento/);
+	assert.match(sources['Segreteria.gs'], /function leggiVistaOperativaConservata_/);
+	assert.match(sources['Segreteria.gs'], /MI_DATA_AGGIORNAMENTO/);
+	assert.match(segreteriaHtml, /Approva e conserva/);
+	assert.match(segreteriaHtml, /Aggiorna dati/);
+	assert.match(segreteriaHtml, /Rigenera struttura/);
 	assert.match(sources['Segreteria.gs'], /MINIMO/);
 	assert.match(sources['Segreteria.gs'], /QUOTA_UNICA/);
 	assert.match(sources['Segreteria.gs'], /SERVIZI_MULTIPLI/);
