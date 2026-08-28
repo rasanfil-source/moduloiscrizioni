@@ -140,6 +140,8 @@ test('le viste operative seguono il tipo di evento e comprimono il dettaglio deg
 	assert.match(segreteriaHtml, /Approva e conserva/);
 	assert.match(segreteriaHtml, /Aggiorna dati/);
 	assert.match(segreteriaHtml, /Rigenera struttura/);
+	assert.match(segreteriaHtml, /function formattaDataOra/);
+	assert.doesNotMatch(segreteriaHtml, /\bformatDate\s*\(/);
 	assert.match(sources['Segreteria.gs'], /MINIMO/);
 	assert.match(sources['Segreteria.gs'], /QUOTA_UNICA/);
 	assert.match(sources['Segreteria.gs'], /SERVIZI_MULTIPLI/);
