@@ -34,7 +34,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.6\.3/);
+	assert.match(source, /Version:\s+3\.6\.4/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1092,6 +1092,11 @@ test('il wizard crea una bozza completa e mostra collegamenti espliciti', async 
   assert.match(portal, /array\( 'email', 'phone', 'birth_date' \)/);
   assert.match(portal, /custom_question_label\[\]/);
   assert.match(portal, /name="pricing_mode"/);
+	assert.match(portal, /service_enabled\[/);
+	assert.match(portal, /service_price\[/);
+	assert.match(portal, /Rimborso spese generico/);
+	assert.match(portal, /'scope' => 'TICKET'/);
+	assert.match(script, /data-mi-service-fee/);
   assert.match(portal, /Bozza creata correttamente/);
   assert.match(portal, /Completa la bozza/);
   assert.match(portal, /Apri anteprima/);

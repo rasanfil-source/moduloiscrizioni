@@ -41,6 +41,17 @@ document.addEventListener('DOMContentLoaded', () => {
       rooms.hidden = !overnight.checked;
       if (!overnight.checked) rooms.querySelectorAll('input').forEach((input) => { input.checked = false; });
     });
+	form.querySelectorAll('[data-mi-service-fee]').forEach((service) => {
+	  const price = service.closest('.mi-service-fee')?.querySelector('input[name^="service_price"]');
+	  const updateService = () => {
+		if (!price) return;
+		price.disabled = !service.checked;
+		price.required = service.checked;
+		if (!service.checked) price.value = '';
+	  };
+	  service.addEventListener('change', updateService);
+	  updateService();
+	});
     form.querySelectorAll('[data-mi-required]').forEach((required) => required.addEventListener('change', () => {
       const enabled = form.querySelector(`[data-mi-field="${required.dataset.miRequired}"]`);
       if (required.checked && enabled) enabled.checked = true;

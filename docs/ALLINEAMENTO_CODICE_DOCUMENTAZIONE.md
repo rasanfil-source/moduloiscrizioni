@@ -1,6 +1,6 @@
 # Allineamento tra documentazione e codice
 
-Verifica sistematica aggiornata per WordPress 3.6.3 e Workspace 1.8.0. Questo documento prevale sulle descrizioni progettuali quando occorre distinguere ciò che è già disponibile dalla sola architettura prevista.
+Verifica sistematica aggiornata per WordPress 3.6.4 e Workspace 1.8.0. Questo documento prevale sulle descrizioni progettuali quando occorre distinguere ciò che è già disponibile dalla sola architettura prevista.
 
 ## Implementato e verificato
 
