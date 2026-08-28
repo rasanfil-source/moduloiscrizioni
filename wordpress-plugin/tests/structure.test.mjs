@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.5\.11/);
+	assert.match(source, /Version:\s+3\.5\.12/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1012,4 +1012,15 @@ test('il portale mette in evidenza persone, data e immagine senza duplicare il r
   assert.match(css, /\.mi-event-card__date/);
   assert.match(css, /\.mi-booking-detail__person/);
   assert.match(css, /\.mi-booking-detail__referent-dot/);
+});
+
+test('gli eventi passati sono separati dalla vista operativa ordinaria', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /mi_portal_history/);
+  assert.match(portal, /Visualizza eventi passati/);
+  assert.match(portal, /Torna agli eventi attuali/);
+  assert.match(portal, /is_past_event/);
+  assert.match(portal, /Eventi passati/);
+  assert.match(css, /\.mi-event-history-link/);
 });

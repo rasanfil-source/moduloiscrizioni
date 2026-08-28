@@ -154,15 +154,11 @@ final class MI_Portal {
 		if ( 'ALL' !== $scope && ! $scope ) { echo '<section class="mi-portal-empty"><div class="mi-portal-bubble">Na⁺</div><h2>C’è qualcuno qui…?</h2><p>Al momento non ti è stato assegnato nessun evento. Chiedi all’amministratore o al segretario di associarti a un evento.</p></section>'; return; }
 		$query = array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => -1, 'orderby' => 'date', 'order' => 'DESC', 'update_post_term_cache' => false );
 		if ( 'ALL' !== $scope ) $query['post__in'] = $scope;
-		$events = get_posts( $query );
-		$ids = wp_list_pluck( $events, 'ID' );
-		if ( ! $ids ) { echo '<section class="mi-portal-empty"><div class="mi-portal-bubble">Na⁺</div><h2>C’è qualcuno qui…?</h2><p>Non ci sono eventi visibili.</p></section>'; return; }
-		$safe_ids = implode( ',', array_map( 'absint', $ids ) );
-		$counts = array();
-		foreach ( $wpdb->get_results( "SELECT event_id,confirmed_count FROM {$wpdb->prefix}mi_event_counters WHERE event_id IN ({$safe_ids})", ARRAY_A ) as $counter ) $counts[ (int) $counter['event_id'] ] = (int) $counter['confirmed_count'];
+		$all_events = get_posts( $query );
+		if ( ! $all_events ) { echo '<section class="mi-portal-empty"><div class="mi-portal-bubble">Na⁺</div><h2>C’è qualcuno qui…?</h2><p>Non ci sono eventi visibili.</p></section>'; return; }
 		$published_summaries = array();
 		$revision_ids = array();
-		foreach ( $events as $event ) if ( 'publish' === $event->post_status ) { $revision_id = absint( get_post_meta( $event->ID, '_mi_published_revision_id', true ) ); if ( $revision_id ) $revision_ids[] = $revision_id; }
+		foreach ( $all_events as $event ) if ( 'publish' === $event->post_status ) { $revision_id = absint( get_post_meta( $event->ID, '_mi_published_revision_id', true ) ); if ( $revision_id ) $revision_ids[] = $revision_id; }
 		if ( $revision_ids ) {
 			$revision_list = implode( ',', array_map( 'absint', array_unique( $revision_ids ) ) );
 			foreach ( $wpdb->get_results( "SELECT event_id,config_json FROM {$wpdb->prefix}mi_event_revisions WHERE id IN ({$revision_list})", ARRAY_A ) as $revision ) {
@@ -170,8 +166,33 @@ final class MI_Portal {
 				if ( is_array( $config ) ) $published_summaries[ (int) $revision['event_id'] ] = $config;
 			}
 		}
+		$show_past = ! empty( $_GET['mi_portal_history'] ) && '1' === sanitize_text_field( wp_unslash( $_GET['mi_portal_history'] ) );
+		$current_events = array();
+		$past_events = array();
+		$start_timestamps = array();
+		foreach ( $all_events as $event ) {
+			$published = (array) ( $published_summaries[ $event->ID ] ?? array() );
+			$starts_at = (string) ( $published['event_starts_at'] ?? get_post_meta( $event->ID, '_mi_event_starts_at', true ) );
+			$start_timestamps[ $event->ID ] = self::date_timestamp( $starts_at );
+			if ( self::is_past_event( $starts_at ) ) $past_events[] = $event; else $current_events[] = $event;
+		}
+		$events = $show_past ? $past_events : $current_events;
+		usort( $events, static function ( $a, $b ) use ( $start_timestamps, $show_past ) {
+			$a_time = (int) ( $start_timestamps[ $a->ID ] ?? 0 );
+			$b_time = (int) ( $start_timestamps[ $b->ID ] ?? 0 );
+			if ( ! $a_time ) $a_time = $show_past ? 0 : PHP_INT_MAX;
+			if ( ! $b_time ) $b_time = $show_past ? 0 : PHP_INT_MAX;
+			return $show_past ? $b_time <=> $a_time : $a_time <=> $b_time;
+		} );
+		$ids = array_map( 'absint', wp_list_pluck( $events, 'ID' ) );
+		$counts = array();
+		if ( $ids ) {
+			$safe_ids = implode( ',', $ids );
+			foreach ( $wpdb->get_results( "SELECT event_id,confirmed_count FROM {$wpdb->prefix}mi_event_counters WHERE event_id IN ({$safe_ids})", ARRAY_A ) as $counter ) $counts[ (int) $counter['event_id'] ] = (int) $counter['confirmed_count'];
+		}
 		$base_url = self::base_url();
-		echo '<section><h2>Eventi</h2><div class="mi-event-grid">';
+		echo '<section><h2>' . ( $show_past ? 'Eventi passati' : 'Eventi' ) . '</h2>';
+		if ( $events ) echo '<div class="mi-event-grid">';
 		foreach ( $events as $event ) {
 			$count = (int) ( $counts[ $event->ID ] ?? 0 );
 			$published = (array) ( $published_summaries[ $event->ID ] ?? array() );
@@ -184,16 +205,26 @@ final class MI_Portal {
 			$cover_image = esc_url( (string) ( $published['cover_image'] ?? get_the_post_thumbnail_url( $event->ID, 'thumbnail' ) ) );
 			$date_badge = self::date_badge( $starts_at );
 			$occupancy_percentage = min( 100, max( 0, (int) round( ( $count / $capacity ) * 100 ) ) );
-			$url = add_query_arg( array( 'mi_portal_view' => 'manage', 'mi_portal_event' => $event->ID ), $base_url );
+			$url_args = array( 'mi_portal_view' => 'manage', 'mi_portal_event' => $event->ID );
+			if ( $show_past ) $url_args['mi_portal_history'] = '1';
+			$url = add_query_arg( $url_args, $base_url );
 			echo '<a class="mi-event-card" href="' . esc_url( $url ) . '"><span class="mi-event-card__date"><small>' . esc_html( $date_badge['month'] ) . '</small><strong>' . esc_html( $date_badge['day'] ) . '</strong></span><span class="mi-event-card__content"><span class="mi-event-card__image">';
 			if ( $cover_image ) echo '<img src="' . esc_url( $cover_image ) . '" alt="">';
 			echo '</span><span class="mi-event-card__identity"><strong>' . esc_html( $event_title ) . '</strong>';
 			if ( $activity_name ) echo '<small>' . esc_html( $activity_name ) . '</small>';
-			echo '<small>' . esc_html( self::format_date( $starts_at ) ) . '</small></span><span class="mi-event-card__footer"><span class="mi-event-card__capacity"><small>Posti occupati</small><strong>' . esc_html( $count . ' / ' . $capacity ) . '</strong><i aria-hidden="true"><b style="width:' . esc_attr( $occupancy_percentage ) . '%"></b></i></span><span class="mi-event-card__status"><strong>' . esc_html( 'publish' === $event->post_status ? 'Attivo' : 'Bozza' ) . '</strong><small>Scadenza: ' . esc_html( self::format_date( $closes_at ) ) . '</small></span></span></span></a>';
+			$status_label = 'publish' === $event->post_status ? ( $show_past ? 'Concluso' : 'Attivo' ) : 'Bozza';
+			echo '<small>' . esc_html( self::format_date( $starts_at ) ) . '</small></span><span class="mi-event-card__footer"><span class="mi-event-card__capacity"><small>Posti occupati</small><strong>' . esc_html( $count . ' / ' . $capacity ) . '</strong><i aria-hidden="true"><b style="width:' . esc_attr( $occupancy_percentage ) . '%"></b></i></span><span class="mi-event-card__status"><strong>' . esc_html( $status_label ) . '</strong><small>Scadenza: ' . esc_html( self::format_date( $closes_at ) ) . '</small></span></span></span></a>';
 		}
-		echo '</div></section>';
-		$selected = absint( $_GET['mi_portal_event'] ?? 0 );
-		if ( $selected && in_array( $selected, $ids, true ) ) self::registrations_view( $selected ); else self::registrations_view( 0, $ids );
+		if ( $events ) echo '</div>'; else echo '<p class="mi-portal-muted">' . ( $show_past ? 'Non ci sono eventi passati.' : 'Non ci sono eventi in corso, futuri o in bozza.' ) . '</p>';
+		echo '</section>';
+		if ( $ids ) {
+			$selected = absint( $_GET['mi_portal_event'] ?? 0 );
+			if ( $selected && in_array( $selected, $ids, true ) ) self::registrations_view( $selected ); else self::registrations_view( 0, $ids );
+		}
+		$history_url = $show_past
+			? add_query_arg( 'mi_portal_view', 'manage', $base_url )
+			: add_query_arg( array( 'mi_portal_view' => 'manage', 'mi_portal_history' => '1' ), $base_url );
+		echo '<p class="mi-event-history-link"><a href="' . esc_url( $history_url ) . '">' . ( $show_past ? 'Torna agli eventi attuali' : 'Visualizza eventi passati' ) . '</a></p>';
 	}
 
 	private static function registrations_view( $event_id = 0, $event_ids = array() ) {
@@ -202,6 +233,7 @@ final class MI_Portal {
 		$rows = $wpdb->get_results( "SELECT r.id registration_id,r.event_id,r.created_at,r.buyer_email,p.id participant_id,p.first_name,p.last_name,events.post_title event_title FROM {$wpdb->prefix}mi_registrations r JOIN {$wpdb->prefix}mi_participants p ON p.registration_id=r.id JOIN {$wpdb->posts} events ON events.ID=r.event_id WHERE {$where} ORDER BY r.created_at DESC,p.id ASC LIMIT 10", ARRAY_A );
 		$base_url = self::base_url();
 		if ( $event_id ) $base_url = add_query_arg( 'mi_portal_event', $event_id, $base_url );
+		if ( ! empty( $_GET['mi_portal_history'] ) ) $base_url = add_query_arg( 'mi_portal_history', '1', $base_url );
 		echo '<section><h2>Ultime iscrizioni</h2><div class="mi-booking-list">';
 		foreach ( $rows as $index => $row ) { $url = add_query_arg( array( 'mi_portal_view' => 'manage', 'mi_portal_booking' => $row['registration_id'] ), $base_url ); echo '<a data-mi-portal-booking-open href="' . esc_url( $url ) . '"><span>' . esc_html( $index + 1 ) . '</span><strong>' . esc_html( $row['first_name'] . ' ' . $row['last_name'] ) . '</strong><small>' . esc_html( $row['event_title'] . ' · ' . self::format_utc_date( $row['created_at'] ) . ' · ' . $row['buyer_email'] ) . '</small></a>'; }
 		if ( ! $rows ) echo '<p class="mi-portal-muted">Nessuna iscrizione presente.</p>';
@@ -289,6 +321,15 @@ final class MI_Portal {
 			'month' => mb_strtoupper( rtrim( wp_date( 'M', $date->getTimestamp(), wp_timezone() ), '.' ) ),
 			'day'   => wp_date( 'd', $date->getTimestamp(), wp_timezone() ),
 		);
+	}
+	private static function date_timestamp( $value ) {
+		if ( ! $value ) return 0;
+		$date = DateTimeImmutable::createFromFormat( '!Y-m-d\TH:i', (string) $value, wp_timezone() );
+		return $date instanceof DateTimeImmutable ? $date->getTimestamp() : 0;
+	}
+	private static function is_past_event( $value ) {
+		$timestamp = self::date_timestamp( $value );
+		return $timestamp > 0 && $timestamp < current_time( 'timestamp', true );
 	}
 	private static function format_utc_date( $value ) {
 		if ( ! $value ) return 'Data non disponibile';
