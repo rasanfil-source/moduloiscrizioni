@@ -20,6 +20,7 @@ function configuraCartellaDiLavoro() {
   lock.waitLock(30000);
   try {
     const spreadsheet = ottieniFoglioDiLavoroAssociato_();
+    PropertiesService.getScriptProperties().setProperty('MI_SPREADSHEET_ID', spreadsheet.getId());
     rinominaSchedePrecedenti_(spreadsheet);
     const existing = spreadsheet.getSheets();
     if (!spreadsheet.getSheetByName(MI_SHEETS.CONFIG) && existing.length === 1 && existing[0].getLastRow() <= 1 && existing[0].getLastColumn() <= 1) {

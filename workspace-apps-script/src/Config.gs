@@ -68,8 +68,12 @@ const MI_PAYMENT_ENUMS = Object.freeze({
 });
 
 function ottieniFoglioDiLavoroAssociato_() {
+  const properties = typeof PropertiesService !== 'undefined' ? PropertiesService.getScriptProperties() : null;
+  const configuredId = properties ? String(properties.getProperty('MI_SPREADSHEET_ID') || '').trim() : '';
+  if (configuredId) return SpreadsheetApp.openById(configuredId);
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  if (!spreadsheet) throw new Error('Il progetto deve essere associato a un Google Sheet.');
+  if (!spreadsheet) throw new Error('Foglio operativo non configurato. Esegui Inizializza/aggiorna struttura dal Google Sheet.');
+  if (properties) properties.setProperty('MI_SPREADSHEET_ID', spreadsheet.getId());
   return spreadsheet;
 }
 
