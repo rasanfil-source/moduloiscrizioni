@@ -259,7 +259,7 @@ final class MI_Portal {
 		$view = sanitize_key( wp_unslash( $_GET['mi_portal_view'] ?? 'manage' ) );
 		$can_create = current_user_can( 'mi_create_events' ) || current_user_can( 'manage_options' );
 		ob_start();
-		?><main class="mi-portal"><header class="mi-portal-header"><div><span class="mi-portal-eyebrow">Servizio iscrizioni</span><h1>Gestione eventi</h1></div><a class="mi-portal-logout" href="<?php echo esc_url( wp_logout_url( self::base_url() ) ); ?>">Esci</a></header>
+		?><main class="mi-portal"><header class="mi-portal-header"><div><span class="mi-portal-eyebrow">Servizio iscrizioni</span><h1>Gestione eventi</h1></div><a class="mi-portal-logout" href="<?php echo esc_url( wp_logout_url( self::base_url() ) ); ?>"><span aria-hidden="true">↗</span> Esci</a></header>
 		<nav class="mi-portal-switcher" aria-label="Vista portale"><?php if ( $can_create ) : ?><a class="<?php echo 'create' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'create' ) ); ?>">Crea evento</a><?php endif; ?><a class="<?php echo 'create' !== $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'manage' ) ); ?>"><?php echo esc_html( self::manage_label() ); ?></a></nav>
 		<?php self::notice(); ?>
 		<?php if ( 'create' === $view && $can_create ) self::create_view(); else self::manage_view(); ?>

@@ -34,7 +34,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.6\.4/);
+	assert.match(source, /Version:\s+3\.6\.5/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -224,7 +224,12 @@ test('il portale tecnico evita Divi e aggrega i dati della dashboard', async () 
 
 test('il portale resta utilizzabile fra telefono e tablet', async () => {
   const css = await read('assets/portal.css');
+	const portal = await read('includes/class-mi-portal.php');
   assert.match(css, /mi-portal-header[^}]+flex-wrap:wrap/);
+	assert.match(portal, /class="mi-portal-logout"/);
+	assert.match(portal, /<span aria-hidden="true">↗<\/span> Esci/);
+	assert.match(css, /\.mi-portal-logout\{[^}]+border-radius:999px/);
+	assert.match(css, /\.mi-portal-logout:focus-visible/);
   assert.match(css, /mi-portal-switcher[^}]+flex-wrap:wrap/);
   assert.match(css, /min-height:44px/);
   assert.match(css, /@media\(max-width:760px\)/);
