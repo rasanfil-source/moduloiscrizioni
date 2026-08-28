@@ -1,5 +1,32 @@
-function doGet() {
+function doGet(event) {
+  const parameters = event && event.parameter ? event.parameter : {};
+  if (String(parameters.view || '') === 'segreteria') {
+    if (!utenteSegreteriaAutorizzato_()) {
+      return HtmlService.createHtmlOutput('<!doctype html><html><body style="font:16px Arial,sans-serif;padding:32px"><h1>Accesso riservato</h1><p>Accedi con l’account Google autorizzato dalla segreteria.</p></body></html>')
+        .setTitle('Accesso riservato');
+    }
+    const template = HtmlService.createTemplateFromFile('Segreteria');
+    const section = normalizzaValoreElenco_(parameters.section, ['ASSEGNAZIONI', 'REPORT', 'GRUPPI', 'COMUNICAZIONI']);
+    template.modalita = parameters.order ? 'PRENOTAZIONE' : (section || 'LISTA');
+    template.codiceOrdineIniziale = normalizzaTesto_(parameters.order, 64);
+    template.webAppUrl = pulisciUrlWebAppSegreteria_(PropertiesService.getScriptProperties().getProperty('MI_SECRETARY_WEBAPP_URL') || ScriptApp.getService().getUrl() || '');
+    template.isWebApp = true;
+    return template.evaluate().setTitle('Segreteria eventi').addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
   return creaRispostaJson_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, mode: 'PREVIEW' });
+}
+
+function pulisciUrlWebAppSegreteria_(url) {
+  return String(url || '').trim().split(/[?#]/)[0];
+}
+
+function utenteSegreteriaAutorizzato_() {
+  const active = String(Session.getActiveUser().getEmail() || '').trim().toLowerCase();
+  if (!active) return false;
+  const effective = String(Session.getEffectiveUser().getEmail() || '').trim().toLowerCase();
+  const configured = String(PropertiesService.getScriptProperties().getProperty('MI_SECRETARY_ALLOWED_EMAILS') || '')
+    .split(',').map(function (email) { return email.trim().toLowerCase(); }).filter(Boolean);
+  return active === effective || configured.indexOf(active) >= 0;
 }
 
 function doPost(event) {
@@ -9,7 +36,7 @@ function doPost(event) {
     const verified = verificaBusta_(envelope);
     if (!verified.ok) return creaRispostaJson_({ ok: false, error: verified.error });
     if (envelope.action === 'PING') return creaRispostaJson_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, mode: 'PREVIEW' });
-	if (envelope.action === 'STATO_SCHEMA') return creaRispostaJson_({ ok: true, schema_version: MI_SCHEMA_VERSION, registration_headers: MI_HEADERS[MI_SHEETS.REGISTRATIONS], mode: 'PREVIEW' });
+	if (envelope.action === 'STATO_SCHEMA') return creaRispostaJson_({ ok: true, schema_version: MI_SCHEMA_VERSION, registration_headers: MI_HEADERS[MI_SHEETS.REGISTRATIONS], accommodation_headers: MI_HEADERS[MI_SHEETS.ACCOMMODATIONS], group_headers: MI_HEADERS[MI_SHEETS.GROUPS], report_template_headers: MI_HEADERS[MI_SHEETS.REPORT_TEMPLATES], event_headers: MI_HEADERS[MI_SHEETS.EVENTS], mode: 'PREVIEW' });
     if (envelope.action === 'ELENCA_PAGAMENTI') return creaRispostaJson_(elencaPagamenti_(envelope.payload));
     if (envelope.action !== 'APPEND_REGISTRATION') return creaRispostaJson_({ ok: false, error: 'ACTION_NOT_ALLOWED' });
     return creaRispostaJson_(aggiungiIscrizione_(envelope.payload));

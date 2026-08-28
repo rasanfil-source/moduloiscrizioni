@@ -33,6 +33,77 @@ final class MI_Spedizione_Email {
 		}
 	}
 
+	public static function accoda_comunicazione_operativa( array $payload ) {
+		global $wpdb;
+		$communication_id = sanitize_key( (string) ( $payload['communication_id'] ?? '' ) );
+		$event_id = absint( $payload['event_id'] ?? 0 );
+		$template_type = strtoupper( sanitize_key( (string) ( $payload['template_type'] ?? '' ) ) );
+		$message = sanitize_textarea_field( (string) ( $payload['message'] ?? '' ) );
+		$allow_operational = ! empty( $payload['allow_operational'] );
+		if ( ! $communication_id || ! $event_id || ! in_array( $template_type, array( 'PRE_DEPARTURE_REMINDER', 'BALANCE_REMINDER', 'EVENT_CANCELLATION' ), true ) ) return new WP_Error( 'mi_operational_email_invalid', 'Comunicazione non valida.', array( 'status' => 400 ) );
+		if ( 'PRE_DEPARTURE_REMINDER' === $template_type && ! $message ) return new WP_Error( 'mi_operational_email_message_required', 'Il promemoria richiede un testo.', array( 'status' => 400 ) );
+		$recipient_payload = is_array( $payload['recipients'] ?? null ) ? array_slice( $payload['recipients'], 0, 1000 ) : array();
+		$recipient_state = array();
+		foreach ( $recipient_payload as $recipient ) {
+			if ( ! is_array( $recipient ) ) continue;
+			$order_code = sanitize_text_field( (string) ( $recipient['order_code'] ?? '' ) );
+			if ( ! $order_code || strlen( $order_code ) > 64 ) continue;
+			$recipient_state[ $order_code ] = array(
+				'paid_cents'    => max( 0, absint( $recipient['paid_cents'] ?? 0 ) ),
+				'balance_cents' => max( 0, absint( $recipient['balance_cents'] ?? 0 ) ),
+			);
+		}
+		if ( ! $recipient_state ) return array( 'ok' => true, 'count' => 0, 'mode' => self::modalita(), 'message' => 'Nessun destinatario corrisponde ai criteri.' );
+		$event = MI_Registration_Service::public_event( $event_id, true );
+		if ( is_wp_error( $event ) ) return $event;
+		$lock_name = 'mi_email_' . substr( hash( 'sha256', $communication_id ), 0, 48 );
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 3)', $lock_name ) ) ) return new WP_Error( 'mi_operational_email_busy', 'Preparazione momentaneamente occupata.', array( 'status' => 503 ) );
+		try {
+			$idempotency_key = 'mi_operational_email_' . hash( 'sha256', $communication_id );
+			$effective_mode = $allow_operational && 'OPERATIVO' === self::modalita() && 'publish' === get_post_status( $event_id ) ? 'OPERATIVO' : 'ANTEPRIMA';
+			if ( get_transient( $idempotency_key ) ) return array( 'ok' => true, 'count' => 0, 'mode' => $effective_mode, 'message' => 'Questa comunicazione era già stata preparata.' );
+			$registrations_table = $wpdb->prefix . 'mi_registrations';
+			$outbox_table = $wpdb->prefix . 'mi_email_outbox';
+			$order_codes = array_keys( $recipient_state );
+			$placeholders = implode( ',', array_fill( 0, count( $order_codes ), '%s' ) );
+			$query_args = array_merge( array( $event_id ), $order_codes );
+			$registrations = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,status,buyer_first_name,buyer_last_name,buyer_email,total_qty,total_cents,initial_due_cents,balance_cents,payment_methods_json FROM {$registrations_table} WHERE event_id=%d AND order_code IN ({$placeholders}) AND status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED') AND capacity_released_at IS NULL ORDER BY id LIMIT 1000", $query_args ), ARRAY_A );
+			$now = current_time( 'mysql', true );
+			$count = 0;
+			$wpdb->query( 'START TRANSACTION' );
+			try {
+				foreach ( $registrations as $registration ) {
+					if ( 'WAITLISTED' === $registration['status'] && 'EVENT_CANCELLATION' !== $template_type ) continue;
+					$financial_state = $recipient_state[ $registration['order_code'] ] ?? array();
+					$paid = min( (int) $registration['total_cents'], max( 0, (int) ( $financial_state['paid_cents'] ?? 0 ) ) );
+					$balance = min( (int) $registration['total_cents'], max( 0, (int) ( $financial_state['balance_cents'] ?? 0 ) ) );
+					if ( 'BALANCE_REMINDER' === $template_type && $balance < 1 ) continue;
+					$economic = array( 'total_cents' => (int) $registration['total_cents'], 'initial_due_cents' => (int) $registration['initial_due_cents'], 'balance_cents' => $balance, 'payment_methods' => json_decode( (string) $registration['payment_methods_json'], true ) ?: array() );
+					$status_labels = array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'In attesa di pagamento', 'WAITLISTED' => 'Lista d’attesa' );
+					$values = MI_Modello_Email::valori_ordine( $event, $registration['order_code'], $status_labels[ $registration['status'] ] ?? $registration['status'], (int) $registration['total_qty'], trim( $registration['buyer_first_name'] . ' ' . $registration['buyer_last_name'] ), $economic );
+					$status_url = MI_Portal::status_url( $registration['id'], $registration['order_code'], $registration['buyer_email'] );
+					$snapshot = MI_Modello_Email::crea_istantanea_operativa( $event_id, $values, $template_type, $message, $status_url );
+					$status = 'OPERATIVO' === $effective_mode ? self::stato_nuova_email( $snapshot ) : 'PREVIEW';
+					$payload_json = wp_json_encode( array( 'communication_id' => $communication_id, 'event_title' => $event['title'], 'order_code' => $registration['order_code'], 'template_type' => $template_type, 'email_preview' => $snapshot ) );
+					if ( false === $payload_json ) throw new RuntimeException( 'Coda email non salvata.' );
+					$origin_key = hash( 'sha256', $communication_id . '|' . $registration['id'] );
+					$inserted = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$outbox_table} (registration_id,recipient,template_type,origin_key,payload_json,status,created_at) VALUES (%d,%s,%s,%s,%s,%s,%s)", $registration['id'], $registration['buyer_email'], $template_type, $origin_key, $payload_json, $status, $now ) );
+					if ( false === $inserted ) throw new RuntimeException( 'Coda email non salvata.' );
+					if ( $inserted ) $count++;
+				}
+				$wpdb->query( 'COMMIT' );
+				set_transient( $idempotency_key, 1, DAY_IN_SECONDS );
+			} catch ( Throwable $error ) {
+				$wpdb->query( 'ROLLBACK' );
+				return new WP_Error( 'mi_operational_email_storage', 'Non è stato possibile preparare la comunicazione.', array( 'status' => 500 ) );
+			}
+			if ( 'OPERATIVO' === $effective_mode && $count ) self::pianifica_spedizione();
+			return array( 'ok' => true, 'count' => $count, 'mode' => $effective_mode, 'message' => 'Comunicazione preparata nella coda WordPress.' );
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+		}
+	}
+
 	public static function aggiungi_pagina() {
 		add_submenu_page( 'edit.php?post_type=' . MI_Event_Post_Type::EVENT_TYPE, 'Spedizione email', 'Spedizione email', 'manage_options', 'mi-spedizione-email', array( __CLASS__, 'mostra_pagina' ) );
 	}

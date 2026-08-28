@@ -11,13 +11,46 @@ const segreteriaHtml = await readFile(new URL('Segreteria.html', sourceDir), 'ut
 
 test('tutti i file Apps Script hanno sintassi valida', () => {
   for (const [name, source] of Object.entries(sources)) assert.doesNotThrow(() => new vm.Script(source, { filename: name }));
+  const embeddedScript = segreteriaHtml.match(/<script>([\s\S]*?)<\/script>/i)?.[1].replace(/<\?!=[\s\S]*?\?>/g, 'TEST') || '';
+  assert.doesNotThrow(() => new vm.Script(embeddedScript, { filename: 'Segreteria.html' }));
 });
 
 test('il setup dichiara tutte le schede operative', () => {
   for (const name of ['Configurazione', 'Eventi', 'Iscrizioni', 'Partecipanti', 'Inserimento pagamenti', 'Pagamenti', 'Coda email', 'Registro controlli']) assert.match(combined, new RegExp(name));
   assert.match(sources['Setup.gs'], /configuraCartellaDiLavoro/);
+  assert.match(sources['Setup.gs'], /console\.log\('Struttura aggiornata/);
   assert.match(sources['Setup.gs'], /rinominaSchedePrecedenti_/);
   assert.match(sources['Setup.gs'], /requireValueInList/);
+});
+
+test('i modelli report personalizzati sono validati e non sovrascrivono quelli standard', () => {
+  assert.match(sources['Config.gs'], /REPORT_TEMPLATES:\s*'Modelli report'/);
+  assert.match(sources['Report.gs'], /function elencaModelliReport/);
+  assert.match(sources['Report.gs'], /function salvaModelloReport/);
+  assert.match(sources['Report.gs'], /function generaReportDaModello/);
+  assert.match(sources['Report.gs'], /generaElencoOperativo_/);
+  assert.match(sources['Report.gs'], /'PERSONALIZZATO'/);
+  assert.match(sources['Report.gs'], /normalizzaScelteReport_/);
+  assert.match(sources['Report.gs'], /campiElencoOperativo_/);
+  assert.match(sources['Segreteria.gs'], /const grouping = normalizzaScelteReport_/);
+  assert.match(sources['Segreteria.gs'], /SOLID_MEDIUM/);
+  assert.match(segreteriaHtml, /name="reportGroup"/);
+  assert.match(segreteriaHtml, /name="reportOrder"/);
+  assert.doesNotMatch(sources['Report.gs'], /deleteRow|clearContent|setValues/);
+});
+
+test('Workspace gestisce gruppi espliciti e migra soltanto l’intestazione storica', () => {
+  assert.match(sources['Config.gs'], /GROUPS:\s*'Gruppi'/);
+  assert.match(sources['Config.gs'], /'Eventi': \['id_evento', 'id_gruppo'/);
+  assert.match(sources['Config.gs'], /MI_INTESTAZIONI_PRECEDENTI[\s\S]*'id_attivita'/);
+  assert.match(sources['Setup.gs'], /inizializzaGruppi_/);
+  assert.match(sources['Gruppi.gs'], /function elencaGruppi/);
+  assert.match(sources['Gruppi.gs'], /function aggiungiGruppo/);
+  assert.match(sources['Gruppi.gs'], /CREATE_GROUP/);
+  assert.match(sources['Gruppi.gs'], /sincronizzaGruppiConWordPress/);
+  assert.match(sources['Gruppi.gs'], /https:\\\/\\\//);
+  assert.match(segreteriaHtml, /MODE==='GRUPPI'/);
+  assert.match(segreteriaHtml, /function groupsUI/);
 });
 
 test('il web endpoint fallisce chiuso e richiede HMAC e anti replay', () => {
@@ -28,11 +61,14 @@ test('il web endpoint fallisce chiuso e richiede HMAC e anti replay', () => {
 	assert.match(sources['WebApp.gs'], /MI_USED_NONCES/);
 	assert.match(sources['WebApp.gs'], /120000/);
   assert.match(sources['WebApp.gs'], /envelope\.action === 'PING'/);
+  assert.match(sources['WebApp.gs'], /group_headers/);
+  assert.match(sources['WebApp.gs'], /report_template_headers/);
   assert.doesNotMatch(combined, /API_KEY\s*=\s*['"]\s*['"]/);
 });
 
 test('il sorgente non incorpora destinazioni o coordinate operative', () => {
-  assert.doesNotMatch(combined, /docs\.google\.com\/spreadsheets\/d\//);
+  assert.doesNotMatch(combined, /docs\.google\.com\/spreadsheets\/d\/[A-Za-z0-9_-]{20,}/);
+  assert.match(sources['Segreteria.gs'], /spreadsheet\.getId\(\)/);
   assert.doesNotMatch(combined, /@[a-z0-9.-]+\.[a-z]{2,}/i);
   assert.doesNotMatch(combined, /\bIT\d{2}[A-Z]\d{10,}/);
 });
@@ -43,6 +79,9 @@ test('i pagamenti ammettono solo bonifico carta e contanti senza dati carta', ()
   assert.match(sources['Config.gs'], /CONTANTE/);
   assert.match(sources['Payments.gs'], /contienePossibileNumeroCarta_/);
   assert.match(sources['Payments.gs'], /id_inserimento_origine/);
+	assert.match(sources['Payments.gs'], /FREE_ORDER/);
+	assert.match(sources['Payments.gs'], /OVERPAYMENT/);
+	assert.match(sources['Payments.gs'], /EXCESS_REFUND/);
 });
 
 test('le funzioni Apps Script applicative hanno nomi italiani', () => {
@@ -55,26 +94,54 @@ test('le funzioni Apps Script applicative hanno nomi italiani', () => {
   }
 });
 
-test('la migrazione aggiunge il riepilogo economico alle iscrizioni', () => {
-	assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.5\.0'/);
+test('la migrazione aggiunge riepilogo economico e sistemazioni operative', () => {
+	assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.8\.0'/);
   assert.match(sources['Config.gs'], /modalita_economica/);
   assert.match(sources['Config.gs'], /primo_versamento_centesimi/);
   assert.match(sources['Config.gs'], /saldo_centesimi/);
   assert.match(sources['Setup.gs'], /MI_INTESTAZIONI_PRECEDENTI/);
   assert.match(sources['WebApp.gs'], /payment_methods/);
+	assert.match(sources['Config.gs'], /ACCOMMODATIONS: 'Sistemazioni'/);
 });
 
 test('la console Sheets consulta prenotazioni e genera elenchi operativi per evento', () => {
-	assert.match(sources['Setup.gs'], /Apri scheda prenotazione/);
+	assert.match(sources['Setup.gs'], /Apri segreteria/);
 	assert.match(sources['Setup.gs'], /Configura elenco operativo/);
+	assert.match(sources['Setup.gs'], /Comunicazioni operative/);
 	assert.match(sources['Segreteria.gs'], /showSidebar/);
+	assert.match(sources['Segreteria.gs'], /showModelessDialog/);
 	assert.doesNotMatch(sources['Segreteria.gs'], /SpreadsheetApp\.create/);
 	assert.doesNotMatch(sources['Segreteria.gs'], /creaIniziativaGuidata|CREATE_EVENT_DRAFT/);
 	assert.match(sources['Config.gs'], /Operazioni segreteria/);
 	assert.match(sources['Segreteria.gs'], /MI_SHEETS\.SECRETARY_OPERATIONS/);
 	assert.match(sources['Segreteria.gs'], /MI_SHEETS\.OPERATIONAL_VIEWS/);
 	assert.match(sources['Segreteria.gs'], /generaElencoOperativo_/);
+	assert.match(sources['Segreteria.gs'], /cercaPrenotazioniSegreteria/);
+  assert.match(sources['Segreteria.gs'], /cambiaSistemazioneSegreteria/);
+  assert.match(sources['Segreteria.gs'], /Opzione dimostrativa predefinita/);
+  assert.match(sources['Segreteria.gs'], /Data di nascita/);
+	assert.match(sources['Segreteria.gs'], /destinatariComunicazioneOperativa_/);
+	assert.match(sources['Segreteria.gs'], /statoComunicazioniOperative/);
+	assert.match(sources['Segreteria.gs'], /Contatto di emergenza/);
+	assert.match(sources['Segreteria.gs'], /creaUrlStampaElenco_/);
 	assert.match(segreteriaHtml, /Conferma modifiche/);
+	assert.match(segreteriaHtml, /Aggiungi versamento/);
+	assert.match(segreteriaHtml, /posti liberi/);
+	assert.match(segreteriaHtml, /allow_operational/);
+});
+
+test('la segreteria Web è autonoma e rifiuta accessi anonimi', () => {
+	assert.match(sources['Setup.gs'], /apriSegreteriaWeb/);
+	assert.match(sources['WebApp.gs'], /view \|\| ''\) === 'segreteria'/);
+	assert.match(sources['WebApp.gs'], /utenteSegreteriaAutorizzato_/);
+	assert.match(sources['WebApp.gs'], /if \(!active\) return false/);
+	assert.match(sources['Segreteria.gs'], /MI_SECRETARY_WEBAPP_URL/);
+	assert.match(segreteriaHtml, /IS_WEB_APP/);
+	assert.match(sources['WebApp.gs'], /pulisciUrlWebAppSegreteria_/);
+	assert.match(segreteriaHtml, /new URL\(base,location\.href\)/);
+	assert.match(segreteriaHtml, /searchParams\.set\('order',order\)/);
+	assert.match(segreteriaHtml, /if\(IS_WEB_APP\)\{await loadBooking\(code\);return\}/);
+	assert.doesNotMatch(segreteriaHtml, /location\.assign\(secretaryUrl/);
 });
 
 test('lo stato individuale dei partecipanti arriva nelle schede e negli elenchi', () => {
@@ -83,6 +150,17 @@ test('lo stato individuale dei partecipanti arriva nelle schede e negli elenchi'
 	assert.match(sources['WebApp.gs'], /participant\.status/);
 	assert.match(sources['WebApp.gs'], /participant\.cancelled_at/);
 	assert.match(sources['Segreteria.gs'], /row\.stato_partecipante/);
+});
+
+test('camere e pullman si assegnano collettivamente senza superare la capienza', () => {
+	assert.match(sources['Setup.gs'], /Assegna camere e pullman/);
+	assert.match(sources['Segreteria.gs'], /function apriAssegnazioniEvento/);
+	assert.match(sources['Assegnazioni.gs'], /function caricaAssegnazioniEvento/);
+	assert.match(sources['Assegnazioni.gs'], /function salvaAssegnazioniEvento/);
+	assert.match(sources['Assegnazioni.gs'], /finalRoomCounts\[code\] > rooms\[code\]\.capacity/);
+	assert.match(sources['Assegnazioni.gs'], /BULK_ASSIGNMENTS/);
+	assert.match(segreteriaHtml, /Assegnazioni collettive/);
+	assert.match(segreteriaHtml, /data-assignment/);
 });
 
 test('la console non richiede mai foto o scansioni dei documenti', () => {

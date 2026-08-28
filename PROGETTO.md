@@ -1,11 +1,11 @@
 # Progetto: sistema multi-evento di iscrizione e pagamento
 
-Stato: implementazione revisionata — WordPress 3.5.3 / Workspace 1.5.0
+Stato: implementazione revisionata — WordPress 3.6.1 / Workspace 1.8.0
 Data: 27 agosto 2026
 
 Per lo stato puntuale delle funzioni confermate, parziali e fuori scope della v1 si applica `docs/ALLINEAMENTO_CODICE_DOCUMENTAZIONE.md`.
 
-Esito revisione del codice: il repository contiene WordPress `3.5.3` e Apps Script `1.5.0`. WordPress ospita il portale autenticato, configura e pubblica il modulo, raccoglie l’iscrizione iniziale e la consegna in modo firmato a Workspace. Il portale tecnico viene servito con un guscio autonomo leggero e query aggregate, senza avviare il front-end Divi. Le pagine informative non caricano il frontend WooCommerce, mentre donazioni, prodotti, carrello, pagamento, account, endpoint e contenuti WooCommerce incorporati restano esclusi dall'ottimizzazione. Sheets offre schede personali ed elenchi operativi configurabili per evento, compreso lo stato individuale; i fogli tecnici restano sottostanti. La modalità email predefinita resta `ANTEPRIMA`; `PROVA` usa soltanto dati sintetici e `OPERATIVO` è bloccata fino a una prova accettata dal sistema di posta.
+Esito revisione del codice: il repository contiene WordPress `3.6.1` e Apps Script `1.8.0`. WordPress ospita il portale autenticato, configura e pubblica il modulo, raccoglie l’iscrizione iniziale e la consegna in modo firmato a Workspace. Il referente dispone di una consultazione minima dello stato e del saldo, autenticata con codice/email o collegamento firmato. Il portale tecnico viene servito con un guscio autonomo leggero e query aggregate, senza avviare il front-end Divi. Le pagine informative non caricano il frontend WooCommerce, mentre donazioni, prodotti, carrello, pagamento, account, endpoint e contenuti WooCommerce incorporati restano esclusi dall'ottimizzazione. Sheets offre ricerca a schede, modifica dei dati operativi, versamenti convalidati, sistemazioni a capienza controllata, assegnazioni collettive, comunicazioni operative ed elenchi A4 configurabili per evento. La modalità email predefinita resta `ANTEPRIMA`; `PROVA` usa soltanto dati sintetici e `OPERATIVO` è bloccata fino a una prova accettata dal sistema di posta.
 
 Backend Workspace: il progetto Apps Script `MODULI` è installato nell'account Workspace organizzativo definitivo e collegato allo spreadsheet riservato `DB_MODULI`. Il setup e la migrazione linguistica hanno creato otto schede operative con nomi, intestazioni e valori in italiano: `Configurazione`, `Eventi`, `Iscrizioni`, `Partecipanti`, `Inserimento pagamenti`, `Pagamenti`, `Coda email` e `Registro controlli`. La Web App è distribuita dall'account organizzativo e il controllo `PING` firmato con HMAC e anti-replay è stato verificato da WordPress anche dopo l'installazione della replica delle iscrizioni. Una registrazione interamente sintetica ha collaudato salvataggio locale, replica in `Iscrizioni` e `Partecipanti`, outbox locale, `Coda email` in `PREVIEW` e replay idempotente senza duplicati. L'evento usato per la prova è stato subito riportato in bozza con finestra iscrizioni vuota; nessuna email è stata inviata. Il repository non contiene ID, URL di distribuzione, segreti, codici di collaudo o destinatari operativi.
 
@@ -18,6 +18,7 @@ Backend Workspace: il progetto Apps Script `MODULI` è installato nell'account W
 - [Politica di sanitizzazione](docs/SANITIZZAZIONE.md)
 - [Criteri di accettazione della prima vertical slice](docs/CRITERI_ACCETTAZIONE_VERTICAL_SLICE.md)
 - [Prototipo responsive](prototipo/README.md)
+- [Catalogo report e modello personalizzato](schema/report.example.json)
 
 ## 1. Obiettivo
 
@@ -35,11 +36,21 @@ Realizzare un sistema riutilizzabile per più eventi, integrato in WordPress, ch
 - generare per ogni ordine un codice univoco interno e lasciare all'organizzatore la scelta di mostrarlo nell'email come testo, QR, codice a barre o senza rappresentazione grafica;
 - proporre il pagamento tramite bonifico, link carta esterno, contanti o una combinazione configurabile;
 - amministrare eventi, schermate, email e prenotazioni da WordPress e consultare nel pannello i pagamenti acquisiti manualmente dallo spreadsheet;
-- rappresentare la parrocchia come ente base e le sue diverse attività come organizzatori distinti, ciascuno con identità visiva e logo propri.
+- rappresentare la parrocchia come ente base e i suoi diversi gruppi come organizzatori distinti, ciascuno con identità visiva e logo propri.
 
 Il sistema deve partire da uno schema iniziale ben progettato. L'amministratore potrà personalizzare contenuti e regole senza poter compromettere struttura, accessibilità o sicurezza inserendo JavaScript arbitrario.
 
 ## 2. Architettura consigliata
+
+### Semplificazione del modello: niente livello “Attività”
+
+Il livello operativo ufficiale è **Gruppo → Evento**. Il concetto di “Attività” non viene utilizzato né richiesto per creare o pubblicare un evento. Potrà essere reintrodotto in futuro soltanto come raggruppamento facoltativo, dopo una decisione esplicita e senza rompere gli identificativi esistenti.
+
+Un gruppo è un contenitore organizzativo (per esempio `Parrocchia`, `12 Ceste`, `ICEF`, `Escursioni`, `Visite`) e può avere nome, slug, stato, contatti, logo e immagine predefinita. Ogni evento appartiene a un gruppo e può sovrascrivere logo, immagine e testi senza modificare il gruppo.
+
+Gli eventi non condividono un elenco fisso di campi: ciascuno dichiara il proprio profilo di raccolta dati e gli eventuali moduli aggiuntivi. Il nucleo minimo comprende referente e partecipanti; documenti, nascita, maglietta, allergie, alloggio, camera, pullman e altri dati logistici sono attivati solo quando necessari.
+
+I report sono viste configurabili sui dati dell'evento, non nuovi schemi paralleli. Sono previsti modelli standard (partecipanti, documenti, camere, pullman, servizi, pagamenti) e report personalizzati con colonne, filtri, raggruppamenti e ordinamenti salvabili come modello riutilizzabile.
 
 La scelta confermata resta essenziale: plugin monolitico WordPress sul sito esistente e un progetto Apps Script collegato alla console Workspace. WordPress è autorevole per configurazione pubblica, revisioni, raccolta iniziale, ruoli e ACL; dopo la consegna dell’iscrizione, Sheets/GAS è autorevole per l’intero flusso operativo della segreteria. WordPress non conserva camere, pasti, trasporti, pagamenti o documenti integrati successivamente.
 
@@ -79,7 +90,7 @@ Se il piano WordPress non consente plugin personalizzati, sarà necessario scegl
 
 ### Gerarchia organizzativa e branding
 
-La parrocchia è l'ente base e il soggetto legale di riferimento. Contiene una o più attività e ogni evento appartiene obbligatoriamente a una sola attività. Il branding viene risolto per singola proprietà seguendo `predefinito plugin -> parrocchia -> attività -> evento`.
+La parrocchia è l'ente base e il soggetto legale di riferimento. Contiene uno o più gruppi e ogni evento appartiene obbligatoriamente a un solo gruppo. Il branding viene risolto per singola proprietà seguendo `predefinito plugin -> parrocchia -> gruppo -> evento`.
 
 Logo, colori e contatti pubblici possono essere ereditati o sovrascritti entro una allowlist. Il branding non può invece modificare identità legale, titolare del trattamento, informativa privacy o responsabilità della parrocchia. Logo e immagine editoriale dell'evento restano asset distinti.
 
@@ -95,8 +106,8 @@ Il sistema usa un solo wizard responsive, non due applicazioni diverse. Passaggi
 
 ### Passaggio 1: riepilogo evento
 
-- logo dell'attività organizzatrice, oppure logo specifico dell'evento se configurato;
-- nome testuale dell'attività e riferimento alla parrocchia, visibili anche quando il logo contiene già del testo;
+- logo del gruppo organizzatore, oppure logo specifico dell'evento se configurato;
+- nome testuale del gruppo e riferimento alla parrocchia, visibili anche quando il logo contiene già del testo;
 - immagine e testo alternativo;
 - titolo, date, ora, luogo e descrizione breve;
 - stato delle iscrizioni e disponibilità, se configurata;
@@ -254,20 +265,20 @@ Il preset non rimane una scorciatoia ambigua: alla pubblicazione viene compilato
 
 Il pannello è suddiviso in sezioni.
 
-### Ente e attività
+### Ente e gruppo
 
 - la parrocchia è l'ente base dell'installazione;
-- l'ente contiene una o più attività organizzatrici, ciascuna con ID stabile, nome, slug, stato e contatti;
-- ogni attività può configurare il proprio logo dalla Media Library, con testo alternativo obbligatorio;
-- ogni evento appartiene obbligatoriamente a una sola attività;
-- il branding effettivo segue l'ordine `predefinito di sistema -> ente -> attività -> evento`, dove i livelli successivi possono sovrascrivere soltanto i valori esplicitamente configurati;
-- il logo dell'attività viene usato automaticamente dagli eventi collegati; un evento può impostare un logo specifico senza modificare quello dell'attività;
-- la cancellazione di un'attività con eventi collegati non è consentita: può essere archiviata oppure i suoi eventi devono essere prima riassegnati.
+- l'ente contiene uno o più gruppi organizzativi, ciascuno con ID stabile, nome, slug, stato e contatti;
+- ogni gruppo può configurare logo e immagine predefinita dalla Media Library, con testo alternativo obbligatorio;
+- ogni evento appartiene obbligatoriamente a un solo gruppo;
+- il branding effettivo segue l'ordine `predefinito di sistema -> ente -> gruppo -> evento`, dove i livelli successivi possono sovrascrivere soltanto i valori esplicitamente configurati;
+- il logo e l'immagine del gruppo vengono usati automaticamente dagli eventi collegati; un evento può impostare valori specifici senza modificare il gruppo;
+- la cancellazione di un gruppo con eventi collegati non è consentita: può essere archiviato oppure gli eventi devono essere prima riassegnati.
 
 ### Generale
 
 - ID immutabile e slug pubblico;
-- attività organizzatrice;
+- gruppo organizzatore;
 - stato `Bozza`, `Pubblicato`, `Chiuso`, `Annullato`, `Archiviato`;
 - titolo, descrizioni e URL della pagina WordPress;
 - date, orari, fuso orario e luogo;
@@ -329,7 +340,7 @@ Si consente testo semplice o rich text filtrato con una allowlist. Non si consen
 ### Aspetto
 
 - colore principale e secondario entro limiti di contrasto;
-- logo ereditato dall'attività, con eventuale override dell'evento, e immagine evento;
+- logo ereditato dal gruppo, con eventuale sostituzione dell'evento, e immagine evento;
 - testo alternativo obbligatorio per ogni logo e immagine;
 - etichette principali;
 - anteprima accessibile.
@@ -588,8 +599,8 @@ Si usa un unico spreadsheet per tutti gli eventi, con ID stabili e non con numer
 |---|---|
 | `Settings` | versione schema, ambiente e impostazioni tecniche non segrete |
 | `Organizations` | ente base, denominazione, contatti e branding predefinito |
-| `Activities` | attività organizzatrici, logo, contatti, branding, stato e riferimento all'ente |
-| `Events` | attività proprietaria, dati generali, stato, date, capienza, override branding e revisione pubblicata |
+| `Groups` | gruppi organizzatori, logo, immagine, contatti, branding, stato e riferimento all'ente |
+| `Events` | gruppo proprietario, dati generali, stato, date, capienza, sostituzioni del branding e revisione pubblicata |
 | `Screens` | testi e impostazioni dei passaggi del wizard |
 | `TicketTypes` | tipi di biglietto, prezzi e disponibilità |
 | `FieldDefinitions` | definizioni versionate dei campi, ambito, tipo, privacy, obbligatorietà e condizioni |
@@ -598,7 +609,7 @@ Si usa un unico spreadsheet per tutti gli eventi, con ID stabili e non con numer
 | `Messages` | avvisi, consensi e messaggi finali |
 | `PaymentMethods` | metodi, modalità, scadenze e istruzioni per evento |
 | `EmailTemplates` | template versionati e configurazione invio |
-| `Orders` | ordine autorevole, ente, attività, referente, totali, stati, revisione evento, branding risolto e idempotenza |
+| `Orders` | ordine autorevole, ente, gruppo, referente, totali, stati, revisione evento, branding risolto e idempotenza |
 | `Tickets` | partecipanti e tipo biglietto |
 | `ParticipantAnswers` | risposte tipizzate ai campi configurabili, una riga per partecipante e definizione |
 | `Selections` | opzioni scelte con etichetta e prezzo fotografati |
@@ -757,7 +768,7 @@ Il nuovo ordine viene prima registrato in modo autorevole e riceve un codice uni
 ### Fase A: decisioni e prototipo
 
 - risposte alle decisioni aperte;
-- modello ente, attività ed evento con regole di ereditarietà del branding;
+- modello ente, gruppo ed evento con regole di ereditarietà del branding;
 - wireframe responsive;
 - schema configurazione e fogli;
 - prototipo di un evento campione.
@@ -767,7 +778,7 @@ Il nuovo ordine viene prima registrato in modo autorevole e riceve un codice uni
 - plugin WordPress;
 - endpoint proxy firmati;
 - progetto GAS modulare;
-- gestione e versionamento di ente, attività e branding ereditato;
+- gestione e versionamento di ente, gruppi e branding ereditato;
 - inizializzazione e versionamento dello spreadsheet;
 - ruoli amministrativi e audit.
 
@@ -780,7 +791,7 @@ Il nuovo ordine viene prima registrato in modo autorevole e riceve un codice uni
 
 ### Fase D: pannello ed email
 
-- editor attività e anteprima del branding ereditato;
+- editor gruppi e anteprima del branding ereditato;
 - editor eventi e schermate;
 - editor e anteprima email: editor per evento, segnaposto italiani, HTML limitato, testo semplice, anteprima sintetica, snapshot, identità storica, prova controllata e modalità operativa protetta sono implementati; QR e barcode vengono incorporati localmente;
 - coda, retry e notifiche interne;
@@ -822,7 +833,8 @@ Il nuovo ordine viene prima registrato in modo autorevole e riceve un codice uni
 - QR e codice a barre sono opzioni libere per evento (`NONE`, `TEXT`, `QR`, `BARCODE`); il codice univoco interno esiste comunque e la grafica non è mai obbligatoria.
 - Direzione visiva iniziale coerente con il sito: titoli ispirati a `Roboto Slab`, testo semplice nello stile `Open Sans`, bianco e grigi chiari, blu principale vicino a `#337ab7`, accenti blu notte e card pulite.
 - Gli stili del plugin saranno completamente namespaced: il codice precedente modifica globalmente il `body` della pagina e questo comportamento non verrà ripetuto.
-- La parrocchia è l'ente base, ma contiene più attività organizzatrici. Ogni attività può impostare il proprio logo e usarlo come predefinito per i suoi eventi; il singolo evento può configurare un override esplicito.
+- La parrocchia è l'ente base e contiene più gruppi organizzativi. Ogni gruppo può impostare logo e immagine predefiniti per i suoi eventi; il singolo evento può configurare override espliciti. Il livello “Attività” è rimosso dal modello operativo e non va introdotto nei nuovi dati.
+- I modelli storici dei fogli restano dati di riferimento: non si cancellano né si rinominano automaticamente. L'eventuale migrazione verso `Groups` e viste report configurabili sarà progettata con mappatura e controllo di conservazione dati.
 - Gli amministratori WordPress accedono automaticamente al pannello del plugin. Le persone delegate usano account WordPress personali con un ruolo dedicato e possono essere limitate al solo pannello iscrizioni e alle attività assegnate.
 - Nel primo rilascio il pannello gestionale risiede in `wp-admin`; non è prevista una seconda area amministrativa nel frontend.
 - Il plugin carica asset e logica soltanto nelle pagine che usano il modulo e nelle proprie schermate amministrative; sulle altre pagine WordPress deve avere un impatto trascurabile e verificato.

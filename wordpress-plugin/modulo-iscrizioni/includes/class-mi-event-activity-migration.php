@@ -16,8 +16,8 @@ final class MI_Event_Activity_Migration {
 	public static function menu() {
 		add_submenu_page(
 			'edit.php?post_type=' . MI_Event_Post_Type::EVENT_TYPE,
-			'Migrazione attività',
-			'Migrazione attività',
+			'Migrazione gruppo',
+			'Migrazione gruppo',
 			'manage_options',
 			self::PAGE_SLUG,
 			array( __CLASS__, 'render_page' )
@@ -53,11 +53,11 @@ final class MI_Event_Activity_Migration {
 		}
 		?>
 		<div class="wrap">
-			<h1>Migrazione attività evento</h1>
+			<h1>Migrazione gruppo dell’evento</h1>
 			<?php if ( is_array( $notice ) ) : ?>
 				<div class="notice notice-<?php echo esc_attr( ! empty( $notice['success'] ) ? 'success' : 'error' ); ?> is-dismissible"><p><?php echo esc_html( $notice['message'] ?? '' ); ?></p></div>
 			<?php endif; ?>
-			<p>Questa operazione modifica soltanto l’attività associata all’evento. Iscrizioni, partecipanti, pagamenti, contatori e istantanee storiche restano invariati.</p>
+			<p>Questa operazione modifica soltanto il gruppo associato all’evento. Iscrizioni, partecipanti, pagamenti, contatori e istantanee storiche restano invariati.</p>
 			<p><strong>Usala esclusivamente quando il normale salvataggio impedisce il cambio perché esistono già iscrizioni.</strong> L’evento non viene pubblicato e non vengono inviate email.</p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<input type="hidden" name="action" value="mi_migrate_event_activity">
@@ -70,8 +70,8 @@ final class MI_Event_Activity_Migration {
 						<?php endforeach; ?></select></td>
 					</tr>
 					<tr>
-						<th scope="row"><label for="mi_migration_activity_id">Nuova attività</label></th>
-						<td><select id="mi_migration_activity_id" name="activity_id" required><option value="">Seleziona attività</option><?php foreach ( $activities as $activity ) : ?>
+						<th scope="row"><label for="mi_migration_activity_id">Nuovo gruppo</label></th>
+						<td><select id="mi_migration_activity_id" name="activity_id" required><option value="">Seleziona gruppo</option><?php foreach ( $activities as $activity ) : ?>
 							<option value="<?php echo esc_attr( $activity->ID ); ?>"><?php echo esc_html( $activity->post_title . ' — ID ' . $activity->ID . ' — ' . $activity->post_status ); ?></option>
 						<?php endforeach; ?></select></td>
 					</tr>
@@ -103,7 +103,7 @@ final class MI_Event_Activity_Migration {
 			$notice = array(
 				'success' => true,
 				'message' => sprintf(
-					'Migrazione completata: evento %1$d collegato all’attività %2$d. Verificate %3$d iscrizioni, tutte conservate.',
+					'Migrazione completata: evento %1$d collegato al gruppo %2$d. Verificate %3$d iscrizioni, tutte conservate.',
 					$result['event_id'],
 					$result['activity_id'],
 					$result['registrations_after']
@@ -130,19 +130,19 @@ final class MI_Event_Activity_Migration {
 			return new WP_Error( 'mi_migration_event_invalid', 'Evento non valido. Nessuna modifica eseguita.' );
 		}
 		if ( MI_Event_Post_Type::ACTIVITY_TYPE !== get_post_type( $activity_id ) || ! in_array( get_post_status( $activity_id ), array( 'publish', 'draft', 'private' ), true ) ) {
-			return new WP_Error( 'mi_migration_activity_invalid', 'Attività di destinazione non valida. Nessuna modifica eseguita.' );
+			return new WP_Error( 'mi_migration_activity_invalid', 'Gruppo di destinazione non valido. Nessuna modifica eseguita.' );
 		}
 
 		$current_activity_id = absint( get_post_meta( $event_id, '_mi_activity_id', true ) );
 		if ( $current_activity_id === $activity_id ) {
-			return new WP_Error( 'mi_migration_unchanged', 'L’evento è già collegato all’attività selezionata.' );
+			return new WP_Error( 'mi_migration_unchanged', 'L’evento è già collegato al gruppo selezionato.' );
 		}
 
 		global $wpdb;
 		$registrations_table = $wpdb->prefix . 'mi_registrations';
 		$registrations_before = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$registrations_table} WHERE event_id = %d", $event_id ) );
 		if ( $registrations_before < 1 ) {
-			return new WP_Error( 'mi_migration_not_required', 'L’evento non ha iscrizioni: cambia l’attività dal normale editor.' );
+			return new WP_Error( 'mi_migration_not_required', 'L’evento non ha iscrizioni: cambia il gruppo dal normale editor.' );
 		}
 
 		$updated = update_post_meta( $event_id, '_mi_activity_id', $activity_id );

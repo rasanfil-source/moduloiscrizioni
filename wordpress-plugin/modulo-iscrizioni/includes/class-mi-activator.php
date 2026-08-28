@@ -6,6 +6,7 @@ final class MI_Activator {
 	public static function activate() {
 		self::create_tables();
 		self::add_roles_and_capabilities();
+		self::ensure_default_groups();
 		self::ensure_schedule();
 	}
 
@@ -20,6 +21,7 @@ final class MI_Activator {
 		if ( MI_VERSION !== get_option( 'mi_db_version' ) ) {
 			self::create_tables();
 			self::add_roles_and_capabilities();
+			self::ensure_default_groups();
 		}
 		self::ensure_schedule();
 	}
@@ -30,6 +32,30 @@ final class MI_Activator {
 		}
 		if ( ! wp_next_scheduled( 'mi_expire_registrations' ) ) {
 			wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', 'mi_expire_registrations' );
+		}
+	}
+
+	/** Crea soltanto i gruppi iniziali mancanti, senza modificare dati esistenti. */
+	private static function ensure_default_groups() {
+		$groups = array(
+			'parrocchia' => 'Parrocchia',
+			'12-ceste'   => '12 Ceste',
+			'icef'       => 'ICEF',
+			'escursioni' => 'Escursioni',
+			'visite'     => 'Visite',
+		);
+		foreach ( $groups as $slug => $name ) {
+			if ( get_page_by_path( $slug, OBJECT, MI_Event_Post_Type::GROUP_TYPE ) ) {
+				continue;
+			}
+			wp_insert_post(
+				array(
+					'post_type'   => MI_Event_Post_Type::GROUP_TYPE,
+					'post_status' => 'publish',
+					'post_title'  => $name,
+					'post_name'   => $slug,
+				)
+			);
 		}
 	}
 
@@ -170,6 +196,7 @@ final class MI_Activator {
 			registration_id bigint(20) unsigned NOT NULL,
 			recipient varchar(254) NOT NULL,
 			template_type varchar(40) NOT NULL,
+			origin_key varchar(64) NULL,
 			payload_json longtext NOT NULL,
 			status varchar(24) NOT NULL DEFAULT 'PREVIEW',
 			attempts smallint(5) unsigned NOT NULL DEFAULT 0,
@@ -179,6 +206,7 @@ final class MI_Activator {
 			created_at datetime NOT NULL,
 			PRIMARY KEY  (id),
 			KEY registration_id (registration_id),
+			UNIQUE KEY origin_key (origin_key),
 			KEY status (status),
 			KEY dispatch_queue (status,attempts,id)
 		) ENGINE=InnoDB {$charset};" );

@@ -26,7 +26,7 @@ final class MI_Admin {
 	public static function render_dashboard_widget() {
 		$base = 'edit.php?post_type=' . MI_Event_Post_Type::EVENT_TYPE;
 		?>
-		<p>Gestisci gli eventi e consulta le iscrizioni delle attività che ti sono state assegnate.</p>
+		<p>Gestisci gli eventi e consulta le iscrizioni dei gruppi che ti sono stati assegnati.</p>
 		<p><a class="button button-primary" href="<?php echo esc_url( admin_url( $base ) ); ?>">Apri il servizio moduli</a>
 		<?php if ( current_user_can( 'mi_view_registrations' ) ) : ?>
 			<a class="button" href="<?php echo esc_url( admin_url( $base . '&page=mi-registrations' ) ); ?>">Vedi le iscrizioni</a>
@@ -36,7 +36,7 @@ final class MI_Admin {
 			<?php if ( current_user_can( 'mi_view_registrations' ) ) : ?><li><a href="<?php echo esc_url( admin_url( $base . '&page=mi-email-outbox' ) ); ?>">Controlla la coda email</a></li><?php endif; ?>
 			<?php if ( current_user_can( 'mi_manage_payments' ) ) : ?><li><a href="<?php echo esc_url( admin_url( $base . '&page=mi-payments' ) ); ?>">Consulta i pagamenti</a></li><?php endif; ?>
 		</ul>
-		<p><small>Ogni delegato vede esclusivamente le attività autorizzate dall’amministratore.</small></p>
+		<p><small>Ogni delegato vede esclusivamente i gruppi autorizzati dall’amministratore.</small></p>
 		<?php
 	}
 
@@ -728,9 +728,9 @@ final class MI_Admin {
 		$valid_economic = ( $registration_only_price || $calculated_price || $fixed_price_valid ) && ( ! $collects_payment || ! empty( $payment_methods ) );
 		if ( ! $activity_id || MI_Event_Post_Type::ACTIVITY_TYPE !== get_post_type( $activity_id ) || ! $activity_stable || ! $valid_dates || ! $has_ticket || ! $valid_economic || ! $privacy_valid || ! $marketing_valid ) {
 			$data['post_status'] = 'draft';
-			$message = 'Evento mantenuto in bozza: completa attività, date e tipologie.';
+			$message = 'Evento mantenuto in bozza: completa gruppo, date e tipologie.';
 			if ( ! $activity_stable ) {
-				$message = 'Evento mantenuto in bozza: l’attività non può cambiare dopo la prima iscrizione senza una migrazione amministrativa esplicita.';
+				$message = 'Evento mantenuto in bozza: il gruppo non può cambiare dopo la prima iscrizione senza una migrazione amministrativa esplicita.';
 			} elseif ( ! $valid_economic ) {
 				$message = 'Evento mantenuto in bozza: “Gratuito” richiede “Nessun pagamento previsto”; le altre modalità richiedono una quota positiva e, quando previsto, almeno una fonte di pagamento.';
 			} elseif ( ! $privacy_valid ) {

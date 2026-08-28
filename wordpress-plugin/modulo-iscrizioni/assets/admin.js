@@ -1,6 +1,23 @@
 (function () {
   'use strict';
 
+  const groupCoverButton = document.querySelector('[data-mi-group-cover]');
+  if (groupCoverButton && window.wp?.media) {
+    const field = document.getElementById('mi_group_cover_image_id');
+    const preview = document.querySelector('[data-mi-group-cover-preview]');
+    const remove = document.querySelector('[data-mi-group-cover-remove]');
+    groupCoverButton.addEventListener('click', () => {
+      const frame = window.wp.media({ title: 'Scegli immagine del gruppo', button: { text: 'Usa questa immagine' }, multiple: false, library: { type: 'image' } });
+      frame.on('select', () => {
+        const attachment = frame.state().get('selection').first().toJSON();
+        field.value = attachment.id;
+        preview.innerHTML = `<img src="${attachment.sizes?.medium?.url || attachment.url}" alt="" style="max-width:100%;height:auto">`;
+      });
+      frame.open();
+    });
+    remove?.addEventListener('click', () => { field.value = ''; preview.textContent = 'Nessuna immagine predefinita.'; });
+  }
+
   const saveDraftButton = document.getElementById('save-post');
   if (saveDraftButton) {
     saveDraftButton.setAttribute('formnovalidate', 'formnovalidate');

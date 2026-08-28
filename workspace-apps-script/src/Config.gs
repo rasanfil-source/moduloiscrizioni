@@ -1,6 +1,7 @@
-const MI_SCHEMA_VERSION = '1.5.0';
+const MI_SCHEMA_VERSION = '1.8.0';
 const MI_SHEETS = Object.freeze({
   CONFIG: 'Configurazione',
+  GROUPS: 'Gruppi',
   EVENTS: 'Eventi',
   REGISTRATIONS: 'Iscrizioni',
   PARTICIPANTS: 'Partecipanti',
@@ -12,12 +13,15 @@ const MI_SHEETS = Object.freeze({
   EVENT_WORKSPACES: 'Fogli iniziative',
   OPERATIONAL_VIEWS: 'Viste operative',
   OPERATIONAL_LIST: 'Elenco operativo',
+  REPORT_TEMPLATES: 'Modelli report',
+  ACCOMMODATIONS: 'Sistemazioni',
   AUDIT_LOG: 'Registro controlli'
 });
 
 const MI_HEADERS = Object.freeze({
   'Configurazione': ['chiave', 'valore', 'descrizione'],
-  'Eventi': ['id_evento', 'id_attivita', 'titolo', 'stato', 'capienza', 'apertura_iscrizioni', 'chiusura_iscrizioni', 'modalita_prezzo', 'data_aggiornamento'],
+  'Gruppi': ['id_gruppo', 'nome', 'slug', 'stato', 'logo_url', 'immagine_url', 'data_aggiornamento'],
+  'Eventi': ['id_evento', 'id_gruppo', 'titolo', 'stato', 'capienza', 'apertura_iscrizioni', 'chiusura_iscrizioni', 'modalita_prezzo', 'data_aggiornamento'],
   'Iscrizioni': ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'richieste_particolari', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'hash_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'versione_informativa_privacy', 'data_accettazione_privacy', 'biglietti_json', 'id_consenso_marketing', 'data_accettazione_marketing', 'opzioni_ordine_json'],
   'Partecipanti': ['codice_ordine', 'numero_partecipante', 'codice_tipologia', 'indice_tipologia', 'nome', 'cognome', 'dati_aggiuntivi_json', 'opzioni_json', 'stato_partecipante', 'data_annullamento'],
   'Inserimento pagamenti': ['id_inserimento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'nota_amministrativa', 'stato_convalida', 'messaggio_convalida', 'data_convalida'],
@@ -28,6 +32,8 @@ const MI_HEADERS = Object.freeze({
   'Fogli iniziative': ['id_evento', 'titolo', 'id_foglio', 'url_foglio', 'url_iscrizione', 'url_saldo', 'data_creazione'],
   'Viste operative': ['id_evento', 'campi_json', 'data_aggiornamento', 'etichetta_operatore'],
   'Elenco operativo': ['evento', 'codice_ordine', 'numero_partecipante', 'nome', 'cognome', 'stato'],
+  'Modelli report': ['id_modello', 'nome', 'tipo', 'id_evento', 'colonne_json', 'filtri_json', 'raggruppamenti_json', 'ordinamento_json', 'predefinito', 'data_aggiornamento', 'etichetta_operatore'],
+  'Sistemazioni': ['id_evento', 'codice', 'nome', 'capienza', 'attiva', 'note'],
   'Registro controlli': ['id_controllo', 'data_evento', 'canale', 'azione', 'tipo_entita', 'riferimento_entita', 'esito', 'etichetta_attore', 'codice_dettaglio']
 });
 
@@ -43,6 +49,7 @@ const MI_LEGACY_SHEET_NAMES = Object.freeze({
 });
 
 const MI_INTESTAZIONI_PRECEDENTI = Object.freeze({
+  'Eventi': ['id_evento', 'id_attivita', 'titolo', 'stato', 'capienza', 'apertura_iscrizioni', 'chiusura_iscrizioni', 'modalita_prezzo', 'data_aggiornamento'],
   'Iscrizioni': ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json'],
   'Partecipanti': ['codice_ordine', 'numero_partecipante', 'nome', 'cognome', 'dati_aggiuntivi_json'],
   'Pagamenti': ['id_pagamento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo_centesimi', 'valuta', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'canale_registrazione', 'id_inserimento_origine', 'data_creazione']
@@ -66,8 +73,12 @@ const MI_PAYMENT_ENUMS = Object.freeze({
 });
 
 function ottieniFoglioDiLavoroAssociato_() {
+  const properties = typeof PropertiesService !== 'undefined' ? PropertiesService.getScriptProperties() : null;
+  const configuredId = properties ? String(properties.getProperty('MI_SPREADSHEET_ID') || '').trim() : '';
+  if (configuredId) return SpreadsheetApp.openById(configuredId);
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  if (!spreadsheet) throw new Error('Il progetto deve essere associato a un Google Sheet.');
+  if (!spreadsheet) throw new Error('Foglio operativo non configurato. Esegui Inizializza/aggiorna struttura dal Google Sheet.');
+  if (properties) properties.setProperty('MI_SPREADSHEET_ID', spreadsheet.getId());
   return spreadsheet;
 }
 

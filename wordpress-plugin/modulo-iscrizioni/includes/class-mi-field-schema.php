@@ -26,7 +26,7 @@ final class MI_Field_Schema {
 				'label'        => 'Data di nascita',
 				'type'         => 'date',
 				'autocomplete' => 'bday',
-				'help'         => 'Raccogli soltanto se necessaria per l’attività.',
+				'help'         => 'Raccogli soltanto se necessaria per l’evento.',
 				'high_impact'  => true,
 			),
 			'nationality' => array(

@@ -5,9 +5,36 @@ import test from 'node:test';
 const root = new URL('../modulo-iscrizioni/', import.meta.url);
 const read = (path) => readFile(new URL(path, root), 'utf8');
 
+test('il catalogo dei gruppi e dei report è italiano e privo di duplicati', async () => {
+  const catalogo = JSON.parse(await readFile(new URL('../../schema/report.example.json', import.meta.url), 'utf8'));
+  assert.equal(catalogo.versione, 1);
+  assert.deepEqual(catalogo.modelli.map((modello) => modello.codice), [
+    'partecipanti', 'documenti', 'logistica', 'pullman', 'pagamenti',
+  ]);
+  assert.equal(new Set(catalogo.modelli.map((modello) => modello.codice)).size, catalogo.modelli.length);
+  assert.equal(catalogo.report_personalizzato.salvabile_come_modello, true);
+});
+
+test('il contenitore tecnico storico è presentato come Gruppi', async () => {
+  const source = await read('includes/class-mi-event-post-type.php');
+  assert.match(source, /const GROUP_TYPE = 'mi_activity'/);
+  assert.match(source, /'name'\s*=>\s*'Gruppi'/);
+  assert.match(source, /'singular_name'\s*=>\s*'Gruppo'/);
+  assert.match(source, /<strong>Gruppo<\/strong>/);
+});
+
+test('Workspace prevede modelli report standard senza sovrascrivere dati', async () => {
+  const config = await readFile(new URL('../../workspace-apps-script/src/Config.gs', import.meta.url), 'utf8');
+  const setup = await readFile(new URL('../../workspace-apps-script/src/Setup.gs', import.meta.url), 'utf8');
+  assert.match(config, /REPORT_TEMPLATES:\s*'Modelli report'/);
+  assert.match(config, /'Modelli report':\s*\[/);
+  assert.match(setup, /inizializzaModelliReport_/);
+  assert.match(setup, /if \(sheet\.getLastRow\(\) > 1\) return/);
+});
+
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.5\.12/);
+	assert.match(source, /Version:\s+3\.6\.1/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -182,6 +209,9 @@ test('il portale tecnico evita Divi e aggrega i dati della dashboard', async () 
   assert.doesNotMatch(portal, /wp_head\(\)|wp_footer\(\)/);
   assert.match(portal, /assets\/portal\.css\?ver=/);
   assert.match(portal, /assets\/portal\.js\?ver=/);
+  assert.match(portal, /render_virtual_page' \), -90/);
+  assert.match(portal, /handle_actions' \), -100/);
+  assert.match(portal, /loading="lazy" decoding="async"/);
   assert.match(portal, /SELECT event_id,confirmed_count/);
   assert.match(portal, /JOIN \{\$wpdb->posts\} events/);
   assert.doesNotMatch(portal, /SELECT COALESCE\(SUM\(total_qty\)/);
@@ -237,17 +267,17 @@ test('i dati dimostrativi sono riservati a bozze, amministratori ed email in ant
   assert.match(registration, /!\s*\$allow_unpublished\s*&&\s*'OPEN'\s*!==\s*self::registration_time_state/);
 });
 
-test('il wizard è breve, crea solo bozze e rende gli alloggi condizionali', async () => {
+test('il wizard guidato crea solo bozze e rende gli alloggi condizionali', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const script = await read('assets/portal.js');
-  assert.match(portal, /1 di 5/);
-  assert.match(portal, /5 di 5/);
+  assert.match(portal, /1 di 8/);
+  assert.match(portal, /8 di 8/);
   assert.match(portal, /post_status' => 'draft'/);
-  assert.match(portal, /Vuoi partire da un evento precedente/);
+  assert.match(portal, /Vuoi partire dalla configurazione di un evento precedente/);
   assert.match(portal, /data-mi-overnight/);
   assert.match(portal, /data-mi-accommodations hidden/);
   assert.match(script, /rooms\.hidden\s*=\s*!overnight\.checked/);
-  assert.doesNotMatch(portal, /wp_insert_post\([\s\S]{0,300}post_status' => 'publish'/);
+  assert.doesNotMatch(portal, /post_type'\s*=>\s*MI_Event_Post_Type::EVENT_TYPE[\s\S]{0,160}post_status'\s*=>\s*'publish'/);
 });
 
 test('ogni partecipante dispone di annullamento individuale confermato e auditabile', async () => {
@@ -267,6 +297,7 @@ test('ogni partecipante dispone di annullamento individuale confermato e auditab
   assert.match(service, /cancellation_token_hash=NULL/);
   assert.match(service, /status = 'ACTIVE' GROUP BY ticket_type_code/);
   assert.match(portal, /cancel_participant_portal/);
+	assert.match(portal, /mi-booking-detail__cancel-button/);
   assert.match(portal, /Conferma richiesta/);
   assert.match(portal, /Eventuali rimborsi devono essere concordati separatamente/);
 });
@@ -697,7 +728,7 @@ test('l’ACL per attività è applicata alle capability meta di WordPress', asy
   assert.match(access, /do_not_allow/);
   assert.match(postType, /'map_meta_cap'\s*=>\s*true/);
   assert.match(postType, /'edit_post'\s*=>\s*'edit_mi_event'/);
-	assert.match(postType, /Attività non modificata/);
+	assert.match(postType, /Gruppo non modificato/);
 	assert.match(postType, /mi_registrations WHERE event_id/);
 	assert.match((await read('includes/class-mi-admin.php')), /activity_stable/);
 });
@@ -939,12 +970,17 @@ test('la replica Workspace include il riepilogo economico storico', async () => 
   assert.match(service, /payment_methods/);
 });
 
-test('il pannello verifica lo schema economico senza creare iscrizioni', async () => {
+test('il pannello verifica lo schema Workspace senza creare iscrizioni', async () => {
   const settings = await read('includes/class-mi-workspace-settings.php');
   const client = await read('includes/class-mi-workspace-client.php');
-  assert.match(settings, /Verifica schema economico/);
+  assert.match(settings, /Verifica schema Workspace/);
   assert.match(settings, /schema_version/);
+  assert.match(settings, /'1\.8\.0'/);
+  assert.match(settings, /group_headers/);
+  assert.match(settings, /report_template_headers/);
   assert.match(client, /STATO_SCHEMA/);
+	assert.doesNotMatch(settings, /1\.6\.0/);
+	assert.match(settings, /accommodation_headers/);
 });
 
 test('l’elenco e la scheda prenotazione usano una presentazione operativa e responsive', async () => {
@@ -992,7 +1028,14 @@ test('anche il portale apre la scheda prenotazione in sovrimpressione', async ()
   assert.match(script, /'Tab'/);
   assert.match(script, /replaceState/);
   assert.match(script, /window\.location\.assign\(link\.href\)/);
+	assert.match(script, /data-mi-portal-booking-previous/);
+	assert.match(script, /data-mi-portal-booking-next/);
+	assert.match(script, /'ArrowLeft'/);
+	assert.match(script, /'ArrowRight'/);
+	assert.match(script, /findIndex\(\(candidate\) => candidate\.href === link\.href\)/);
   assert.match(css, /\.mi-portal-modal__backdrop/);
+	assert.match(css, /\.mi-portal-modal__nav--previous/);
+	assert.match(css, /\.mi-portal-modal__nav--next/);
   assert.match(css, /min-height:100vh/);
 });
 
@@ -1023,4 +1066,108 @@ test('gli eventi passati sono separati dalla vista operativa ordinaria', async (
   assert.match(portal, /is_past_event/);
   assert.match(portal, /Eventi passati/);
   assert.match(css, /\.mi-event-history-link/);
+});
+
+test('l’elenco iscrizioni indica l’evento selezionato', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(portal, /\$list_title = 'Ultime iscrizioni'/);
+  assert.match(portal, /\$list_title \.= ' — ' \. \$event_title/);
+  assert.match(portal, /esc_html\( \$list_title \)/);
+});
+
+test('il wizard crea una bozza completa e mostra collegamenti espliciti', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  assert.match(portal, /1 di 8/);
+  assert.match(portal, /name="description"/);
+  assert.match(portal, /name="cover_image"/);
+  assert.match(portal, /participant_fields\[\]/);
+  assert.match(portal, /participant_extra_scope/);
+  assert.match(portal, /<details class="mi-additional-fields">/);
+  assert.match(portal, /Ulteriori dati per alcuni eventi/);
+  assert.match(portal, /array\( 'email', 'phone', 'birth_date' \)/);
+  assert.match(portal, /custom_question_label\[\]/);
+  assert.match(portal, /name="pricing_mode"/);
+  assert.match(portal, /Bozza creata correttamente/);
+  assert.match(portal, /Completa la bozza/);
+  assert.match(portal, /Apri anteprima/);
+  assert.match(script, /data-mi-review/);
+  assert.match(script, /data-mi-pricing/);
+  assert.match(portal, /name="starts_at" min=/);
+  assert.match(portal, /La data di inizio non può essere precedente a oggi/);
+  assert.match(portal, /start_date->format\( 'Y-m-d' \) < current_time\( 'Y-m-d' \)/);
+  assert.match(portal, /\$close_date < \$open_date/);
+  assert.match(portal, /\$close_date > \$start_date/);
+  assert.match(script, /data-mi-opens/);
+  assert.match(script, /closesAt\.min/);
+  assert.match(script, /startsAt\.min/);
+});
+
+test('il portale consente di creare un gruppo senza duplicare lo slug', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(portal, /name="new_group_name"/);
+  assert.match(portal, /find_or_create_group/);
+  assert.match(portal, /get_page_by_path/);
+  assert.match(portal, /GROUP_TYPE/);
+  assert.match(portal, /mi_manage_all_events/);
+});
+
+test('Workspace può creare gruppi WordPress e risolverli per slug', async () => {
+  const rest = await read('includes/class-mi-rest-controller.php');
+  assert.match(rest, /CREATE_GROUP/);
+  assert.match(rest, /create_group_from_workspace/);
+  assert.match(rest, /get_page_by_path/);
+  assert.match(rest, /group_slug/);
+});
+
+test('il referente consulta stato e saldo senza esporre dati personali', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const service = await read('includes/class-mi-registration-service.php');
+  const email = await read('includes/class-mi-modello-email.php');
+  assert.match(portal, /mi_status/);
+  assert.match(portal, /public_status_view/);
+  assert.match(portal, /mi_public_status/);
+  assert.match(portal, /mi_status_rate_/);
+  assert.match(portal, /noindex,nofollow,noarchive/);
+  assert.match(service, /public_status_token/);
+  assert.match(service, /hash_equals/);
+  assert.match(service, /reconcile_workspace_payments\( array\( \$registration\['order_code'\] \) \)/);
+  assert.doesNotMatch(service, /public_status[\s\S]{0,4000}buyer_phone/);
+  assert.match(email, /Controlla stato e saldo/);
+});
+
+test('i promemoria operativi passano dalla coda protetta e le bozze restano in anteprima', async () => {
+  const activator = await read('includes/class-mi-activator.php');
+  const controller = await read('includes/class-mi-rest-controller.php');
+  const sender = await read('includes/class-mi-spedizione-email.php');
+  const model = await read('includes/class-mi-modello-email.php');
+  assert.match(controller, /QUEUE_OPERATIONAL_EMAILS/);
+	assert.match(controller, /GET_EMAIL_MODE/);
+  assert.match(controller, /verify_workspace_envelope/);
+  assert.match(sender, /accoda_comunicazione_operativa/);
+  assert.match(sender, /PRE_DEPARTURE_REMINDER/);
+  assert.match(sender, /BALANCE_REMINDER/);
+  assert.match(sender, /get_post_status\( \$event_id \).*PREVIEW/s);
+	assert.match(sender, /allow_operational/);
+  assert.match(sender, /communication_id/);
+	assert.match(activator, /UNIQUE KEY origin_key/);
+	assert.match(sender, /INSERT IGNORE INTO/);
+  assert.match(model, /crea_istantanea_operativa/);
+});
+
+test('la scheda evento consente modifiche sicure e annullamento con avviso', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const sender = await read('includes/class-mi-spedizione-email.php');
+  const model = await read('includes/class-mi-modello-email.php');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /event_management_card/);
+  assert.match(portal, /mi_portal_manage_event_/);
+  assert.match(portal, /confirm_cancellation/);
+  assert.match(portal, /cancellation_reason/);
+  assert.match(portal, /MI_Registration_Service::cancel_registration/);
+  assert.match(portal, /_mi_event_cancelled_at/);
+  assert.match(portal, /allow_operational' => true/);
+  assert.match(sender, /EVENT_CANCELLATION/);
+  assert.match(model, /Evento annullato/);
+  assert.match(css, /mi-event-danger/);
 });

@@ -1,12 +1,12 @@
 # Allineamento tra documentazione e codice
 
-Verifica sistematica eseguita per la versione 3.4.18. Questo documento prevale sulle descrizioni progettuali quando occorre distinguere ciò che è già disponibile nella prima versione da ciò che rappresenta l'architettura prevista.
+Verifica sistematica aggiornata per WordPress 3.6.1 e Workspace 1.8.0. Questo documento prevale sulle descrizioni progettuali quando occorre distinguere ciò che è già disponibile dalla sola architettura prevista.
 
 ## Implementato e verificato
 
 | Comportamento confermato | Stato nel codice | Verifica |
 |---|---|---|
-| Evento associato a una sola attività e accesso delegato limitato per attività | Implementato | controlli capability e assegnazione attività nel plugin |
+| Evento associato a un solo gruppo e accesso delegato limitato per gruppo | Implementato | controlli capability e assegnazione gruppo nel plugin; il nome tecnico storico resta interno per compatibilità |
 | Revisione pubblicata e snapshot dell'iscrizione | Implementato | revisione, hash e snapshot persistiti e replicati |
 | Capienza globale/per tipologia, lista d'attesa, scadenza e rilascio posti | Implementato | servizio iscrizioni e test strutturali/comportamentali |
 | Nome e cognome di ogni partecipante obbligatori | Implementato | validazione WordPress e GAS |
@@ -20,13 +20,20 @@ Verifica sistematica eseguita per la versione 3.4.18. Questo documento prevale s
 | HMAC e anti-replay | Implementato | finestra 120 secondi, `ScriptLock`, cache e registro nonce durevole in Script Properties |
 | Modalità email sicure | Implementato | anteprima predefinita, prova su destinatario controllato, operativo protetto |
 | Sanitizzazione del repository pubblico | Implementato | `tools/check-sanitization.ps1` eseguito anche da GitHub Actions su push e pull request |
+| Consultazione autonoma di stato e saldo | Implementato | codice/email o collegamento HMAC, limite tentativi, pagina `noindex` priva di dati personali |
+| Promemoria prima dell'evento e del saldo | Implementato | selezione destinatari in Sheets e accodamento firmato in WordPress; bozze sempre `PREVIEW` |
+| Scheda segreteria rapida | Implementato | lista a card, dialogo dettaglio, versamenti con validatore condiviso e sistemazioni con capienza |
+| Elenco operativo stampabile | Implementato | colonne per evento, campi personalizzati raccolti, PDF A4 e neutralizzazione formule |
+| Gruppi con logo e immagine ereditabili | Implementato | catalogo condiviso WordPress/Workspace, valori iniziali e creazione controllata da entrambe le interfacce |
+| Report standard e personalizzati riutilizzabili | Implementato | modelli protetti, scelta colonne, ordinamento, generazione per evento e salvataggio configurazione |
+| Assegnazioni collettive di camere e pullman | Implementato | vista per evento, modifica multipla auditabile e controllo della capienza finale |
 
 ## Implementato in forma più semplice nella v1
 
 | Descrizione progettuale | Ambito reale della v1 |
 |---|---|
 | Entità logiche separate per risposte, selezioni e piano rateale | Il database WordPress usa tabelle normalizzate per le entità principali e JSON controllato per alcune risposte/opzioni; Sheets è una proiezione operativa, non una replica fisica completa dello schema concettuale. |
-| Coda email completa con tentativi e notifiche | Sono presenti anteprima, prova controllata, invio protetto e stato della coda; l'osservabilità avanzata resta limitata. |
+| Coda email completa con tentativi e notifiche | Sono presenti conferma, promemoria pre-evento/saldo, anteprima, prova controllata, invio protetto e stato della coda; altri modelli e l'osservabilità avanzata restano limitati. |
 | Cache pubblica con grafo completo di invalidazione | La configurazione pubblica è calcolata dal backend e legata alla revisione; non è implementato un sottosistema generale di dipendenze e cache. |
 | Audit con differenze complete | Sono registrate le operazioni essenziali; non tutte le modifiche producono un diff campo per campo. |
 | Profili estesi con finalità e conservazione per singolo campo | I campi sono configurabili e i campi ad alto impatto sono controllati, ma non esiste ancora un motore completo di policy per ogni domanda. |

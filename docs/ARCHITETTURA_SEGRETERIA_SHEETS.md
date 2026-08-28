@@ -23,9 +23,21 @@ Non aggiungere campi di caricamento file, collegamenti a servizi di upload o ist
 
 ## Console della segreteria
 
-Il foglio principale offre due percorsi guidati:
+La creazione e pubblicazione dell'evento restano in WordPress, perché è WordPress a produrre il modulo pubblico. Il foglio non crea un secondo evento concorrente.
 
-- creazione di una nuova iniziativa e del relativo foglio operativo;
-- aggiornamento di un'iscrizione già raccolta.
+Dal menu **Modulo iscrizioni** del foglio la segreteria dispone di quattro percorsi:
+
+- **Apri segreteria**: ricerca per persona o codice, filtri rapidi e scheda prenotazione in dialogo;
+- **Configura elenco operativo**: scelta delle sole colonne utili per l'evento e PDF A4 stampabile;
+- **Comunicazioni operative**: promemoria pre-evento e promemoria saldo affidati alla coda WordPress;
+- convalida dei pagamenti inseriti nel foglio tecnico, disponibile come percorso alternativo alla scheda rapida.
+
+Il foglio `Sistemazioni` definisce camere o soluzioni con codice, nome e capienza. La scheda mostra i posti liberi e blocca l'assegnazione oltre capienza. I campi personalizzati effettivamente raccolti diventano selezionabili nell'elenco operativo senza aggiungere colonne fisse per ogni possibile domanda.
 
 Ogni operazione è registrata in modo append-only nel foglio `Operazioni segreteria`; `Stato operativo` presenta invece la situazione corrente. I fogli dedicati alle iniziative sono strumenti operativi e non sostituiscono il modulo pubblico WordPress.
+
+## Stato pubblico e comunicazioni
+
+Il referente può controllare soltanto stato della prenotazione, stato del pagamento, versato e saldo. L'accesso richiede codice ordine ed email oppure il collegamento firmato inserito nella conferma; la pagina è `noindex` e non mostra partecipanti, contatti, note o richieste particolari.
+
+Sheets non invia direttamente le comunicazioni operative ai partecipanti. Invia a WordPress una richiesta HMAC con i soli codici ammessi e i saldi calcolati dal registro autorevole. WordPress ricontrolla evento e stato delle iscrizioni e crea le righe nella propria outbox. In `ANTEPRIMA` non parte alcuna email; una bozza resta sempre in anteprima anche se la modalità globale fosse operativa.

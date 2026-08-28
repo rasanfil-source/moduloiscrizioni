@@ -112,7 +112,7 @@ final class MI_Modello_Email {
 		$secondary_color = $secondary_color ?: '#337ab7';
 		$snapshot['identita'] = array(
 			'nome_attivita' => $activity_id ? get_the_title( $activity_id ) : '',
-			'logo_url'      => $thumbnail_id ? (string) wp_get_attachment_image_url( $thumbnail_id, 'medium' ) : '',
+			'logo_url'      => $thumbnail_id ? (string) wp_get_attachment_image_url( $thumbnail_id, 'medium' ) : esc_url_raw( get_post_meta( $activity_id, '_mi_group_logo_url', true ), array( 'https' ) ),
 			'logo_alt'      => $thumbnail_id ? (string) get_post_meta( $thumbnail_id, '_wp_attachment_image_alt', true ) : '',
 			'primary_color' => $primary_color,
 			'secondary_color' => $secondary_color,
@@ -140,6 +140,34 @@ final class MI_Modello_Email {
 			return $name && $url ? array( 'nome' => $name, 'url' => $url ) : null;
 		}, $participant_management ) ) );
 		$snapshot['revisione'] = hash( 'sha256', wp_json_encode( $settings ) );
+		return $snapshot;
+	}
+
+	public static function crea_istantanea_operativa( $event_id, $values, $template_type, $message, $status_url ) {
+		$snapshot = self::crea_istantanea( $event_id, $values );
+		$snapshot['identificativo']['modalita'] = 'NONE';
+		$snapshot['gestione_partecipanti'] = array();
+		$snapshot['status_url'] = esc_url_raw( (string) $status_url );
+		$event_title = sanitize_text_field( (string) ( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) ) );
+		$buyer_name = sanitize_text_field( (string) ( $values['{{referente.nome_completo}}'] ?? '' ) );
+		if ( 'EVENT_CANCELLATION' === $template_type ) {
+			$clean_message = sanitize_textarea_field( (string) $message );
+			$snapshot['oggetto'] = 'Evento annullato — ' . $event_title;
+			$snapshot['preheader'] = 'Comunicazione importante relativa alla tua iscrizione.';
+			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ti informiamo che <strong>' . esc_html( $event_title ) . '</strong> è stato annullato.</p>' . ( $clean_message ? '<p><strong>Motivo comunicato:</strong><br>' . nl2br( esc_html( $clean_message ) ) . '</p>' : '' ) . '<p>La segreteria ti contatterà separatamente se sono necessari rimborsi o altri adempimenti.</p>';
+			$snapshot['testo'] = "Gentile {$buyer_name},\n\nl’evento {$event_title} è stato annullato." . ( $clean_message ? "\n\nMotivo comunicato:\n{$clean_message}" : '' ) . "\n\nLa segreteria ti contatterà separatamente se sono necessari rimborsi o altri adempimenti.";
+		} elseif ( 'BALANCE_REMINDER' === $template_type ) {
+			$snapshot['oggetto'] = 'Promemoria saldo — ' . $event_title;
+			$snapshot['preheader'] = 'Controlla il saldo ancora da versare.';
+			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ti ricordiamo che per <strong>' . esc_html( $event_title ) . '</strong> risulta ancora un saldo da completare.</p><p><strong>Saldo residuo:</strong> ' . esc_html( (string) ( $values['{{pagamento.saldo}}'] ?? '' ) ) . '<br><strong>Scadenza:</strong> ' . esc_html( (string) ( $values['{{pagamento.scadenza}}'] ?? '' ) ) . '<br><strong>Causale:</strong> ' . esc_html( (string) ( $values['{{pagamento.causale}}'] ?? '' ) ) . '</p>';
+			$snapshot['testo'] = "Gentile {$buyer_name},\n\nper {$event_title} risulta ancora un saldo da completare.\nSaldo residuo: " . (string) ( $values['{{pagamento.saldo}}'] ?? '' ) . "\nScadenza: " . (string) ( $values['{{pagamento.scadenza}}'] ?? '' ) . "\nCausale: " . (string) ( $values['{{pagamento.causale}}'] ?? '' );
+		} else {
+			$clean_message = sanitize_textarea_field( (string) $message );
+			$snapshot['oggetto'] = 'Informazioni utili — ' . $event_title;
+			$snapshot['preheader'] = 'Indicazioni operative prima dell’evento.';
+			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ecco le informazioni aggiornate per <strong>' . esc_html( $event_title ) . '</strong>.</p><p>' . nl2br( esc_html( $clean_message ) ) . '</p>';
+			$snapshot['testo'] = "Gentile {$buyer_name},\n\necco le informazioni aggiornate per {$event_title}.\n\n{$clean_message}";
+		}
 		return $snapshot;
 	}
 
@@ -238,6 +266,7 @@ final class MI_Modello_Email {
 			foreach ( $istantanea['gestione_partecipanti'] as $item ) $management_html .= '<div style="margin:8px 0"><a href="' . esc_url( $item['url'] ?? '' ) . '" style="color:' . esc_attr( $secondary ) . ';font-weight:700;text-decoration:none;">Annulla la partecipazione di ' . esc_html( $item['nome'] ?? '' ) . '</a></div>';
 			$management_html .= '</td></tr></table>';
 		}
+		$status_html = ! empty( $istantanea['status_url'] ) ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . esc_url( $istantanea['status_url'] ) . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">Controlla stato e saldo</a></td></tr></table>' : '';
 		$footer = nl2br( esc_html( $istantanea['footer'] ?? '' ) );
 		$code = (string) $codice_html;
 
@@ -248,7 +277,7 @@ final class MI_Modello_Email {
 			. '<div style="font-size:18px;font-weight:700;line-height:1.3;">' . esc_html( $title ?: 'Conferma iscrizione' ) . '</div>'
 			. ( $activity_name ? '<div style="font-size:13px;line-height:1.4;margin-top:5px;opacity:0.9;">' . esc_html( $activity_name ) . '</div>' : '' )
 			. '</td></tr><tr><td style="padding:24px 20px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#333333;font-size:16px;line-height:1.6;">'
-			. $body . $code . $cta . $management_html
+			. $body . $code . $cta . $status_html . $management_html
 			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#eef2ff" style="width:100%;margin-top:20px;background:#eef2ff;border-radius:14px;"><tr><td style="padding:16px 20px;font-family:Arial,Helvetica,sans-serif;color:#333333;"><div style="font-size:15px;font-weight:700;margin-bottom:8px;">Assistenza</div><div style="font-size:14px;line-height:1.7;">' . $assistance . '</div></td></tr></table>'
 			. '<div style="font-family:Arial,Helvetica,sans-serif;color:' . esc_attr( $secondary ) . ';font-size:14px;font-style:italic;font-weight:700;margin-top:18px;text-align:right;">' . $footer . '</div>'
 			. '</td></tr></table>'
@@ -269,6 +298,7 @@ final class MI_Modello_Email {
 			! empty( $istantanea['identificativo']['codice'] ) ? 'Codice: ' . sanitize_text_field( $istantanea['identificativo']['codice'] ) : '',
 			! empty( $event['url'] ) ? 'Pagina evento: ' . esc_url_raw( $event['url'] ) : '',
 			$management_lines ? "Gestisci le partecipazioni:\n" . implode( "\n", $management_lines ) : '',
+			! empty( $istantanea['status_url'] ) ? 'Controlla stato e saldo: ' . esc_url_raw( $istantanea['status_url'] ) : '',
 			! empty( $email_identity['indirizzo_risposte'] ) ? 'Assistenza: ' . sanitize_email( $email_identity['indirizzo_risposte'] ) : 'Assistenza: rispondi a questa email.',
 			sanitize_textarea_field( (string) ( $istantanea['footer'] ?? '' ) ),
 		) );
