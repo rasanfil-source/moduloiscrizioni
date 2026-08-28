@@ -327,9 +327,9 @@ final class MI_Portal {
 			$fields = json_decode( (string) $participant['extra_json'], true );
 			foreach ( (array) $fields as $key => $value ) if ( '' !== (string) $value ) echo '<p><span>' . esc_html( $field_labels[ $key ] ?? ucfirst( str_replace( '_', ' ', preg_replace( '/^custom_/', '', $key ) ) ) ) . '</span><strong>' . esc_html( is_scalar( $value ) ? (string) $value : wp_json_encode( $value ) ) . '</strong></p>';
 			if ( 'ACTIVE' === ( $participant['status'] ?: 'ACTIVE' ) ) {
-				echo '<form method="post" onsubmit="return confirm(\'Annullare la partecipazione di questa persona?\')"><input type="hidden" name="mi_portal_action" value="cancel_participant_portal"><input type="hidden" name="participant_id" value="' . esc_attr( $participant['id'] ) . '">';
+				echo '<form class="mi-booking-detail__cancel" method="post" onsubmit="return confirm(\'Annullare la partecipazione di questa persona?\')"><input type="hidden" name="mi_portal_action" value="cancel_participant_portal"><input type="hidden" name="participant_id" value="' . esc_attr( $participant['id'] ) . '">';
 				wp_nonce_field( 'mi_cancel_participant_portal_' . $participant['id'], 'mi_portal_nonce' );
-				echo '<button class="mi-danger" type="submit">Annulla partecipazione</button></form>';
+				echo '<button class="mi-booking-detail__cancel-button" type="submit">Annulla partecipazione</button></form>';
 			}
 			echo '</article>';
 		}

@@ -267,6 +267,7 @@ test('ogni partecipante dispone di annullamento individuale confermato e auditab
   assert.match(service, /cancellation_token_hash=NULL/);
   assert.match(service, /status = 'ACTIVE' GROUP BY ticket_type_code/);
   assert.match(portal, /cancel_participant_portal/);
+	assert.match(portal, /mi-booking-detail__cancel-button/);
   assert.match(portal, /Conferma richiesta/);
   assert.match(portal, /Eventuali rimborsi devono essere concordati separatamente/);
 });
