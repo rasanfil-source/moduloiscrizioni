@@ -84,7 +84,9 @@ test('la console Sheets consulta prenotazioni e genera elenchi operativi per eve
 	assert.match(sources['Segreteria.gs'], /MI_SHEETS\.OPERATIONAL_VIEWS/);
 	assert.match(sources['Segreteria.gs'], /generaElencoOperativo_/);
 	assert.match(sources['Segreteria.gs'], /cercaPrenotazioniSegreteria/);
-	assert.match(sources['Segreteria.gs'], /cambiaSistemazioneSegreteria/);
+  assert.match(sources['Segreteria.gs'], /cambiaSistemazioneSegreteria/);
+  assert.match(sources['Segreteria.gs'], /Opzione dimostrativa predefinita/);
+  assert.match(sources['Segreteria.gs'], /Data di nascita/);
 	assert.match(sources['Segreteria.gs'], /destinatariComunicazioneOperativa_/);
 	assert.match(sources['Segreteria.gs'], /statoComunicazioniOperative/);
 	assert.match(sources['Segreteria.gs'], /Contatto di emergenza/);

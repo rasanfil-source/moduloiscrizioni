@@ -214,7 +214,14 @@ function datiOperativiPartecipante_(participant, overrides) {
 }
 
 function elencaSistemazioniDisponibili_(eventId) {
-  const rooms = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.ACCOMMODATIONS)).filter(function (row) { return String(row.id_evento) === String(eventId) && ['0', 'NO', 'FALSE', 'INATTIVA'].indexOf(String(row.attiva).toUpperCase()) < 0; });
+  const accommodationsSheet = ottieniSchedaObbligatoria_(MI_SHEETS.ACCOMMODATIONS);
+  let rooms = convertiRigheInOggetti_(accommodationsSheet).filter(function (row) { return String(row.id_evento) === String(eventId) && ['0', 'NO', 'FALSE', 'INATTIVA'].indexOf(String(row.attiva).toUpperCase()) < 0; });
+  if (!rooms.length && eventId) {
+    [['SINGOLA','Camera singola',1],['DOPPIA','Camera doppia',2],['TRIPLA','Camera tripla',3],['MULTIPLA','Camera multipla',8]].forEach(function (item) {
+      accommodationsSheet.appendRow([String(eventId), item[0], item[1], item[2], 'SI', 'Opzione dimostrativa predefinita']);
+    });
+    rooms = convertiRigheInOggetti_(accommodationsSheet).filter(function (row) { return String(row.id_evento) === String(eventId); });
+  }
   const registrations = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(function (row) { return String(row.id_evento) === String(eventId) && ['ANNULLATO', 'SCADUTO', 'CANCELLED', 'EXPIRED'].indexOf(String(row.stato).toUpperCase()) < 0; }); const allowedOrders = registrations.reduce(function (result, row) { result[String(row.codice_ordine)] = true; return result; }, {}); const operational = indiceStatoOperativo_(); const occupied = {};
   convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).forEach(function (participant) { const orderCode = String(participant.codice_ordine || ''); if (!allowedOrders[orderCode] || String(participant.stato_partecipante || 'ACTIVE').toUpperCase() === 'CANCELLED') return; const number = Number(participant.numero_partecipante) || 0; const fields = datiOperativiPartecipante_(participant, operational[orderCode + '|' + number] || {}); const code = String(fields.room || fields.camera || fields.alloggio || ''); if (code) occupied[code] = (occupied[code] || 0) + 1; });
   return rooms.map(function (room) { const code = String(room.codice || ''); const capacity = Math.max(0, Math.round(Number(room.capienza) || 0)); const used = occupied[code] || 0; return { code: code, name: String(room.nome || code), capacity: capacity, occupied: used, available: Math.max(0, capacity - used) }; });
@@ -250,7 +257,8 @@ function campiElencoOperativo_() {
     Object.keys(data).forEach(function (key) {
       if (known[key] || data[key] == null || String(data[key]).trim() === '' || !/^[A-Za-z0-9_-]{1,80}$/.test(key)) return;
       known[key] = true;
-      fields.push({ key: key, label: key.replace(/[_-]+/g, ' ').replace(/^./, function (letter) { return letter.toUpperCase(); }) });
+      const labels = { birth_date: 'Data di nascita', room: 'Alloggio', transport: 'Pullman/trasporto', breakfast: 'Colazione', lunch: 'Pranzo', insurance: 'Assicurazione' };
+      fields.push({ key: key, label: labels[key] || key.replace(/[_-]+/g, ' ').replace(/^./, function (letter) { return letter.toUpperCase(); }) });
     });
   });
   return fields;
