@@ -130,6 +130,21 @@ test('la console Sheets consulta prenotazioni e genera elenchi operativi per eve
 	assert.match(segreteriaHtml, /allow_operational/);
 });
 
+test('le viste operative seguono il tipo di evento e comprimono il dettaglio degli incassi', () => {
+	assert.match(sources['Segreteria.gs'], /function caricaVistaOperativaEvento/);
+	assert.match(sources['Segreteria.gs'], /MINIMO/);
+	assert.match(sources['Segreteria.gs'], /QUOTA_UNICA/);
+	assert.match(sources['Segreteria.gs'], /SERVIZI_MULTIPLI/);
+	assert.match(sources['Segreteria.gs'], /VIAGGIO_COMPLESSO/);
+	assert.match(sources['Segreteria.gs'], /paid_cash/);
+	assert.match(sources['Segreteria.gs'], /paid_transfer/);
+	assert.match(sources['Segreteria.gs'], /paid_card/);
+	assert.match(segreteriaHtml, /Navigazione segreteria/);
+	assert.match(segreteriaHtml, /Dettaglio incassi/);
+	assert.match(segreteriaHtml, /mostraDettagliColonne/);
+	assert.match(segreteriaHtml, /Registrare.*modific/);
+});
+
 test('la segreteria Web è autonoma e rifiuta accessi anonimi', () => {
 	assert.match(sources['Setup.gs'], /apriSegreteriaWeb/);
 	assert.match(sources['WebApp.gs'], /view \|\| ''\) === 'segreteria'/);
