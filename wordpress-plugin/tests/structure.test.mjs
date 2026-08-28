@@ -1057,6 +1057,9 @@ test('il wizard crea una bozza completa e mostra collegamenti espliciti', async 
   assert.match(portal, /Apri anteprima/);
   assert.match(script, /data-mi-review/);
   assert.match(script, /data-mi-pricing/);
+  assert.match(portal, /name="starts_at" min=/);
+  assert.match(portal, /La data di inizio non può essere precedente a oggi/);
+  assert.match(portal, /start_date->format\( 'Y-m-d' \) < current_time\( 'Y-m-d' \)/);
 });
 
 test('il referente consulta stato e saldo senza esporre dati personali', async () => {
