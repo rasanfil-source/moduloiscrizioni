@@ -82,6 +82,10 @@ final class MI_Registration_Service {
 		$field_configuration = MI_Field_Schema::event_configuration( $event_id );
 		$activity_thumbnail_id = $activity ? get_post_thumbnail_id( $activity ) : 0;
 		$event_thumbnail_id = get_post_thumbnail_id( $event_id );
+		$group_cover_id = $activity ? absint( get_post_meta( $activity_id, '_mi_group_cover_image_id', true ) ) : 0;
+		$resolved_cover_id = $event_thumbnail_id ?: $group_cover_id;
+		$external_group_logo = $activity ? esc_url_raw( get_post_meta( $activity_id, '_mi_group_logo_url', true ), array( 'https' ) ) : '';
+		$external_group_cover = $activity ? esc_url_raw( get_post_meta( $activity_id, '_mi_group_cover_image_url', true ), array( 'https' ) ) : '';
 		$legacy_activity_color = $activity ? sanitize_hex_color( get_post_meta( $activity_id, '_mi_accent_color', true ) ) : '';
 		$activity_primary_color = $activity ? sanitize_hex_color( get_post_meta( $activity_id, '_mi_primary_color', true ) ) : '';
 		$activity_secondary_color = $activity ? sanitize_hex_color( get_post_meta( $activity_id, '_mi_secondary_color', true ) ) : '';
@@ -92,15 +96,15 @@ final class MI_Registration_Service {
 			'title'            => get_the_title( $event_id ),
 			'description'      => mb_substr( wp_strip_all_tags( $event->post_content ), 0, 5000 ),
 			'activity'         => $activity ? $activity->post_title : '',
-			'activity_logo'    => $activity ? get_the_post_thumbnail_url( $activity, 'medium' ) : '',
+			'activity_logo'    => $activity ? ( get_the_post_thumbnail_url( $activity, 'medium' ) ?: $external_group_logo ) : '',
 			'activity_logo_alt'=> $activity_thumbnail_id ? (string) get_post_meta( $activity_thumbnail_id, '_wp_attachment_image_alt', true ) : '',
 			'accent_color'     => $activity_primary_color,
 			'resolved_branding'=> array(
 				'primary_color'   => $activity_primary_color,
 				'secondary_color' => $activity_secondary_color,
 			),
-			'cover_image'      => $event_thumbnail_id ? get_the_post_thumbnail_url( $event_id, 'large' ) : '',
-			'cover_image_alt'  => $event_thumbnail_id ? (string) get_post_meta( $event_thumbnail_id, '_wp_attachment_image_alt', true ) : '',
+			'cover_image'      => $resolved_cover_id ? (string) wp_get_attachment_image_url( $resolved_cover_id, 'large' ) : $external_group_cover,
+			'cover_image_alt'  => $resolved_cover_id ? (string) get_post_meta( $resolved_cover_id, '_wp_attachment_image_alt', true ) : '',
 			'event_starts_at'  => (string) get_post_meta( $event_id, '_mi_event_starts_at', true ),
 			'event_location'   => (string) get_post_meta( $event_id, '_mi_event_location', true ),
 			'capacity'         => max( 1, absint( get_post_meta( $event_id, '_mi_capacity', true ) ) ),

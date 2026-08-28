@@ -112,7 +112,7 @@ final class MI_Modello_Email {
 		$secondary_color = $secondary_color ?: '#337ab7';
 		$snapshot['identita'] = array(
 			'nome_attivita' => $activity_id ? get_the_title( $activity_id ) : '',
-			'logo_url'      => $thumbnail_id ? (string) wp_get_attachment_image_url( $thumbnail_id, 'medium' ) : '',
+			'logo_url'      => $thumbnail_id ? (string) wp_get_attachment_image_url( $thumbnail_id, 'medium' ) : esc_url_raw( get_post_meta( $activity_id, '_mi_group_logo_url', true ), array( 'https' ) ),
 			'logo_alt'      => $thumbnail_id ? (string) get_post_meta( $thumbnail_id, '_wp_attachment_image_alt', true ) : '',
 			'primary_color' => $primary_color,
 			'secondary_color' => $secondary_color,

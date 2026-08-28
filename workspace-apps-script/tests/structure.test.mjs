@@ -18,8 +18,39 @@ test('tutti i file Apps Script hanno sintassi valida', () => {
 test('il setup dichiara tutte le schede operative', () => {
   for (const name of ['Configurazione', 'Eventi', 'Iscrizioni', 'Partecipanti', 'Inserimento pagamenti', 'Pagamenti', 'Coda email', 'Registro controlli']) assert.match(combined, new RegExp(name));
   assert.match(sources['Setup.gs'], /configuraCartellaDiLavoro/);
+  assert.match(sources['Setup.gs'], /console\.log\('Struttura aggiornata/);
   assert.match(sources['Setup.gs'], /rinominaSchedePrecedenti_/);
   assert.match(sources['Setup.gs'], /requireValueInList/);
+});
+
+test('i modelli report personalizzati sono validati e non sovrascrivono quelli standard', () => {
+  assert.match(sources['Config.gs'], /REPORT_TEMPLATES:\s*'Modelli report'/);
+  assert.match(sources['Report.gs'], /function elencaModelliReport/);
+  assert.match(sources['Report.gs'], /function salvaModelloReport/);
+  assert.match(sources['Report.gs'], /function generaReportDaModello/);
+  assert.match(sources['Report.gs'], /generaElencoOperativo_/);
+  assert.match(sources['Report.gs'], /'PERSONALIZZATO'/);
+  assert.match(sources['Report.gs'], /normalizzaScelteReport_/);
+  assert.match(sources['Report.gs'], /campiElencoOperativo_/);
+  assert.match(sources['Segreteria.gs'], /const grouping = normalizzaScelteReport_/);
+  assert.match(sources['Segreteria.gs'], /SOLID_MEDIUM/);
+  assert.match(segreteriaHtml, /name="reportGroup"/);
+  assert.match(segreteriaHtml, /name="reportOrder"/);
+  assert.doesNotMatch(sources['Report.gs'], /deleteRow|clearContent|setValues/);
+});
+
+test('Workspace gestisce gruppi espliciti e migra soltanto l’intestazione storica', () => {
+  assert.match(sources['Config.gs'], /GROUPS:\s*'Gruppi'/);
+  assert.match(sources['Config.gs'], /'Eventi': \['id_evento', 'id_gruppo'/);
+  assert.match(sources['Config.gs'], /MI_INTESTAZIONI_PRECEDENTI[\s\S]*'id_attivita'/);
+  assert.match(sources['Setup.gs'], /inizializzaGruppi_/);
+  assert.match(sources['Gruppi.gs'], /function elencaGruppi/);
+  assert.match(sources['Gruppi.gs'], /function aggiungiGruppo/);
+  assert.match(sources['Gruppi.gs'], /CREATE_GROUP/);
+  assert.match(sources['Gruppi.gs'], /sincronizzaGruppiConWordPress/);
+  assert.match(sources['Gruppi.gs'], /https:\\\/\\\//);
+  assert.match(segreteriaHtml, /MODE==='GRUPPI'/);
+  assert.match(segreteriaHtml, /function groupsUI/);
 });
 
 test('il web endpoint fallisce chiuso e richiede HMAC e anti replay', () => {
@@ -30,6 +61,8 @@ test('il web endpoint fallisce chiuso e richiede HMAC e anti replay', () => {
 	assert.match(sources['WebApp.gs'], /MI_USED_NONCES/);
 	assert.match(sources['WebApp.gs'], /120000/);
   assert.match(sources['WebApp.gs'], /envelope\.action === 'PING'/);
+  assert.match(sources['WebApp.gs'], /group_headers/);
+  assert.match(sources['WebApp.gs'], /report_template_headers/);
   assert.doesNotMatch(combined, /API_KEY\s*=\s*['"]\s*['"]/);
 });
 
@@ -62,7 +95,7 @@ test('le funzioni Apps Script applicative hanno nomi italiani', () => {
 });
 
 test('la migrazione aggiunge riepilogo economico e sistemazioni operative', () => {
-	assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.6\.0'/);
+	assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.8\.0'/);
   assert.match(sources['Config.gs'], /modalita_economica/);
   assert.match(sources['Config.gs'], /primo_versamento_centesimi/);
   assert.match(sources['Config.gs'], /saldo_centesimi/);
@@ -117,6 +150,17 @@ test('lo stato individuale dei partecipanti arriva nelle schede e negli elenchi'
 	assert.match(sources['WebApp.gs'], /participant\.status/);
 	assert.match(sources['WebApp.gs'], /participant\.cancelled_at/);
 	assert.match(sources['Segreteria.gs'], /row\.stato_partecipante/);
+});
+
+test('camere e pullman si assegnano collettivamente senza superare la capienza', () => {
+	assert.match(sources['Setup.gs'], /Assegna camere e pullman/);
+	assert.match(sources['Segreteria.gs'], /function apriAssegnazioniEvento/);
+	assert.match(sources['Assegnazioni.gs'], /function caricaAssegnazioniEvento/);
+	assert.match(sources['Assegnazioni.gs'], /function salvaAssegnazioniEvento/);
+	assert.match(sources['Assegnazioni.gs'], /finalRoomCounts\[code\] > rooms\[code\]\.capacity/);
+	assert.match(sources['Assegnazioni.gs'], /BULK_ASSIGNMENTS/);
+	assert.match(segreteriaHtml, /Assegnazioni collettive/);
+	assert.match(segreteriaHtml, /data-assignment/);
 });
 
 test('la console non richiede mai foto o scansioni dei documenti', () => {

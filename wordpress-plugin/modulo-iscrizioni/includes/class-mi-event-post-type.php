@@ -4,7 +4,9 @@ defined( 'ABSPATH' ) || exit;
 
 final class MI_Event_Post_Type {
 	const EVENT_TYPE = 'mi_event';
+	// Il tipo tecnico storico resta invariato per non perdere gli eventi esistenti.
 	const ACTIVITY_TYPE = 'mi_activity';
+	const GROUP_TYPE = 'mi_activity';
 
 	public static function boot() {
 		add_action( 'init', array( __CLASS__, 'register_types' ) );
@@ -73,11 +75,11 @@ final class MI_Event_Post_Type {
 			self::ACTIVITY_TYPE,
 			array(
 				'labels' => array(
-					'name'          => 'Attività',
-					'singular_name' => 'Attività',
-					'add_new_item'  => 'Aggiungi attività',
-					'edit_item'     => 'Modifica attività',
-					'menu_name'     => 'Attività',
+					'name'          => 'Gruppi',
+					'singular_name' => 'Gruppo',
+					'add_new_item'  => 'Aggiungi gruppo',
+					'edit_item'     => 'Modifica gruppo',
+					'menu_name'     => 'Gruppi',
 				),
 				'public'              => false,
 				'show_ui'             => true,
@@ -95,7 +97,7 @@ final class MI_Event_Post_Type {
 		add_meta_box( 'mi_event_configuration', 'Configurazione iscrizioni', array( __CLASS__, 'render_event_box' ), self::EVENT_TYPE, 'normal', 'high' );
 		add_meta_box( 'mi_event_shortcode', 'Pubblicazione nel sito', array( __CLASS__, 'render_shortcode_box' ), self::EVENT_TYPE, 'side', 'default' );
 		add_meta_box( 'mi_event_operators', 'Operatori dell’evento', array( __CLASS__, 'render_operators_box' ), self::EVENT_TYPE, 'side', 'default' );
-		add_meta_box( 'mi_activity_branding', 'Identità attività', array( __CLASS__, 'render_activity_box' ), self::ACTIVITY_TYPE, 'side', 'default' );
+		add_meta_box( 'mi_activity_branding', 'Identità del gruppo', array( __CLASS__, 'render_activity_box' ), self::GROUP_TYPE, 'side', 'default' );
 	}
 
 	public static function render_operators_box( $post ) {
@@ -138,16 +140,16 @@ final class MI_Event_Post_Type {
 		if ( ! is_array( $ticket_types ) || empty( $ticket_types ) ) {
 			$ticket_types = array( array( 'code' => 'standard', 'name' => 'Iscrizione', 'price_cents' => 0, 'max_per_order' => 5, 'capacity' => 0 ) );
 		}
-		$activities = get_posts( array( 'post_type' => self::ACTIVITY_TYPE, 'post_status' => array( 'publish', 'draft' ), 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) );
+		$activities = get_posts( array( 'post_type' => self::GROUP_TYPE, 'post_status' => array( 'publish', 'draft' ), 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) );
 		if ( class_exists( 'MI_Access' ) && 'ALL' !== MI_Access::activity_ids() ) {
 			$scope = MI_Access::activity_ids();
 			$activities = array_values( array_filter( $activities, static function ( $activity ) use ( $scope ) { return in_array( $activity->ID, $scope, true ); } ) );
 		}
 		?>
 		<div class="mi-admin-grid">
-			<p><label for="mi_activity_id"><strong>Attività</strong></label><br>
+			<p><label for="mi_activity_id"><strong>Gruppo</strong></label><br>
 			<select id="mi_activity_id" name="mi_activity_id" required>
-				<option value="">Seleziona attività</option>
+				<option value="">Seleziona gruppo</option>
 				<?php foreach ( $activities as $activity ) : ?>
 					<option value="<?php echo esc_attr( $activity->ID ); ?>" <?php selected( $activity_id, $activity->ID ); ?>><?php echo esc_html( $activity->post_title ); ?></option>
 				<?php endforeach; ?>
@@ -237,7 +239,11 @@ final class MI_Event_Post_Type {
 		wp_nonce_field( 'mi_save_activity', 'mi_activity_nonce' );
 		$primary_color = sanitize_hex_color( get_post_meta( $post->ID, '_mi_primary_color', true ) ) ?: ( sanitize_hex_color( get_post_meta( $post->ID, '_mi_accent_color', true ) ) ?: '#151b38' );
 		$secondary_color = sanitize_hex_color( get_post_meta( $post->ID, '_mi_secondary_color', true ) ) ?: '#337ab7';
-		echo '<p>Usa l’immagine in evidenza come logo dell’attività. Logo e colori vengono ereditati dai suoi eventi e dalle email.</p>';
+		$cover_id = absint( get_post_meta( $post->ID, '_mi_group_cover_image_id', true ) );
+		echo '<p>Usa l’immagine in evidenza come logo del gruppo. Logo, immagine e colori vengono ereditati dagli eventi, salvo sostituzione nel singolo evento.</p>';
+		echo '<input type="hidden" id="mi_group_cover_image_id" name="mi_group_cover_image_id" value="' . esc_attr( $cover_id ) . '">';
+		echo '<p><button type="button" class="button" data-mi-group-cover>Scegli immagine del gruppo</button> <button type="button" class="button-link-delete" data-mi-group-cover-remove>Rimuovi</button></p>';
+		echo '<div data-mi-group-cover-preview>' . ( $cover_id ? wp_get_attachment_image( $cover_id, 'medium' ) : '<span class="description">Nessuna immagine predefinita.</span>' ) . '</div>';
 		echo '<p><label for="mi_primary_color"><strong>Colore primario</strong></label><br><input id="mi_primary_color" name="mi_primary_color" type="color" value="' . esc_attr( $primary_color ) . '"></p>';
 		echo '<p><label for="mi_secondary_color"><strong>Colore secondario / CTA</strong></label><br><input id="mi_secondary_color" name="mi_secondary_color" type="color" value="' . esc_attr( $secondary_color ) . '"></p>';
 		echo '<p class="description">Il primario identifica intestazioni e stati attivi; il secondario viene usato per pulsanti e link. Il testo email sceglie automaticamente bianco o scuro per il contrasto.</p>';
@@ -248,11 +254,14 @@ final class MI_Event_Post_Type {
 		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) || ! current_user_can( 'manage_options' ) ) return;
 		$primary_color = isset( $_POST['mi_primary_color'] ) ? sanitize_hex_color( wp_unslash( $_POST['mi_primary_color'] ) ) : '';
 		$secondary_color = isset( $_POST['mi_secondary_color'] ) ? sanitize_hex_color( wp_unslash( $_POST['mi_secondary_color'] ) ) : '';
+		$cover_id = isset( $_POST['mi_group_cover_image_id'] ) ? absint( $_POST['mi_group_cover_image_id'] ) : 0;
+		if ( $cover_id && ! wp_attachment_is_image( $cover_id ) ) $cover_id = 0;
 		$primary_color = $primary_color ?: '#151b38';
 		$secondary_color = $secondary_color ?: '#337ab7';
 		update_post_meta( $post_id, '_mi_primary_color', $primary_color );
 		update_post_meta( $post_id, '_mi_secondary_color', $secondary_color );
 		update_post_meta( $post_id, '_mi_accent_color', $primary_color );
+		if ( $cover_id ) update_post_meta( $post_id, '_mi_group_cover_image_id', $cover_id ); else delete_post_meta( $post_id, '_mi_group_cover_image_id' );
 		$dependent_events = get_posts( array( 'post_type' => self::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => -1, 'fields' => 'ids', 'meta_key' => '_mi_activity_id', 'meta_value' => $post_id ) );
 		foreach ( $dependent_events as $event_id ) update_post_meta( $event_id, '_mi_needs_republish', '1' );
 	}
@@ -273,13 +282,13 @@ final class MI_Event_Post_Type {
 			$has_registrations = (bool) $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$wpdb->prefix}mi_registrations WHERE event_id = %d LIMIT 1", $post_id ) );
 			if ( $has_registrations ) {
 				$activity_id = $current_activity_id;
-				set_transient( 'mi_publication_error_' . get_current_user_id(), 'Attività non modificata: un evento con iscrizioni richiede una migrazione amministrativa esplicita.', MINUTE_IN_SECONDS );
+				set_transient( 'mi_publication_error_' . get_current_user_id(), 'Gruppo non modificato: un evento con iscrizioni richiede una migrazione amministrativa esplicita.', MINUTE_IN_SECONDS );
 			}
 		}
 		if ( $activity_id && self::ACTIVITY_TYPE === get_post_type( $activity_id ) ) {
 			if ( ! MI_Access::can_access_activity( $activity_id ) ) {
 				$activity_id = $current_activity_id;
-				set_transient( 'mi_publication_error_' . get_current_user_id(), 'Attività non modificata: non disponi dell’autorizzazione necessaria. Le altre modifiche sono state salvate.', MINUTE_IN_SECONDS );
+				set_transient( 'mi_publication_error_' . get_current_user_id(), 'Gruppo non modificato: non disponi dell’autorizzazione necessaria. Le altre modifiche sono state salvate.', MINUTE_IN_SECONDS );
 			}
 			if ( $activity_id ) update_post_meta( $post_id, '_mi_activity_id', $activity_id );
 		}
@@ -443,7 +452,7 @@ final class MI_Event_Post_Type {
 	}
 
 	public static function event_columns( $columns ) {
-		$columns['mi_activity'] = 'Attività';
+		$columns['mi_activity'] = 'Gruppo';
 		$columns['mi_window'] = 'Finestra iscrizioni';
 		$columns['mi_capacity'] = 'Capienza';
 		return $columns;
@@ -474,9 +483,10 @@ final class MI_Event_Post_Type {
 
 	public static function admin_assets( $hook ) {
 		$screen = get_current_screen();
-		if ( ! $screen || self::EVENT_TYPE !== $screen->post_type ) {
+		if ( ! $screen || ! in_array( $screen->post_type, array( self::EVENT_TYPE, self::GROUP_TYPE ), true ) ) {
 			return;
 		}
+		if ( self::GROUP_TYPE === $screen->post_type ) wp_enqueue_media();
 		wp_enqueue_style( 'mi-admin', MI_PLUGIN_URL . 'assets/admin.css', array(), MI_VERSION );
 		wp_enqueue_script( 'mi-admin', MI_PLUGIN_URL . 'assets/admin.js', array(), MI_VERSION, true );
 	}

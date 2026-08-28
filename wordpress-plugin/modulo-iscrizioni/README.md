@@ -1,11 +1,11 @@
-# Modulo Iscrizioni — versione 3.5.15
+# Modulo Iscrizioni — versione 3.6.1
 
 Plugin WordPress per configurare e pubblicare moduli, raccogliere iscrizioni e consegnarle in modo firmato alla console operativa Google Workspace.
 
 ## Funzioni principali
 
 - revisioni pubblicate e snapshot ordine immutabili, identificati da hash SHA-256;
-- ACL per attività applicate a elenchi, editor, azioni amministrative ed esportazioni;
+- ACL per gruppo applicate a elenchi, editor, azioni amministrative ed esportazioni;
 - idempotenza risolta anche dopo chiusura evento, timeout o esaurimento posti;
 - capienza globale e per tipologia protetta da lock transazionali, con lista d’attesa;
 - partecipanti associati in modo univoco alla tipologia e alla posizione acquistata;
@@ -26,9 +26,9 @@ Plugin WordPress per configurare e pubblicare moduli, raccogliere iscrizioni e c
 - promemoria pre-evento e promemoria saldo preparati da Sheets e consegnati alla coda WordPress firmata;
 - gli eventi in bozza forzano sempre le comunicazioni operative nello stato `PREVIEW`.
 
-## Migrazione amministrativa dell’attività
+## Migrazione amministrativa del gruppo
 
-Quando un evento possiede già iscrizioni, il normale editor impedisce di cambiarne l’attività. Un amministratore può usare **Modulo iscrizioni → Migrazione attività**: l’azione richiede evento, attività di destinazione e una frase di conferma che contiene entrambi gli ID. La migrazione aggiorna soltanto il collegamento dell’evento, verifica il numero di iscrizioni prima e dopo, conserva revisioni e istantanee storiche, registra un audit nei metadati e non pubblica contenuti né invia email.
+Quando un evento possiede già iscrizioni, il normale editor impedisce di cambiarne il gruppo. Un amministratore può usare **Modulo iscrizioni → Migrazione gruppo**: l’azione richiede evento, gruppo di destinazione e una frase di conferma che contiene entrambi gli ID. La migrazione aggiorna soltanto il collegamento dell’evento, verifica il numero di iscrizioni prima e dopo, conserva revisioni e istantanee storiche, registra un audit nei metadati e non pubblica contenuti né invia email.
 
 ## Limiti intenzionali
 
@@ -38,8 +38,8 @@ Il plugin non riscuote denaro e non conserva coordinate bancarie, numeri complet
 
 1. Comprimere la cartella `modulo-iscrizioni` in uno ZIP e aggiornare il plugin nell’ambiente autorizzato.
 2. Verificare che l’upgrade abbia impostato `mi_db_version` alla stessa versione del plugin e aggiornato tabelle e indici.
-3. Aggiornare Apps Script allo schema `1.6.0`, eseguire `configuraCartellaDiLavoro()` e verificare lo schema dal pannello WordPress.
-4. Aprire e salvare gli eventi pubblicati per creare la prima revisione completa; ripubblicare quelli segnalati dopo modifiche all’attività.
+3. Aggiornare Apps Script allo schema `1.8.0`, eseguire `configuraCartellaDiLavoro()` e verificare lo schema dal pannello WordPress.
+4. Aprire e salvare gli eventi pubblicati per creare la prima revisione completa; ripubblicare quelli segnalati dopo modifiche al gruppo.
 5. Collaudare capienza, retry, annullamento, scadenza, email e replica con sole identità fittizie.
 
 Non usare dati reali durante il primo collaudo.

@@ -5,9 +5,36 @@ import test from 'node:test';
 const root = new URL('../modulo-iscrizioni/', import.meta.url);
 const read = (path) => readFile(new URL(path, root), 'utf8');
 
+test('il catalogo dei gruppi e dei report è italiano e privo di duplicati', async () => {
+  const catalogo = JSON.parse(await readFile(new URL('../../schema/report.example.json', import.meta.url), 'utf8'));
+  assert.equal(catalogo.versione, 1);
+  assert.deepEqual(catalogo.modelli.map((modello) => modello.codice), [
+    'partecipanti', 'documenti', 'logistica', 'pullman', 'pagamenti',
+  ]);
+  assert.equal(new Set(catalogo.modelli.map((modello) => modello.codice)).size, catalogo.modelli.length);
+  assert.equal(catalogo.report_personalizzato.salvabile_come_modello, true);
+});
+
+test('il contenitore tecnico storico è presentato come Gruppi', async () => {
+  const source = await read('includes/class-mi-event-post-type.php');
+  assert.match(source, /const GROUP_TYPE = 'mi_activity'/);
+  assert.match(source, /'name'\s*=>\s*'Gruppi'/);
+  assert.match(source, /'singular_name'\s*=>\s*'Gruppo'/);
+  assert.match(source, /<strong>Gruppo<\/strong>/);
+});
+
+test('Workspace prevede modelli report standard senza sovrascrivere dati', async () => {
+  const config = await readFile(new URL('../../workspace-apps-script/src/Config.gs', import.meta.url), 'utf8');
+  const setup = await readFile(new URL('../../workspace-apps-script/src/Setup.gs', import.meta.url), 'utf8');
+  assert.match(config, /REPORT_TEMPLATES:\s*'Modelli report'/);
+  assert.match(config, /'Modelli report':\s*\[/);
+  assert.match(setup, /inizializzaModelliReport_/);
+  assert.match(setup, /if \(sheet\.getLastRow\(\) > 1\) return/);
+});
+
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.5\.15/);
+	assert.match(source, /Version:\s+3\.6\.1/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -250,7 +277,7 @@ test('il wizard guidato crea solo bozze e rende gli alloggi condizionali', async
   assert.match(portal, /data-mi-overnight/);
   assert.match(portal, /data-mi-accommodations hidden/);
   assert.match(script, /rooms\.hidden\s*=\s*!overnight\.checked/);
-  assert.doesNotMatch(portal, /wp_insert_post\([\s\S]{0,300}post_status' => 'publish'/);
+  assert.doesNotMatch(portal, /post_type'\s*=>\s*MI_Event_Post_Type::EVENT_TYPE[\s\S]{0,160}post_status'\s*=>\s*'publish'/);
 });
 
 test('ogni partecipante dispone di annullamento individuale confermato e auditabile', async () => {
@@ -701,7 +728,7 @@ test('l’ACL per attività è applicata alle capability meta di WordPress', asy
   assert.match(access, /do_not_allow/);
   assert.match(postType, /'map_meta_cap'\s*=>\s*true/);
   assert.match(postType, /'edit_post'\s*=>\s*'edit_mi_event'/);
-	assert.match(postType, /Attività non modificata/);
+	assert.match(postType, /Gruppo non modificato/);
 	assert.match(postType, /mi_registrations WHERE event_id/);
 	assert.match((await read('includes/class-mi-admin.php')), /activity_stable/);
 });
@@ -943,13 +970,16 @@ test('la replica Workspace include il riepilogo economico storico', async () => 
   assert.match(service, /payment_methods/);
 });
 
-test('il pannello verifica lo schema economico senza creare iscrizioni', async () => {
+test('il pannello verifica lo schema Workspace senza creare iscrizioni', async () => {
   const settings = await read('includes/class-mi-workspace-settings.php');
   const client = await read('includes/class-mi-workspace-client.php');
-  assert.match(settings, /Verifica schema economico/);
+  assert.match(settings, /Verifica schema Workspace/);
   assert.match(settings, /schema_version/);
+  assert.match(settings, /'1\.8\.0'/);
+  assert.match(settings, /group_headers/);
+  assert.match(settings, /report_template_headers/);
   assert.match(client, /STATO_SCHEMA/);
-	assert.match(settings, /1\.6\.0/);
+	assert.doesNotMatch(settings, /1\.6\.0/);
 	assert.match(settings, /accommodation_headers/);
 });
 
@@ -1071,6 +1101,23 @@ test('il wizard crea una bozza completa e mostra collegamenti espliciti', async 
   assert.match(script, /data-mi-opens/);
   assert.match(script, /closesAt\.min/);
   assert.match(script, /startsAt\.min/);
+});
+
+test('il portale consente di creare un gruppo senza duplicare lo slug', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(portal, /name="new_group_name"/);
+  assert.match(portal, /find_or_create_group/);
+  assert.match(portal, /get_page_by_path/);
+  assert.match(portal, /GROUP_TYPE/);
+  assert.match(portal, /mi_manage_all_events/);
+});
+
+test('Workspace può creare gruppi WordPress e risolverli per slug', async () => {
+  const rest = await read('includes/class-mi-rest-controller.php');
+  assert.match(rest, /CREATE_GROUP/);
+  assert.match(rest, /create_group_from_workspace/);
+  assert.match(rest, /get_page_by_path/);
+  assert.match(rest, /group_slug/);
 });
 
 test('il referente consulta stato e saldo senza esporre dati personali', async () => {

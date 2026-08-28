@@ -3,7 +3,11 @@ function onOpen() {
     .addItem('Inizializza/aggiorna struttura', 'configuraCartellaDiLavoro')
     .addSeparator()
     .addItem('Apri segreteria', 'apriSegreteriaWeb')
+    .addItem('Assegna camere e pullman', 'apriAssegnazioniEvento')
     .addItem('Configura elenco operativo', 'apriConfigurazioneElencoOperativo')
+    .addItem('Configura modelli report', 'apriConfigurazioneModelliReport')
+    .addItem('Gestisci gruppi', 'apriGestioneGruppi')
+    .addItem('Allinea gruppi con WordPress', 'sincronizzaGruppiConWordPress')
     .addItem('Comunicazioni operative', 'apriComunicazioniOperative')
     .addItem('Configura collegamento WordPress', 'configuraEndpointWordPress')
     .addSeparator()
@@ -34,14 +38,53 @@ function configuraCartellaDiLavoro() {
     });
 
     inizializzaConfigurazione_();
+		inizializzaGruppi_();
     inizializzaConvalidaPagamenti_();
+		inizializzaModelliReport_();
     applicaProtezioniConAvviso_();
     aggiungiControllo_('SETUP_WORKBOOK', 'WORKBOOK', 'BOUND', 'SUCCESS', Session.getActiveUser().getEmail(), MI_SCHEMA_VERSION, 'WORKSPACE_UI');
     SpreadsheetApp.flush();
-    SpreadsheetApp.getUi().alert('Struttura aggiornata. Email e integrazione restano in modalità PREVIEW.');
+    try {
+      SpreadsheetApp.getUi().alert('Struttura aggiornata. Email e integrazione restano in modalità PREVIEW.');
+    } catch (error) {
+      console.log('Struttura aggiornata. Email e integrazione restano in modalità PREVIEW.');
+    }
   } finally {
     lock.releaseLock();
   }
+}
+
+/** Crea i gruppi iniziali soltanto quando la scheda Gruppi non contiene dati. */
+function inizializzaGruppi_() {
+  const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.GROUPS);
+  if (sheet.getLastRow() > 1) return;
+  const now = new Date();
+  sheet.getRange(2, 1, 5, 7).setValues([
+    ['parrocchia', 'Parrocchia', 'parrocchia', 'ATTIVO', '', '', now],
+    ['12-ceste', '12 Ceste', '12-ceste', 'ATTIVO', '', '', now],
+    ['icef', 'ICEF', 'icef', 'ATTIVO', '', '', now],
+    ['escursioni', 'Escursioni', 'escursioni', 'ATTIVO', '', '', now],
+    ['visite', 'Visite', 'visite', 'ATTIVO', '', '', now]
+  ]);
+}
+
+/** Inserisce i modelli standard soltanto se il catalogo è ancora vuoto. */
+function inizializzaModelliReport_() {
+  const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.REPORT_TEMPLATES);
+  if (sheet.getLastRow() > 1) return;
+  const modelli = [
+    ['partecipanti', 'Elenco partecipanti', 'STANDARD', '', '["participant_number","last_name","first_name","email","phone","status"]', '["evento","stato_iscrizione","gruppo"]', '[]', '["last_name","first_name"]', 'SI', new Date(), 'SISTEMA'],
+    ['documenti', 'Documenti e dati anagrafici', 'STANDARD', '', '["last_name","first_name","birth_date","document_type","document_number","document_issue_date","document_expiry_date","nationality"]', '["evento","documenti_mancanti"]', '[]', '["last_name","first_name"]', 'SI', new Date(), 'SISTEMA'],
+    ['logistica', 'Camere e sistemazioni', 'STANDARD', '', '["last_name","first_name","room","special_requests"]', '["evento","sistemazione","camera"]', '["room"]', '["room","last_name","first_name"]', 'SI', new Date(), 'SISTEMA'],
+    ['pullman', 'Assegnazione pullman', 'STANDARD', '', '["last_name","first_name","transport","phone"]', '["evento","pullman"]', '["transport"]', '["transport","last_name","first_name"]', 'SI', new Date(), 'SISTEMA'],
+    ['pagamenti', 'Situazione pagamenti', 'STANDARD', '', '["order_code","last_name","first_name","total","paid","balance"]', '["evento","stato_pagamento","fonte_pagamento","data_versamento"]', '[]', '["last_name","first_name"]', 'SI', new Date(), 'SISTEMA']
+  ];
+  sheet.getRange(2, 1, modelli.length, modelli[0].length).setValues(modelli);
+}
+
+function configuraModelliReport() {
+  inizializzaModelliReport_();
+  SpreadsheetApp.getUi().alert('Modelli report pronti. La webapp potrà crearne di personalizzati senza alterare quelli standard.');
 }
 
 function rinominaSchedePrecedenti_(spreadsheet) {

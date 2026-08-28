@@ -6,7 +6,8 @@ function doGet(event) {
         .setTitle('Accesso riservato');
     }
     const template = HtmlService.createTemplateFromFile('Segreteria');
-    template.modalita = parameters.order ? 'PRENOTAZIONE' : 'LISTA';
+    const section = normalizzaValoreElenco_(parameters.section, ['ASSEGNAZIONI', 'REPORT', 'GRUPPI', 'COMUNICAZIONI']);
+    template.modalita = parameters.order ? 'PRENOTAZIONE' : (section || 'LISTA');
     template.codiceOrdineIniziale = normalizzaTesto_(parameters.order, 64);
     template.webAppUrl = pulisciUrlWebAppSegreteria_(PropertiesService.getScriptProperties().getProperty('MI_SECRETARY_WEBAPP_URL') || ScriptApp.getService().getUrl() || '');
     template.isWebApp = true;
@@ -35,7 +36,7 @@ function doPost(event) {
     const verified = verificaBusta_(envelope);
     if (!verified.ok) return creaRispostaJson_({ ok: false, error: verified.error });
     if (envelope.action === 'PING') return creaRispostaJson_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, mode: 'PREVIEW' });
-	if (envelope.action === 'STATO_SCHEMA') return creaRispostaJson_({ ok: true, schema_version: MI_SCHEMA_VERSION, registration_headers: MI_HEADERS[MI_SHEETS.REGISTRATIONS], accommodation_headers: MI_HEADERS[MI_SHEETS.ACCOMMODATIONS], mode: 'PREVIEW' });
+	if (envelope.action === 'STATO_SCHEMA') return creaRispostaJson_({ ok: true, schema_version: MI_SCHEMA_VERSION, registration_headers: MI_HEADERS[MI_SHEETS.REGISTRATIONS], accommodation_headers: MI_HEADERS[MI_SHEETS.ACCOMMODATIONS], group_headers: MI_HEADERS[MI_SHEETS.GROUPS], report_template_headers: MI_HEADERS[MI_SHEETS.REPORT_TEMPLATES], event_headers: MI_HEADERS[MI_SHEETS.EVENTS], mode: 'PREVIEW' });
     if (envelope.action === 'ELENCA_PAGAMENTI') return creaRispostaJson_(elencaPagamenti_(envelope.payload));
     if (envelope.action !== 'APPEND_REGISTRATION') return creaRispostaJson_({ ok: false, error: 'ACTION_NOT_ALLOWED' });
     return creaRispostaJson_(aggiungiIscrizione_(envelope.payload));

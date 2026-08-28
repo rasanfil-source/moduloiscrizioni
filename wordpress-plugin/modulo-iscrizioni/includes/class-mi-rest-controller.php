@@ -49,9 +49,37 @@ final class MI_REST_Controller {
 		$action = strtoupper( sanitize_key( (string) ( $envelope['action'] ?? '' ) ) );
 		$payload = (array) ( $envelope['payload'] ?? array() );
 		if ( 'CREATE_EVENT_DRAFT' === $action ) return self::create_event_draft_from_workspace( $payload );
+		if ( 'CREATE_GROUP' === $action ) return self::create_group_from_workspace( $payload );
 		if ( 'GET_EMAIL_MODE' === $action ) return array( 'ok' => true, 'mode' => MI_Spedizione_Email::modalita() );
 		if ( 'QUEUE_OPERATIONAL_EMAILS' === $action ) return MI_Spedizione_Email::accoda_comunicazione_operativa( $payload );
 		return new WP_Error( 'mi_workspace_action_not_allowed', 'Azione Workspace non consentita.', array( 'status' => 403 ) );
+	}
+
+	private static function create_group_from_workspace( array $payload ) {
+		$name = mb_substr( sanitize_text_field( $payload['name'] ?? '' ), 0, 120 );
+		$slug = sanitize_title( $payload['slug'] ?? $name );
+		$logo_url = self::sanitize_https_asset_url( $payload['logo_url'] ?? '' );
+		$image_url = self::sanitize_https_asset_url( $payload['image_url'] ?? '' );
+		if ( ! $name || ! $slug ) return new WP_Error( 'mi_workspace_group_invalid', 'Nome del gruppo non valido.', array( 'status' => 400 ) );
+		$existing = get_page_by_path( $slug, OBJECT, MI_Event_Post_Type::GROUP_TYPE );
+		if ( $existing ) {
+			self::save_group_asset_urls( (int) $existing->ID, $logo_url, $image_url );
+			return array( 'ok' => true, 'group_id' => (int) $existing->ID, 'name' => $existing->post_title, 'slug' => $existing->post_name, 'existing' => true );
+		}
+		$group_id = wp_insert_post( array( 'post_type' => MI_Event_Post_Type::GROUP_TYPE, 'post_status' => 'publish', 'post_title' => $name, 'post_name' => $slug ), true );
+		if ( is_wp_error( $group_id ) ) return $group_id;
+		self::save_group_asset_urls( (int) $group_id, $logo_url, $image_url );
+		return array( 'ok' => true, 'group_id' => (int) $group_id, 'name' => get_the_title( $group_id ), 'slug' => $slug, 'existing' => false );
+	}
+
+	private static function sanitize_https_asset_url( $value ) {
+		$url = esc_url_raw( (string) $value, array( 'https' ) );
+		return $url && 0 === strpos( $url, 'https://' ) ? $url : '';
+	}
+
+	private static function save_group_asset_urls( $group_id, $logo_url, $image_url ) {
+		if ( $logo_url ) update_post_meta( $group_id, '_mi_group_logo_url', $logo_url );
+		if ( $image_url ) update_post_meta( $group_id, '_mi_group_cover_image_url', $image_url );
 	}
 
 	private static function verify_workspace_envelope( array $envelope ) {
@@ -91,7 +119,12 @@ final class MI_REST_Controller {
 		$existing = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => 1, 'meta_key' => '_mi_workspace_draft_id', 'meta_value' => $draft_id ) );
 		if ( $existing ) return rest_ensure_response( self::event_draft_response( (int) $existing[0]->ID ) );
 		$copy_id = absint( $payload['copy_event_id'] ?? 0 );
-		$activity_id = absint( $payload['activity_id'] ?? 0 );
+		$activity_id = absint( $payload['group_id'] ?? $payload['activity_id'] ?? 0 );
+		$group_slug = sanitize_title( $payload['group_slug'] ?? '' );
+		if ( ! $activity_id && $group_slug ) {
+			$group = get_page_by_path( $group_slug, OBJECT, MI_Event_Post_Type::GROUP_TYPE );
+			if ( $group ) $activity_id = (int) $group->ID;
+		}
 		if ( $copy_id && MI_Event_Post_Type::EVENT_TYPE === get_post_type( $copy_id ) ) {
 			$copy_activity = absint( get_post_meta( $copy_id, '_mi_activity_id', true ) );
 			if ( ! $activity_id ) $activity_id = $copy_activity;

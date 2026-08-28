@@ -6,6 +6,7 @@ final class MI_Activator {
 	public static function activate() {
 		self::create_tables();
 		self::add_roles_and_capabilities();
+		self::ensure_default_groups();
 		self::ensure_schedule();
 	}
 
@@ -20,6 +21,7 @@ final class MI_Activator {
 		if ( MI_VERSION !== get_option( 'mi_db_version' ) ) {
 			self::create_tables();
 			self::add_roles_and_capabilities();
+			self::ensure_default_groups();
 		}
 		self::ensure_schedule();
 	}
@@ -30,6 +32,30 @@ final class MI_Activator {
 		}
 		if ( ! wp_next_scheduled( 'mi_expire_registrations' ) ) {
 			wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', 'mi_expire_registrations' );
+		}
+	}
+
+	/** Crea soltanto i gruppi iniziali mancanti, senza modificare dati esistenti. */
+	private static function ensure_default_groups() {
+		$groups = array(
+			'parrocchia' => 'Parrocchia',
+			'12-ceste'   => '12 Ceste',
+			'icef'       => 'ICEF',
+			'escursioni' => 'Escursioni',
+			'visite'     => 'Visite',
+		);
+		foreach ( $groups as $slug => $name ) {
+			if ( get_page_by_path( $slug, OBJECT, MI_Event_Post_Type::GROUP_TYPE ) ) {
+				continue;
+			}
+			wp_insert_post(
+				array(
+					'post_type'   => MI_Event_Post_Type::GROUP_TYPE,
+					'post_status' => 'publish',
+					'post_title'  => $name,
+					'post_name'   => $slug,
+				)
+			);
 		}
 	}
 

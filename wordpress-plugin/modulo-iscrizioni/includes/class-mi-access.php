@@ -91,7 +91,7 @@ final class MI_Access {
 		}
 		$post_id = absint( $_GET['post'] );
 		if ( MI_Event_Post_Type::EVENT_TYPE === get_post_type( $post_id ) && ! self::can_access_event( $post_id ) ) {
-			wp_die( esc_html__( 'Questo evento non appartiene alle attività assegnate.', 'modulo-iscrizioni' ), 403 );
+			wp_die( esc_html__( 'Questo evento non appartiene ai gruppi assegnati.', 'modulo-iscrizioni' ), 403 );
 		}
 	}
 
@@ -107,8 +107,8 @@ final class MI_Access {
 		wp_nonce_field( 'mi_save_activity_scope_' . $user->ID, 'mi_activity_scope_nonce' );
 		?>
 		<h2>Modulo iscrizioni</h2>
-		<table class="form-table"><tr><th>Attività assegnate</th><td>
-		<?php if ( ! $activities ) : ?><p>Crea prima almeno una attività.</p><?php endif; ?>
+		<table class="form-table"><tr><th>Gruppi assegnati</th><td>
+		<?php if ( ! $activities ) : ?><p>Crea prima almeno un gruppo.</p><?php endif; ?>
 		<?php foreach ( $activities as $activity ) : ?><label><input type="checkbox" name="mi_activity_scope[]" value="<?php echo esc_attr( $activity->ID ); ?>" <?php checked( in_array( $activity->ID, $selected, true ) ); ?>> <?php echo esc_html( $activity->post_title ); ?></label><br><?php endforeach; ?>
 		<p class="description">Usato soltanto per utenti con ruolo Gestore iscrizioni. Gli amministratori mantengono accesso globale.</p>
 		</td></tr></table>

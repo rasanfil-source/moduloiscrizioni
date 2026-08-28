@@ -63,11 +63,17 @@ final class MI_Portal {
 		if ( $close_date > $start_date ) return self::redirect_result( 'La chiusura delle iscrizioni non può essere successiva all’inizio dell’evento.', true );
 		$copy_id = absint( $_POST['copy_event_id'] ?? 0 );
 		if ( $copy_id && ! MI_Access::can_access_event( $copy_id ) ) wp_die( 'Evento modello non accessibile.', 403 );
+		$new_group_name = mb_substr( sanitize_text_field( wp_unslash( $_POST['new_group_name'] ?? '' ) ), 0, 120 );
+		if ( $new_group_name && ! current_user_can( 'mi_manage_all_events' ) && ! current_user_can( 'manage_options' ) ) return self::redirect_result( 'Non disponi del permesso per creare un nuovo gruppo.', true );
 		$description = wp_kses_post( wp_unslash( $_POST['description'] ?? '' ) );
 		$event_id = wp_insert_post( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'draft', 'post_title' => $title, 'post_content' => $description, 'post_author' => get_current_user_id() ), true );
 		if ( is_wp_error( $event_id ) ) return self::redirect_result( 'Non è stato possibile creare la bozza.', true );
 		if ( $copy_id ) self::copy_configuration( $copy_id, $event_id );
 		$activity_id = absint( $_POST['activity_id'] ?? 0 );
+		if ( $new_group_name ) {
+			$activity_id = self::find_or_create_group( $new_group_name );
+			if ( is_wp_error( $activity_id ) ) return self::redirect_result( $activity_id->get_error_message(), true );
+		}
 		if ( $activity_id && MI_Access::can_access_activity( $activity_id ) ) update_post_meta( $event_id, '_mi_activity_id', $activity_id );
 		self::save_date( $event_id, '_mi_event_starts_at', $starts_at );
 		self::save_date( $event_id, '_mi_registration_opens_at', $opens_at );
@@ -446,7 +452,7 @@ final class MI_Portal {
 		echo '<section id="mi-portal-booking-detail" class="mi-booking-detail"><div class="mi-booking-detail__hero' . ( $cover_image ? ' has-cover' : '' ) . '">';
 		if ( $cover_image ) echo '<img class="mi-booking-detail__cover" src="' . esc_url( $cover_image ) . '" alt="" loading="lazy" decoding="async">';
 		echo '<header class="mi-booking-detail__header">';
-		if ( $activity_name ) echo '<p class="mi-booking-detail__activity"><span>Attività</span>' . esc_html( $activity_name ) . '</p>';
+		if ( $activity_name ) echo '<p class="mi-booking-detail__activity"><span>Gruppo</span>' . esc_html( $activity_name ) . '</p>';
 		echo '<h2 class="mi-booking-detail__event">' . esc_html( $event_name ) . '</h2><p class="mi-booking-detail__code">Codice prenotazione <code>' . esc_html( $registration['order_code'] ) . '</code></p></header></div>';
 		foreach ( $participants as $participant ) {
 			$is_referent = $is_multiple && $referent_participant_id === (int) $participant['id'];
@@ -473,6 +479,14 @@ final class MI_Portal {
 		echo '</section>';
 	}
 
+	private static function find_or_create_group( $name ) {
+		$slug = sanitize_title( $name );
+		if ( ! $slug ) return new WP_Error( 'mi_group_name_invalid', 'Il nome del gruppo non è valido.' );
+		$existing = get_page_by_path( $slug, OBJECT, MI_Event_Post_Type::GROUP_TYPE );
+		if ( $existing ) return (int) $existing->ID;
+		return wp_insert_post( array( 'post_type' => MI_Event_Post_Type::GROUP_TYPE, 'post_status' => 'publish', 'post_title' => $name, 'post_name' => $slug, 'post_author' => get_current_user_id() ), true );
+	}
+
 	private static function create_view() {
 		$models = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft' ), 'numberposts' => 30, 'orderby' => 'date', 'order' => 'DESC' ) );
 		$activities = get_posts( array( 'post_type' => MI_Event_Post_Type::ACTIVITY_TYPE, 'post_status' => array( 'publish', 'draft' ), 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) );
@@ -481,7 +495,7 @@ final class MI_Portal {
 		$additional_fields = array_diff_key( $catalog, $common_fields );
 		$today_start = current_time( 'Y-m-d' ) . 'T00:00';
 		?><form class="mi-event-wizard" method="post" enctype="multipart/form-data"><input type="hidden" name="mi_portal_action" value="create_event"><?php wp_nonce_field( 'mi_portal_create_event', 'mi_portal_nonce' ); ?>
-		<section class="mi-wizard-step is-active"><span class="mi-portal-eyebrow">1 di 8</span><h2>Come si chiama?</h2><label>Titolo dell’evento<input name="title" required maxlength="180" placeholder="Es. Pellegrinaggio ad Assisi"></label><label>Gruppo o settore organizzatore <small>(facoltativo)</small><select name="activity_id"><option value="">Nessuno</option><?php foreach ( $activities as $activity ) : ?><option value="<?php echo esc_attr( $activity->ID ); ?>"><?php echo esc_html( $activity->post_title ); ?></option><?php endforeach; ?></select></label><label>Vuoi partire dalla configurazione di un evento precedente?<select name="copy_event_id"><option value="">No, configuro liberamente il nuovo evento</option><?php foreach ( $models as $model ) : ?><option value="<?php echo esc_attr( $model->ID ); ?>"><?php echo esc_html( $model->post_title ); ?></option><?php endforeach; ?></select></label><p class="mi-portal-muted">Vengono copiate solo impostazioni e domande, mai iscrizioni o dati personali.</p></section>
+		<section class="mi-wizard-step is-active"><span class="mi-portal-eyebrow">1 di 8</span><h2>Come si chiama?</h2><label>Titolo dell’evento<input name="title" required maxlength="180" placeholder="Es. Pellegrinaggio ad Assisi"></label><label>Gruppo organizzatore<select name="activity_id"><option value="">Scegli un gruppo</option><?php foreach ( $activities as $activity ) : ?><option value="<?php echo esc_attr( $activity->ID ); ?>"><?php echo esc_html( $activity->post_title ); ?></option><?php endforeach; ?></select></label><label>Oppure crea un nuovo gruppo <small>(facoltativo)</small><input name="new_group_name" maxlength="120" placeholder="Es. Giovani"></label><p class="mi-portal-muted">Se indichi un nuovo gruppo, questo prevale sulla scelta precedente e sarà disponibile per gli eventi successivi.</p><label>Vuoi partire dalla configurazione di un evento precedente?<select name="copy_event_id"><option value="">No, configuro liberamente il nuovo evento</option><?php foreach ( $models as $model ) : ?><option value="<?php echo esc_attr( $model->ID ); ?>"><?php echo esc_html( $model->post_title ); ?></option><?php endforeach; ?></select></label><p class="mi-portal-muted">Vengono copiate solo impostazioni e domande, mai iscrizioni o dati personali.</p></section>
 		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">2 di 8</span><h2>Cosa devono sapere le persone?</h2><label>Luogo<input name="location" maxlength="180" placeholder="Es. Basilica di Sant’Eugenio"></label><label>Presentazione e informazioni<textarea name="description" rows="7" placeholder="Descrivi programma, orari, cosa portare e ogni informazione utile."></textarea></label></section>
 		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">3 di 8</span><h2>Immagine</h2><label>Immagine in evidenza <small>(facoltativa)</small><input type="file" name="cover_image" accept="image/jpeg,image/png,image/webp"></label><p class="mi-portal-muted">JPG, PNG o WebP, massimo 5 MB. Comparirà nella scheda e nella pagina dell’evento.</p></section>
 		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">4 di 8</span><h2>Date e posti</h2><div class="mi-wizard-grid"><label>Apertura iscrizioni<input type="datetime-local" name="opens_at" data-mi-opens></label><label>Chiusura iscrizioni<input type="datetime-local" name="closes_at" data-mi-closes required></label><label>Data e ora di inizio<input type="datetime-local" name="starts_at" min="<?php echo esc_attr( $today_start ); ?>" data-mi-starts data-mi-today="<?php echo esc_attr( $today_start ); ?>" required></label><label>Posti disponibili<input type="number" min="1" max="10000" name="capacity" value="30" required></label></div><p class="mi-portal-muted">Ordine richiesto: apertura iscrizioni, chiusura iscrizioni, inizio evento. L’evento non può iniziare prima di oggi.</p><label class="mi-check"><input type="checkbox" name="waitlist_enabled" value="1"> Attiva automaticamente la lista d’attesa a esaurimento posti</label></section>
