@@ -306,6 +306,15 @@ function caricaVistaOperativaEvento(form) {
 }
 
 function determinaProfiloVistaOperativa_(iscrizioni, partecipanti) {
+  const profiliEspliciti = ['MINIMO', 'QUOTA_UNICA', 'SERVIZI_MULTIPLI', 'VIAGGIO_COMPLESSO'];
+  let profiloEsplicito = '';
+  iscrizioni.some(function (riga) {
+    const istantanea = decodificaOggetto_(riga.snapshot_json);
+    const candidato = normalizzaTesto_((istantanea.event || {}).operational_profile, 30).toUpperCase();
+    if (profiliEspliciti.indexOf(candidato) < 0) return false;
+    profiloEsplicito = candidato;
+    return true;
+  });
   let haDocumenti = false, haServizi = false;
   partecipanti.forEach(function (riga) {
     const dati = decodificaOggetto_(riga.dati_aggiuntivi_json);
@@ -313,10 +322,17 @@ function determinaProfiloVistaOperativa_(iscrizioni, partecipanti) {
     if (dati.document_number || dati.numero_documento || dati.document_expiry_date || dati.scadenza_documento || dati.room || dati.camera || dati.alloggio) haDocumenti = true;
     if (dati.transport || dati.pullman || dati.lunch || dati.pranzo || /pullman|pranzo|colazione|cena/.test(opzioni)) haServizi = true;
   });
-  if (haDocumenti) return { id: 'VIAGGIO_COMPLESSO', nome: 'Viaggio complesso', campi: ['last_name', 'first_name', 'phone', 'birth_date', 'document_type', 'document_number', 'document_issue_date', 'document_expiry_date', 'nationality', 'transport', 'room', 'lunch', 'insurance', 'total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance'] };
-  if (haServizi) return { id: 'SERVIZI_MULTIPLI', nome: 'Gita con più servizi', campi: ['last_name', 'first_name', 'phone', 'transport', 'lunch', 'options', 'total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance'] };
-  if (iscrizioni.some(function (riga) { return Number(riga.totale_centesimi) > 0; })) return { id: 'QUOTA_UNICA', nome: 'Evento con quota unica', campi: ['last_name', 'first_name', 'phone', 'total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance'] };
-  return { id: 'MINIMO', nome: 'Elenco minimo', campi: ['last_name', 'first_name', 'phone'] };
+  const profili = {
+    VIAGGIO_COMPLESSO: { id: 'VIAGGIO_COMPLESSO', nome: 'Viaggio complesso', campi: ['last_name', 'first_name', 'phone', 'birth_date', 'document_type', 'document_number', 'document_issue_date', 'document_expiry_date', 'nationality', 'transport', 'room', 'lunch', 'insurance', 'total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance'] },
+    SERVIZI_MULTIPLI: { id: 'SERVIZI_MULTIPLI', nome: 'Gita con più servizi', campi: ['last_name', 'first_name', 'phone', 'transport', 'lunch', 'options', 'total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance'] },
+    QUOTA_UNICA: { id: 'QUOTA_UNICA', nome: 'Evento con quota unica', campi: ['last_name', 'first_name', 'phone', 'total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance'] },
+    MINIMO: { id: 'MINIMO', nome: 'Elenco minimo', campi: ['last_name', 'first_name', 'phone'] }
+  };
+  if (profiloEsplicito) return profili[profiloEsplicito];
+  if (haDocumenti) return profili.VIAGGIO_COMPLESSO;
+  if (haServizi) return profili.SERVIZI_MULTIPLI;
+  if (iscrizioni.some(function (riga) { return Number(riga.totale_centesimi) > 0; })) return profili.QUOTA_UNICA;
+  return profili.MINIMO;
 }
 
 function gruppoCampoVistaOperativa_(chiave) {
@@ -346,7 +362,7 @@ function campiElencoOperativo_() {
 }
 
 function valoreCampoElenco_(field, event, registration, participant, data, payments) {
-  const aliases = { email: ['participant_email', 'email'], phone: ['participant_phone', 'phone', 'mobile'], birth_date: ['birth_date', 'data_nascita'], document_type: ['document_type', 'tipo_documento'], document_number: ['document_number', 'numero_documento'], document_issue_date: ['document_issue_date', 'data_emissione_documento'], document_expiry_date: ['document_expiry_date', 'scadenza_documento'], nationality: ['nationality', 'nazionalita'], room: ['room', 'camera', 'alloggio'], transport: ['pullman', 'transport'], breakfast: ['colazione', 'breakfast'], lunch: ['pranzo', 'lunch'], insurance: ['assicurazione', 'insurance'], emergency_contact: ['emergency_contact', 'emergency_phone', 'contatto_emergenza', 'telefono_emergenza'] };
+  const aliases = { email: ['participant_email', 'email'], phone: ['participant_phone', 'phone', 'mobile'], birth_date: ['birth_date', 'data_nascita'], document_type: ['document_type', 'tipo_documento'], document_number: ['document_number', 'numero_documento'], document_issue_date: ['document_issue_date', 'data_emissione_documento'], document_expiry_date: ['document_expiry_date', 'document_expiry', 'scadenza_documento'], nationality: ['nationality', 'nazionalita'], room: ['room', 'camera', 'alloggio'], transport: ['pullman', 'transport'], breakfast: ['colazione', 'breakfast'], lunch: ['pranzo', 'lunch'], insurance: ['assicurazione', 'insurance'], emergency_contact: ['emergency_contact', 'emergency_phone', 'contatto_emergenza', 'telefono_emergenza'] };
   const direct = { event: event.titolo || registration.id_evento, order_code: registration.codice_ordine, participant_number: participant.numero_partecipante, first_name: participant.nome, last_name: participant.cognome, status: participant.stato_partecipante || registration.stato, special_requests: registration.richieste_particolari || '' };
   if (Object.prototype.hasOwnProperty.call(direct, field)) return direct[field];
   if (field === 'options') return decodificaElenco_(participant.opzioni_json).map(function (option) { return option.name || option.label || option.code || ''; }).filter(Boolean).join(', ');

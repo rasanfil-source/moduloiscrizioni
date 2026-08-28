@@ -114,6 +114,7 @@ final class MI_Registration_Service {
 			'pricing_mode'     => (string) get_post_meta( $event_id, '_mi_pricing_mode', true ),
 			'fixed_price_cents'=> max( 0, (int) get_post_meta( $event_id, '_mi_fixed_price_cents', true ) ),
 			'economic_mode'    => (string) ( get_post_meta( $event_id, '_mi_economic_mode', true ) ?: 'REGISTRATION_ONLY' ),
+			'operational_profile' => MI_Field_Schema::sanitize_operational_profile( get_post_meta( $event_id, '_mi_operational_profile', true ) ),
 			'deposit_percentage' => min( 99, max( 1, absint( get_post_meta( $event_id, '_mi_deposit_percentage', true ) ?: 30 ) ) ),
 			'payment_methods'  => (array) get_post_meta( $event_id, '_mi_payment_methods', true ),
 			'identifier_display' => in_array( strtoupper( (string) get_post_meta( $event_id, '_mi_identifier_display', true ) ), array( 'NONE', 'TEXT', 'QR', 'BARCODE' ), true ) ? strtoupper( (string) get_post_meta( $event_id, '_mi_identifier_display', true ) ) : 'TEXT',

@@ -131,7 +131,7 @@ final class MI_REST_Controller {
 		}
 		$event_id = wp_insert_post( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'draft', 'post_title' => $title ), true );
 		if ( is_wp_error( $event_id ) ) return $event_id;
-		$copy_keys = array( '_mi_data_profile', '_mi_participant_fields', '_mi_participant_required_fields', '_mi_custom_participant_fields', '_mi_participant_extra_scope', '_mi_special_requests_enabled', '_mi_marketing_enabled', '_mi_email_settings', '_mi_identifier_mode' );
+		$copy_keys = array( '_mi_data_profile', '_mi_participant_fields', '_mi_participant_required_fields', '_mi_custom_participant_fields', '_mi_participant_extra_scope', '_mi_operational_profile', '_mi_special_requests_enabled', '_mi_marketing_enabled', '_mi_email_settings', '_mi_identifier_mode' );
 		if ( $copy_id ) foreach ( $copy_keys as $key ) { $value = get_post_meta( $copy_id, $key, true ); if ( '' !== $value ) update_post_meta( $event_id, $key, $value ); }
 		update_post_meta( $event_id, '_mi_workspace_draft_id', $draft_id );
 		update_post_meta( $event_id, '_mi_activity_id', $activity_id );
@@ -143,6 +143,7 @@ final class MI_REST_Controller {
 		update_post_meta( $event_id, '_mi_economic_mode', $economic_mode );
 		update_post_meta( $event_id, '_mi_pricing_mode', $fixed_price > 0 ? 'FIXED' : 'NONE' );
 		update_post_meta( $event_id, '_mi_fixed_price_cents', $fixed_price );
+		update_post_meta( $event_id, '_mi_operational_profile', MI_Field_Schema::sanitize_operational_profile( $payload['operational_profile'] ?? 'AUTOMATICO' ) );
 		update_post_meta( $event_id, '_mi_deposit_percentage', min( 99, max( 1, absint( $payload['deposit_percentage'] ?? 30 ) ) ) );
 		update_post_meta( $event_id, '_mi_ticket_types', array( array( 'code' => 'standard', 'name' => 'Quota di partecipazione', 'price_cents' => 0, 'max_per_order' => 20, 'capacity' => 0 ) ) );
 		$options = self::workspace_service_options( (array) ( $payload['services'] ?? array() ), (array) ( $payload['accommodations'] ?? array() ) );

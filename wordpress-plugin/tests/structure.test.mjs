@@ -23,6 +23,19 @@ test('il contenitore tecnico storico è presentato come Gruppi', async () => {
   assert.match(source, /<strong>Gruppo<\/strong>/);
 });
 
+test('il modello operativo dell evento è scelto in WordPress e consegnato a Workspace', async () => {
+  const schema = await read('includes/class-mi-field-schema.php');
+  const eventType = await read('includes/class-mi-event-post-type.php');
+  const portal = await read('includes/class-mi-portal.php');
+  const registration = await read('includes/class-mi-registration-service.php');
+  const portalJs = await read('assets/portal.js');
+  for (const profile of ['AUTOMATICO', 'MINIMO', 'QUOTA_UNICA', 'SERVIZI_MULTIPLI', 'VIAGGIO_COMPLESSO']) assert.match(schema, new RegExp(profile));
+  assert.match(eventType, /_mi_operational_profile/);
+  assert.match(portal, /_mi_operational_profile/);
+  assert.match(registration, /operational_profile/);
+  assert.match(portalJs, /name="operational_profile"/);
+});
+
 test('Workspace prevede modelli report standard senza sovrascrivere dati', async () => {
   const config = await readFile(new URL('../../workspace-apps-script/src/Config.gs', import.meta.url), 'utf8');
   const setup = await readFile(new URL('../../workspace-apps-script/src/Setup.gs', import.meta.url), 'utf8');
@@ -34,7 +47,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.6\.6/);
+	assert.match(source, /Version:\s+3\.7\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 

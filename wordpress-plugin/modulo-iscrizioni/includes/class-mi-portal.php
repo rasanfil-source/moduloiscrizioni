@@ -81,6 +81,7 @@ final class MI_Portal {
 		update_post_meta( $event_id, '_mi_event_location', mb_substr( sanitize_text_field( wp_unslash( $_POST['location'] ?? '' ) ), 0, 180 ) );
 		update_post_meta( $event_id, '_mi_capacity', min( 10000, max( 1, absint( $_POST['capacity'] ?? 30 ) ) ) );
 		update_post_meta( $event_id, '_mi_waitlist_enabled', ! empty( $_POST['waitlist_enabled'] ) ? '1' : '0' );
+		update_post_meta( $event_id, '_mi_operational_profile', MI_Field_Schema::sanitize_operational_profile( wp_unslash( $_POST['operational_profile'] ?? 'AUTOMATICO' ) ) );
 		$overnight = ! empty( $_POST['overnight'] ) ? '1' : '0';
 		update_post_meta( $event_id, '_mi_overnight_enabled', $overnight );
 		$accommodations = '1' === $overnight ? array_values( array_intersect( array( 'SINGOLA', 'DOPPIA_SEPARATI', 'DOPPIA_MATRIMONIALE', 'TRIPLA', 'MULTIPLA' ), array_map( 'strtoupper', array_map( 'sanitize_key', (array) wp_unslash( $_POST['accommodations'] ?? array() ) ) ) ) ) : array();
@@ -235,7 +236,7 @@ final class MI_Portal {
 	}
 
 	private static function copy_configuration( $source, $target ) {
-		$keys = array( '_mi_activity_id', '_mi_capacity', '_mi_waitlist_enabled', '_mi_pricing_mode', '_mi_fixed_price_cents', '_mi_economic_mode', '_mi_deposit_percentage', '_mi_payment_methods', '_mi_data_profile', '_mi_participant_fields', '_mi_participant_required_fields', '_mi_custom_participant_fields', '_mi_participant_extra_scope', '_mi_ticket_types', '_mi_options', '_mi_marketing_enabled', '_mi_special_requests_enabled', '_mi_overnight_enabled', '_mi_accommodations' );
+		$keys = array( '_mi_activity_id', '_mi_capacity', '_mi_waitlist_enabled', '_mi_pricing_mode', '_mi_fixed_price_cents', '_mi_economic_mode', '_mi_deposit_percentage', '_mi_payment_methods', '_mi_operational_profile', '_mi_data_profile', '_mi_participant_fields', '_mi_participant_required_fields', '_mi_custom_participant_fields', '_mi_participant_extra_scope', '_mi_ticket_types', '_mi_options', '_mi_marketing_enabled', '_mi_special_requests_enabled', '_mi_overnight_enabled', '_mi_accommodations' );
 		foreach ( $keys as $key ) {
 			$value = get_post_meta( $source, $key, true );
 			if ( '' !== $value ) update_post_meta( $target, $key, $value );
