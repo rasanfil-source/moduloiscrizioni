@@ -4,6 +4,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const steps = [...form.querySelectorAll('.mi-wizard-step')];
     const back = form.querySelector('[data-mi-back]');
     const next = form.querySelector('[data-mi-next]');
+	const coverImage = form.querySelector('[name="cover_image"][data-mi-max-bytes]');
+	const validateCoverImage = () => {
+	  if (!coverImage) return true;
+	  const file = coverImage.files?.[0];
+	  const maximum = Number.parseInt(coverImage.dataset.miMaxBytes || '0', 10);
+	  coverImage.setCustomValidity(file && maximum && file.size > maximum ? 'L’immagine in evidenza non può superare 2 MB.' : '');
+	  return coverImage.reportValidity();
+	};
+	coverImage?.addEventListener('change', validateCoverImage);
     let index = 0;
     const show = () => {
       steps.forEach((step, stepIndex) => step.classList.toggle('is-active', stepIndex === index));
@@ -18,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
     next.addEventListener('click', () => {
       const fields = [...steps[index].querySelectorAll('[required]')];
       if (fields.some((field) => !field.reportValidity())) return;
+	  if (coverImage && steps[index].contains(coverImage) && !validateCoverImage()) return;
       index = Math.min(steps.length - 1, index + 1);
       show();
     });

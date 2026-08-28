@@ -34,7 +34,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.6\.2/);
+	assert.match(source, /Version:\s+3\.6\.3/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1081,6 +1081,10 @@ test('il wizard crea una bozza completa e mostra collegamenti espliciti', async 
   assert.match(portal, /1 di 8/);
   assert.match(portal, /name="description"/);
   assert.match(portal, /name="cover_image"/);
+	assert.match(portal, /data-mi-max-bytes="2097152"/);
+	assert.match(portal, /file superiore a 2 MB/);
+	assert.match(portal, /massimo 2 MB/);
+	assert.match(script, /L’immagine in evidenza non può superare 2 MB/);
   assert.match(portal, /participant_fields\[\]/);
   assert.match(portal, /participant_extra_scope/);
   assert.match(portal, /<details class="mi-additional-fields">/);
