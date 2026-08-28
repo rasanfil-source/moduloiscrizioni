@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.5\.14/);
+	assert.match(source, /Version:\s+3\.5\.15/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -182,6 +182,9 @@ test('il portale tecnico evita Divi e aggrega i dati della dashboard', async () 
   assert.doesNotMatch(portal, /wp_head\(\)|wp_footer\(\)/);
   assert.match(portal, /assets\/portal\.css\?ver=/);
   assert.match(portal, /assets\/portal\.js\?ver=/);
+  assert.match(portal, /render_virtual_page' \), -90/);
+  assert.match(portal, /handle_actions' \), -100/);
+  assert.match(portal, /loading="lazy" decoding="async"/);
   assert.match(portal, /SELECT event_id,confirmed_count/);
   assert.match(portal, /JOIN \{\$wpdb->posts\} events/);
   assert.doesNotMatch(portal, /SELECT COALESCE\(SUM\(total_qty\)/);
@@ -1103,4 +1106,21 @@ test('i promemoria operativi passano dalla coda protetta e le bozze restano in a
 	assert.match(activator, /UNIQUE KEY origin_key/);
 	assert.match(sender, /INSERT IGNORE INTO/);
   assert.match(model, /crea_istantanea_operativa/);
+});
+
+test('la scheda evento consente modifiche sicure e annullamento con avviso', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const sender = await read('includes/class-mi-spedizione-email.php');
+  const model = await read('includes/class-mi-modello-email.php');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /event_management_card/);
+  assert.match(portal, /mi_portal_manage_event_/);
+  assert.match(portal, /confirm_cancellation/);
+  assert.match(portal, /cancellation_reason/);
+  assert.match(portal, /MI_Registration_Service::cancel_registration/);
+  assert.match(portal, /_mi_event_cancelled_at/);
+  assert.match(portal, /allow_operational' => true/);
+  assert.match(sender, /EVENT_CANCELLATION/);
+  assert.match(model, /Evento annullato/);
+  assert.match(css, /mi-event-danger/);
 });

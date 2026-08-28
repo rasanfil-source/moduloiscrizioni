@@ -150,7 +150,13 @@ final class MI_Modello_Email {
 		$snapshot['status_url'] = esc_url_raw( (string) $status_url );
 		$event_title = sanitize_text_field( (string) ( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) ) );
 		$buyer_name = sanitize_text_field( (string) ( $values['{{referente.nome_completo}}'] ?? '' ) );
-		if ( 'BALANCE_REMINDER' === $template_type ) {
+		if ( 'EVENT_CANCELLATION' === $template_type ) {
+			$clean_message = sanitize_textarea_field( (string) $message );
+			$snapshot['oggetto'] = 'Evento annullato — ' . $event_title;
+			$snapshot['preheader'] = 'Comunicazione importante relativa alla tua iscrizione.';
+			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ti informiamo che <strong>' . esc_html( $event_title ) . '</strong> è stato annullato.</p>' . ( $clean_message ? '<p><strong>Motivo comunicato:</strong><br>' . nl2br( esc_html( $clean_message ) ) . '</p>' : '' ) . '<p>La segreteria ti contatterà separatamente se sono necessari rimborsi o altri adempimenti.</p>';
+			$snapshot['testo'] = "Gentile {$buyer_name},\n\nl’evento {$event_title} è stato annullato." . ( $clean_message ? "\n\nMotivo comunicato:\n{$clean_message}" : '' ) . "\n\nLa segreteria ti contatterà separatamente se sono necessari rimborsi o altri adempimenti.";
+		} elseif ( 'BALANCE_REMINDER' === $template_type ) {
 			$snapshot['oggetto'] = 'Promemoria saldo — ' . $event_title;
 			$snapshot['preheader'] = 'Controlla il saldo ancora da versare.';
 			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ti ricordiamo che per <strong>' . esc_html( $event_title ) . '</strong> risulta ancora un saldo da completare.</p><p><strong>Saldo residuo:</strong> ' . esc_html( (string) ( $values['{{pagamento.saldo}}'] ?? '' ) ) . '<br><strong>Scadenza:</strong> ' . esc_html( (string) ( $values['{{pagamento.scadenza}}'] ?? '' ) ) . '<br><strong>Causale:</strong> ' . esc_html( (string) ( $values['{{pagamento.causale}}'] ?? '' ) ) . '</p>';

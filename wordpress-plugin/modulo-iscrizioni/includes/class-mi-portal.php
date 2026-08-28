@@ -7,8 +7,10 @@ final class MI_Portal {
 
 	public static function boot() {
 		add_shortcode( self::SHORTCODE, array( __CLASS__, 'render' ) );
-		add_action( 'template_redirect', array( __CLASS__, 'handle_actions' ) );
-		add_action( 'template_redirect', array( __CLASS__, 'render_virtual_page' ), 20 );
+		// Il portale autonomo deve terminare la richiesta prima che tema, builder e
+		// plugin frontend eseguano i propri callback su template_redirect.
+		add_action( 'template_redirect', array( __CLASS__, 'handle_actions' ), -100 );
+		add_action( 'template_redirect', array( __CLASS__, 'render_virtual_page' ), -90 );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ) );
 		add_action( 'send_headers', array( __CLASS__, 'secure_cancellation_headers' ) );
 	}
@@ -43,6 +45,7 @@ final class MI_Portal {
 			if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Partecipante non accessibile.', 403 );
 			return self::redirect_cancel_result( MI_Registration_Service::cancel_participant( $participant_id, wp_get_current_user()->display_name ) );
 		}
+		if ( in_array( $action, array( 'update_event', 'cancel_event' ), true ) ) return self::handle_event_management_action( $action );
 		if ( 'create_event' !== $action ) return;
 		if ( ! is_user_logged_in() || ! current_user_can( 'mi_create_events' ) ) wp_die( 'Accesso non consentito.', 403 );
 		check_admin_referer( 'mi_portal_create_event', 'mi_portal_nonce' );
@@ -112,6 +115,46 @@ final class MI_Portal {
 		update_post_meta( $event_id, '_mi_payment_methods', in_array( $economic_mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ? $payment_methods : array() );
 		$upload_warning = self::save_cover_upload( $event_id );
 		self::redirect_result( $upload_warning ? 'Bozza creata; immagine non caricata: ' . $upload_warning : 'Bozza creata correttamente.', false, $event_id );
+	}
+
+	private static function handle_event_management_action( $action ) {
+		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_portal_access' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
+		$event_id = absint( $_POST['event_id'] ?? 0 );
+		if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Evento non accessibile.', 403 );
+		check_admin_referer( 'mi_portal_manage_event_' . $event_id, 'mi_portal_nonce' );
+		if ( 'update_event' === $action ) {
+			$title = sanitize_text_field( wp_unslash( $_POST['title'] ?? '' ) );
+			if ( ! $title ) return self::redirect_result( 'Il titolo è obbligatorio.', true, $event_id );
+			$starts_at = sanitize_text_field( wp_unslash( $_POST['starts_at'] ?? '' ) );
+			$closes_at = sanitize_text_field( wp_unslash( $_POST['closes_at'] ?? '' ) );
+			$start_date = $starts_at ? DateTimeImmutable::createFromFormat( '!Y-m-d\TH:i', $starts_at, wp_timezone() ) : null;
+			$close_date = $closes_at ? DateTimeImmutable::createFromFormat( '!Y-m-d\TH:i', $closes_at, wp_timezone() ) : null;
+			if ( ( $starts_at && ! $start_date ) || ( $closes_at && ! $close_date ) || ( $start_date && $close_date && $close_date > $start_date ) ) return self::redirect_result( 'Controlla le date: la chiusura delle iscrizioni non può seguire l’inizio dell’evento.', true, $event_id );
+			wp_update_post( array( 'ID' => $event_id, 'post_title' => $title ) );
+			update_post_meta( $event_id, '_mi_event_location', mb_substr( sanitize_text_field( wp_unslash( $_POST['location'] ?? '' ) ), 0, 180 ) );
+			update_post_meta( $event_id, '_mi_capacity', min( 10000, max( 1, absint( $_POST['capacity'] ?? 1 ) ) ) );
+			self::save_date( $event_id, '_mi_event_starts_at', $starts_at );
+			self::save_date( $event_id, '_mi_registration_closes_at', $closes_at );
+			return self::redirect_result( 'Dettagli dell’evento aggiornati.', false, $event_id );
+		}
+		if ( empty( $_POST['confirm_cancellation'] ) ) return self::redirect_result( 'Conferma esplicitamente l’annullamento dell’evento.', true, $event_id );
+		$reason = mb_substr( sanitize_textarea_field( wp_unslash( $_POST['cancellation_reason'] ?? '' ) ), 0, 2000 );
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,status,total_cents,balance_cents FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED') AND capacity_released_at IS NULL ORDER BY id", $event_id ), ARRAY_A );
+		$recipients = array();
+		foreach ( $rows as $row ) $recipients[] = array( 'order_code' => $row['order_code'], 'paid_cents' => max( 0, (int) $row['total_cents'] - (int) $row['balance_cents'] ), 'balance_cents' => max( 0, (int) $row['balance_cents'] ) );
+		$email_result = $recipients ? MI_Spedizione_Email::accoda_comunicazione_operativa( array( 'communication_id' => 'event-cancel-' . $event_id . '-' . time(), 'event_id' => $event_id, 'template_type' => 'EVENT_CANCELLATION', 'message' => $reason, 'allow_operational' => true, 'recipients' => $recipients ) ) : array( 'count' => 0, 'mode' => MI_Spedizione_Email::modalita() );
+		if ( is_wp_error( $email_result ) ) return self::redirect_result( 'Impossibile preparare gli avvisi: evento non annullato.', true, $event_id );
+		foreach ( $rows as $row ) {
+			$result = MI_Registration_Service::cancel_registration( (int) $row['id'], wp_get_current_user()->display_name );
+			if ( is_wp_error( $result ) ) return self::redirect_result( 'Annullamento incompleto: controlla le iscrizioni prima di riprovare.', true, $event_id );
+		}
+		update_post_meta( $event_id, '_mi_event_cancelled_at', current_time( 'mysql', true ) );
+		update_post_meta( $event_id, '_mi_event_cancellation_reason', $reason );
+		wp_update_post( array( 'ID' => $event_id, 'post_status' => 'draft' ) );
+		$count = (int) ( $email_result['count'] ?? 0 );
+		$mode = sanitize_text_field( (string) ( $email_result['mode'] ?? 'ANTEPRIMA' ) );
+		return self::redirect_result( 'Evento annullato. Avvisi preparati: ' . $count . ' (modalità ' . $mode . ').', false, $event_id );
 	}
 
 	public static function url() {
@@ -318,7 +361,7 @@ final class MI_Portal {
 			if ( $show_past ) $url_args['mi_portal_history'] = '1';
 			$url = add_query_arg( $url_args, $base_url );
 			echo '<a class="mi-event-card" href="' . esc_url( $url ) . '"><span class="mi-event-card__date"><small>' . esc_html( $date_badge['month'] ) . '</small><strong>' . esc_html( $date_badge['day'] ) . '</strong></span><span class="mi-event-card__content"><span class="mi-event-card__image">';
-			if ( $cover_image ) echo '<img src="' . esc_url( $cover_image ) . '" alt="">';
+			if ( $cover_image ) echo '<img src="' . esc_url( $cover_image ) . '" alt="" loading="lazy" decoding="async" fetchpriority="low">';
 			echo '</span><span class="mi-event-card__identity"><strong>' . esc_html( $event_title ) . '</strong>';
 			if ( $activity_name ) echo '<small>' . esc_html( $activity_name ) . '</small>';
 			$status_label = 'publish' === $event->post_status ? ( $show_past ? 'Concluso' : 'Attivo' ) : 'Bozza';
@@ -328,12 +371,32 @@ final class MI_Portal {
 		echo '</section>';
 		if ( $ids ) {
 			$selected = absint( $_GET['mi_portal_event'] ?? 0 );
-			if ( $selected && in_array( $selected, $ids, true ) ) self::registrations_view( $selected ); else self::registrations_view( 0, $ids );
+			if ( $selected && in_array( $selected, $ids, true ) ) { self::event_management_card( $selected ); self::registrations_view( $selected ); } else self::registrations_view( 0, $ids );
 		}
 		$history_url = $show_past
 			? add_query_arg( 'mi_portal_view', 'manage', $base_url )
 			: add_query_arg( array( 'mi_portal_view' => 'manage', 'mi_portal_history' => '1' ), $base_url );
 		echo '<p class="mi-event-history-link"><a href="' . esc_url( $history_url ) . '">' . ( $show_past ? 'Torna agli eventi attuali' : 'Visualizza eventi passati' ) . '</a></p>';
+	}
+
+	private static function event_management_card( $event_id ) {
+		$event = get_post( $event_id );
+		if ( ! $event || ! MI_Access::can_access_event( $event_id ) ) return;
+		$starts_at = (string) get_post_meta( $event_id, '_mi_event_starts_at', true );
+		$closes_at = (string) get_post_meta( $event_id, '_mi_registration_closes_at', true );
+		$location = (string) get_post_meta( $event_id, '_mi_event_location', true );
+		$capacity = max( 1, absint( get_post_meta( $event_id, '_mi_capacity', true ) ) );
+		$cancelled = (string) get_post_meta( $event_id, '_mi_event_cancelled_at', true );
+		global $wpdb;
+		$active_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED') AND capacity_released_at IS NULL", $event_id ) );
+		echo '<section class="mi-event-management"><div class="mi-event-management__heading"><div><span class="mi-portal-eyebrow">Evento selezionato</span><h2>' . esc_html( $event->post_title ) . '</h2></div><span class="mi-event-management__state">' . esc_html( $cancelled ? 'Annullato' : ( 'publish' === $event->post_status ? 'Attivo' : 'Bozza' ) ) . '</span></div>';
+		if ( $cancelled ) { echo '<div class="mi-portal-notice mi-portal-error"><strong>Evento annullato</strong><p>La scheda e le iscrizioni sono conservate nello storico.</p></div></section>'; return; }
+		echo '<details open><summary>Modifica i dettagli principali</summary><form class="mi-event-management__form" method="post"><input type="hidden" name="mi_portal_action" value="update_event"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
+		wp_nonce_field( 'mi_portal_manage_event_' . $event_id, 'mi_portal_nonce' );
+		echo '<label>Titolo<input name="title" maxlength="180" required value="' . esc_attr( $event->post_title ) . '"></label><label>Luogo<input name="location" maxlength="180" value="' . esc_attr( $location ) . '"></label><div class="mi-wizard-grid"><label>Data e ora di inizio<input type="datetime-local" name="starts_at" value="' . esc_attr( $starts_at ) . '"></label><label>Chiusura iscrizioni<input type="datetime-local" name="closes_at" value="' . esc_attr( $closes_at ) . '"></label><label>Posti disponibili<input type="number" min="1" max="10000" name="capacity" value="' . esc_attr( $capacity ) . '"></label></div><button class="mi-primary" type="submit">Salva modifiche</button></form></details>';
+		echo '<details class="mi-event-danger"><summary>Annulla l’evento</summary><div class="mi-event-danger__body"><p><strong>Attenzione:</strong> saranno annullate ' . esc_html( $active_count ) . ' prenotazioni attive o in lista d’attesa. I dati resteranno nello storico e gli eventuali rimborsi dovranno essere gestiti separatamente.</p><p>Per ogni referente con prenotazione attiva sarà preparato un avviso. L’invio effettivo dipende dalla modalità email generale; in ANTEPRIMA non parte alcuna email.</p><form method="post" onsubmit="return confirm(\'Confermi definitivamente l’annullamento di questo evento?\')"><input type="hidden" name="mi_portal_action" value="cancel_event"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
+		wp_nonce_field( 'mi_portal_manage_event_' . $event_id, 'mi_portal_nonce' );
+		echo '<label>Motivo da comunicare agli iscritti <small>(facoltativo)</small><textarea name="cancellation_reason" rows="5" maxlength="2000" placeholder="Spiega brevemente perché l’evento è stato annullato."></textarea></label><label class="mi-check"><input type="checkbox" name="confirm_cancellation" value="1" required> Ho compreso che tutte le iscrizioni saranno annullate</label><button class="mi-danger" type="submit">Annulla definitivamente l’evento</button></form></div></details></section>';
 	}
 
 	private static function registrations_view( $event_id = 0, $event_ids = array() ) {
@@ -381,7 +444,7 @@ final class MI_Portal {
 		$field_labels = array();
 		foreach ( (array) ( $snapshot['event']['participant_fields'] ?? array() ) as $field ) { $key = sanitize_key( $field['key'] ?? '' ); $label = sanitize_text_field( $field['label'] ?? '' ); if ( $key && $label ) $field_labels[ $key ] = $label; }
 		echo '<section id="mi-portal-booking-detail" class="mi-booking-detail"><div class="mi-booking-detail__hero' . ( $cover_image ? ' has-cover' : '' ) . '">';
-		if ( $cover_image ) echo '<img class="mi-booking-detail__cover" src="' . esc_url( $cover_image ) . '" alt="">';
+		if ( $cover_image ) echo '<img class="mi-booking-detail__cover" src="' . esc_url( $cover_image ) . '" alt="" loading="lazy" decoding="async">';
 		echo '<header class="mi-booking-detail__header">';
 		if ( $activity_name ) echo '<p class="mi-booking-detail__activity"><span>Attività</span>' . esc_html( $activity_name ) . '</p>';
 		echo '<h2 class="mi-booking-detail__event">' . esc_html( $event_name ) . '</h2><p class="mi-booking-detail__code">Codice prenotazione <code>' . esc_html( $registration['order_code'] ) . '</code></p></header></div>';

@@ -40,7 +40,7 @@ final class MI_Spedizione_Email {
 		$template_type = strtoupper( sanitize_key( (string) ( $payload['template_type'] ?? '' ) ) );
 		$message = sanitize_textarea_field( (string) ( $payload['message'] ?? '' ) );
 		$allow_operational = ! empty( $payload['allow_operational'] );
-		if ( ! $communication_id || ! $event_id || ! in_array( $template_type, array( 'PRE_DEPARTURE_REMINDER', 'BALANCE_REMINDER' ), true ) ) return new WP_Error( 'mi_operational_email_invalid', 'Comunicazione non valida.', array( 'status' => 400 ) );
+		if ( ! $communication_id || ! $event_id || ! in_array( $template_type, array( 'PRE_DEPARTURE_REMINDER', 'BALANCE_REMINDER', 'EVENT_CANCELLATION' ), true ) ) return new WP_Error( 'mi_operational_email_invalid', 'Comunicazione non valida.', array( 'status' => 400 ) );
 		if ( 'PRE_DEPARTURE_REMINDER' === $template_type && ! $message ) return new WP_Error( 'mi_operational_email_message_required', 'Il promemoria richiede un testo.', array( 'status' => 400 ) );
 		$recipient_payload = is_array( $payload['recipients'] ?? null ) ? array_slice( $payload['recipients'], 0, 1000 ) : array();
 		$recipient_state = array();
@@ -67,18 +67,20 @@ final class MI_Spedizione_Email {
 			$order_codes = array_keys( $recipient_state );
 			$placeholders = implode( ',', array_fill( 0, count( $order_codes ), '%s' ) );
 			$query_args = array_merge( array( $event_id ), $order_codes );
-			$registrations = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,status,buyer_first_name,buyer_last_name,buyer_email,total_qty,total_cents,initial_due_cents,balance_cents,payment_methods_json FROM {$registrations_table} WHERE event_id=%d AND order_code IN ({$placeholders}) AND status IN ('CONFIRMED','PENDING_PAYMENT') AND capacity_released_at IS NULL ORDER BY id LIMIT 1000", $query_args ), ARRAY_A );
+			$registrations = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,status,buyer_first_name,buyer_last_name,buyer_email,total_qty,total_cents,initial_due_cents,balance_cents,payment_methods_json FROM {$registrations_table} WHERE event_id=%d AND order_code IN ({$placeholders}) AND status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED') AND capacity_released_at IS NULL ORDER BY id LIMIT 1000", $query_args ), ARRAY_A );
 			$now = current_time( 'mysql', true );
 			$count = 0;
 			$wpdb->query( 'START TRANSACTION' );
 			try {
 				foreach ( $registrations as $registration ) {
+					if ( 'WAITLISTED' === $registration['status'] && 'EVENT_CANCELLATION' !== $template_type ) continue;
 					$financial_state = $recipient_state[ $registration['order_code'] ] ?? array();
 					$paid = min( (int) $registration['total_cents'], max( 0, (int) ( $financial_state['paid_cents'] ?? 0 ) ) );
 					$balance = min( (int) $registration['total_cents'], max( 0, (int) ( $financial_state['balance_cents'] ?? 0 ) ) );
 					if ( 'BALANCE_REMINDER' === $template_type && $balance < 1 ) continue;
 					$economic = array( 'total_cents' => (int) $registration['total_cents'], 'initial_due_cents' => (int) $registration['initial_due_cents'], 'balance_cents' => $balance, 'payment_methods' => json_decode( (string) $registration['payment_methods_json'], true ) ?: array() );
-					$values = MI_Modello_Email::valori_ordine( $event, $registration['order_code'], 'CONFIRMED' === $registration['status'] ? 'Confermata' : 'In attesa di pagamento', (int) $registration['total_qty'], trim( $registration['buyer_first_name'] . ' ' . $registration['buyer_last_name'] ), $economic );
+					$status_labels = array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'In attesa di pagamento', 'WAITLISTED' => 'Lista d’attesa' );
+					$values = MI_Modello_Email::valori_ordine( $event, $registration['order_code'], $status_labels[ $registration['status'] ] ?? $registration['status'], (int) $registration['total_qty'], trim( $registration['buyer_first_name'] . ' ' . $registration['buyer_last_name'] ), $economic );
 					$status_url = MI_Portal::status_url( $registration['id'], $registration['order_code'], $registration['buyer_email'] );
 					$snapshot = MI_Modello_Email::crea_istantanea_operativa( $event_id, $values, $template_type, $message, $status_url );
 					$status = 'OPERATIVO' === $effective_mode ? self::stato_nuova_email( $snapshot ) : 'PREVIEW';

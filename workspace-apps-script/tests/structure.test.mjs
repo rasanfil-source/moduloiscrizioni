@@ -102,6 +102,11 @@ test('la segreteria Web è autonoma e rifiuta accessi anonimi', () => {
 	assert.match(sources['WebApp.gs'], /if \(!active\) return false/);
 	assert.match(sources['Segreteria.gs'], /MI_SECRETARY_WEBAPP_URL/);
 	assert.match(segreteriaHtml, /IS_WEB_APP/);
+	assert.match(sources['WebApp.gs'], /pulisciUrlWebAppSegreteria_/);
+	assert.match(segreteriaHtml, /new URL\(base,location\.href\)/);
+	assert.match(segreteriaHtml, /searchParams\.set\('order',order\)/);
+	assert.match(segreteriaHtml, /if\(IS_WEB_APP\)\{await loadBooking\(code\);return\}/);
+	assert.doesNotMatch(segreteriaHtml, /location\.assign\(secretaryUrl/);
 });
 
 test('lo stato individuale dei partecipanti arriva nelle schede e negli elenchi', () => {
