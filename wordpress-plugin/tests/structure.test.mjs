@@ -34,7 +34,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.6\.5/);
+	assert.match(source, /Version:\s+3\.6\.6/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1179,6 +1179,7 @@ test('la scheda evento consente modifiche sicure e annullamento con avviso', asy
   assert.match(portal, /mi_portal_manage_event_/);
   assert.match(portal, /confirm_cancellation/);
   assert.match(portal, /cancellation_reason/);
+	assert.match(portal, /if \( \$active_count > 0 \)/);
   assert.match(portal, /MI_Registration_Service::cancel_registration/);
   assert.match(portal, /_mi_event_cancelled_at/);
   assert.match(portal, /allow_operational' => true/);
