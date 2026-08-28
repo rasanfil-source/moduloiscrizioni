@@ -34,7 +34,7 @@ Dal menu **Modulo iscrizioni** del foglio la segreteria dispone di quattro perco
 
 Il foglio `Sistemazioni` definisce camere o soluzioni con codice, nome e capienza. La scheda mostra i posti liberi e blocca l'assegnazione oltre capienza. I campi personalizzati effettivamente raccolti diventano selezionabili nell'elenco operativo senza aggiungere colonne fisse per ogni possibile domanda.
 
-Ogni operazione è registrata in modo append-only nel foglio `Operazioni segreteria`; `Stato operativo` presenta invece la situazione corrente. I fogli dedicati alle iniziative sono strumenti operativi e non sostituiscono il modulo pubblico WordPress.
+Ogni operazione è registrata in modo append-only nel foglio `Operazioni segreteria`; `Stato operativo` presenta invece la situazione corrente. Per ogni evento può essere creato un file Google Sheets operativo separato, collegato tramite `Fogli iniziative`: contiene la vista adatta all'evento e raggruppa le colonne non essenziali. Questi file sono strumenti operativi modificabili e non sostituiscono né il modulo pubblico WordPress né `DB_MODULI`, che resta l'archivio centrale. Ogni sincronizzazione è esplicita e auditabile.
 
 ## Stato pubblico e comunicazioni
 

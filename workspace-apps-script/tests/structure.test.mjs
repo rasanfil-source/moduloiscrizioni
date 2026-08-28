@@ -157,6 +157,15 @@ test('le viste operative seguono il tipo di evento e comprimono il dettaglio deg
 	assert.match(segreteriaHtml, /Registrare.*modific/);
 });
 
+test('la segreteria essenziale apre un foglio operativo dedicato per evento', () => {
+	assert.match(sources['FogliOperativi.gs'], /function apriFoglioOperativoEvento/);
+	assert.match(sources['FogliOperativi.gs'], /SpreadsheetApp\.create/);
+	assert.match(sources['FogliOperativi.gs'], /MI_SHEETS\.EVENT_WORKSPACES/);
+	assert.match(sources['FogliOperativi.gs'], /function raggruppaColonneFoglioOperativo_/);
+	assert.match(segreteriaHtml, /Apri il foglio operativo dell’evento/);
+	assert.doesNotMatch(segreteriaHtml.match(/function navigazioneSegreteria[\s\S]*?\n/)[0], /Viste operative|Camere e pullman/);
+});
+
 test('la segreteria Web è autonoma e rifiuta accessi anonimi', () => {
 	assert.match(sources['Setup.gs'], /apriSegreteriaWeb/);
 	assert.match(sources['WebApp.gs'], /view \|\| ''\) === 'segreteria'/);
