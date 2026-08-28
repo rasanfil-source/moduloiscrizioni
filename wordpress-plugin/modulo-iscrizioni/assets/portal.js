@@ -37,6 +37,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     const overnight = form.querySelector('[data-mi-overnight]');
     const rooms = form.querySelector('[data-mi-accommodations]');
+	const servicesStep = overnight?.closest('.mi-wizard-step');
+	if (servicesStep && !form.querySelector('[name="operational_profile"]')) {
+	  const profileField = document.createElement('label');
+	  profileField.innerHTML = 'Vista iniziale della segreteria<select name="operational_profile"><option value="AUTOMATICO">Automatico in base ai dati e alle quote</option><option value="MINIMO">Elenco minimo: nominativo e cellulare</option><option value="QUOTA_UNICA">Quota unica con dettaglio degli incassi</option><option value="SERVIZI_MULTIPLI">Più servizi: per esempio pullman e pranzo</option><option value="VIAGGIO_COMPLESSO">Viaggio complesso: documenti, servizi, sistemazioni e rate</option></select><small>La Segreteria consente comunque di personalizzare le colonne.</small>';
+	  servicesStep.insertBefore(profileField, overnight.closest('label'));
+	}
     if (overnight) overnight.addEventListener('change', () => {
       rooms.hidden = !overnight.checked;
       if (!overnight.checked) rooms.querySelectorAll('input').forEach((input) => { input.checked = false; });

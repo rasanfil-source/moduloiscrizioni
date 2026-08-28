@@ -136,6 +136,8 @@ test('le viste operative seguono il tipo di evento e comprimono il dettaglio deg
 	assert.match(sources['Segreteria.gs'], /QUOTA_UNICA/);
 	assert.match(sources['Segreteria.gs'], /SERVIZI_MULTIPLI/);
 	assert.match(sources['Segreteria.gs'], /VIAGGIO_COMPLESSO/);
+	assert.match(sources['Segreteria.gs'], /snapshot_json/);
+	assert.match(sources['Segreteria.gs'], /operational_profile/);
 	assert.match(sources['Segreteria.gs'], /paid_cash/);
 	assert.match(sources['Segreteria.gs'], /paid_transfer/);
 	assert.match(sources['Segreteria.gs'], /paid_card/);

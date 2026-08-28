@@ -137,6 +137,7 @@ final class MI_Event_Post_Type {
 		$field_configuration = MI_Field_Schema::event_configuration( $post->ID );
 		$field_catalog = MI_Field_Schema::catalog();
 		$field_profiles = MI_Field_Schema::profiles();
+		$operational_profile = MI_Field_Schema::sanitize_operational_profile( get_post_meta( $post->ID, '_mi_operational_profile', true ) );
 		if ( ! is_array( $ticket_types ) || empty( $ticket_types ) ) {
 			$ticket_types = array( array( 'code' => 'standard', 'name' => 'Iscrizione', 'price_cents' => 0, 'max_per_order' => 5, 'capacity' => 0 ) );
 		}
@@ -175,6 +176,13 @@ final class MI_Event_Post_Type {
 		</div>
 		<hr>
 		<h3>Dati dei partecipanti</h3>
+		<p><label for="mi_operational_profile"><strong>Vista operativa della segreteria</strong></label><br>
+		<select id="mi_operational_profile" name="mi_operational_profile">
+		<?php foreach ( MI_Field_Schema::operational_profiles() as $profile_key => $profile_label ) : ?>
+			<option value="<?php echo esc_attr( $profile_key ); ?>" <?php selected( $operational_profile, $profile_key ); ?>><?php echo esc_html( $profile_label ); ?></option>
+		<?php endforeach; ?>
+		</select></p>
+		<p class="description">La Segreteria parte da questa struttura e consente comunque di personalizzare le colonne. I dettagli collegati restano comprimibili.</p>
 		<?php $participant_extra_scope = 'ALL' === strtoupper( (string) get_post_meta( $post->ID, '_mi_participant_extra_scope', true ) ) ? 'ALL' : 'ONE'; ?>
 		<fieldset><legend><strong>A chi chiedere i dati aggiuntivi</strong></legend>
 			<label><input type="radio" name="mi_participant_extra_scope" value="ONE" <?php checked( $participant_extra_scope, 'ONE' ); ?>> Solo a uno degli iscritti (il primo è selezionato automaticamente)</label><br>
@@ -341,6 +349,7 @@ final class MI_Event_Post_Type {
 			$payment_methods = array();
 		}
 		update_post_meta( $post_id, '_mi_payment_methods', $payment_methods );
+		update_post_meta( $post_id, '_mi_operational_profile', MI_Field_Schema::sanitize_operational_profile( wp_unslash( $_POST['mi_operational_profile'] ?? 'AUTOMATICO' ) ) );
 
 		$identifier = isset( $_POST['mi_identifier_display'] ) ? strtoupper( sanitize_key( wp_unslash( $_POST['mi_identifier_display'] ) ) ) : 'TEXT';
 		update_post_meta( $post_id, '_mi_identifier_display', in_array( $identifier, array( 'NONE', 'TEXT', 'QR', 'BARCODE' ), true ) ? $identifier : 'TEXT' );

@@ -97,6 +97,21 @@ final class MI_Field_Schema {
 		);
 	}
 
+	public static function operational_profiles() {
+		return array(
+			'AUTOMATICO'       => 'Automatico in base ai dati e alle quote',
+			'MINIMO'           => 'Elenco minimo: nominativo e cellulare',
+			'QUOTA_UNICA'      => 'Quota unica con dettaglio degli incassi',
+			'SERVIZI_MULTIPLI' => 'Più servizi: per esempio pullman e pranzo',
+			'VIAGGIO_COMPLESSO'=> 'Viaggio complesso: documenti, servizi, sistemazioni e rate',
+		);
+	}
+
+	public static function sanitize_operational_profile( $profile ) {
+		$profile = strtoupper( sanitize_key( (string) $profile ) );
+		return isset( self::operational_profiles()[ $profile ] ) ? $profile : 'AUTOMATICO';
+	}
+
 	public static function event_configuration( $event_id ) {
 		$profiles = self::profiles();
 		$profile = strtoupper( (string) get_post_meta( $event_id, '_mi_data_profile', true ) );
