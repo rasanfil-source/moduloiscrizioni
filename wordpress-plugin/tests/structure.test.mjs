@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.5\.10/);
+	assert.match(source, /Version:\s+3\.5\.11/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -187,7 +187,7 @@ test('il portale tecnico evita Divi e aggrega i dati della dashboard', async () 
   assert.doesNotMatch(portal, /SELECT COALESCE\(SUM\(total_qty\)/);
   assert.match(activator, /KEY event_created \(event_id,created_at\)/);
   assert.match(portal, /mi_event_revisions/);
-  assert.match(portal, /posti occupati/);
+  assert.match(portal, /posti occupati/i);
   assert.match(portal, /createFromFormat\( '!Y-m-d\\TH:i'/);
   assert.match(portal, /new DateTimeZone\( 'UTC' \)/);
 });
@@ -994,4 +994,22 @@ test('anche il portale apre la scheda prenotazione in sovrimpressione', async ()
   assert.match(script, /window\.location\.assign\(link\.href\)/);
   assert.match(css, /\.mi-portal-modal__backdrop/);
   assert.match(css, /min-height:100vh/);
+});
+
+test('il portale mette in evidenza persone, data e immagine senza duplicare il referente', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /mi-event-card__date/);
+  assert.match(portal, /date_badge/);
+  assert.match(portal, /mi-event-card__image/);
+  assert.match(portal, /mi-booking-detail__cover/);
+  assert.match(portal, /snapshot_event\['cover_image'\]/);
+  assert.match(portal, /mi-booking-detail__code/);
+  assert.match(portal, /mi-booking-detail__person/);
+  assert.match(portal, /\$is_referent\s*=\s*\$is_multiple\s*&&/);
+  assert.match(portal, /mi-booking-detail__referent-dot/);
+  assert.doesNotMatch(portal, /<strong>Referente:<\/strong>/);
+  assert.match(css, /\.mi-event-card__date/);
+  assert.match(css, /\.mi-booking-detail__person/);
+  assert.match(css, /\.mi-booking-detail__referent-dot/);
 });

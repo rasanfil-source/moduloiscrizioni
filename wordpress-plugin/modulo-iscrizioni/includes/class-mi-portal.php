@@ -178,8 +178,18 @@ final class MI_Portal {
 			$capacity = max( 1, absint( $published['capacity'] ?? get_post_meta( $event->ID, '_mi_capacity', true ) ) );
 			$starts_at = (string) ( $published['event_starts_at'] ?? get_post_meta( $event->ID, '_mi_event_starts_at', true ) );
 			$closes_at = (string) ( $published['closes_at'] ?? get_post_meta( $event->ID, '_mi_registration_closes_at', true ) );
+			$event_title = sanitize_text_field( (string) ( $published['title'] ?? $event->post_title ) );
+			$activity_name = sanitize_text_field( (string) ( $published['activity'] ?? '' ) );
+			if ( ! $activity_name ) { $activity_id = absint( get_post_meta( $event->ID, '_mi_activity_id', true ) ); if ( $activity_id ) $activity_name = get_the_title( $activity_id ); }
+			$cover_image = esc_url( (string) ( $published['cover_image'] ?? get_the_post_thumbnail_url( $event->ID, 'thumbnail' ) ) );
+			$date_badge = self::date_badge( $starts_at );
+			$occupancy_percentage = min( 100, max( 0, (int) round( ( $count / $capacity ) * 100 ) ) );
 			$url = add_query_arg( array( 'mi_portal_view' => 'manage', 'mi_portal_event' => $event->ID ), $base_url );
-			echo '<a class="mi-event-card" href="' . esc_url( $url ) . '"><strong>' . esc_html( $event->post_title ) . '</strong><small>' . esc_html( self::format_date( $starts_at ) ) . '</small><small>' . esc_html( $count . ' / ' . $capacity . ' posti occupati · ' . ( 'publish' === $event->post_status ? 'Attivo' : 'Bozza' ) ) . '</small><small>Scadenza: ' . esc_html( self::format_date( $closes_at ) ) . '</small></a>';
+			echo '<a class="mi-event-card" href="' . esc_url( $url ) . '"><span class="mi-event-card__date"><small>' . esc_html( $date_badge['month'] ) . '</small><strong>' . esc_html( $date_badge['day'] ) . '</strong></span><span class="mi-event-card__content"><span class="mi-event-card__image">';
+			if ( $cover_image ) echo '<img src="' . esc_url( $cover_image ) . '" alt="">';
+			echo '</span><span class="mi-event-card__identity"><strong>' . esc_html( $event_title ) . '</strong>';
+			if ( $activity_name ) echo '<small>' . esc_html( $activity_name ) . '</small>';
+			echo '<small>' . esc_html( self::format_date( $starts_at ) ) . '</small></span><span class="mi-event-card__footer"><span class="mi-event-card__capacity"><small>Posti occupati</small><strong>' . esc_html( $count . ' / ' . $capacity ) . '</strong><i aria-hidden="true"><b style="width:' . esc_attr( $occupancy_percentage ) . '%"></b></i></span><span class="mi-event-card__status"><strong>' . esc_html( 'publish' === $event->post_status ? 'Attivo' : 'Bozza' ) . '</strong><small>Scadenza: ' . esc_html( self::format_date( $closes_at ) ) . '</small></span></span></span></a>';
 		}
 		echo '</div></section>';
 		$selected = absint( $_GET['mi_portal_event'] ?? 0 );
@@ -204,11 +214,44 @@ final class MI_Portal {
 		if ( ! $registration || ! MI_Access::can_access_event( (int) $registration['event_id'] ) ) return;
 		$participants = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_participants WHERE registration_id=%d ORDER BY id", $registration_id ), ARRAY_A );
 		$snapshot = json_decode( (string) ( $registration['snapshot_json'] ?? '' ), true );
+		$snapshot_event = (array) ( $snapshot['event'] ?? array() );
+		$event_name = sanitize_text_field( (string) ( $snapshot_event['title'] ?? get_the_title( (int) $registration['event_id'] ) ) );
+		$activity_name = sanitize_text_field( (string) ( $snapshot_event['activity'] ?? '' ) );
+		$cover_image = esc_url( (string) ( $snapshot_event['cover_image'] ?? get_the_post_thumbnail_url( (int) $registration['event_id'], 'large' ) ) );
+		if ( ! $activity_name ) {
+			$activity_id = absint( get_post_meta( (int) $registration['event_id'], '_mi_activity_id', true ) );
+			if ( $activity_id ) $activity_name = get_the_title( $activity_id );
+		}
+		$is_multiple = count( $participants ) > 1;
+		$referent_participant_id = 0;
+		if ( $is_multiple ) {
+			$buyer_key = mb_strtolower( remove_accents( trim( $registration['buyer_first_name'] . ' ' . $registration['buyer_last_name'] ) ) );
+			foreach ( $participants as $participant ) {
+				$participant_key = mb_strtolower( remove_accents( trim( $participant['first_name'] . ' ' . $participant['last_name'] ) ) );
+				if ( $participant_key === $buyer_key ) { $referent_participant_id = (int) $participant['id']; break; }
+			}
+			if ( ! $referent_participant_id && $participants ) $referent_participant_id = (int) $participants[0]['id'];
+		}
 		$field_labels = array();
 		foreach ( (array) ( $snapshot['event']['participant_fields'] ?? array() ) as $field ) { $key = sanitize_key( $field['key'] ?? '' ); $label = sanitize_text_field( $field['label'] ?? '' ); if ( $key && $label ) $field_labels[ $key ] = $label; }
-		echo '<section id="mi-portal-booking-detail" class="mi-booking-detail"><h2>Prenotazione ' . esc_html( $registration['order_code'] ) . '</h2><p><strong>Referente:</strong> ' . esc_html( $registration['buyer_first_name'] . ' ' . $registration['buyer_last_name'] ) . '<br>' . esc_html( $registration['buyer_email'] . ' · ' . $registration['buyer_phone'] ) . '</p>';
+		echo '<section id="mi-portal-booking-detail" class="mi-booking-detail"><div class="mi-booking-detail__hero' . ( $cover_image ? ' has-cover' : '' ) . '">';
+		if ( $cover_image ) echo '<img class="mi-booking-detail__cover" src="' . esc_url( $cover_image ) . '" alt="">';
+		echo '<header class="mi-booking-detail__header">';
+		if ( $activity_name ) echo '<p class="mi-booking-detail__activity"><span>Attività</span>' . esc_html( $activity_name ) . '</p>';
+		echo '<h2 class="mi-booking-detail__event">' . esc_html( $event_name ) . '</h2><p class="mi-booking-detail__code">Codice prenotazione <code>' . esc_html( $registration['order_code'] ) . '</code></p></header></div>';
 		foreach ( $participants as $participant ) {
-			echo '<article><h3>' . esc_html( $participant['first_name'] . ' ' . $participant['last_name'] ) . ( 'CANCELLED' === $participant['status'] ? ' <small>— Annullata</small>' : '' ) . '</h3>';
+			$is_referent = $is_multiple && $referent_participant_id === (int) $participant['id'];
+			echo '<article><h3 class="mi-booking-detail__person">';
+			if ( $is_referent ) echo '<span class="mi-booking-detail__referent-dot" aria-label="Referente" title="Referente"></span>';
+			echo '<span>' . esc_html( $participant['first_name'] . ' ' . $participant['last_name'] ) . '</span>' . ( 'CANCELLED' === $participant['status'] ? ' <small>— Annullata</small>' : '' ) . '</h3>';
+			if ( ! empty( $registration['buyer_email'] ) || ! empty( $registration['buyer_phone'] ) ) {
+				if ( ! $is_multiple || $is_referent ) {
+					echo '<div class="mi-booking-detail__contacts">';
+					if ( ! empty( $registration['buyer_email'] ) ) echo '<p><span>Email</span><strong>' . esc_html( $registration['buyer_email'] ) . '</strong></p>';
+					if ( ! empty( $registration['buyer_phone'] ) ) echo '<p><span>Cellulare</span><strong>' . esc_html( $registration['buyer_phone'] ) . '</strong></p>';
+					echo '</div>';
+				}
+			}
 			$fields = json_decode( (string) $participant['extra_json'], true );
 			foreach ( (array) $fields as $key => $value ) if ( '' !== (string) $value ) echo '<p><span>' . esc_html( $field_labels[ $key ] ?? ucfirst( str_replace( '_', ' ', preg_replace( '/^custom_/', '', $key ) ) ) ) . '</span><strong>' . esc_html( is_scalar( $value ) ? (string) $value : wp_json_encode( $value ) ) . '</strong></p>';
 			if ( 'ACTIVE' === ( $participant['status'] ?: 'ACTIVE' ) ) {
@@ -237,6 +280,15 @@ final class MI_Portal {
 		if ( ! $value ) return 'Data da definire';
 		$date = DateTimeImmutable::createFromFormat( '!Y-m-d\TH:i', (string) $value, wp_timezone() );
 		return $date instanceof DateTimeImmutable ? wp_date( 'd/m/Y H:i', $date->getTimestamp(), wp_timezone() ) : (string) $value;
+	}
+	private static function date_badge( $value ) {
+		if ( ! $value ) return array( 'month' => 'DATA', 'day' => '—' );
+		$date = DateTimeImmutable::createFromFormat( '!Y-m-d\TH:i', (string) $value, wp_timezone() );
+		if ( ! $date instanceof DateTimeImmutable ) return array( 'month' => 'DATA', 'day' => '—' );
+		return array(
+			'month' => mb_strtoupper( rtrim( wp_date( 'M', $date->getTimestamp(), wp_timezone() ), '.' ) ),
+			'day'   => wp_date( 'd', $date->getTimestamp(), wp_timezone() ),
+		);
 	}
 	private static function format_utc_date( $value ) {
 		if ( ! $value ) return 'Data non disponibile';
