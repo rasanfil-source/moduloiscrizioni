@@ -70,6 +70,12 @@ document.addEventListener('DOMContentLoaded', () => {
     show();
   }
 
+  const selectedEvent = document.querySelector('[data-mi-selected-event]');
+  if (selectedEvent) {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.requestAnimationFrame(() => selectedEvent.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' }));
+  }
+
   const bookingLinks = [...document.querySelectorAll('[data-mi-portal-booking-open]')]
     .filter((link, index, links) => links.findIndex((candidate) => candidate.href === link.href) === index);
   const inlineDetail = document.getElementById('mi-portal-booking-detail');

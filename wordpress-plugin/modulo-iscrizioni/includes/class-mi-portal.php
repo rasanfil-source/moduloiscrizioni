@@ -395,7 +395,7 @@ final class MI_Portal {
 		$cancelled = (string) get_post_meta( $event_id, '_mi_event_cancelled_at', true );
 		global $wpdb;
 		$active_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED') AND capacity_released_at IS NULL", $event_id ) );
-		echo '<section class="mi-event-management"><div class="mi-event-management__heading"><div><span class="mi-portal-eyebrow">Evento selezionato</span><h2>' . esc_html( $event->post_title ) . '</h2></div><span class="mi-event-management__state">' . esc_html( $cancelled ? 'Annullato' : ( 'publish' === $event->post_status ? 'Attivo' : 'Bozza' ) ) . '</span></div>';
+		echo '<section class="mi-event-management" data-mi-selected-event tabindex="-1"><div class="mi-event-management__heading"><div><span class="mi-portal-eyebrow">Evento selezionato</span><h2>' . esc_html( $event->post_title ) . '</h2></div><span class="mi-event-management__state">' . esc_html( $cancelled ? 'Annullato' : ( 'publish' === $event->post_status ? 'Attivo' : 'Bozza' ) ) . '</span></div>';
 		if ( $cancelled ) { echo '<div class="mi-portal-notice mi-portal-error"><strong>Evento annullato</strong><p>La scheda e le iscrizioni sono conservate nello storico.</p></div></section>'; return; }
 		echo '<details open><summary>Modifica i dettagli principali</summary><form class="mi-event-management__form" method="post"><input type="hidden" name="mi_portal_action" value="update_event"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
 		wp_nonce_field( 'mi_portal_manage_event_' . $event_id, 'mi_portal_nonce' );
