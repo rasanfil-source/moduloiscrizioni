@@ -275,6 +275,46 @@ function caricaVistaOperativaEvento(form) {
   form = form || {};
   const idEvento = normalizzaTesto_(form.id_evento, 40);
   if (!idEvento) throw new Error('Scegli un evento.');
+  if (!form.forza_generazione) {
+    const vistaConservata = leggiVistaOperativaConservata_(idEvento);
+    if (vistaConservata) return vistaConservata;
+  }
+  return generaVistaOperativaEvento_(idEvento);
+}
+
+/** Approva la vista dimostrativa e la conserva in una scheda dedicata all'evento. */
+function approvaVistaOperativaEvento(form) {
+  form = form || {};
+  const idEvento = normalizzaTesto_(form.id_evento, 40);
+  if (!idEvento) throw new Error('Scegli un evento.');
+  const vista = generaVistaOperativaEvento_(idEvento);
+  salvaVistaOperativaConservata_(vista);
+  return leggiVistaOperativaConservata_(idEvento);
+}
+
+/** Aggiorna soltanto i dati, mantenendo le colonne già approvate. */
+function aggiornaDatiVistaOperativaEvento(form) {
+  form = form || {};
+  const idEvento = normalizzaTesto_(form.id_evento, 40);
+  if (!idEvento) throw new Error('Scegli un evento.');
+  const precedente = leggiVistaOperativaConservata_(idEvento);
+  if (!precedente) throw new Error('Approva prima la vista dimostrativa.');
+  const vista = generaVistaOperativaEvento_(idEvento, precedente.colonne.map(function (colonna) { return colonna.key; }));
+  salvaVistaOperativaConservata_(vista);
+  return leggiVistaOperativaConservata_(idEvento);
+}
+
+/** Rigenera modello e colonne, quindi sostituisce la vista conservata. */
+function rigeneraStrutturaVistaOperativaEvento(form) {
+  form = form || {};
+  const idEvento = normalizzaTesto_(form.id_evento, 40);
+  if (!idEvento) throw new Error('Scegli un evento.');
+  const vista = generaVistaOperativaEvento_(idEvento);
+  salvaVistaOperativaConservata_(vista);
+  return leggiVistaOperativaConservata_(idEvento);
+}
+
+function generaVistaOperativaEvento_(idEvento, campiForzati) {
   const eventi = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS));
   const evento = eventi.find(function (riga) { return String(riga.id_evento) === idEvento; });
   if (!evento) throw new Error('Evento non trovato.');
@@ -287,9 +327,12 @@ function caricaVistaOperativaEvento(form) {
   });
   const pagamenti = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS));
   const statoOperativo = indiceStatoOperativo_();
-  const vistaSalvata = (caricaContestoSegreteria().views || {})[idEvento] || [];
+  const rigaVistaSalvata = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.OPERATIONAL_VIEWS)).find(function (riga) { return String(riga.id_evento) === idEvento; });
+  let vistaSalvata = [];
+  try { vistaSalvata = rigaVistaSalvata ? JSON.parse(String(rigaVistaSalvata.campi_json || '[]')) : []; } catch (errore) { vistaSalvata = []; }
+  if (!Array.isArray(vistaSalvata)) vistaSalvata = [];
   const profilo = determinaProfiloVistaOperativa_(iscrizioni, partecipanti);
-  const campi = vistaSalvata.length ? vistaSalvata : profilo.campi;
+  const campi = Array.isArray(campiForzati) && campiForzati.length ? campiForzati : (vistaSalvata.length ? vistaSalvata : profilo.campi);
   const catalogo = campiElencoOperativo_().reduce(function (indice, campo) { indice[campo.key] = campo; return indice; }, {});
   const colonne = campi.filter(function (chiave) { return !!catalogo[chiave]; }).map(function (chiave) {
     return { key: chiave, label: catalogo[chiave].label, gruppo: gruppoCampoVistaOperativa_(chiave), comprimibile: ['paid_cash', 'paid_transfer', 'paid_card'].indexOf(chiave) >= 0 };
@@ -302,7 +345,61 @@ function caricaVistaOperativaEvento(form) {
     colonne.forEach(function (colonna) { valori[colonna.key] = valoreCampoElenco_(colonna.key, evento, iscrizione, partecipante, dati, pagamenti); });
     return { codice_ordine: String(partecipante.codice_ordine), numero_partecipante: numero, valori: valori };
   });
-  return { evento: { id: idEvento, titolo: String(evento.titolo || idEvento) }, profilo: profilo.id, nome_profilo: profilo.nome, personalizzata: !!vistaSalvata.length, colonne: colonne, righe: righe };
+  return { evento: { id: idEvento, titolo: String(evento.titolo || idEvento) }, profilo: profilo.id, nome_profilo: profilo.nome, personalizzata: !!vistaSalvata.length, conservata: false, colonne: colonne, righe: righe };
+}
+
+function nomeSchedaVistaOperativa_(idEvento) {
+  const impronta = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, idEvento, Utilities.Charset.UTF_8).slice(0, 6).map(function (valore) { return ('0' + (valore & 255).toString(16)).slice(-2); }).join('');
+  return 'Vista operativa ' + impronta;
+}
+
+function impostaMetadatoVista_(scheda, chiave, valore) {
+  const metadato = scheda.getDeveloperMetadata().find(function (elemento) { return elemento.getKey() === chiave; });
+  if (metadato) metadato.setValue(String(valore)); else scheda.addDeveloperMetadata(chiave, String(valore));
+}
+
+function salvaVistaOperativaConservata_(vista) {
+  const foglio = ottieniFoglioDiLavoroAssociato_();
+  const nome = nomeSchedaVistaOperativa_(vista.evento.id);
+  let scheda = foglio.getSheetByName(nome);
+  if (!scheda) scheda = foglio.insertSheet(nome);
+  scheda.clear();
+  const intestazioni = ['Codice prenotazione', 'Numero partecipante'].concat(vista.colonne.map(function (colonna) { return colonna.label; }));
+  const righe = vista.righe.map(function (riga) {
+    return [neutralizzaFormula_(riga.codice_ordine, 64), Number(riga.numero_partecipante) || 0].concat(vista.colonne.map(function (colonna) { return neutralizzaFormula_(riga.valori[colonna.key], 5000); }));
+  });
+  scheda.getRange(1, 1, 1, intestazioni.length).setValues([intestazioni]);
+  if (righe.length) scheda.getRange(2, 1, righe.length, intestazioni.length).setValues(righe);
+  scheda.setFrozenRows(1);
+  scheda.hideColumns(1, 2);
+  scheda.getRange(1, 1, 1, intestazioni.length).setFontWeight('bold').setBackground('#172554').setFontColor('#ffffff');
+  scheda.autoResizeColumns(3, Math.max(1, intestazioni.length - 2));
+  impostaMetadatoVista_(scheda, 'MI_ID_EVENTO', vista.evento.id);
+  impostaMetadatoVista_(scheda, 'MI_TITOLO_EVENTO', vista.evento.titolo);
+  impostaMetadatoVista_(scheda, 'MI_PROFILO', vista.profilo);
+  impostaMetadatoVista_(scheda, 'MI_NOME_PROFILO', vista.nome_profilo);
+  impostaMetadatoVista_(scheda, 'MI_PERSONALIZZATA', vista.personalizzata ? '1' : '0');
+  impostaMetadatoVista_(scheda, 'MI_CAMPI', JSON.stringify(vista.colonne.map(function (colonna) { return colonna.key; })));
+  impostaMetadatoVista_(scheda, 'MI_DATA_AGGIORNAMENTO', new Date().toISOString());
+}
+
+function leggiVistaOperativaConservata_(idEvento) {
+  const scheda = ottieniFoglioDiLavoroAssociato_().getSheetByName(nomeSchedaVistaOperativa_(idEvento));
+  if (!scheda) return null;
+  const metadati = scheda.getDeveloperMetadata().reduce(function (indice, elemento) { indice[elemento.getKey()] = elemento.getValue(); return indice; }, {});
+  if (String(metadati.MI_ID_EVENTO || '') !== idEvento) return null;
+  let campi = [];
+  try { campi = JSON.parse(String(metadati.MI_CAMPI || '[]')); } catch (errore) { campi = []; }
+  if (!Array.isArray(campi) || !campi.length) return null;
+  const intestazioni = scheda.getRange(1, 1, 1, Math.max(2 + campi.length, 2)).getDisplayValues()[0];
+  const colonne = campi.map(function (chiave, indice) { return { key: chiave, label: String(intestazioni[indice + 2] || chiave), gruppo: gruppoCampoVistaOperativa_(chiave), comprimibile: ['paid_cash', 'paid_transfer', 'paid_card'].indexOf(chiave) >= 0 }; });
+  const valori = scheda.getLastRow() > 1 ? scheda.getRange(2, 1, scheda.getLastRow() - 1, 2 + colonne.length).getDisplayValues() : [];
+  const righe = valori.map(function (riga) {
+    const dati = {};
+    colonne.forEach(function (colonna, indice) { dati[colonna.key] = riga[indice + 2]; });
+    return { codice_ordine: String(riga[0] || ''), numero_partecipante: Number(riga[1]) || 0, valori: dati };
+  });
+  return { evento: { id: idEvento, titolo: String(metadati.MI_TITOLO_EVENTO || idEvento) }, profilo: String(metadati.MI_PROFILO || ''), nome_profilo: String(metadati.MI_NOME_PROFILO || 'Vista operativa'), personalizzata: String(metadati.MI_PERSONALIZZATA || '') === '1', conservata: true, data_aggiornamento: String(metadati.MI_DATA_AGGIORNAMENTO || ''), colonne: colonne, righe: righe };
 }
 
 function determinaProfiloVistaOperativa_(iscrizioni, partecipanti) {

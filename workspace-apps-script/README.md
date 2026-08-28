@@ -10,6 +10,7 @@ Progetto Google Apps Script associato a uno spreadsheet dedicato. Il repository 
 - **Apri segreteria** apre una Web App autonoma e riservata, senza ereditare la pesantezza o i limiti dell’iframe del foglio;
 - dalla scheda si registrano versamenti usando la stessa validazione del foglio `Inserimento pagamenti` e si cambiano sistemazioni senza superarne la capienza;
 - **Configura elenco operativo** permette di scegliere per evento soltanto le colonne utili e produce un collegamento PDF A4 stampabile;
+- la prima vista operativa è dimostrativa; dopo l'approvazione viene conservata in una scheda dedicata e si riapre rapidamente. L'operatore può aggiornare soltanto i dati oppure rigenerare anche modello e colonne;
 - **Comunicazioni operative** prepara promemoria pre-evento e promemoria saldo nella coda WordPress firmata;
 - `doPost()` accetta soltanto richieste firmate provenienti dal proxy WordPress;
 - l'azione firmata `PING` verifica firma e anti-replay senza leggere o scrivere dati personali;
