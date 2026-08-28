@@ -1050,6 +1050,9 @@ test('il wizard crea una bozza completa e mostra collegamenti espliciti', async 
   assert.match(portal, /name="cover_image"/);
   assert.match(portal, /participant_fields\[\]/);
   assert.match(portal, /participant_extra_scope/);
+  assert.match(portal, /<details class="mi-additional-fields">/);
+  assert.match(portal, /Ulteriori dati per alcuni eventi/);
+  assert.match(portal, /array\( 'email', 'phone', 'birth_date' \)/);
   assert.match(portal, /custom_question_label\[\]/);
   assert.match(portal, /name="pricing_mode"/);
   assert.match(portal, /Bozza creata correttamente/);
