@@ -270,11 +270,67 @@ function creaUrlStampaElenco_() {
   return 'https://docs.google.com/spreadsheets/d/' + encodeURIComponent(spreadsheet.getId()) + '/export?format=pdf&gid=' + sheet.getSheetId() + '&size=A4&portrait=false&fitw=true&sheetnames=false&printtitle=false&pagenumbers=true&gridlines=false&fzr=true';
 }
 
+/** Restituisce la vista quotidiana più adatta ai dati realmente raccolti dall'evento. */
+function caricaVistaOperativaEvento(form) {
+  form = form || {};
+  const idEvento = normalizzaTesto_(form.id_evento, 40);
+  if (!idEvento) throw new Error('Scegli un evento.');
+  const eventi = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS));
+  const evento = eventi.find(function (riga) { return String(riga.id_evento) === idEvento; });
+  if (!evento) throw new Error('Evento non trovato.');
+  const iscrizioni = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(function (riga) {
+    return String(riga.id_evento) === idEvento && ['ANNULLATO', 'SCADUTO', 'CANCELLED', 'EXPIRED'].indexOf(String(riga.stato).toUpperCase()) < 0;
+  });
+  const iscrizioniPerCodice = iscrizioni.reduce(function (indice, riga) { indice[String(riga.codice_ordine)] = riga; return indice; }, {});
+  const partecipanti = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).filter(function (riga) {
+    return !!iscrizioniPerCodice[String(riga.codice_ordine)] && String(riga.stato_partecipante || 'ACTIVE').toUpperCase() !== 'CANCELLED';
+  });
+  const pagamenti = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS));
+  const statoOperativo = indiceStatoOperativo_();
+  const vistaSalvata = (caricaContestoSegreteria().views || {})[idEvento] || [];
+  const profilo = determinaProfiloVistaOperativa_(iscrizioni, partecipanti);
+  const campi = vistaSalvata.length ? vistaSalvata : profilo.campi;
+  const catalogo = campiElencoOperativo_().reduce(function (indice, campo) { indice[campo.key] = campo; return indice; }, {});
+  const colonne = campi.filter(function (chiave) { return !!catalogo[chiave]; }).map(function (chiave) {
+    return { key: chiave, label: catalogo[chiave].label, gruppo: gruppoCampoVistaOperativa_(chiave), comprimibile: ['paid_cash', 'paid_transfer', 'paid_card'].indexOf(chiave) >= 0 };
+  });
+  const righe = partecipanti.map(function (partecipante) {
+    const iscrizione = iscrizioniPerCodice[String(partecipante.codice_ordine)];
+    const numero = Number(partecipante.numero_partecipante) || 0;
+    const dati = datiOperativiPartecipante_(partecipante, statoOperativo[String(partecipante.codice_ordine) + '|' + numero] || {});
+    const valori = {};
+    colonne.forEach(function (colonna) { valori[colonna.key] = valoreCampoElenco_(colonna.key, evento, iscrizione, partecipante, dati, pagamenti); });
+    return { codice_ordine: String(partecipante.codice_ordine), numero_partecipante: numero, valori: valori };
+  });
+  return { evento: { id: idEvento, titolo: String(evento.titolo || idEvento) }, profilo: profilo.id, nome_profilo: profilo.nome, personalizzata: !!vistaSalvata.length, colonne: colonne, righe: righe };
+}
+
+function determinaProfiloVistaOperativa_(iscrizioni, partecipanti) {
+  let haDocumenti = false, haServizi = false;
+  partecipanti.forEach(function (riga) {
+    const dati = decodificaOggetto_(riga.dati_aggiuntivi_json);
+    const opzioni = JSON.stringify(decodificaElenco_(riga.opzioni_json)).toLowerCase();
+    if (dati.document_number || dati.numero_documento || dati.document_expiry_date || dati.scadenza_documento || dati.room || dati.camera || dati.alloggio) haDocumenti = true;
+    if (dati.transport || dati.pullman || dati.lunch || dati.pranzo || /pullman|pranzo|colazione|cena/.test(opzioni)) haServizi = true;
+  });
+  if (haDocumenti) return { id: 'VIAGGIO_COMPLESSO', nome: 'Viaggio complesso', campi: ['last_name', 'first_name', 'phone', 'birth_date', 'document_type', 'document_number', 'document_issue_date', 'document_expiry_date', 'nationality', 'transport', 'room', 'lunch', 'insurance', 'total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance'] };
+  if (haServizi) return { id: 'SERVIZI_MULTIPLI', nome: 'Gita con più servizi', campi: ['last_name', 'first_name', 'phone', 'transport', 'lunch', 'options', 'total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance'] };
+  if (iscrizioni.some(function (riga) { return Number(riga.totale_centesimi) > 0; })) return { id: 'QUOTA_UNICA', nome: 'Evento con quota unica', campi: ['last_name', 'first_name', 'phone', 'total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance'] };
+  return { id: 'MINIMO', nome: 'Elenco minimo', campi: ['last_name', 'first_name', 'phone'] };
+}
+
+function gruppoCampoVistaOperativa_(chiave) {
+  if (['total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance'].indexOf(chiave) >= 0) return 'pagamenti';
+  if (['birth_date', 'document_type', 'document_number', 'document_issue_date', 'document_expiry_date', 'nationality'].indexOf(chiave) >= 0) return 'documenti';
+  if (['room', 'transport', 'breakfast', 'lunch', 'insurance', 'options'].indexOf(chiave) >= 0) return 'servizi';
+  return 'persona';
+}
+
 function campiElencoOperativo_() {
   const fields = [
     { key: 'event', label: 'Evento' }, { key: 'order_code', label: 'Codice prenotazione' }, { key: 'participant_number', label: 'N.' }, { key: 'first_name', label: 'Nome' }, { key: 'last_name', label: 'Cognome' }, { key: 'status', label: 'Stato' },
     { key: 'email', label: 'Email' }, { key: 'phone', label: 'Cellulare' }, { key: 'birth_date', label: 'Data di nascita' }, { key: 'document_type', label: 'Tipo documento' }, { key: 'document_number', label: 'Numero documento' }, { key: 'document_issue_date', label: 'Data emissione documento' }, { key: 'document_expiry_date', label: 'Scadenza documento' }, { key: 'nationality', label: 'Nazionalità' }, { key: 'room', label: 'Alloggio' }, { key: 'transport', label: 'Pullman/trasporto' }, { key: 'breakfast', label: 'Colazione' },
-    { key: 'lunch', label: 'Pranzo' }, { key: 'insurance', label: 'Assicurazione' }, { key: 'emergency_contact', label: 'Contatto di emergenza' }, { key: 'options', label: 'Altre opzioni' }, { key: 'total', label: 'Totale' }, { key: 'paid', label: 'Versato' }, { key: 'balance', label: 'Saldo' }, { key: 'special_requests', label: 'Richieste particolari' }
+    { key: 'lunch', label: 'Pranzo' }, { key: 'insurance', label: 'Assicurazione' }, { key: 'emergency_contact', label: 'Contatto di emergenza' }, { key: 'options', label: 'Altre opzioni' }, { key: 'total', label: 'Totale' }, { key: 'paid', label: 'Incassato' }, { key: 'paid_cash', label: 'Contanti' }, { key: 'paid_transfer', label: 'Bonifico' }, { key: 'paid_card', label: 'Carta/PayPal' }, { key: 'balance', label: 'Da incassare' }, { key: 'special_requests', label: 'Richieste particolari' }
   ];
   const known = fields.reduce(function (result, field) { result[field.key] = true; return result; }, {});
   convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).forEach(function (participant) {
@@ -294,9 +350,14 @@ function valoreCampoElenco_(field, event, registration, participant, data, payme
   const direct = { event: event.titolo || registration.id_evento, order_code: registration.codice_ordine, participant_number: participant.numero_partecipante, first_name: participant.nome, last_name: participant.cognome, status: participant.stato_partecipante || registration.stato, special_requests: registration.richieste_particolari || '' };
   if (Object.prototype.hasOwnProperty.call(direct, field)) return direct[field];
   if (field === 'options') return decodificaElenco_(participant.opzioni_json).map(function (option) { return option.name || option.label || option.code || ''; }).filter(Boolean).join(', ');
-  const paid = payments.filter(function (payment) { return String(payment.codice_ordine) === String(registration.codice_ordine); }).reduce(function (total, payment) { const amount = Number(payment.importo_centesimi) || 0; return total + (['RIMBORSO', 'STORNO'].indexOf(String(payment.tipo_movimento).toUpperCase()) >= 0 ? -amount : amount); }, 0);
+  const pagamentiOrdine = payments.filter(function (payment) { return String(payment.codice_ordine) === String(registration.codice_ordine); });
+  const sommaPagamenti = function (fonte) { return pagamentiOrdine.reduce(function (total, payment) { if (fonte && String(payment.fonte_pagamento).toUpperCase() !== fonte) return total; const amount = Number(payment.importo_centesimi) || 0; return total + (['RIMBORSO', 'STORNO'].indexOf(String(payment.tipo_movimento).toUpperCase()) >= 0 ? -amount : amount); }, 0); };
+  const paid = sommaPagamenti('');
   if (field === 'total') return (Number(registration.totale_centesimi) || 0) / 100;
   if (field === 'paid') return paid / 100;
+  if (field === 'paid_cash') return sommaPagamenti('CONTANTE') / 100;
+  if (field === 'paid_transfer') return sommaPagamenti('BONIFICO') / 100;
+  if (field === 'paid_card') return sommaPagamenti('CARTA') / 100;
   if (field === 'balance') return Math.max(0, (Number(registration.totale_centesimi) || 0) - paid) / 100;
   const candidates = aliases[field] || [field]; for (let index = 0; index < candidates.length; index += 1) if (data[candidates[index]] != null && data[candidates[index]] !== '') return data[candidates[index]];
   if (field === 'email') return registration.email_referente || ''; if (field === 'phone') return registration.telefono_referente || ''; return '';

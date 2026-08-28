@@ -4,6 +4,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const steps = [...form.querySelectorAll('.mi-wizard-step')];
     const back = form.querySelector('[data-mi-back]');
     const next = form.querySelector('[data-mi-next]');
+	const coverImage = form.querySelector('[name="cover_image"][data-mi-max-bytes]');
+	const validateCoverImage = () => {
+	  if (!coverImage) return true;
+	  const file = coverImage.files?.[0];
+	  const maximum = Number.parseInt(coverImage.dataset.miMaxBytes || '0', 10);
+	  coverImage.setCustomValidity(file && maximum && file.size > maximum ? 'L’immagine in evidenza non può superare 2 MB.' : '');
+	  return coverImage.reportValidity();
+	};
+	coverImage?.addEventListener('change', validateCoverImage);
     let index = 0;
     const show = () => {
       steps.forEach((step, stepIndex) => step.classList.toggle('is-active', stepIndex === index));
@@ -18,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
     next.addEventListener('click', () => {
       const fields = [...steps[index].querySelectorAll('[required]')];
       if (fields.some((field) => !field.reportValidity())) return;
+	  if (coverImage && steps[index].contains(coverImage) && !validateCoverImage()) return;
       index = Math.min(steps.length - 1, index + 1);
       show();
     });
@@ -31,6 +41,17 @@ document.addEventListener('DOMContentLoaded', () => {
       rooms.hidden = !overnight.checked;
       if (!overnight.checked) rooms.querySelectorAll('input').forEach((input) => { input.checked = false; });
     });
+	form.querySelectorAll('[data-mi-service-fee]').forEach((service) => {
+	  const price = service.closest('.mi-service-fee')?.querySelector('input[name^="service_price"]');
+	  const updateService = () => {
+		if (!price) return;
+		price.disabled = !service.checked;
+		price.required = service.checked;
+		if (!service.checked) price.value = '';
+	  };
+	  service.addEventListener('change', updateService);
+	  updateService();
+	});
     form.querySelectorAll('[data-mi-required]').forEach((required) => required.addEventListener('change', () => {
       const enabled = form.querySelector(`[data-mi-field="${required.dataset.miRequired}"]`);
       if (required.checked && enabled) enabled.checked = true;
@@ -68,6 +89,12 @@ document.addEventListener('DOMContentLoaded', () => {
     closesAt?.addEventListener('change', updateDateLimits);
     updateDateLimits();
     show();
+  }
+
+  const selectedEvent = document.querySelector('[data-mi-selected-event]');
+  if (selectedEvent) {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.requestAnimationFrame(() => selectedEvent.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' }));
   }
 
   const bookingLinks = [...document.querySelectorAll('[data-mi-portal-booking-open]')]

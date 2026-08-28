@@ -34,7 +34,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.6\.1/);
+	assert.match(source, /Version:\s+3\.6\.6/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -224,7 +224,12 @@ test('il portale tecnico evita Divi e aggrega i dati della dashboard', async () 
 
 test('il portale resta utilizzabile fra telefono e tablet', async () => {
   const css = await read('assets/portal.css');
+	const portal = await read('includes/class-mi-portal.php');
   assert.match(css, /mi-portal-header[^}]+flex-wrap:wrap/);
+	assert.match(portal, /class="mi-portal-logout"/);
+	assert.match(portal, /<span aria-hidden="true">↗<\/span> Esci/);
+	assert.match(css, /\.mi-portal-logout\{[^}]+border-radius:999px/);
+	assert.match(css, /\.mi-portal-logout:focus-visible/);
   assert.match(css, /mi-portal-switcher[^}]+flex-wrap:wrap/);
   assert.match(css, /min-height:44px/);
   assert.match(css, /@media\(max-width:760px\)/);
@@ -1081,6 +1086,10 @@ test('il wizard crea una bozza completa e mostra collegamenti espliciti', async 
   assert.match(portal, /1 di 8/);
   assert.match(portal, /name="description"/);
   assert.match(portal, /name="cover_image"/);
+	assert.match(portal, /data-mi-max-bytes="2097152"/);
+	assert.match(portal, /file superiore a 2 MB/);
+	assert.match(portal, /massimo 2 MB/);
+	assert.match(script, /L’immagine in evidenza non può superare 2 MB/);
   assert.match(portal, /participant_fields\[\]/);
   assert.match(portal, /participant_extra_scope/);
   assert.match(portal, /<details class="mi-additional-fields">/);
@@ -1088,6 +1097,11 @@ test('il wizard crea una bozza completa e mostra collegamenti espliciti', async 
   assert.match(portal, /array\( 'email', 'phone', 'birth_date' \)/);
   assert.match(portal, /custom_question_label\[\]/);
   assert.match(portal, /name="pricing_mode"/);
+	assert.match(portal, /service_enabled\[/);
+	assert.match(portal, /service_price\[/);
+	assert.match(portal, /Rimborso spese generico/);
+	assert.match(portal, /'scope' => 'TICKET'/);
+	assert.match(script, /data-mi-service-fee/);
   assert.match(portal, /Bozza creata correttamente/);
   assert.match(portal, /Completa la bozza/);
   assert.match(portal, /Apri anteprima/);
@@ -1157,6 +1171,7 @@ test('i promemoria operativi passano dalla coda protetta e le bozze restano in a
 
 test('la scheda evento consente modifiche sicure e annullamento con avviso', async () => {
   const portal = await read('includes/class-mi-portal.php');
+  const portalJs = await read('assets/portal.js');
   const sender = await read('includes/class-mi-spedizione-email.php');
   const model = await read('includes/class-mi-modello-email.php');
   const css = await read('assets/portal.css');
@@ -1164,10 +1179,15 @@ test('la scheda evento consente modifiche sicure e annullamento con avviso', asy
   assert.match(portal, /mi_portal_manage_event_/);
   assert.match(portal, /confirm_cancellation/);
   assert.match(portal, /cancellation_reason/);
+	assert.match(portal, /if \( \$active_count > 0 \)/);
   assert.match(portal, /MI_Registration_Service::cancel_registration/);
   assert.match(portal, /_mi_event_cancelled_at/);
   assert.match(portal, /allow_operational' => true/);
   assert.match(sender, /EVENT_CANCELLATION/);
   assert.match(model, /Evento annullato/);
   assert.match(css, /mi-event-danger/);
+  assert.match(css, /mi-event-danger summary\{text-align:left\}/);
+  assert.match(portal, /data-mi-selected-event/);
+  assert.match(portalJs, /scrollIntoView/);
+  assert.match(portalJs, /prefers-reduced-motion/);
 });
