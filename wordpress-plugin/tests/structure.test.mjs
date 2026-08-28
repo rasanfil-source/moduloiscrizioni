@@ -994,7 +994,14 @@ test('anche il portale apre la scheda prenotazione in sovrimpressione', async ()
   assert.match(script, /'Tab'/);
   assert.match(script, /replaceState/);
   assert.match(script, /window\.location\.assign\(link\.href\)/);
+	assert.match(script, /data-mi-portal-booking-previous/);
+	assert.match(script, /data-mi-portal-booking-next/);
+	assert.match(script, /'ArrowLeft'/);
+	assert.match(script, /'ArrowRight'/);
+	assert.match(script, /findIndex\(\(candidate\) => candidate\.href === link\.href\)/);
   assert.match(css, /\.mi-portal-modal__backdrop/);
+	assert.match(css, /\.mi-portal-modal__nav--previous/);
+	assert.match(css, /\.mi-portal-modal__nav--next/);
   assert.match(css, /min-height:100vh/);
 });
 

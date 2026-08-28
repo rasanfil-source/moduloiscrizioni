@@ -29,7 +29,8 @@ document.addEventListener('DOMContentLoaded', () => {
     show();
   }
 
-  const bookingLinks = [...document.querySelectorAll('[data-mi-portal-booking-open]')];
+  const bookingLinks = [...document.querySelectorAll('[data-mi-portal-booking-open]')]
+    .filter((link, index, links) => links.findIndex((candidate) => candidate.href === link.href) === index);
   const inlineDetail = document.getElementById('mi-portal-booking-detail');
   if (!bookingLinks.length && !inlineDetail) return;
 
@@ -38,19 +39,28 @@ document.addEventListener('DOMContentLoaded', () => {
   const modal = document.createElement('div');
   modal.className = 'mi-portal-modal';
   modal.hidden = true;
-  modal.innerHTML = '<div class="mi-portal-modal__backdrop" data-mi-portal-booking-close></div><section class="mi-portal-modal__dialog" role="dialog" aria-modal="true" aria-label="Scheda prenotazione"><button type="button" class="mi-portal-modal__close" data-mi-portal-booking-close aria-label="Chiudi la scheda">×</button><div class="mi-portal-modal__content" aria-live="polite"></div></section>';
+  modal.innerHTML = '<div class="mi-portal-modal__backdrop" data-mi-portal-booking-close></div><section class="mi-portal-modal__dialog" role="dialog" aria-modal="true" aria-label="Scheda prenotazione"><button type="button" class="mi-portal-modal__close" data-mi-portal-booking-close aria-label="Chiudi la scheda">×</button><button type="button" class="mi-portal-modal__nav mi-portal-modal__nav--previous" data-mi-portal-booking-previous aria-label="Scheda precedente" title="Scheda precedente">◀</button><button type="button" class="mi-portal-modal__nav mi-portal-modal__nav--next" data-mi-portal-booking-next aria-label="Scheda successiva" title="Scheda successiva">▶</button><div class="mi-portal-modal__content" aria-live="polite"></div></section>';
   document.body.append(modal);
   const content = modal.querySelector('.mi-portal-modal__content');
   const closeButton = modal.querySelector('.mi-portal-modal__close');
+  const previousButton = modal.querySelector('[data-mi-portal-booking-previous]');
+  const nextButton = modal.querySelector('[data-mi-portal-booking-next]');
   let previousFocus = null;
   let activeRequest = null;
+  let activeBookingIndex = -1;
 
-  const showBooking = (detail, url = '', pushHistory = false) => {
+  const updateNavigation = () => {
+    previousButton.disabled = activeBookingIndex <= 0;
+    nextButton.disabled = activeBookingIndex < 0 || activeBookingIndex >= bookingLinks.length - 1;
+  };
+  const showBooking = (detail, url = '', historyMode = '') => {
     content.replaceChildren(detail);
     modal.hidden = false;
     document.body.classList.add('mi-portal-modal-open');
     closeButton.focus();
-    if (pushHistory && url) window.history.pushState({}, '', url);
+    updateNavigation();
+    if ('push' === historyMode && url) window.history.pushState({}, '', url);
+    if ('replace' === historyMode && url) window.history.replaceState({}, '', url);
   };
   const closeBooking = (replaceHistory = true) => {
     if (modal.hidden) return;
@@ -62,11 +72,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (replaceHistory) window.history.replaceState({}, '', listUrl);
     previousFocus?.focus();
   };
-  const openBooking = async (link) => {
+  const openBooking = async (link, historyMode = 'push') => {
     activeRequest?.abort();
     const request = new AbortController();
     activeRequest = request;
     previousFocus = link;
+    activeBookingIndex = bookingLinks.indexOf(link);
+    updateNavigation();
     modal.hidden = false;
     document.body.classList.add('mi-portal-modal-open');
     content.innerHTML = '<p class="mi-portal-modal__loading">Apertura della prenotazione…</p>';
@@ -77,7 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const detailDocument = new DOMParser().parseFromString(await response.text(), 'text/html');
       const detail = detailDocument.getElementById('mi-portal-booking-detail');
       if (!detail) throw new Error('detail_missing');
-      showBooking(detail, link.href, true);
+      showBooking(detail, link.href, historyMode);
     } catch (error) {
       if ('AbortError' === error.name) return;
       window.location.assign(link.href);
@@ -91,11 +103,21 @@ document.addEventListener('DOMContentLoaded', () => {
     event.preventDefault();
     openBooking(link);
   }));
+  const moveBooking = (offset) => {
+    const targetIndex = activeBookingIndex + offset;
+    if (targetIndex < 0 || targetIndex >= bookingLinks.length) return;
+    openBooking(bookingLinks[targetIndex], 'replace');
+  };
+  previousButton.addEventListener('click', () => moveBooking(-1));
+  nextButton.addEventListener('click', () => moveBooking(1));
   modal.addEventListener('click', (event) => {
     if (event.target.closest('[data-mi-portal-booking-close]')) closeBooking();
   });
   document.addEventListener('keydown', (event) => {
     if ('Escape' === event.key && !modal.hidden) closeBooking();
+    const editing = event.target.closest('input, textarea, select, [contenteditable="true"]');
+    if (!modal.hidden && !editing && 'ArrowLeft' === event.key) { event.preventDefault(); moveBooking(-1); }
+    if (!modal.hidden && !editing && 'ArrowRight' === event.key) { event.preventDefault(); moveBooking(1); }
     if ('Tab' !== event.key || modal.hidden) return;
     const focusable = [...modal.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
       .filter((element) => !element.hidden && null !== element.offsetParent);
@@ -118,6 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (inlineDetail) {
     inlineDetail.remove();
+    activeBookingIndex = bookingLinks.findIndex((link) => new URL(link.href).searchParams.get('mi_portal_booking') === new URL(window.location.href).searchParams.get('mi_portal_booking'));
     showBooking(inlineDetail);
   }
 });
