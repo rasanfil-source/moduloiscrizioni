@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.5\.9/);
+	assert.match(source, /Version:\s+3\.5\.10/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -246,7 +246,7 @@ test('il wizard è breve, crea solo bozze e rende gli alloggi condizionali', asy
   assert.match(portal, /Vuoi partire da un evento precedente/);
   assert.match(portal, /data-mi-overnight/);
   assert.match(portal, /data-mi-accommodations hidden/);
-  assert.match(script, /rooms\.hidden=!overnight\.checked/);
+  assert.match(script, /rooms\.hidden\s*=\s*!overnight\.checked/);
   assert.doesNotMatch(portal, /wp_insert_post\([\s\S]{0,300}post_status' => 'publish'/);
 });
 
@@ -976,4 +976,22 @@ test('la scheda prenotazione si apre in un popup accessibile con fallback', asyn
   assert.match(script, /window\.location\.assign\(link\.href\)/);
   assert.match(css, /\.mi-booking-modal__backdrop/);
   assert.match(css, /min-height: 100vh/);
+});
+
+test('anche il portale apre la scheda prenotazione in sovrimpressione', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /data-mi-portal-booking-open/);
+  assert.match(portal, /id="mi-portal-booking-detail"/);
+  assert.match(script, /role="dialog" aria-modal="true"/);
+  assert.match(script, /fetch\(link\.href/);
+  assert.match(script, /DOMParser/);
+  assert.match(script, /AbortController/);
+  assert.match(script, /'Escape'/);
+  assert.match(script, /'Tab'/);
+  assert.match(script, /replaceState/);
+  assert.match(script, /window\.location\.assign\(link\.href\)/);
+  assert.match(css, /\.mi-portal-modal__backdrop/);
+  assert.match(css, /min-height:100vh/);
 });

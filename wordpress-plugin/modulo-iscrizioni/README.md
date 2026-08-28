@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — versione 3.5.9
+# Modulo Iscrizioni — versione 3.5.10
 
 Plugin WordPress per configurare e pubblicare moduli, raccogliere iscrizioni e consegnarle in modo firmato alla console operativa Google Workspace.
 
@@ -18,7 +18,8 @@ Plugin WordPress per configurare e pubblicare moduli, raccogliere iscrizioni e c
 - identificativo `NONE`, `TEXT`, `QR` o `BARCODE`, generato localmente anche nell’email;
 - replica Workspace asincrona e riconciliante, marcata `SYNCED` soltanto dopo verifica completa;
 - shortcode `[modulo_iscrizioni event="ID"]`, pagina concentrata e modulo Divi 4.
-- anteprima riservata isolata dalla toolbar e dagli hook amministrativi del tema.
+- anteprima riservata isolata dalla toolbar e dagli hook amministrativi del tema;
+- scheda prenotazione in sovrimpressione accessibile sia nel pannello sia nel portale, con collegamento normale come fallback.
 
 ## Migrazione amministrativa dell’attività
 

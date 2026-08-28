@@ -191,8 +191,9 @@ final class MI_Portal {
 		if ( $event_id ) { $where = $wpdb->prepare( 'r.event_id=%d', $event_id ); } else { $safe = array_values( array_filter( array_map( 'absint', $event_ids ) ) ); $where = 'r.event_id IN (' . implode( ',', $safe ) . ')'; }
 		$rows = $wpdb->get_results( "SELECT r.id registration_id,r.event_id,r.created_at,r.buyer_email,p.id participant_id,p.first_name,p.last_name,events.post_title event_title FROM {$wpdb->prefix}mi_registrations r JOIN {$wpdb->prefix}mi_participants p ON p.registration_id=r.id JOIN {$wpdb->posts} events ON events.ID=r.event_id WHERE {$where} ORDER BY r.created_at DESC,p.id ASC LIMIT 10", ARRAY_A );
 		$base_url = self::base_url();
+		if ( $event_id ) $base_url = add_query_arg( 'mi_portal_event', $event_id, $base_url );
 		echo '<section><h2>Ultime iscrizioni</h2><div class="mi-booking-list">';
-		foreach ( $rows as $index => $row ) { $url = add_query_arg( array( 'mi_portal_view' => 'manage', 'mi_portal_booking' => $row['registration_id'] ), $base_url ); echo '<a href="' . esc_url( $url ) . '"><span>' . esc_html( $index + 1 ) . '</span><strong>' . esc_html( $row['first_name'] . ' ' . $row['last_name'] ) . '</strong><small>' . esc_html( $row['event_title'] . ' · ' . self::format_utc_date( $row['created_at'] ) . ' · ' . $row['buyer_email'] ) . '</small></a>'; }
+		foreach ( $rows as $index => $row ) { $url = add_query_arg( array( 'mi_portal_view' => 'manage', 'mi_portal_booking' => $row['registration_id'] ), $base_url ); echo '<a data-mi-portal-booking-open href="' . esc_url( $url ) . '"><span>' . esc_html( $index + 1 ) . '</span><strong>' . esc_html( $row['first_name'] . ' ' . $row['last_name'] ) . '</strong><small>' . esc_html( $row['event_title'] . ' · ' . self::format_utc_date( $row['created_at'] ) . ' · ' . $row['buyer_email'] ) . '</small></a>'; }
 		if ( ! $rows ) echo '<p class="mi-portal-muted">Nessuna iscrizione presente.</p>';
 		echo '</div></section>';
 		$booking_id = absint( $_GET['mi_portal_booking'] ?? 0 ); if ( $booking_id ) self::booking_detail( $booking_id );
@@ -205,7 +206,7 @@ final class MI_Portal {
 		$snapshot = json_decode( (string) ( $registration['snapshot_json'] ?? '' ), true );
 		$field_labels = array();
 		foreach ( (array) ( $snapshot['event']['participant_fields'] ?? array() ) as $field ) { $key = sanitize_key( $field['key'] ?? '' ); $label = sanitize_text_field( $field['label'] ?? '' ); if ( $key && $label ) $field_labels[ $key ] = $label; }
-		echo '<section class="mi-booking-detail"><h2>Prenotazione ' . esc_html( $registration['order_code'] ) . '</h2><p><strong>Referente:</strong> ' . esc_html( $registration['buyer_first_name'] . ' ' . $registration['buyer_last_name'] ) . '<br>' . esc_html( $registration['buyer_email'] . ' · ' . $registration['buyer_phone'] ) . '</p>';
+		echo '<section id="mi-portal-booking-detail" class="mi-booking-detail"><h2>Prenotazione ' . esc_html( $registration['order_code'] ) . '</h2><p><strong>Referente:</strong> ' . esc_html( $registration['buyer_first_name'] . ' ' . $registration['buyer_last_name'] ) . '<br>' . esc_html( $registration['buyer_email'] . ' · ' . $registration['buyer_phone'] ) . '</p>';
 		foreach ( $participants as $participant ) {
 			echo '<article><h3>' . esc_html( $participant['first_name'] . ' ' . $participant['last_name'] ) . ( 'CANCELLED' === $participant['status'] ? ' <small>— Annullata</small>' : '' ) . '</h3>';
 			$fields = json_decode( (string) $participant['extra_json'], true );
