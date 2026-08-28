@@ -269,7 +269,12 @@ final class MI_Portal {
 		$base_url = self::base_url();
 		if ( $event_id ) $base_url = add_query_arg( 'mi_portal_event', $event_id, $base_url );
 		if ( ! empty( $_GET['mi_portal_history'] ) ) $base_url = add_query_arg( 'mi_portal_history', '1', $base_url );
-		echo '<section><h2>Ultime iscrizioni</h2><div class="mi-booking-list">';
+		$list_title = 'Ultime iscrizioni';
+		if ( $event_id ) {
+			$event_title = sanitize_text_field( get_the_title( $event_id ) );
+			if ( $event_title ) $list_title .= ' — ' . $event_title;
+		}
+		echo '<section><h2>' . esc_html( $list_title ) . '</h2><div class="mi-booking-list">';
 		foreach ( $rows as $index => $row ) { $url = add_query_arg( array( 'mi_portal_view' => 'manage', 'mi_portal_booking' => $row['registration_id'] ), $base_url ); echo '<a data-mi-portal-booking-open href="' . esc_url( $url ) . '"><span>' . esc_html( $index + 1 ) . '</span><strong>' . esc_html( $row['first_name'] . ' ' . $row['last_name'] ) . '</strong><small>' . esc_html( $row['event_title'] . ' · ' . self::format_utc_date( $row['created_at'] ) . ' · ' . $row['buyer_email'] ) . '</small></a>'; }
 		if ( ! $rows ) echo '<p class="mi-portal-muted">Nessuna iscrizione presente.</p>';
 		echo '</div></section>';

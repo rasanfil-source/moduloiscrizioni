@@ -1034,6 +1034,13 @@ test('gli eventi passati sono separati dalla vista operativa ordinaria', async (
   assert.match(css, /\.mi-event-history-link/);
 });
 
+test('l’elenco iscrizioni indica l’evento selezionato', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(portal, /\$list_title = 'Ultime iscrizioni'/);
+  assert.match(portal, /\$list_title \.= ' — ' \. \$event_title/);
+  assert.match(portal, /esc_html\( \$list_title \)/);
+});
+
 test('il referente consulta stato e saldo senza esporre dati personali', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const service = await read('includes/class-mi-registration-service.php');
