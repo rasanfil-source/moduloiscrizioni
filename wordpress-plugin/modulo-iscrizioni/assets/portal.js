@@ -9,6 +9,11 @@ document.addEventListener('DOMContentLoaded', () => {
       steps.forEach((step, stepIndex) => step.classList.toggle('is-active', stepIndex === index));
       back.disabled = index === 0;
       next.hidden = index === steps.length - 1;
+      if (index === steps.length - 1) {
+        const value = (name) => form.querySelector(`[name="${name}"]`)?.value || 'Da definire';
+        const review = form.querySelector('[data-mi-review]');
+        if (review) review.innerHTML = `<strong>${value('title')}</strong><span>Inizio: ${value('starts_at')}</span><span>Chiusura iscrizioni: ${value('closes_at')}</span><span>Posti: ${value('capacity')}</span>`;
+      }
     };
     next.addEventListener('click', () => {
       const fields = [...steps[index].querySelectorAll('[required]')];
@@ -26,6 +31,29 @@ document.addEventListener('DOMContentLoaded', () => {
       rooms.hidden = !overnight.checked;
       if (!overnight.checked) rooms.querySelectorAll('input').forEach((input) => { input.checked = false; });
     });
+    form.querySelectorAll('[data-mi-required]').forEach((required) => required.addEventListener('change', () => {
+      const enabled = form.querySelector(`[data-mi-field="${required.dataset.miRequired}"]`);
+      if (required.checked && enabled) enabled.checked = true;
+    }));
+    form.querySelectorAll('[data-mi-field]').forEach((enabled) => enabled.addEventListener('change', () => {
+      const required = form.querySelector(`[data-mi-required="${enabled.dataset.miField}"]`);
+      if (!enabled.checked && required) required.checked = false;
+    }));
+    const pricing = form.querySelector('[data-mi-pricing]');
+    const fixedPrice = form.querySelector('[data-mi-fixed-price]');
+    const updatePricing = () => { if (pricing && fixedPrice) fixedPrice.hidden = pricing.value !== 'FIXED'; };
+    pricing?.addEventListener('change', updatePricing);
+    updatePricing();
+    const economic = form.querySelector('[data-mi-economic]');
+    const payment = form.querySelector('[data-mi-payment]');
+    const deposit = form.querySelector('[data-mi-deposit]');
+    const updateEconomic = () => {
+      const collects = ['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(economic?.value);
+      if (payment) payment.hidden = !collects;
+      if (deposit) deposit.hidden = economic?.value !== 'DEPOSIT_BALANCE';
+    };
+    economic?.addEventListener('change', updateEconomic);
+    updateEconomic();
     show();
   }
 

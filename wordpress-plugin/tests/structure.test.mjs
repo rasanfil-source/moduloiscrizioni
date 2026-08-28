@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.5\.13/);
+	assert.match(source, /Version:\s+3\.5\.14/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -237,13 +237,13 @@ test('i dati dimostrativi sono riservati a bozze, amministratori ed email in ant
   assert.match(registration, /!\s*\$allow_unpublished\s*&&\s*'OPEN'\s*!==\s*self::registration_time_state/);
 });
 
-test('il wizard è breve, crea solo bozze e rende gli alloggi condizionali', async () => {
+test('il wizard guidato crea solo bozze e rende gli alloggi condizionali', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const script = await read('assets/portal.js');
-  assert.match(portal, /1 di 5/);
-  assert.match(portal, /5 di 5/);
+  assert.match(portal, /1 di 8/);
+  assert.match(portal, /8 di 8/);
   assert.match(portal, /post_status' => 'draft'/);
-  assert.match(portal, /Vuoi partire da un evento precedente/);
+  assert.match(portal, /riutilizza la configurazione di un evento precedente/);
   assert.match(portal, /data-mi-overnight/);
   assert.match(portal, /data-mi-accommodations hidden/);
   assert.match(script, /rooms\.hidden\s*=\s*!overnight\.checked/);
@@ -1040,6 +1040,23 @@ test('l’elenco iscrizioni indica l’evento selezionato', async () => {
   assert.match(portal, /\$list_title = 'Ultime iscrizioni'/);
   assert.match(portal, /\$list_title \.= ' — ' \. \$event_title/);
   assert.match(portal, /esc_html\( \$list_title \)/);
+});
+
+test('il wizard crea una bozza completa e mostra collegamenti espliciti', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  assert.match(portal, /1 di 8/);
+  assert.match(portal, /name="description"/);
+  assert.match(portal, /name="cover_image"/);
+  assert.match(portal, /participant_fields\[\]/);
+  assert.match(portal, /participant_extra_scope/);
+  assert.match(portal, /custom_question_label\[\]/);
+  assert.match(portal, /name="pricing_mode"/);
+  assert.match(portal, /Bozza creata correttamente/);
+  assert.match(portal, /Completa la bozza/);
+  assert.match(portal, /Apri anteprima/);
+  assert.match(script, /data-mi-review/);
+  assert.match(script, /data-mi-pricing/);
 });
 
 test('il referente consulta stato e saldo senza esporre dati personali', async () => {

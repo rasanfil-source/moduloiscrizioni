@@ -50,19 +50,58 @@ final class MI_Portal {
 		if ( ! $title ) return self::redirect_result( 'Titolo obbligatorio.', true );
 		$copy_id = absint( $_POST['copy_event_id'] ?? 0 );
 		if ( $copy_id && ! MI_Access::can_access_event( $copy_id ) ) wp_die( 'Evento modello non accessibile.', 403 );
-		$event_id = wp_insert_post( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'draft', 'post_title' => $title, 'post_author' => get_current_user_id() ), true );
+		$description = wp_kses_post( wp_unslash( $_POST['description'] ?? '' ) );
+		$event_id = wp_insert_post( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'draft', 'post_title' => $title, 'post_content' => $description, 'post_author' => get_current_user_id() ), true );
 		if ( is_wp_error( $event_id ) ) return self::redirect_result( 'Non è stato possibile creare la bozza.', true );
 		if ( $copy_id ) self::copy_configuration( $copy_id, $event_id );
 		$activity_id = absint( $_POST['activity_id'] ?? 0 );
 		if ( $activity_id && MI_Access::can_access_activity( $activity_id ) ) update_post_meta( $event_id, '_mi_activity_id', $activity_id );
 		self::save_date( $event_id, '_mi_event_starts_at', $_POST['starts_at'] ?? '' );
+		self::save_date( $event_id, '_mi_registration_opens_at', $_POST['opens_at'] ?? '' );
 		self::save_date( $event_id, '_mi_registration_closes_at', $_POST['closes_at'] ?? '' );
+		update_post_meta( $event_id, '_mi_event_location', mb_substr( sanitize_text_field( wp_unslash( $_POST['location'] ?? '' ) ), 0, 180 ) );
 		update_post_meta( $event_id, '_mi_capacity', min( 10000, max( 1, absint( $_POST['capacity'] ?? 30 ) ) ) );
+		update_post_meta( $event_id, '_mi_waitlist_enabled', ! empty( $_POST['waitlist_enabled'] ) ? '1' : '0' );
 		$overnight = ! empty( $_POST['overnight'] ) ? '1' : '0';
 		update_post_meta( $event_id, '_mi_overnight_enabled', $overnight );
 		$accommodations = '1' === $overnight ? array_values( array_intersect( array( 'SINGOLA', 'DOPPIA_SEPARATI', 'DOPPIA_MATRIMONIALE', 'TRIPLA', 'MULTIPLA' ), array_map( 'strtoupper', array_map( 'sanitize_key', (array) wp_unslash( $_POST['accommodations'] ?? array() ) ) ) ) ) : array();
 		update_post_meta( $event_id, '_mi_accommodations', $accommodations );
-		self::redirect_result( 'Bozza creata.', false, $event_id );
+		$field_configuration = MI_Field_Schema::sanitize_configuration(
+			'CUSTOM',
+			(array) wp_unslash( $_POST['participant_fields'] ?? array() ),
+			(array) wp_unslash( $_POST['participant_required'] ?? array() )
+		);
+		update_post_meta( $event_id, '_mi_data_profile', $field_configuration['profile'] );
+		update_post_meta( $event_id, '_mi_participant_fields', $field_configuration['enabled'] );
+		update_post_meta( $event_id, '_mi_participant_required_fields', $field_configuration['required'] );
+		update_post_meta( $event_id, '_mi_high_impact_approved', MI_Field_Schema::has_high_impact_fields( $field_configuration ) ? '1' : '0' );
+		$scope = strtoupper( sanitize_key( wp_unslash( $_POST['participant_extra_scope'] ?? 'ONE' ) ) );
+		update_post_meta( $event_id, '_mi_participant_extra_scope', 'ALL' === $scope ? 'ALL' : 'ONE' );
+		$question_labels = (array) wp_unslash( $_POST['custom_question_label'] ?? array() );
+		$question_types = (array) wp_unslash( $_POST['custom_question_type'] ?? array() );
+		$question_required = (array) wp_unslash( $_POST['custom_question_required'] ?? array() );
+		$custom_questions = array();
+		foreach ( array_slice( $question_labels, 0, 8, true ) as $index => $label ) {
+			$label = sanitize_text_field( $label );
+			if ( ! $label ) continue;
+			$custom_questions[] = array( 'key' => 'domanda_' . ( $index + 1 ), 'label' => $label, 'type' => $question_types[ $index ] ?? 'text', 'required' => ! empty( $question_required[ $index ] ), 'retention' => 'STANDARD' );
+		}
+		update_post_meta( $event_id, '_mi_custom_participant_fields', MI_Field_Schema::sanitize_custom_fields( $custom_questions ) );
+		update_post_meta( $event_id, '_mi_special_requests_enabled', ! empty( $_POST['special_requests_enabled'] ) ? '1' : '0' );
+		update_post_meta( $event_id, '_mi_marketing_enabled', ! empty( $_POST['marketing_enabled'] ) ? '1' : '0' );
+		$pricing_mode = strtoupper( sanitize_key( wp_unslash( $_POST['pricing_mode'] ?? 'NONE' ) ) );
+		if ( ! in_array( $pricing_mode, array( 'NONE', 'ZERO', 'FIXED' ), true ) ) $pricing_mode = 'NONE';
+		$fixed_price = self::parse_euro_cents( wp_unslash( $_POST['fixed_price'] ?? '' ) );
+		update_post_meta( $event_id, '_mi_pricing_mode', $pricing_mode );
+		update_post_meta( $event_id, '_mi_fixed_price_cents', 'FIXED' === $pricing_mode && ! is_wp_error( $fixed_price ) ? $fixed_price : 0 );
+		$economic_mode = strtoupper( sanitize_key( wp_unslash( $_POST['economic_mode'] ?? 'REGISTRATION_ONLY' ) ) );
+		if ( ! in_array( $economic_mode, array( 'REGISTRATION_ONLY', 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) $economic_mode = 'REGISTRATION_ONLY';
+		update_post_meta( $event_id, '_mi_economic_mode', $economic_mode );
+		update_post_meta( $event_id, '_mi_deposit_percentage', min( 99, max( 1, absint( $_POST['deposit_percentage'] ?? 30 ) ) ) );
+		$payment_methods = array_values( array_intersect( array( 'BANK_TRANSFER', 'CARD', 'CASH' ), array_map( 'strtoupper', array_map( 'sanitize_key', (array) wp_unslash( $_POST['payment_methods'] ?? array() ) ) ) ) );
+		update_post_meta( $event_id, '_mi_payment_methods', in_array( $economic_mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ? $payment_methods : array() );
+		$upload_warning = self::save_cover_upload( $event_id );
+		self::redirect_result( $upload_warning ? 'Bozza creata; immagine non caricata: ' . $upload_warning : 'Bozza creata correttamente.', false, $event_id );
 	}
 
 	public static function url() {
@@ -99,6 +138,31 @@ final class MI_Portal {
 	private static function save_date( $event_id, $key, $value ) {
 		$value = sanitize_text_field( wp_unslash( $value ) );
 		if ( preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $value ) ) update_post_meta( $event_id, $key, $value );
+	}
+
+	private static function save_cover_upload( $event_id ) {
+		if ( empty( $_FILES['cover_image']['name'] ) ) return '';
+		$file = $_FILES['cover_image'];
+		if ( ! empty( $file['error'] ) || empty( $file['tmp_name'] ) ) return 'caricamento incompleto';
+		if ( (int) $file['size'] > 5 * MB_IN_BYTES ) return 'file superiore a 5 MB';
+		$checked = wp_check_filetype_and_ext( $file['tmp_name'], sanitize_file_name( $file['name'] ) );
+		if ( ! in_array( $checked['type'] ?? '', array( 'image/jpeg', 'image/png', 'image/webp' ), true ) ) return 'formato non ammesso';
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/image.php';
+		require_once ABSPATH . 'wp-admin/includes/media.php';
+		$attachment_id = media_handle_upload( 'cover_image', $event_id, array(), array( 'test_form' => false ) );
+		if ( is_wp_error( $attachment_id ) ) return 'WordPress non ha potuto salvare il file';
+		set_post_thumbnail( $event_id, $attachment_id );
+		return '';
+	}
+
+	private static function parse_euro_cents( $value ) {
+		$value = preg_replace( '/[^0-9,.]/', '', (string) $value );
+		if ( '' === $value ) return 0;
+		if ( false !== strpos( $value, ',' ) ) $value = str_replace( '.', '', $value );
+		$value = str_replace( ',', '.', $value );
+		if ( ! preg_match( '/^\d+(?:\.\d{1,2})?$/', $value ) ) return new WP_Error( 'invalid_amount' );
+		return (int) round( (float) $value * 100 );
 	}
 
 	private static function copy_configuration( $source, $target ) {
@@ -339,12 +403,16 @@ final class MI_Portal {
 	private static function create_view() {
 		$models = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft' ), 'numberposts' => 30, 'orderby' => 'date', 'order' => 'DESC' ) );
 		$activities = get_posts( array( 'post_type' => MI_Event_Post_Type::ACTIVITY_TYPE, 'post_status' => array( 'publish', 'draft' ), 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) );
-		?><form class="mi-event-wizard" method="post"><input type="hidden" name="mi_portal_action" value="create_event"><?php wp_nonce_field( 'mi_portal_create_event', 'mi_portal_nonce' ); ?>
-		<section class="mi-wizard-step is-active"><span class="mi-portal-eyebrow">1 di 5</span><h2>La nuova attività</h2><label>Titolo<input name="title" required placeholder="Es. Pellegrinaggio ad Assisi"></label><label>Gruppo o settore organizzatore <small>(facoltativo)</small><select name="activity_id"><option value="">Nessuno</option><?php foreach ( $activities as $activity ) : ?><option value="<?php echo esc_attr( $activity->ID ); ?>"><?php echo esc_html( $activity->post_title ); ?></option><?php endforeach; ?></select></label></section>
-		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">2 di 5</span><h2>Vuoi partire da un evento precedente?</h2><select name="copy_event_id"><option value="">No, parto da zero</option><?php foreach ( $models as $model ) : ?><option value="<?php echo esc_attr( $model->ID ); ?>"><?php echo esc_html( $model->post_title ); ?></option><?php endforeach; ?></select><p class="mi-portal-muted">Copiamo soltanto configurazione e domande, mai iscrizioni o dati personali.</p></section>
-		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">3 di 5</span><h2>Date e posti</h2><label>Data e ora di inizio<input type="datetime-local" name="starts_at"></label><label>Chiusura iscrizioni<input type="datetime-local" name="closes_at"></label><label>Posti disponibili<input type="number" min="1" max="10000" name="capacity" value="30"></label></section>
-		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">4 di 5</span><h2>Servizi essenziali</h2><label class="mi-check"><input type="checkbox" name="overnight" value="1" data-mi-overnight> È previsto il pernottamento</label><div data-mi-accommodations hidden><h3>Tipi di alloggio</h3><?php foreach ( array( 'SINGOLA' => 'Singola', 'DOPPIA_SEPARATI' => 'Doppia con letti separati', 'DOPPIA_MATRIMONIALE' => 'Doppia matrimoniale', 'TRIPLA' => 'Tripla', 'MULTIPLA' => 'Multipla' ) as $code => $label ) : ?><label class="mi-check"><input type="checkbox" name="accommodations[]" value="<?php echo esc_attr( $code ); ?>"> <?php echo esc_html( $label ); ?></label><?php endforeach; ?></div></section>
-		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">5 di 5</span><h2>Controlla e crea la bozza</h2><p>La bozza non sarà pubblicata automaticamente. Potrai completare quote, servizi e domande prima dell’anteprima.</p><button class="mi-primary" type="submit">Crea in bozza</button></section>
+		$catalog = MI_Field_Schema::catalog();
+		?><form class="mi-event-wizard" method="post" enctype="multipart/form-data"><input type="hidden" name="mi_portal_action" value="create_event"><?php wp_nonce_field( 'mi_portal_create_event', 'mi_portal_nonce' ); ?>
+		<section class="mi-wizard-step is-active"><span class="mi-portal-eyebrow">1 di 8</span><h2>Come si chiama?</h2><label>Titolo dell’evento<input name="title" required maxlength="180" placeholder="Es. Pellegrinaggio ad Assisi"></label><label>Gruppo o settore organizzatore <small>(facoltativo)</small><select name="activity_id"><option value="">Nessuno</option><?php foreach ( $activities as $activity ) : ?><option value="<?php echo esc_attr( $activity->ID ); ?>"><?php echo esc_html( $activity->post_title ); ?></option><?php endforeach; ?></select></label><label>Oppure riutilizza la configurazione di un evento precedente<select name="copy_event_id"><option value="">No, parto da zero</option><?php foreach ( $models as $model ) : ?><option value="<?php echo esc_attr( $model->ID ); ?>"><?php echo esc_html( $model->post_title ); ?></option><?php endforeach; ?></select></label><p class="mi-portal-muted">Vengono copiate solo impostazioni e domande, mai iscrizioni o dati personali.</p></section>
+		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">2 di 8</span><h2>Cosa devono sapere le persone?</h2><label>Luogo<input name="location" maxlength="180" placeholder="Es. Basilica di Sant’Eugenio"></label><label>Presentazione e informazioni<textarea name="description" rows="7" placeholder="Descrivi programma, orari, cosa portare e ogni informazione utile."></textarea></label></section>
+		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">3 di 8</span><h2>Immagine</h2><label>Immagine in evidenza <small>(facoltativa)</small><input type="file" name="cover_image" accept="image/jpeg,image/png,image/webp"></label><p class="mi-portal-muted">JPG, PNG o WebP, massimo 5 MB. Comparirà nella scheda e nella pagina dell’evento.</p></section>
+		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">4 di 8</span><h2>Date e posti</h2><div class="mi-wizard-grid"><label>Apertura iscrizioni<input type="datetime-local" name="opens_at"></label><label>Data e ora di inizio<input type="datetime-local" name="starts_at" required></label><label>Chiusura iscrizioni<input type="datetime-local" name="closes_at" required></label><label>Posti disponibili<input type="number" min="1" max="10000" name="capacity" value="30" required></label></div><label class="mi-check"><input type="checkbox" name="waitlist_enabled" value="1"> Attiva automaticamente la lista d’attesa a esaurimento posti</label></section>
+		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">5 di 8</span><h2>Quali dati chiediamo?</h2><p>Nome e cognome sono sempre obbligatori per ogni partecipante.</p><div class="mi-field-choice-list"><?php foreach ( $catalog as $key => $field ) : ?><div class="mi-field-choice"><label class="mi-check"><input type="checkbox" name="participant_fields[]" value="<?php echo esc_attr( $key ); ?>" data-mi-field="<?php echo esc_attr( $key ); ?>"> <?php echo esc_html( $field['label'] ); ?></label><label class="mi-check mi-field-required"><input type="checkbox" name="participant_required[]" value="<?php echo esc_attr( $key ); ?>" data-mi-required="<?php echo esc_attr( $key ); ?>"> Obbligatorio</label><small><?php echo esc_html( $field['help'] ?? '' ); ?></small></div><?php endforeach; ?></div><fieldset><legend>Dati aggiuntivi da compilare</legend><label class="mi-check"><input type="radio" name="participant_extra_scope" value="ONE" checked> Solo per uno degli iscritti (il primo, modificabile)</label><label class="mi-check"><input type="radio" name="participant_extra_scope" value="ALL"> Per tutti gli iscritti</label></fieldset></section>
+		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">6 di 8</span><h2>Domande particolari</h2><p class="mi-portal-muted">Aggiungi solo ciò che serve davvero. Puoi lasciare tutto vuoto.</p><div class="mi-custom-questions"><?php for ( $i = 0; $i < 4; $i++ ) : ?><div class="mi-custom-question"><label>Domanda <?php echo esc_html( $i + 1 ); ?><input name="custom_question_label[]" maxlength="120" placeholder="Es. Allergie da segnalare"></label><label>Risposta<select name="custom_question_type[]"><option value="text">Breve</option><option value="textarea">Testo libero</option><option value="date">Data</option><option value="email">Email</option><option value="tel">Telefono</option></select></label><label class="mi-check"><input type="checkbox" name="custom_question_required[<?php echo esc_attr( $i ); ?>]" value="1"> Obbligatoria</label></div><?php endfor; ?></div><label class="mi-check"><input type="checkbox" name="special_requests_enabled" value="1"> Mostra uno spazio facoltativo per richieste particolari</label><label class="mi-check"><input type="checkbox" name="marketing_enabled" value="1"> Mostra “Comunicazioni su future iniziative”</label></section>
+		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">7 di 8</span><h2>Servizi e quota</h2><label class="mi-check"><input type="checkbox" name="overnight" value="1" data-mi-overnight> È previsto il pernottamento</label><div data-mi-accommodations hidden><h3>Tipi di alloggio</h3><?php foreach ( array( 'SINGOLA' => 'Singola', 'DOPPIA_SEPARATI' => 'Doppia con letti separati', 'DOPPIA_MATRIMONIALE' => 'Doppia matrimoniale', 'TRIPLA' => 'Tripla', 'MULTIPLA' => 'Multipla' ) as $code => $label ) : ?><label class="mi-check"><input type="checkbox" name="accommodations[]" value="<?php echo esc_attr( $code ); ?>"> <?php echo esc_html( $label ); ?></label><?php endforeach; ?></div><label>Prezzo<select name="pricing_mode" data-mi-pricing><option value="NONE">Nessun prezzo</option><option value="ZERO">Evento gratuito</option><option value="FIXED">Quota uguale per tutti</option></select></label><label data-mi-fixed-price hidden>Quota per partecipante (€)<input name="fixed_price" inputmode="decimal" placeholder="Es. 120,00"></label><label>Modalità di pagamento richiesta<select name="economic_mode" data-mi-economic><option value="REGISTRATION_ONLY">Nessun pagamento previsto</option><option value="PRICE_ONLY">Prezzo solamente informativo</option><option value="FULL_PAYMENT">Pagamento completo richiesto</option><option value="DEPOSIT_BALANCE">Caparra richiesta, saldo successivo</option></select></label><div data-mi-payment hidden><label data-mi-deposit hidden>Percentuale caparra<input type="number" name="deposit_percentage" min="1" max="99" value="30"></label><fieldset><legend>Metodi accettati</legend><label class="mi-check"><input type="checkbox" name="payment_methods[]" value="BANK_TRANSFER"> Bonifico</label><label class="mi-check"><input type="checkbox" name="payment_methods[]" value="CARD"> Carta</label><label class="mi-check"><input type="checkbox" name="payment_methods[]" value="CASH"> Contanti</label></fieldset></div></section>
+		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">8 di 8</span><h2>Controlla e crea la bozza</h2><div class="mi-wizard-review" data-mi-review></div><p>Nulla sarà pubblicato automaticamente e non partirà alcuna email. Dopo la creazione vedrai una conferma chiara e i collegamenti alla bozza e all’anteprima.</p><button class="mi-primary" type="submit">Crea la bozza dell’evento</button></section>
 		<div class="mi-wizard-actions"><button type="button" class="mi-secondary" data-mi-back disabled>Indietro</button><button type="button" class="mi-primary" data-mi-next>Continua</button></div></form><?php
 	}
 
@@ -378,5 +446,18 @@ final class MI_Portal {
 	}
 	private static function format_money( $cents ) { return number_format( max( 0, (int) $cents ) / 100, 2, ',', '.' ) . ' €'; }
 	private static function base_url() { return ! empty( $_GET['mi_portal'] ) ? add_query_arg( 'mi_portal', '1', home_url( '/' ) ) : get_permalink(); }
-	private static function notice() { if ( empty( $_GET['mi_portal_message'] ) ) return; $error = ! empty( $_GET['mi_portal_error'] ); echo '<div class="mi-portal-notice ' . ( $error ? 'mi-portal-error' : '' ) . '">' . esc_html( sanitize_text_field( wp_unslash( $_GET['mi_portal_message'] ) ) ) . '</div>'; }
+	private static function notice() {
+		if ( empty( $_GET['mi_portal_message'] ) ) return;
+		$error = ! empty( $_GET['mi_portal_error'] );
+		$event_id = absint( $_GET['mi_portal_event'] ?? 0 );
+		echo '<div class="mi-portal-notice ' . ( $error ? 'mi-portal-error' : 'mi-portal-success' ) . '"><strong>' . esc_html( sanitize_text_field( wp_unslash( $_GET['mi_portal_message'] ) ) ) . '</strong>';
+		if ( ! $error && $event_id && MI_Access::can_access_event( $event_id ) ) {
+			$edit_url = get_edit_post_link( $event_id, 'raw' );
+			$preview_url = wp_nonce_url( admin_url( 'admin-post.php?action=mi_anteprima_evento&event=' . $event_id ), 'mi_anteprima_evento_' . $event_id );
+			echo '<p>La bozza #' . esc_html( $event_id ) . ' è stata salvata e resta non pubblicata.</p><div class="mi-portal-notice__actions">';
+			if ( $edit_url ) echo '<a class="mi-primary" href="' . esc_url( $edit_url ) . '">Completa la bozza</a>';
+			echo '<a class="mi-secondary" href="' . esc_url( $preview_url ) . '">Apri anteprima</a></div>';
+		}
+		echo '</div>';
+	}
 }
