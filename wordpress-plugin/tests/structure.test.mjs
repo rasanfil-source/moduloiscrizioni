@@ -7,7 +7,7 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.5\.12/);
+	assert.match(source, /Version:\s+3\.5\.13/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -945,6 +945,8 @@ test('il pannello verifica lo schema economico senza creare iscrizioni', async (
   assert.match(settings, /Verifica schema economico/);
   assert.match(settings, /schema_version/);
   assert.match(client, /STATO_SCHEMA/);
+	assert.match(settings, /1\.6\.0/);
+	assert.match(settings, /accommodation_headers/);
 });
 
 test('l’elenco e la scheda prenotazione usano una presentazione operativa e responsive', async () => {
@@ -1023,4 +1025,39 @@ test('gli eventi passati sono separati dalla vista operativa ordinaria', async (
   assert.match(portal, /is_past_event/);
   assert.match(portal, /Eventi passati/);
   assert.match(css, /\.mi-event-history-link/);
+});
+
+test('il referente consulta stato e saldo senza esporre dati personali', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const service = await read('includes/class-mi-registration-service.php');
+  const email = await read('includes/class-mi-modello-email.php');
+  assert.match(portal, /mi_status/);
+  assert.match(portal, /public_status_view/);
+  assert.match(portal, /mi_public_status/);
+  assert.match(portal, /mi_status_rate_/);
+  assert.match(portal, /noindex,nofollow,noarchive/);
+  assert.match(service, /public_status_token/);
+  assert.match(service, /hash_equals/);
+  assert.match(service, /reconcile_workspace_payments\( array\( \$registration\['order_code'\] \) \)/);
+  assert.doesNotMatch(service, /public_status[\s\S]{0,4000}buyer_phone/);
+  assert.match(email, /Controlla stato e saldo/);
+});
+
+test('i promemoria operativi passano dalla coda protetta e le bozze restano in anteprima', async () => {
+  const activator = await read('includes/class-mi-activator.php');
+  const controller = await read('includes/class-mi-rest-controller.php');
+  const sender = await read('includes/class-mi-spedizione-email.php');
+  const model = await read('includes/class-mi-modello-email.php');
+  assert.match(controller, /QUEUE_OPERATIONAL_EMAILS/);
+	assert.match(controller, /GET_EMAIL_MODE/);
+  assert.match(controller, /verify_workspace_envelope/);
+  assert.match(sender, /accoda_comunicazione_operativa/);
+  assert.match(sender, /PRE_DEPARTURE_REMINDER/);
+  assert.match(sender, /BALANCE_REMINDER/);
+  assert.match(sender, /get_post_status\( \$event_id \).*PREVIEW/s);
+	assert.match(sender, /allow_operational/);
+  assert.match(sender, /communication_id/);
+	assert.match(activator, /UNIQUE KEY origin_key/);
+	assert.match(sender, /INSERT IGNORE INTO/);
+  assert.match(model, /crea_istantanea_operativa/);
 });

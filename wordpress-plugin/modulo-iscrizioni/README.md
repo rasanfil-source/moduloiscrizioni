@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — versione 3.5.12
+# Modulo Iscrizioni — versione 3.5.13
 
 Plugin WordPress per configurare e pubblicare moduli, raccogliere iscrizioni e consegnarle in modo firmato alla console operativa Google Workspace.
 
@@ -22,6 +22,9 @@ Plugin WordPress per configurare e pubblicare moduli, raccogliere iscrizioni e c
 - scheda prenotazione in sovrimpressione accessibile sia nel pannello sia nel portale, con collegamento normale come fallback.
 - gerarchia della scheda portale centrata sui partecipanti, con codice marginale e referente indicato solo nelle prenotazioni multiple;
 - tessere con data e immagine; gli eventi passati sono separati dalla vista ordinaria e raggiungibili dal collegamento allo storico.
+- consultazione riservata dello stato e del saldo mediante codice/email o collegamento firmato, senza esporre note o dati dei partecipanti;
+- promemoria pre-evento e promemoria saldo preparati da Sheets e consegnati alla coda WordPress firmata;
+- gli eventi in bozza forzano sempre le comunicazioni operative nello stato `PREVIEW`.
 
 ## Migrazione amministrativa dell’attività
 
@@ -35,7 +38,7 @@ Il plugin non riscuote denaro e non conserva coordinate bancarie, numeri complet
 
 1. Comprimere la cartella `modulo-iscrizioni` in uno ZIP e aggiornare il plugin nell’ambiente autorizzato.
 2. Verificare che l’upgrade abbia impostato `mi_db_version` alla stessa versione del plugin e aggiornato tabelle e indici.
-3. Aggiornare Apps Script allo schema `1.5.0`, eseguire `configuraCartellaDiLavoro()` e verificare lo schema dal pannello WordPress.
+3. Aggiornare Apps Script allo schema `1.6.0`, eseguire `configuraCartellaDiLavoro()` e verificare lo schema dal pannello WordPress.
 4. Aprire e salvare gli eventi pubblicati per creare la prima revisione completa; ripubblicare quelli segnalati dopo modifiche all’attività.
 5. Collaudare capienza, retry, annullamento, scadenza, email e replica con sole identità fittizie.
 

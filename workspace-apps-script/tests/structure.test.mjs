@@ -11,6 +11,8 @@ const segreteriaHtml = await readFile(new URL('Segreteria.html', sourceDir), 'ut
 
 test('tutti i file Apps Script hanno sintassi valida', () => {
   for (const [name, source] of Object.entries(sources)) assert.doesNotThrow(() => new vm.Script(source, { filename: name }));
+  const embeddedScript = segreteriaHtml.match(/<script>([\s\S]*?)<\/script>/i)?.[1].replace(/<\?!=[\s\S]*?\?>/g, 'TEST') || '';
+  assert.doesNotThrow(() => new vm.Script(embeddedScript, { filename: 'Segreteria.html' }));
 });
 
 test('il setup dichiara tutte le schede operative', () => {
@@ -32,7 +34,8 @@ test('il web endpoint fallisce chiuso e richiede HMAC e anti replay', () => {
 });
 
 test('il sorgente non incorpora destinazioni o coordinate operative', () => {
-  assert.doesNotMatch(combined, /docs\.google\.com\/spreadsheets\/d\//);
+  assert.doesNotMatch(combined, /docs\.google\.com\/spreadsheets\/d\/[A-Za-z0-9_-]{20,}/);
+  assert.match(sources['Segreteria.gs'], /spreadsheet\.getId\(\)/);
   assert.doesNotMatch(combined, /@[a-z0-9.-]+\.[a-z]{2,}/i);
   assert.doesNotMatch(combined, /\bIT\d{2}[A-Z]\d{10,}/);
 });
@@ -43,6 +46,9 @@ test('i pagamenti ammettono solo bonifico carta e contanti senza dati carta', ()
   assert.match(sources['Config.gs'], /CONTANTE/);
   assert.match(sources['Payments.gs'], /contienePossibileNumeroCarta_/);
   assert.match(sources['Payments.gs'], /id_inserimento_origine/);
+	assert.match(sources['Payments.gs'], /FREE_ORDER/);
+	assert.match(sources['Payments.gs'], /OVERPAYMENT/);
+	assert.match(sources['Payments.gs'], /EXCESS_REFUND/);
 });
 
 test('le funzioni Apps Script applicative hanno nomi italiani', () => {
@@ -55,26 +61,38 @@ test('le funzioni Apps Script applicative hanno nomi italiani', () => {
   }
 });
 
-test('la migrazione aggiunge il riepilogo economico alle iscrizioni', () => {
-	assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.5\.0'/);
+test('la migrazione aggiunge riepilogo economico e sistemazioni operative', () => {
+	assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.6\.0'/);
   assert.match(sources['Config.gs'], /modalita_economica/);
   assert.match(sources['Config.gs'], /primo_versamento_centesimi/);
   assert.match(sources['Config.gs'], /saldo_centesimi/);
   assert.match(sources['Setup.gs'], /MI_INTESTAZIONI_PRECEDENTI/);
   assert.match(sources['WebApp.gs'], /payment_methods/);
+	assert.match(sources['Config.gs'], /ACCOMMODATIONS: 'Sistemazioni'/);
 });
 
 test('la console Sheets consulta prenotazioni e genera elenchi operativi per evento', () => {
-	assert.match(sources['Setup.gs'], /Apri scheda prenotazione/);
+	assert.match(sources['Setup.gs'], /Apri segreteria/);
 	assert.match(sources['Setup.gs'], /Configura elenco operativo/);
+	assert.match(sources['Setup.gs'], /Comunicazioni operative/);
 	assert.match(sources['Segreteria.gs'], /showSidebar/);
+	assert.match(sources['Segreteria.gs'], /showModelessDialog/);
 	assert.doesNotMatch(sources['Segreteria.gs'], /SpreadsheetApp\.create/);
 	assert.doesNotMatch(sources['Segreteria.gs'], /creaIniziativaGuidata|CREATE_EVENT_DRAFT/);
 	assert.match(sources['Config.gs'], /Operazioni segreteria/);
 	assert.match(sources['Segreteria.gs'], /MI_SHEETS\.SECRETARY_OPERATIONS/);
 	assert.match(sources['Segreteria.gs'], /MI_SHEETS\.OPERATIONAL_VIEWS/);
 	assert.match(sources['Segreteria.gs'], /generaElencoOperativo_/);
+	assert.match(sources['Segreteria.gs'], /cercaPrenotazioniSegreteria/);
+	assert.match(sources['Segreteria.gs'], /cambiaSistemazioneSegreteria/);
+	assert.match(sources['Segreteria.gs'], /destinatariComunicazioneOperativa_/);
+	assert.match(sources['Segreteria.gs'], /statoComunicazioniOperative/);
+	assert.match(sources['Segreteria.gs'], /Contatto di emergenza/);
+	assert.match(sources['Segreteria.gs'], /creaUrlStampaElenco_/);
 	assert.match(segreteriaHtml, /Conferma modifiche/);
+	assert.match(segreteriaHtml, /Aggiungi versamento/);
+	assert.match(segreteriaHtml, /posti liberi/);
+	assert.match(segreteriaHtml, /allow_operational/);
 });
 
 test('lo stato individuale dei partecipanti arriva nelle schede e negli elenchi', () => {

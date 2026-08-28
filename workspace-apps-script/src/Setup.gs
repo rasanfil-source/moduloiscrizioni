@@ -2,8 +2,10 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('Modulo iscrizioni')
     .addItem('Inizializza/aggiorna struttura', 'configuraCartellaDiLavoro')
     .addSeparator()
-    .addItem('Apri scheda prenotazione', 'apriSchedaPrenotazione')
+    .addItem('Apri segreteria', 'apriSchedaPrenotazione')
     .addItem('Configura elenco operativo', 'apriConfigurazioneElencoOperativo')
+    .addItem('Comunicazioni operative', 'apriComunicazioniOperative')
+    .addItem('Configura collegamento WordPress', 'configuraEndpointWordPress')
     .addSeparator()
     .addItem('Convalida pagamenti selezionati', 'convalidaPagamentiSelezionati')
     .addItem('Convalida tutti i pagamenti in attesa', 'convalidaPagamentiInAttesa')
@@ -109,7 +111,7 @@ function inizializzaConvalidaPagamenti_() {
 }
 
 function applicaProtezioniConAvviso_() {
-  const editable = [MI_SHEETS.PAYMENT_INTAKE, MI_SHEETS.SECRETARY_OPERATIONS, MI_SHEETS.OPERATIONAL_VIEWS];
+  const editable = [MI_SHEETS.PAYMENT_INTAKE, MI_SHEETS.SECRETARY_OPERATIONS, MI_SHEETS.OPERATIONAL_VIEWS, MI_SHEETS.ACCOMMODATIONS];
   Object.keys(MI_HEADERS).forEach(function (name) {
     const sheet = ottieniSchedaObbligatoria_(name);
     sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET).forEach(function (protection) { protection.remove(); });

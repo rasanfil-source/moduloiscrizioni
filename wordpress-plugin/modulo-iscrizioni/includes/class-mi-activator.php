@@ -170,6 +170,7 @@ final class MI_Activator {
 			registration_id bigint(20) unsigned NOT NULL,
 			recipient varchar(254) NOT NULL,
 			template_type varchar(40) NOT NULL,
+			origin_key varchar(64) NULL,
 			payload_json longtext NOT NULL,
 			status varchar(24) NOT NULL DEFAULT 'PREVIEW',
 			attempts smallint(5) unsigned NOT NULL DEFAULT 0,
@@ -179,6 +180,7 @@ final class MI_Activator {
 			created_at datetime NOT NULL,
 			PRIMARY KEY  (id),
 			KEY registration_id (registration_id),
+			UNIQUE KEY origin_key (origin_key),
 			KEY status (status),
 			KEY dispatch_queue (status,attempts,id)
 		) ENGINE=InnoDB {$charset};" );

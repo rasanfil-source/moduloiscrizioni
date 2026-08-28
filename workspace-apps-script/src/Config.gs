@@ -1,4 +1,4 @@
-const MI_SCHEMA_VERSION = '1.5.0';
+const MI_SCHEMA_VERSION = '1.6.0';
 const MI_SHEETS = Object.freeze({
   CONFIG: 'Configurazione',
   EVENTS: 'Eventi',
@@ -12,6 +12,7 @@ const MI_SHEETS = Object.freeze({
   EVENT_WORKSPACES: 'Fogli iniziative',
   OPERATIONAL_VIEWS: 'Viste operative',
   OPERATIONAL_LIST: 'Elenco operativo',
+  ACCOMMODATIONS: 'Sistemazioni',
   AUDIT_LOG: 'Registro controlli'
 });
 
@@ -28,6 +29,7 @@ const MI_HEADERS = Object.freeze({
   'Fogli iniziative': ['id_evento', 'titolo', 'id_foglio', 'url_foglio', 'url_iscrizione', 'url_saldo', 'data_creazione'],
   'Viste operative': ['id_evento', 'campi_json', 'data_aggiornamento', 'etichetta_operatore'],
   'Elenco operativo': ['evento', 'codice_ordine', 'numero_partecipante', 'nome', 'cognome', 'stato'],
+  'Sistemazioni': ['id_evento', 'codice', 'nome', 'capienza', 'attiva', 'note'],
   'Registro controlli': ['id_controllo', 'data_evento', 'canale', 'azione', 'tipo_entita', 'riferimento_entita', 'esito', 'etichetta_attore', 'codice_dettaglio']
 });
 

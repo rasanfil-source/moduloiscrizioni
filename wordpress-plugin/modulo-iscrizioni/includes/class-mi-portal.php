@@ -14,15 +14,15 @@ final class MI_Portal {
 	}
 
 	public static function secure_cancellation_headers() {
-		if ( empty( $_GET['mi_cancel_participant'] ) || empty( $_GET['mi_cancel_token'] ) ) return;
+		if ( ( empty( $_GET['mi_cancel_participant'] ) || empty( $_GET['mi_cancel_token'] ) ) && empty( $_GET['mi_status'] ) ) return;
 		header( 'Referrer-Policy: no-referrer' );
 		header( 'X-Robots-Tag: noindex, nofollow, noarchive', true );
 	}
 
 	public static function assets() {
-		if ( ! is_singular() && empty( $_GET['mi_portal'] ) ) return;
+		if ( ! is_singular() && empty( $_GET['mi_portal'] ) && empty( $_GET['mi_status'] ) ) return;
 		$post = get_post();
-		if ( empty( $_GET['mi_portal'] ) && ( ! $post || ! has_shortcode( $post->post_content, self::SHORTCODE ) ) ) return;
+		if ( empty( $_GET['mi_portal'] ) && empty( $_GET['mi_status'] ) && ( ! $post || ! has_shortcode( $post->post_content, self::SHORTCODE ) ) ) return;
 		wp_enqueue_style( 'mi-portal', MI_PLUGIN_URL . 'assets/portal.css', array(), MI_VERSION );
 		wp_enqueue_script( 'mi-portal', MI_PLUGIN_URL . 'assets/portal.js', array(), MI_VERSION, true );
 	}
@@ -77,12 +77,17 @@ final class MI_Portal {
 		return add_query_arg( array( 'mi_cancel_participant' => absint( $participant_id ), 'mi_cancel_token' => (string) $token ), self::url() );
 	}
 
+	public static function status_url( $registration_id, $order_code, $email ) {
+		return add_query_arg( array( 'mi_status' => '1', 'ordine' => sanitize_text_field( (string) $order_code ), 'token' => MI_Registration_Service::public_status_token( $registration_id, $order_code, $email ) ), home_url( '/' ) );
+	}
+
 	public static function render_virtual_page() {
-		if ( empty( $_GET['mi_portal'] ) ) return;
+		if ( empty( $_GET['mi_portal'] ) && empty( $_GET['mi_status'] ) ) return;
 		status_header( 200 );
 		nocache_headers();
 		$asset_version = rawurlencode( MI_VERSION );
-		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><title><?php echo esc_html( get_bloginfo( 'name' ) . ' — Gestione iscrizioni' ); ?></title><link rel="stylesheet" href="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal.css?ver=' . $asset_version ); ?>"></head><body class="mi-portal-standalone"><?php echo self::render(); ?><script defer src="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal.js?ver=' . $asset_version ); ?>"></script></body></html><?php
+		$page_title = ! empty( $_GET['mi_status'] ) ? 'Stato della prenotazione' : 'Gestione iscrizioni';
+		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><title><?php echo esc_html( get_bloginfo( 'name' ) . ' — ' . $page_title ); ?></title><link rel="stylesheet" href="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal.css?ver=' . $asset_version ); ?>"></head><body class="mi-portal-standalone"><?php echo self::render(); ?><script defer src="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal.js?ver=' . $asset_version ); ?>"></script></body></html><?php
 		exit;
 	}
 
@@ -114,6 +119,7 @@ final class MI_Portal {
 
 	public static function render() {
 		if ( ! is_ssl() ) return '<div class="mi-portal-notice mi-portal-error"><strong>Connessione sicura necessaria.</strong><p>Il portale non può essere usato finché HTTPS non è configurato correttamente.</p></div>';
+		if ( ! empty( $_GET['mi_status'] ) ) return self::public_status_view();
 		if ( ! empty( $_GET['mi_cancel_participant'] ) && ! empty( $_GET['mi_cancel_token'] ) ) return self::cancellation_view();
 		if ( ! is_user_logged_in() ) return self::login_view();
 		if ( ! current_user_can( 'mi_portal_access' ) && ! current_user_can( 'manage_options' ) ) return '<div class="mi-portal-empty"><h2>C’è qualcuno qui…?</h2><p>Il tuo account non è abilitato al servizio iscrizioni.</p></div>';
@@ -125,6 +131,35 @@ final class MI_Portal {
 		<?php self::notice(); ?>
 		<?php if ( 'create' === $view && $can_create ) self::create_view(); else self::manage_view(); ?>
 		</main><?php
+		return ob_get_clean();
+	}
+
+	private static function public_status_view() {
+		$order_code = sanitize_text_field( wp_unslash( $_GET['ordine'] ?? '' ) );
+		$token = sanitize_text_field( wp_unslash( $_GET['token'] ?? '' ) );
+		$email = '';
+		$result = null;
+		if ( $order_code && $token ) {
+			$result = MI_Registration_Service::public_status( $order_code, '', $token );
+		} elseif ( 'POST' === strtoupper( $_SERVER['REQUEST_METHOD'] ?? '' ) && 'public_status_lookup' === sanitize_key( wp_unslash( $_POST['mi_portal_action'] ?? '' ) ) ) {
+			$nonce = sanitize_text_field( wp_unslash( $_POST['mi_status_nonce'] ?? '' ) );
+			$address = sanitize_text_field( (string) ( $_SERVER['REMOTE_ADDR'] ?? 'unknown' ) );
+			$rate_key = 'mi_status_rate_' . substr( hash_hmac( 'sha256', $address, wp_salt( 'nonce' ) ), 0, 32 );
+			$attempts = (int) get_transient( $rate_key );
+			if ( ! wp_verify_nonce( $nonce, 'mi_public_status' ) || $attempts >= 10 ) {
+				$result = new WP_Error( 'mi_status_unavailable', 'Non è stato possibile verificare la prenotazione. Riprova più tardi.' );
+			} else {
+				set_transient( $rate_key, $attempts + 1, 15 * MINUTE_IN_SECONDS );
+				$order_code = sanitize_text_field( wp_unslash( $_POST['order_code'] ?? '' ) );
+				$email = sanitize_email( wp_unslash( $_POST['email'] ?? '' ) );
+				$result = MI_Registration_Service::public_status( $order_code, $email );
+			}
+		}
+		ob_start(); ?>
+		<main class="mi-portal mi-public-status"><section class="mi-portal-login"><span class="mi-portal-eyebrow">Consultazione riservata</span><h1>Stato della prenotazione</h1><p>Controlla conferma, pagamenti registrati e saldo residuo. Non vengono mostrati dati personali o note interne.</p>
+		<?php if ( is_array( $result ) ) : ?><div class="mi-status-result"><p class="mi-status-event"><?php echo esc_html( $result['event_title'] ); ?></p><p class="mi-booking-detail__code">Codice <code><?php echo esc_html( $result['order_code'] ); ?></code></p><div class="mi-status-grid"><p><span>Prenotazione</span><strong><?php echo esc_html( $result['status'] ); ?></strong></p><p><span>Pagamento</span><strong><?php echo esc_html( $result['payment_status'] ); ?></strong></p><p><span>Versato</span><strong><?php echo esc_html( self::format_money( $result['paid_cents'] ) ); ?></strong></p><p><span>Saldo residuo</span><strong><?php echo esc_html( self::format_money( $result['balance_cents'] ) ); ?></strong></p></div><?php if ( ! empty( $result['payment_deadline'] ) ) : ?><p class="mi-portal-muted">Scadenza indicata: <?php echo esc_html( self::format_utc_date( $result['payment_deadline'] ) ); ?></p><?php endif; ?></div>
+		<?php elseif ( is_wp_error( $result ) ) : ?><div class="mi-portal-notice mi-portal-error"><?php echo esc_html( $result->get_error_message() ); ?></div><?php endif; ?>
+		<form method="post" action="<?php echo esc_url( add_query_arg( 'mi_status', '1', home_url( '/' ) ) ); ?>"><input type="hidden" name="mi_portal_action" value="public_status_lookup"><input type="hidden" name="mi_status_nonce" value="<?php echo esc_attr( wp_create_nonce( 'mi_public_status' ) ); ?>"><label>Codice prenotazione<input name="order_code" value="<?php echo esc_attr( $order_code ); ?>" maxlength="32" autocomplete="off" required></label><label>Email del referente<input type="email" name="email" value="<?php echo esc_attr( $email ); ?>" autocomplete="email" required></label><button type="submit">Controlla lo stato</button></form></section></main><?php
 		return ob_get_clean();
 	}
 
@@ -336,6 +371,7 @@ final class MI_Portal {
 		$date = DateTimeImmutable::createFromFormat( '!Y-m-d H:i:s', (string) $value, new DateTimeZone( 'UTC' ) );
 		return $date instanceof DateTimeImmutable ? wp_date( 'd/m/Y H:i', $date->getTimestamp(), wp_timezone() ) : (string) $value;
 	}
+	private static function format_money( $cents ) { return number_format( max( 0, (int) $cents ) / 100, 2, ',', '.' ) . ' €'; }
 	private static function base_url() { return ! empty( $_GET['mi_portal'] ) ? add_query_arg( 'mi_portal', '1', home_url( '/' ) ) : get_permalink(); }
 	private static function notice() { if ( empty( $_GET['mi_portal_message'] ) ) return; $error = ! empty( $_GET['mi_portal_error'] ); echo '<div class="mi-portal-notice ' . ( $error ? 'mi-portal-error' : '' ) . '">' . esc_html( sanitize_text_field( wp_unslash( $_GET['mi_portal_message'] ) ) ) . '</div>'; }
 }

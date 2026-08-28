@@ -398,6 +398,7 @@ final class MI_Registration_Service {
 			$email_values = MI_Modello_Email::valori_ordine( $event, $order_code, 'CONFIRMED' === $status ? 'Confermata' : ( 'PENDING_PAYMENT' === $status ? 'In attesa di pagamento' : 'Lista d’attesa' ), $selection['quantity'], $buyer['first_name'] . ' ' . $buyer['last_name'], $economic_summary, $email_items );
 			$email_values['_participant_management'] = $participant_management;
 			$email_snapshot = MI_Modello_Email::crea_istantanea( $event_id, $email_values );
+			$email_snapshot['status_url'] = MI_Portal::status_url( $registration_id, $order_code, $buyer['email'] );
 			$email_status = MI_Spedizione_Email::stato_nuova_email( $email_snapshot );
 			$payload_json = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $order_code, 'status' => $status, 'quantity' => $selection['quantity'], 'total_cents' => $economic_summary['total_cents'], 'economic_summary' => $economic_summary, 'email_preview' => $email_snapshot ) );
 			if ( false === $wpdb->insert( $outbox_table, array( 'registration_id' => $registration_id, 'recipient' => $buyer['email'], 'template_type' => 'REGISTRATION_CONFIRMATION', 'payload_json' => $payload_json, 'status' => $email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) {
@@ -614,11 +615,18 @@ final class MI_Registration_Service {
 		}
 	}
 
-	public static function reconcile_workspace_payments() {
+	public static function reconcile_workspace_payments( $requested_order_codes = array() ) {
 		global $wpdb;
 		$registrations = $wpdb->prefix . 'mi_registrations';
 		$payments_table = $wpdb->prefix . 'mi_payments';
-		$orders = $wpdb->get_results( "SELECT id, order_code FROM {$registrations} WHERE status IN ('CONFIRMED','PENDING_PAYMENT') AND capacity_released_at IS NULL ORDER BY id LIMIT 50", ARRAY_A );
+		$order_codes = array_values( array_unique( array_filter( array_map( 'sanitize_text_field', (array) $requested_order_codes ) ) ) );
+		if ( $order_codes ) {
+			$order_codes = array_slice( $order_codes, 0, 20 );
+			$placeholders = implode( ',', array_fill( 0, count( $order_codes ), '%s' ) );
+			$orders = $wpdb->get_results( $wpdb->prepare( "SELECT id, order_code FROM {$registrations} WHERE order_code IN ({$placeholders}) AND status IN ('CONFIRMED','PENDING_PAYMENT') AND capacity_released_at IS NULL ORDER BY id LIMIT 20", $order_codes ), ARRAY_A );
+		} else {
+			$orders = $wpdb->get_results( "SELECT id, order_code FROM {$registrations} WHERE status IN ('CONFIRMED','PENDING_PAYMENT') AND capacity_released_at IS NULL ORDER BY id LIMIT 50", ARRAY_A );
+		}
 		if ( ! $orders ) return 0;
 		$result = MI_Workspace_Client::request( 'ELENCA_PAGAMENTI', array( 'order_codes' => array_column( $orders, 'order_code' ) ) );
 		if ( is_wp_error( $result ) || ! isset( $result['payments'] ) || ! is_array( $result['payments'] ) ) return new WP_Error( 'mi_workspace_payment_reconciliation_failed', 'Riconciliazione pagamenti Workspace non disponibile.' );
@@ -641,6 +649,48 @@ final class MI_Registration_Service {
 		}
 		foreach ( $orders as $order ) self::reconcile_payment_status( (int) $order['id'], 'WORKSPACE' );
 		return $inserted;
+	}
+
+	public static function public_status_token( $registration_id, $order_code, $email ) {
+		$message = absint( $registration_id ) . '|' . sanitize_text_field( (string) $order_code ) . '|' . strtolower( sanitize_email( (string) $email ) );
+		return hash_hmac( 'sha256', $message, wp_salt( 'auth' ) );
+	}
+
+	public static function public_status( $order_code, $email = '', $token = '' ) {
+		global $wpdb;
+		$order_code = strtoupper( substr( sanitize_text_field( (string) $order_code ), 0, 32 ) );
+		$email = strtolower( sanitize_email( (string) $email ) );
+		$token = strtolower( sanitize_text_field( (string) $token ) );
+		if ( ! $order_code || ( ! $email && ! preg_match( '/^[a-f0-9]{64}$/', $token ) ) ) return new WP_Error( 'mi_status_not_found', 'Non è stato possibile verificare la prenotazione.' );
+		$registration = $wpdb->get_row( $wpdb->prepare( "SELECT id,event_id,order_code,status,buyer_email,total_cents,initial_due_cents,balance_cents,payment_deadline_at FROM {$wpdb->prefix}mi_registrations WHERE order_code=%s LIMIT 1", $order_code ), ARRAY_A );
+		if ( ! $registration ) return new WP_Error( 'mi_status_not_found', 'Non è stato possibile verificare la prenotazione.' );
+		$valid = $email
+			? hash_equals( strtolower( (string) $registration['buyer_email'] ), $email )
+			: hash_equals( self::public_status_token( $registration['id'], $registration['order_code'], $registration['buyer_email'] ), $token );
+		if ( ! $valid ) return new WP_Error( 'mi_status_not_found', 'Non è stato possibile verificare la prenotazione.' );
+		if ( MI_Workspace_Client::is_configured() ) {
+			$reconciled = self::reconcile_workspace_payments( array( $registration['order_code'] ) );
+			if ( is_wp_error( $reconciled ) ) return new WP_Error( 'mi_status_temporarily_unavailable', 'Lo stato aggiornato non è momentaneamente disponibile. Riprova tra poco.' );
+		}
+		$paid = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(CASE WHEN transaction_kind='REFUND' THEN -amount_cents ELSE amount_cents END),0) FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d", $registration['id'] ) );
+		$total = max( 0, (int) $registration['total_cents'] );
+		$balance = max( 0, $total - $paid );
+		$status_labels = array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'In attesa di pagamento', 'WAITLISTED' => 'Lista d’attesa', 'CANCELLED' => 'Annullata', 'EXPIRED' => 'Scaduta' );
+		if ( 0 === $total ) $payment_label = 'Nessun pagamento previsto';
+		elseif ( $paid >= $total ) $payment_label = 'Saldo completato';
+		elseif ( $paid >= (int) $registration['initial_due_cents'] && (int) $registration['initial_due_cents'] > 0 ) $payment_label = 'Caparra ricevuta, saldo ancora dovuto';
+		elseif ( $paid > 0 ) $payment_label = 'Versamento parziale ricevuto';
+		else $payment_label = (int) $registration['initial_due_cents'] > 0 ? 'Caparra ancora da versare' : 'Pagamento ancora da completare';
+		return array(
+			'order_code'       => (string) $registration['order_code'],
+			'event_title'      => get_the_title( (int) $registration['event_id'] ),
+			'status'           => $status_labels[ $registration['status'] ] ?? sanitize_text_field( (string) $registration['status'] ),
+			'payment_status'   => $payment_label,
+			'paid_cents'       => max( 0, $paid ),
+			'balance_cents'    => $balance,
+			'total_cents'      => $total,
+			'payment_deadline' => (string) $registration['payment_deadline_at'],
+		);
 	}
 
 	private static function reconcile_payment_status( $registration_id, $actor_label ) {
@@ -846,6 +896,7 @@ final class MI_Registration_Service {
 			}
 			$email_values['_participant_management'] = $participant_management;
 			$email_snapshot = MI_Modello_Email::crea_istantanea( $event_id, $email_values );
+			$email_snapshot['status_url'] = MI_Portal::status_url( $candidate['id'], $candidate['order_code'], $candidate['buyer_email'] );
 			$email_status = MI_Spedizione_Email::stato_nuova_email( $email_snapshot );
 			$wpdb->insert( $outbox, array( 'registration_id' => $candidate['id'], 'recipient' => $candidate['buyer_email'], 'template_type' => 'WAITLIST_PROMOTION', 'payload_json' => wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $candidate['order_code'], 'status' => $promoted_status, 'email_preview' => $email_snapshot ) ), 'status' => $email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) );
 			$promoted[] = (int) $candidate['id'];

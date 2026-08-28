@@ -62,6 +62,10 @@ L'apertura mostra una pagina di conferma; l'annullamento avviene soltanto con un
 - Login e modifiche sono protetti contro CSRF, enumerazione e tentativi ripetuti.
 - Il portale non richiede mai foto o scansioni dei documenti.
 
+## Consultazione del referente
+
+La consultazione dello stato è distinta dal portale degli operatori. Il referente usa codice prenotazione ed email oppure il collegamento firmato ricevuto nella conferma. Vede soltanto titolo dell'evento, stato della prenotazione, stato economico, importo registrato, saldo e scadenza. Non vengono mostrati nomi dei partecipanti, indirizzi, contatti, note o richieste particolari. La pagina applica limite ai tentativi, `noindex` e `no-referrer`.
+
 ## Rapporto con Sheets
 
 Il portale offre la vista web e le azioni controllate. Sheets resta la sede delle operazioni quotidiane e dello stato operativo esteso. Le modifiche dal portale producono eventi append-only replicabili, evitando due archivi autorevoli indipendenti.
