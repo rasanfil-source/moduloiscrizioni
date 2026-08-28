@@ -1,25 +1,53 @@
 function apriSchedaPrenotazione() {
   const template = HtmlService.createTemplateFromFile('Segreteria');
-  template.modalita = 'LISTA'; template.codiceOrdineIniziale = '';
+  template.modalita = 'LISTA'; template.codiceOrdineIniziale = ''; template.isWebApp = false; template.webAppUrl = '';
   SpreadsheetApp.getUi().showSidebar(template.evaluate().setTitle('Segreteria eventi'));
+}
+
+function apriSegreteriaWeb() {
+  const configured = PropertiesService.getScriptProperties().getProperty('MI_SECRETARY_WEBAPP_URL') || '';
+  const serviceUrl = configured || ScriptApp.getService().getUrl() || '';
+  if (!/^https:\/\/script\.google\.com\//.test(serviceUrl)) {
+    SpreadsheetApp.getUi().alert('La Web App della segreteria non è ancora stata distribuita.');
+    return;
+  }
+  const separator = serviceUrl.indexOf('?') >= 0 ? '&' : '?';
+  const url = serviceUrl + separator + 'view=segreteria';
+  const safeUrl = url.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  const html = HtmlService.createHtmlOutput(
+    '<!doctype html><html><head><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"></head>' +
+    '<body style="font:16px Arial,sans-serif;padding:22px;color:#172033"><h2 style="margin-top:0">Segreteria eventi</h2>' +
+    '<p>Apri la gestione in una pagina web autonoma.</p><p><a href="' + safeUrl + '" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#17224a;color:#fff;text-decoration:none;font-weight:700">Apri segreteria</a></p></body></html>'
+  ).setWidth(390).setHeight(210);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Apri segreteria');
+}
+
+function configuraUrlSegreteriaWeb() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.prompt('URL Web App segreteria', 'Incolla l’URL /exec della distribuzione riservata alla segreteria.', ui.ButtonSet.OK_CANCEL);
+  if (response.getSelectedButton() !== ui.Button.OK) return;
+  const url = normalizzaTesto_(response.getResponseText(), 500);
+  if (!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec\/?$/.test(url)) throw new Error('URL Web App non valido.');
+  PropertiesService.getScriptProperties().setProperty('MI_SECRETARY_WEBAPP_URL', url.replace(/\/$/, ''));
+  ui.alert('Collegamento alla segreteria Web salvato.');
 }
 
 function apriDialogoPrenotazione(orderCode) {
   const template = HtmlService.createTemplateFromFile('Segreteria');
-  template.modalita = 'PRENOTAZIONE'; template.codiceOrdineIniziale = normalizzaTesto_(orderCode, 64);
+  template.modalita = 'PRENOTAZIONE'; template.codiceOrdineIniziale = normalizzaTesto_(orderCode, 64); template.isWebApp = false; template.webAppUrl = '';
   SpreadsheetApp.getUi().showModelessDialog(template.evaluate().setWidth(680).setHeight(720), 'Scheda prenotazione');
   return { ok: true };
 }
 
 function apriConfigurazioneElencoOperativo() {
   const template = HtmlService.createTemplateFromFile('Segreteria');
-  template.modalita = 'ELENCO'; template.codiceOrdineIniziale = '';
+  template.modalita = 'ELENCO'; template.codiceOrdineIniziale = ''; template.isWebApp = false; template.webAppUrl = '';
   SpreadsheetApp.getUi().showSidebar(template.evaluate().setTitle('Elenco operativo'));
 }
 
 function apriComunicazioniOperative() {
   const template = HtmlService.createTemplateFromFile('Segreteria');
-  template.modalita = 'COMUNICAZIONI'; template.codiceOrdineIniziale = '';
+  template.modalita = 'COMUNICAZIONI'; template.codiceOrdineIniziale = ''; template.isWebApp = false; template.webAppUrl = '';
   SpreadsheetApp.getUi().showSidebar(template.evaluate().setTitle('Comunicazioni operative'));
 }
 

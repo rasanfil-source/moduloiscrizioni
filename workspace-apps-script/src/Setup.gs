@@ -2,7 +2,7 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('Modulo iscrizioni')
     .addItem('Inizializza/aggiorna struttura', 'configuraCartellaDiLavoro')
     .addSeparator()
-    .addItem('Apri segreteria', 'apriSchedaPrenotazione')
+    .addItem('Apri segreteria', 'apriSegreteriaWeb')
     .addItem('Configura elenco operativo', 'apriConfigurazioneElencoOperativo')
     .addItem('Comunicazioni operative', 'apriComunicazioniOperative')
     .addItem('Configura collegamento WordPress', 'configuraEndpointWordPress')
@@ -65,7 +65,9 @@ function inizializzaScheda_(sheet, headers) {
   }
   if (hasData && sheet.getName() === MI_SHEETS.PARTICIPANTS && (usesItalianPrevious || usesPreviousHeaders)) {
     const oldRows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
-    const migratedRows = oldRows.map(function (row) { return [row[0], row[1], '', 0, row[2], row[3], row[4], '[]']; });
+    const migratedRows = oldRows.map(function (row) {
+      return [row[0], row[1], '', 0, row[2], row[3], row[4], '[]', 'ATTIVO', ''];
+    });
     sheet.getRange(2, 1, migratedRows.length, headers.length).clearContent().setValues(migratedRows);
   }
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);

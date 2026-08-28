@@ -7,7 +7,7 @@ Progetto Google Apps Script associato a uno spreadsheet dedicato. Il repository 
 - `configuraCartellaDiLavoro()` crea o aggiorna in modo idempotente le schede tecniche con etichette italiane;
 - `convalidaPagamentiSelezionati()` convalida le righe selezionate in `Inserimento pagamenti`;
 - `convalidaPagamentiInAttesa()` elabora tutte le righe nuove;
-- **Apri segreteria** mostra una lista compatta ricercabile; la scheda della prenotazione si apre in un dialogo separato;
+- **Apri segreteria** apre una Web App autonoma e riservata, senza ereditare la pesantezza o i limiti dell’iframe del foglio;
 - dalla scheda si registrano versamenti usando la stessa validazione del foglio `Inserimento pagamenti` e si cambiano sistemazioni senza superarne la capienza;
 - **Configura elenco operativo** permette di scegliere per evento soltanto le colonne utili e produce un collegamento PDF A4 stampabile;
 - **Comunicazioni operative** prepara promemoria pre-evento e promemoria saldo nella coda WordPress firmata;

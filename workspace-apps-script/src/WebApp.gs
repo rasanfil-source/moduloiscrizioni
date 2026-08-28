@@ -1,5 +1,27 @@
-function doGet() {
+function doGet(event) {
+  const parameters = event && event.parameter ? event.parameter : {};
+  if (String(parameters.view || '') === 'segreteria') {
+    if (!utenteSegreteriaAutorizzato_()) {
+      return HtmlService.createHtmlOutput('<!doctype html><html><body style="font:16px Arial,sans-serif;padding:32px"><h1>Accesso riservato</h1><p>Accedi con l’account Google autorizzato dalla segreteria.</p></body></html>')
+        .setTitle('Accesso riservato');
+    }
+    const template = HtmlService.createTemplateFromFile('Segreteria');
+    template.modalita = parameters.order ? 'PRENOTAZIONE' : 'LISTA';
+    template.codiceOrdineIniziale = normalizzaTesto_(parameters.order, 64);
+    template.webAppUrl = ScriptApp.getService().getUrl() || '';
+    template.isWebApp = true;
+    return template.evaluate().setTitle('Segreteria eventi').addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
   return creaRispostaJson_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, mode: 'PREVIEW' });
+}
+
+function utenteSegreteriaAutorizzato_() {
+  const active = String(Session.getActiveUser().getEmail() || '').trim().toLowerCase();
+  if (!active) return false;
+  const effective = String(Session.getEffectiveUser().getEmail() || '').trim().toLowerCase();
+  const configured = String(PropertiesService.getScriptProperties().getProperty('MI_SECRETARY_ALLOWED_EMAILS') || '')
+    .split(',').map(function (email) { return email.trim().toLowerCase(); }).filter(Boolean);
+  return active === effective || configured.indexOf(active) >= 0;
 }
 
 function doPost(event) {

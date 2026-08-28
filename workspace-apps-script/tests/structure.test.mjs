@@ -95,6 +95,15 @@ test('la console Sheets consulta prenotazioni e genera elenchi operativi per eve
 	assert.match(segreteriaHtml, /allow_operational/);
 });
 
+test('la segreteria Web è autonoma e rifiuta accessi anonimi', () => {
+	assert.match(sources['Setup.gs'], /apriSegreteriaWeb/);
+	assert.match(sources['WebApp.gs'], /view \|\| ''\) === 'segreteria'/);
+	assert.match(sources['WebApp.gs'], /utenteSegreteriaAutorizzato_/);
+	assert.match(sources['WebApp.gs'], /if \(!active\) return false/);
+	assert.match(sources['Segreteria.gs'], /MI_SECRETARY_WEBAPP_URL/);
+	assert.match(segreteriaHtml, /IS_WEB_APP/);
+});
+
 test('lo stato individuale dei partecipanti arriva nelle schede e negli elenchi', () => {
 	assert.match(sources['Config.gs'], /stato_partecipante/);
 	assert.match(sources['Config.gs'], /data_annullamento/);
