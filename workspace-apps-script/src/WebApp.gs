@@ -8,7 +8,7 @@ function doGet(event) {
     const template = HtmlService.createTemplateFromFile('Segreteria');
     template.modalita = parameters.order ? 'PRENOTAZIONE' : 'LISTA';
     template.codiceOrdineIniziale = normalizzaTesto_(parameters.order, 64);
-    template.webAppUrl = ScriptApp.getService().getUrl() || '';
+    template.webAppUrl = PropertiesService.getScriptProperties().getProperty('MI_SECRETARY_WEBAPP_URL') || ScriptApp.getService().getUrl() || '';
     template.isWebApp = true;
     return template.evaluate().setTitle('Segreteria eventi').addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
