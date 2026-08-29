@@ -661,7 +661,7 @@ final class MI_Registration_Service {
 		return hash_hmac( 'sha256', $message, wp_salt( 'auth' ) );
 	}
 
-	public static function public_status( $order_code, $email = '', $token = '' ) {
+	public static function public_status( $order_code, $email = '', $token = '', $event_id = 0 ) {
 		global $wpdb;
 		$order_code = strtoupper( substr( sanitize_text_field( (string) $order_code ), 0, 32 ) );
 		$email = strtolower( sanitize_email( (string) $email ) );
@@ -669,6 +669,7 @@ final class MI_Registration_Service {
 		if ( ! $order_code || ( ! $email && ! preg_match( '/^[a-f0-9]{64}$/', $token ) ) ) return new WP_Error( 'mi_status_not_found', 'Non è stato possibile verificare la prenotazione.' );
 		$registration = $wpdb->get_row( $wpdb->prepare( "SELECT id,event_id,order_code,status,buyer_email,total_cents,initial_due_cents,balance_cents,payment_deadline_at FROM {$wpdb->prefix}mi_registrations WHERE order_code=%s LIMIT 1", $order_code ), ARRAY_A );
 		if ( ! $registration ) return new WP_Error( 'mi_status_not_found', 'Non è stato possibile verificare la prenotazione.' );
+		if ( $event_id && absint( $registration['event_id'] ) !== absint( $event_id ) ) return new WP_Error( 'mi_status_not_found', 'Non è stato possibile verificare la prenotazione per questo evento.' );
 		$valid = $email
 			? hash_equals( strtolower( (string) $registration['buyer_email'] ), $email )
 			: hash_equals( self::public_status_token( $registration['id'], $registration['order_code'], $registration['buyer_email'] ), $token );

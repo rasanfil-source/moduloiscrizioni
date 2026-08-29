@@ -20,8 +20,11 @@ function preparaProduzioniEventoDaWordPress_(payload) {
   if (esistente) eventi.getRange(esistente._row, 1, 1, valori.length).setValues([valori]);
   else eventi.appendRow(valori);
   const risultato = apriFoglioOperativoEvento({ id_evento: idEvento });
+	const urlIscrizione = normalizzaUrlPubblico_(payload.url_iscrizione);
+	const urlSaldo = normalizzaUrlPubblico_(payload.url_saldo);
+	aggiornaCollegamentiProduzioneEvento_(idEvento, urlIscrizione, urlSaldo);
   aggiungiControllo_('PRODUZIONI_EVENTO', 'PREPARE', idEvento, 'SUCCESS', 'WORDPRESS', risultato.creato ? 'SHEET_CREATED' : 'SHEET_REUSED', 'WORDPRESS_PROXY');
-  return { ok: true, id_evento: idEvento, id_foglio: risultato.id_foglio, url_foglio: risultato.url_foglio, creato: risultato.creato, mode: 'PREVIEW' };
+  return { ok: true, id_evento: idEvento, id_foglio: risultato.id_foglio, url_foglio: risultato.url_foglio, url_iscrizione: urlIscrizione, url_saldo: urlSaldo, cartella: risultato.cartella || '', creato: risultato.creato, mode: 'PREVIEW' };
 }
 
 /** Restituisce il foglio operativo dell'evento, creandolo soltanto se manca. */
@@ -32,18 +35,46 @@ function apriFoglioOperativoEvento(form) {
   const registro = ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES);
   const esistente = convertiRigheInOggetti_(registro).find(function (riga) { return String(riga.id_evento) === idEvento; });
   if (esistente && esistente.id_foglio) {
-    return { id_evento: idEvento, id_foglio: String(esistente.id_foglio), url_foglio: String(esistente.url_foglio || ('https://docs.google.com/spreadsheets/d/' + esistente.id_foglio + '/edit')), creato: false };
+    return { id_evento: idEvento, id_foglio: String(esistente.id_foglio), url_foglio: String(esistente.url_foglio || ('https://docs.google.com/spreadsheets/d/' + esistente.id_foglio + '/edit')), cartella: '', creato: false };
   }
   const vista = generaVistaOperativaEvento_(idEvento);
-  const titolo = 'Evento - ' + String(vista.evento.titolo || idEvento);
+	const titoloPulito = String(vista.evento.titolo || idEvento).replace(/[\\/:*?"<>|#%{}]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140);
+	const titolo = 'Evento ' + idEvento + ' - ' + titoloPulito;
   const foglio = SpreadsheetApp.create(titolo);
+	const cartella = spostaFoglioAccantoAlDatabase_(foglio.getId());
   const scheda = foglio.getSheets()[0];
   scheda.setName('Dati operativi');
   scriviFoglioOperativoEvento_(scheda, vista);
   const valori = [idEvento, neutralizzaFormula_(vista.evento.titolo, 200), foglio.getId(), foglio.getUrl(), '', '', new Date()];
   registro.appendRow(valori);
   aggiungiControllo_('FOGLIO_OPERATIVO', 'CREATE', idEvento, 'SUCCESS', normalizzaTesto_(Session.getActiveUser().getEmail() || 'SEGRETERIA', 120), 'CREATED', 'SEGRETERIA');
-  return { id_evento: idEvento, id_foglio: foglio.getId(), url_foglio: foglio.getUrl(), creato: true };
+  return { id_evento: idEvento, id_foglio: foglio.getId(), url_foglio: foglio.getUrl(), cartella: cartella, creato: true };
+}
+
+/** Sposta il nuovo foglio nella stessa cartella Drive che contiene DB_MODULI. */
+function spostaFoglioAccantoAlDatabase_(idFoglio) {
+	const database = ottieniFoglioDiLavoroAssociato_();
+	const fileDatabase = DriveApp.getFileById(database.getId());
+	const cartelle = fileDatabase.getParents();
+	if (!cartelle.hasNext()) throw new Error('DB_MODULI non si trova in una cartella Drive utilizzabile.');
+	const cartella = cartelle.next();
+	DriveApp.getFileById(String(idFoglio)).moveTo(cartella);
+	return cartella.getName();
+}
+
+/** Registra gli indirizzi pubblici prodotti da WordPress senza accettare protocolli diversi da HTTPS. */
+function aggiornaCollegamentiProduzioneEvento_(idEvento, urlIscrizione, urlSaldo) {
+	const registro = ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES);
+	const collegamento = convertiRigheInOggetti_(registro).find(function (riga) { return String(riga.id_evento) === String(idEvento); });
+	if (!collegamento) throw new Error('Collegamento al foglio operativo non trovato.');
+	registro.getRange(collegamento._row, 5, 1, 2).setValues([[urlIscrizione, urlSaldo]]);
+}
+
+function normalizzaUrlPubblico_(valore) {
+	const url = normalizzaTesto_(valore, 1000);
+	if (!url) return '';
+	if (!/^https:\/\/[^\s]+$/i.test(url)) throw new Error('Indirizzo pubblico non valido.');
+	return neutralizzaFormula_(url, 1000);
 }
 
 /** Riallinea dal database soltanto dopo una conferma esplicita nell'interfaccia. */

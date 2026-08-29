@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.10\.0/);
+	assert.match(source, /Version:\s+3\.11\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1098,6 +1098,7 @@ test('l’elenco iscrizioni indica l’evento selezionato', async () => {
 
 test('la scheda iscrizioni riprende la vista operativa con ricerca e filtri sicuri', async () => {
   const portal = await read('includes/class-mi-portal.php');
+  const admin = await read('includes/class-mi-admin.php');
   const css = await read('assets/portal.css');
   assert.match(portal, /name="mi_portal_query"/);
   assert.match(portal, /name="mi_portal_status"/);
@@ -1106,6 +1107,9 @@ test('la scheda iscrizioni riprende la vista operativa con ricerca e filtri sicu
   assert.match(portal, /LIMIT 30/);
   assert.match(portal, /class="mi-booking-card"/);
   assert.match(portal, /mi-status-pill/);
+  assert.match(portal, />Tutti gli eventi<\/option>/);
+  assert.match(admin, />Tutti gli eventi<\/option>/);
+  assert.doesNotMatch(portal + admin, /Tutti gli eventi accessibili/);
   assert.match(css, /\.mi-registrations-toolbar/);
   assert.match(css, /\.mi-booking-card__avatar/);
   assert.match(css, /\.mi-status-pill\.is-green/);
@@ -1236,7 +1240,7 @@ test('selezionare una bozza riprende lo stesso percorso guidato e prepara le pro
   assert.match(portal, /PREPARA_PRODUZIONI_EVENTO/);
   assert.match(portal, /_mi_operational_sheet_id/);
   assert.match(portal, /\[modulo_iscrizioni event=&quot;/);
-  assert.match(portal, /Pulsante saldo/);
+  assert.match(portal, /Pulsante Saldo/);
   assert.match(portal, /data-mi-operational-profile/);
   assert.match(script, /updateOvernight\(\)/);
 });
@@ -1388,10 +1392,32 @@ test('il wizard mostra soltanto i costi coerenti con il tipo di evento', async (
 });
 test('il wizard distingue il salvataggio della bozza dalla produzione del foglio', async () => {
   const portal = await read('includes/class-mi-portal.php');
+  const shortcode = await read('includes/class-mi-shortcode.php');
+  const activator = await read('includes/class-mi-activator.php');
   assert.match(portal, /Salva la bozza e vai alle produzioni/);
   assert.match(portal, /Crea la bozza e vai alle produzioni/);
   assert.match(portal, /Crea e collega il foglio Google/);
   assert.doesNotMatch(portal, /Salva e continua la produzione|Produci pulsante e foglio Google/);
+  assert.match(portal, /Pulsante Iscriviti/);
+  assert.match(portal, /Pulsante Saldo/);
+  assert.match(portal, /_mi_registration_url/);
+  assert.match(portal, /_mi_balance_url/);
+  assert.match(portal, /'url_iscrizione' => \$url_iscrizione/);
+  assert.match(portal, /'url_saldo' => \$url_saldo/);
+  assert.match(shortcode, /function url_iscrizione/);
+  assert.match(shortcode, /function mostra_pagina_iscrizione_pubblica/);
+  assert.match(portal, /publish_event_portal/);
+  assert.match(portal, /Pubblica e attiva i collegamenti/);
+  assert.match(portal, /ensure_published_revision\( \$event_id, true \)/);
+  assert.match(activator, /mi_secretary[\s\S]*mi_publish_events/);
+});
+
+test('il controllo saldo può essere limitato all evento del pulsante', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const service = await read('includes/class-mi-registration-service.php');
+  assert.match(portal, /'mi_status' => '1', 'evento' => \$event_id/);
+  assert.match(service, /public_status\( \$order_code, \$email = '', \$token = '', \$event_id = 0 \)/);
+  assert.match(service, /registration\['event_id'\].*\$event_id/);
 });
 
 test('la coerenza temporale impedisce nuove scadenze passate e segnala quelle già presenti', async () => {
