@@ -282,7 +282,7 @@ final class MI_Portal {
 		wp_update_post( array( 'ID' => $event_id, 'post_status' => 'draft' ) );
 		$count = (int) ( $email_result['count'] ?? 0 );
 		$mode = sanitize_text_field( (string) ( $email_result['mode'] ?? 'ANTEPRIMA' ) );
-		return self::redirect_result( 'Evento annullato. Avvisi preparati: ' . $count . ' (modalità ' . $mode . ').', false, $event_id );
+		return self::redirect_result( 'Evento annullato. Avvisi preparati: ' . $count . ' (modalità ' . $mode . ').', false );
 	}
 
 	public static function url() {
@@ -362,8 +362,8 @@ final class MI_Portal {
 	}
 
 	private static function redirect_result( $message, $error = false, $event_id = 0 ) {
-		$url = wp_get_referer() ?: home_url( '/' );
-		$args = array( 'mi_portal_message' => $message, 'mi_portal_error' => $error ? '1' : '0', 'mi_portal_view' => 'manage' );
+		$url = self::url();
+		$args = array( 'mi_portal' => '1', 'mi_portal_message' => $message, 'mi_portal_error' => $error ? '1' : '0', 'mi_portal_view' => 'manage' );
 		if ( $event_id ) $args['mi_portal_event'] = $event_id;
 		wp_safe_redirect( add_query_arg( $args, $url ) );
 		exit;

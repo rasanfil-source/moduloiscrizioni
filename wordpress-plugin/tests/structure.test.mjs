@@ -47,7 +47,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.9\.2/);
+	assert.match(source, /Version:\s+3\.9\.3/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1311,4 +1311,12 @@ test('la scheda evento consente modifiche sicure e annullamento con avviso', asy
   assert.match(portal, /data-mi-selected-event/);
   assert.match(portalJs, /scrollIntoView/);
   assert.match(portalJs, /prefers-reduced-motion/);
+});
+
+test('gli esiti della gestione tornano sempre alla Segreteria eventi', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(portal, /private static function redirect_result[\s\S]*?\$url = self::url\(\)/);
+  assert.match(portal, /'mi_portal' => '1'[\s\S]*?'mi_portal_view' => 'manage'/);
+  assert.doesNotMatch(portal.match(/private static function redirect_result[\s\S]*?\n\t\}/)[0], /wp_get_referer|home_url/);
+  assert.match(portal, /Evento annullato\. Avvisi preparati:[\s\S]*?false \)/);
 });
