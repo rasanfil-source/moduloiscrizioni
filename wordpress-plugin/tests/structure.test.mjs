@@ -33,7 +33,8 @@ test('il modello operativo dell evento è scelto in WordPress e consegnato a Wor
   assert.match(eventType, /_mi_operational_profile/);
   assert.match(portal, /_mi_operational_profile/);
   assert.match(registration, /operational_profile/);
-  assert.match(portalJs, /name="operational_profile"/);
+  assert.doesNotMatch(portalJs, /name="operational_profile"|Vista iniziale della segreteria/);
+  assert.match(portal, /\$_POST\['operational_profile'\] \?\? 'AUTOMATICO'/);
 });
 
 test('Workspace prevede modelli report standard senza sovrascrivere dati', async () => {
@@ -47,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.9\.4/);
+	assert.match(source, /Version:\s+3\.10\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -295,7 +296,7 @@ test('il wizard guidato crea solo bozze e rende gli alloggi condizionali', async
   assert.match(portal, /Vuoi partire dalla configurazione di un evento precedente/);
   assert.match(portal, /data-mi-overnight/);
   assert.match(portal, /data-mi-accommodations hidden/);
-  assert.match(script, /rooms\.hidden\s*=\s*!overnight\.checked/);
+  assert.match(script, /rooms\.hidden\s*=\s*!servicePricing \|\| !overnight\.checked/);
   assert.doesNotMatch(portal, /post_type'\s*=>\s*MI_Event_Post_Type::EVENT_TYPE[\s\S]{0,160}post_status'\s*=>\s*'publish'/);
 });
 
@@ -669,8 +670,9 @@ test('i metadati tecnici dei consensi non compaiono nel pannello evento', async 
 test('email e cellulare dei partecipanti sono campi configurabili e validati', async () => {
 	const schema = await read('includes/class-mi-field-schema.php');
 	const script = await read('assets/public.js');
-	assert.match(schema, /'email'\s*=>[\s\S]*Email del partecipante/);
-	assert.match(schema, /'phone'\s*=>[\s\S]*Cellulare del partecipante/);
+	assert.match(schema, /'email'\s*=>[\s\S]*'label'\s*=>\s*'Email'/);
+	assert.match(schema, /'phone'\s*=>[\s\S]*'label'\s*=>\s*'Cellulare'/);
+	assert.doesNotMatch(schema, /Email del partecipante|Cellulare del partecipante/);
 	assert.match(schema, /mi_participant_email_invalid/);
 	assert.match(schema, /mi_participant_phone_invalid/);
 	assert.match(script, /\['date', 'email', 'tel'\]/);
@@ -1109,11 +1111,11 @@ test('la scheda iscrizioni riprende la vista operativa con ricerca e filtri sicu
   assert.match(css, /\.mi-status-pill\.is-green/);
 });
 
-test('la ricerca iscrizioni privilegia il campo e mantiene Cerca piccolo e affiancato', async () => {
+test('la ricerca iscrizioni privilegia il campo e mantiene Cerca affiancato', async () => {
   const css = await read('assets/portal.css');
-  assert.match(css, /\.mi-registration-search\{width:min\(100%,760px\);grid-template-columns:minmax\(260px,1fr\) 86px/);
-  assert.match(css, /\.mi-registration-search \.mi-primary\{width:86px/);
-  assert.match(css, /grid-template-columns:minmax\(0,1fr\) 78px/);
+  assert.match(css, /mi-registrations-toolbar \.mi-registration-search\{[^}]*grid-template-columns:minmax\(0,3fr\) minmax\(82px,1fr\)/);
+  assert.match(css, /mi-registration-search>\.mi-primary\{[^}]*width:100%/);
+  assert.match(css, /@media\(max-width:520px\)[^{]*\{\.mi-registrations-toolbar \.mi-registration-search\{[^}]*grid-template-columns:minmax\(0,3fr\) minmax\(72px,1fr\)/);
 });
 
 test('i menu delle iscrizioni applicano subito i filtri mantenendo il comando manuale', async () => {
@@ -1181,6 +1183,7 @@ test('gli eventi annullati restano nella gestione come tessere compatte', async 
   assert.match(portal, /is-cancelled/);
   assert.match(portal, /\$status_label = \$is_cancelled \? 'Annullato'/);
   assert.match(css, /\.mi-event-card\.is-cancelled/);
+  assert.match(css, /\.mi-event-card\.is-cancelled\{height:150px;min-height:0;align-self:start/);
   assert.match(css, /\.mi-event-card\.is-cancelled \.mi-event-card__image/);
   assert.match(css, /background:#fdecef;color:#9f1930/);
 });
@@ -1326,4 +1329,75 @@ test('gli eventi annullati spariscono automaticamente dal filtro delle iscrizion
   assert.match(portal, /\$selectable_events = array_values\( array_filter\( \$events[\s\S]*?_mi_event_cancelled_at/);
   assert.match(portal, /\$selected && ! in_array\( \$selected, \$selectable_event_ids, true \) \) \$selected = 0/);
   assert.match(portal, /foreach \( \$selectable_events as \$event \)/);
+});
+
+test('la ricerca iscrizioni mantiene campo e pulsante affiancati in proporzione tre a uno', async () => {
+  const css = await read('assets/portal.css');
+  assert.match(css, /mi-registrations-toolbar \.mi-registration-search\{[^}]*grid-template-columns:minmax\(0,3fr\) minmax\(82px,1fr\)/);
+  assert.match(css, /mi-registration-search>input\{[^}]*width:100%[^}]*margin:0/);
+  assert.match(css, /mi-registration-search>\.mi-primary\{[^}]*width:100%/);
+});
+
+test('le quote accessorie usano righe compatte senza grandi spazi vuoti', async () => {
+  const css = await read('assets/portal.css');
+  assert.match(css, /\.mi-service-fee,\.mi-accommodation-fee\{[^}]*grid-template-columns:minmax\(210px,360px\) minmax\(120px,180px\)[^}]*padding:\.38rem 0/);
+  assert.match(css, /\.mi-event-wizard \.mi-service-fee>label,\.mi-event-wizard \.mi-accommodation-fee>label\{margin:0\}/);
+  assert.match(css, /\.mi-service-fee input:not\(\[type=checkbox\]\),\.mi-event-wizard \.mi-accommodation-fee input:not\(\[type=checkbox\]\)\{[^}]*min-height:40px/);
+});
+
+test('la scelta della quota usa tre opzioni chiare nell ordine richiesto', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const start = portal.indexOf('Come sarà l’evento?');
+  const free = portal.indexOf('Evento totalmente gratuito', start);
+  const fixed = portal.indexOf('Quota uguale per tutti', start);
+  const services = portal.indexOf('In base ai servizi scelti', start);
+  assert.ok(start >= 0 && free > start && fixed > free && services > fixed);
+});
+
+test('Crea evento apre un wizard nuovo e non eredita la bozza precedente', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(portal, /add_query_arg\( 'mi_portal_view', 'create', self::base_url\(\) \)/);
+  assert.doesNotMatch(portal, /add_query_arg\( 'mi_portal_view', 'create' \)/);
+});
+
+test('il wizard non mostra la nota ridondante sull email del referente', async () => {
+  const schema = await read('includes/class-mi-field-schema.php');
+  assert.doesNotMatch(schema, /Può essere diversa dall’email del referente/);
+});
+
+test('ogni sistemazione dispone di un costo che entra nelle opzioni economiche', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /name="accommodation_price\[/);
+  assert.match(portal, /\$accommodation_options\[\] = array\([^;]*'scope' => 'TICKET'[^;]*'price_cents' => \$accommodation_price/);
+  assert.match(portal, /\$priced_options = array_merge\( \$accommodation_options, \$service_options \)/);
+  assert.match(script, /data-mi-accommodation/);
+  assert.match(css, /\.mi-accommodation-fee/);
+});
+
+test('il wizard mostra soltanto i costi coerenti con il tipo di evento', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  assert.match(portal, /Come sarà l’evento\?/);
+  assert.match(portal, /Evento totalmente gratuito[\s\S]*Quota uguale per tutti[\s\S]*In base ai servizi scelti/);
+  assert.doesNotMatch(portal.match(/Modalità di pagamento richiesta<select[\s\S]*?<\/select>/)[0], /PRICE_ONLY|Prezzo solamente informativo|Nessun pagamento previsto/);
+  assert.match(portal, />Unica soluzione<\/option>[\s\S]*>Caparra e saldo<\/option>/);
+  assert.match(script, /servicePricingNodes\.forEach\(\(node\) => \{ node\.hidden = pricing\.value !== 'NONE'; \}\)/);
+  assert.match(script, /economicLabel\.hidden = !paidEvent/);
+});
+test('il wizard distingue il salvataggio della bozza dalla produzione del foglio', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(portal, /Salva la bozza e vai alle produzioni/);
+  assert.match(portal, /Crea la bozza e vai alle produzioni/);
+  assert.match(portal, /Crea e collega il foglio Google/);
+  assert.doesNotMatch(portal, /Salva e continua la produzione|Produci pulsante e foglio Google/);
+});
+
+test('la coerenza temporale impedisce nuove scadenze passate e segnala quelle già presenti', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(portal, /La chiusura delle iscrizioni non può essere precedente a questo momento\./);
+  assert.match(portal, /\$is_expired = self::is_past_event\( \$closes_at \)/);
+  assert.match(portal, /\$is_expired \? 'Scaduto'/);
+  assert.match(portal, /current_time\( 'Y-m-d\\TH:i' \)/);
 });
