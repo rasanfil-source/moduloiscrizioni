@@ -48,8 +48,17 @@ final class MI_Access {
 		$user_id = $user_id ?: get_current_user_id();
 		$user = get_user_by( 'id', $user_id );
 		if ( $user && ( user_can( $user, 'manage_options' ) || user_can( $user, 'mi_manage_all_events' ) ) ) return 'ALL';
-		$scope = get_user_meta( $user_id, '_mi_event_scope', true );
-		return array_values( array_unique( array_filter( array_map( 'absint', is_array( $scope ) ? $scope : array() ) ) ) );
+		$groups = self::activity_ids( $user_id );
+		if ( ! is_array( $groups ) || ! $groups ) return array();
+		return array_values( array_map( 'absint', get_posts( array(
+			'post_type'              => MI_Event_Post_Type::EVENT_TYPE,
+			'post_status'            => array( 'publish', 'draft', 'private' ),
+			'numberposts'            => -1,
+			'fields'                 => 'ids',
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
+			'meta_query'             => array( array( 'key' => '_mi_activity_id', 'value' => $groups, 'compare' => 'IN', 'type' => 'NUMERIC' ) ),
+		) ) ) );
 	}
 
 	public static function map_event_meta_cap( $caps, $cap, $user_id, $args ) {
@@ -124,8 +133,8 @@ final class MI_Access {
 	}
 
 	public static function login_redirect( $redirect_to, $requested, $user ) {
-		if ( $user instanceof WP_User && in_array( 'mi_event_manager', (array) $user->roles, true ) ) {
-			return admin_url( 'edit.php?post_type=' . MI_Event_Post_Type::EVENT_TYPE );
+		if ( $user instanceof WP_User && ( user_can( $user, 'mi_portal_access' ) || user_can( $user, 'manage_options' ) ) ) {
+			return MI_Portal::url();
 		}
 		return $redirect_to;
 	}
