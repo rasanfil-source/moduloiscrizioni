@@ -35,3 +35,6 @@
 .mi-event-card{content-visibility:auto;contain-intrinsic-size:320px}.mi-booking-card{content-visibility:auto;contain-intrinsic-size:78px;touch-action:manipulation}.mi-portal-switcher a,.mi-primary,.mi-secondary,.mi-danger,.mi-portal-logout{touch-action:manipulation}
 @media(max-width:600px){.mi-portal-switcher{display:flex;flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:thin}.mi-portal-switcher a{flex:0 0 auto;min-width:max-content}.mi-registrations-toolbar{position:static}}
 @media(prefers-reduced-motion:reduce){.mi-event-card,.mi-booking-card,.mi-portal-logout{transition:none}}
+
+/* Produzioni richieste al termine della configurazione dell'evento. */
+.mi-event-outputs{margin-top:18px;padding:16px;border:1px solid #cbd5e1;border-radius:14px;background:#fff}.mi-event-outputs h3{margin:0 0 10px}.mi-event-outputs ol{display:grid;gap:10px;margin:0 0 14px;padding-left:22px}.mi-event-outputs li strong,.mi-event-outputs li span,.mi-event-outputs li a,.mi-event-outputs li code{display:block}.mi-event-outputs code{width:max-content;max-width:100%;margin-top:4px;padding:6px 9px;border-radius:7px;background:#eef2ff;overflow-wrap:anywhere}

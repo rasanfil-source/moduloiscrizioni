@@ -1,3 +1,29 @@
+/** Prepara il registro dell'evento e il relativo foglio operativo su richiesta firmata di WordPress. */
+function preparaProduzioniEventoDaWordPress_(payload) {
+  payload = payload || {};
+  const idEvento = normalizzaTesto_(payload.id_evento, 40);
+  const titolo = normalizzaTesto_(payload.titolo, 200);
+  if (!/^\d+$/.test(idEvento) || !titolo) return { ok: false, error: 'EVENTO_NON_VALIDO' };
+  const eventi = ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS);
+  const esistente = convertiRigheInOggetti_(eventi).find(function (riga) { return String(riga.id_evento) === idEvento; });
+  const valori = [
+    idEvento,
+    normalizzaTesto_(payload.id_gruppo, 40),
+    neutralizzaFormula_(titolo, 200),
+    normalizzaValoreElenco_(payload.stato, ['BOZZA', 'PUBBLICATO', 'PRIVATO']) || 'BOZZA',
+    Math.max(1, Math.round(Number(payload.capienza) || 1)),
+    normalizzaTesto_(payload.apertura_iscrizioni, 40),
+    normalizzaTesto_(payload.chiusura_iscrizioni, 40),
+    normalizzaTesto_(payload.modalita_prezzo, 40),
+    new Date()
+  ];
+  if (esistente) eventi.getRange(esistente._row, 1, 1, valori.length).setValues([valori]);
+  else eventi.appendRow(valori);
+  const risultato = apriFoglioOperativoEvento({ id_evento: idEvento });
+  aggiungiControllo_('PRODUZIONI_EVENTO', 'PREPARE', idEvento, 'SUCCESS', 'WORDPRESS', risultato.creato ? 'SHEET_CREATED' : 'SHEET_REUSED', 'WORDPRESS_PROXY');
+  return { ok: true, id_evento: idEvento, id_foglio: risultato.id_foglio, url_foglio: risultato.url_foglio, creato: risultato.creato, mode: 'PREVIEW' };
+}
+
 /** Restituisce il foglio operativo dell'evento, creandolo soltanto se manca. */
 function apriFoglioOperativoEvento(form) {
   form = form || {};

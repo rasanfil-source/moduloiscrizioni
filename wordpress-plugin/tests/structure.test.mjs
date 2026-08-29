@@ -47,7 +47,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.8\.3/);
+	assert.match(source, /Version:\s+3\.9\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1202,6 +1202,22 @@ test('il wizard crea una bozza completa e mostra collegamenti espliciti', async 
   assert.match(script, /data-mi-opens/);
   assert.match(script, /closesAt\.min/);
   assert.match(script, /startsAt\.min/);
+});
+
+test('selezionare una bozza riprende lo stesso percorso guidato e prepara le produzioni', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  assert.match(portal, /'draft' === \$event->post_status[\s\S]*?'mi_portal_view' => 'create'/);
+  assert.match(portal, /'mi_portal_draft' => \$event->ID/);
+  assert.match(portal, /name="draft_event_id"/);
+  assert.match(portal, /wp_update_post\( array\( 'ID' => \$draft_event_id/);
+  assert.match(portal, /Riprendi la creazione/);
+  assert.match(portal, /PREPARA_PRODUZIONI_EVENTO/);
+  assert.match(portal, /_mi_operational_sheet_id/);
+  assert.match(portal, /\[modulo_iscrizioni event=&quot;/);
+  assert.match(portal, /Pulsante saldo/);
+  assert.match(portal, /data-mi-operational-profile/);
+  assert.match(script, /updateOvernight\(\)/);
 });
 
 test('il portale consente di creare un gruppo senza duplicare lo slug', async () => {
