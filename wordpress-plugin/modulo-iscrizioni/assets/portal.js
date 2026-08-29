@@ -35,17 +35,28 @@ document.addEventListener('DOMContentLoaded', () => {
       index = Math.max(0, index - 1);
       show();
     });
+    form.querySelector('button[type="submit"]')?.addEventListener('click', (event) => {
+      const invalid = [...form.elements].find((field) => !field.disabled && field.validity && !field.validity.valid);
+      if (!invalid) return;
+      event.preventDefault();
+      const invalidStep = steps.findIndex((step) => step.contains(invalid));
+      if (invalidStep >= 0) index = invalidStep;
+      show();
+      invalid.reportValidity();
+    });
+    const pricing = form.querySelector('[data-mi-pricing]');
     const overnight = form.querySelector('[data-mi-overnight]');
     const rooms = form.querySelector('[data-mi-accommodations]');
     const updateOvernight = () => {
-	  const servicePricing = form.querySelector('[data-mi-pricing]')?.value === 'NONE';
+	  const servicePricing = pricing?.value === 'NONE';
       rooms.hidden = !servicePricing || !overnight.checked;
       if (!overnight.checked) rooms.querySelectorAll('input').forEach((input) => { input.checked = false; });
 	  rooms.querySelectorAll('[data-mi-accommodation]').forEach((accommodation) => {
 		const price = accommodation.closest('.mi-accommodation-fee')?.querySelector('input[name^="accommodation_price"]');
 		if (!price) return;
-		price.disabled = !overnight.checked || !accommodation.checked;
-		price.required = overnight.checked && accommodation.checked;
+		const active = servicePricing && overnight.checked && accommodation.checked;
+		price.disabled = !active;
+		price.required = active;
 		if (!accommodation.checked) price.value = '';
 	  });
     };
@@ -54,14 +65,17 @@ document.addEventListener('DOMContentLoaded', () => {
       updateOvernight();
     }
 	form.querySelectorAll('[data-mi-accommodation]').forEach((accommodation) => accommodation.addEventListener('change', updateOvernight));
+	const serviceUpdaters = [];
 	form.querySelectorAll('[data-mi-service-fee]').forEach((service) => {
 	  const price = service.closest('.mi-service-fee')?.querySelector('input[name^="service_price"]');
 	  const updateService = () => {
 		if (!price) return;
-		price.disabled = !service.checked;
-		price.required = service.checked;
+		const active = pricing?.value === 'NONE' && service.checked;
+		price.disabled = !active;
+		price.required = active;
 		if (!service.checked) price.value = '';
 	  };
+	  serviceUpdaters.push(updateService);
 	  service.addEventListener('change', updateService);
 	  updateService();
 	});
@@ -73,7 +87,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const required = form.querySelector(`[data-mi-required="${enabled.dataset.miField}"]`);
       if (!enabled.checked && required) required.checked = false;
     }));
-    const pricing = form.querySelector('[data-mi-pricing]');
     const fixedPrice = form.querySelector('[data-mi-fixed-price]');
     const pricingLabel = pricing?.closest('label');
     const serviceFees = [...form.querySelectorAll('.mi-service-fee')];
@@ -99,6 +112,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	  if (fixedPrice) fixedPrice.hidden = pricing.value !== 'FIXED';
 	  servicePricingNodes.forEach((node) => { node.hidden = pricing.value !== 'NONE'; });
 	  updateOvernight();
+	  serviceUpdaters.forEach((updateService) => updateService());
 	  updateEconomic();
 	};
     pricing?.addEventListener('change', updatePricing);
@@ -107,13 +121,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const opensAt = form.querySelector('[data-mi-opens]');
     const closesAt = form.querySelector('[data-mi-closes]');
     const startsAt = form.querySelector('[data-mi-starts]');
+    const dateFields = [opensAt, closesAt, startsAt].filter(Boolean);
+    const formatDateEntry = (field) => {
+      const digits = field.value.replace(/\D/g, '').slice(0, 12);
+      let formatted = digits.slice(0, 2);
+      if (digits.length > 2) formatted += `/${digits.slice(2, 4)}`;
+      if (digits.length > 4) formatted += `/${digits.slice(4, 8)}`;
+      if (digits.length > 8) formatted += ` ${digits.slice(8, 10)}`;
+      if (digits.length > 10) formatted += `:${digits.slice(10, 12)}`;
+      field.value = formatted;
+    };
+    const validateFourDigitYear = (field) => {
+      const value = field.value;
+      field.setCustomValidity(value && !/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/.test(value) ? 'Usa il formato gg/mm/aaaa hh:mm, con un anno di quattro cifre.' : '');
+    };
+    dateFields.forEach((field) => {
+      field.addEventListener('input', () => { formatDateEntry(field); validateFourDigitYear(field); });
+      field.addEventListener('change', () => validateFourDigitYear(field));
+      validateFourDigitYear(field);
+    });
     const updateDateLimits = () => {
-      if (!closesAt || !startsAt) return;
-      const closingBounds = [closesAt.dataset.miNow, opensAt?.value].filter(Boolean).sort();
-      closesAt.min = closingBounds[closingBounds.length - 1] || '';
-      const lowerBounds = [startsAt.dataset.miToday, opensAt?.value, closesAt.value].filter(Boolean);
-      lowerBounds.sort();
-      startsAt.min = lowerBounds[lowerBounds.length - 1] || startsAt.dataset.miToday;
+      dateFields.forEach((field) => validateFourDigitYear(field));
     };
     opensAt?.addEventListener('change', updateDateLimits);
     closesAt?.addEventListener('change', updateDateLimits);

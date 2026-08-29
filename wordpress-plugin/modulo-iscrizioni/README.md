@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — versione 3.11.0
+# Modulo Iscrizioni — versione 3.12.0
 
 Plugin WordPress per configurare e pubblicare moduli, raccogliere iscrizioni e consegnarle in modo firmato alla console operativa Google Workspace.
 
