@@ -36,6 +36,76 @@ function aggiornaFoglioOperativoEvento(form) {
   return { ok: true, url_foglio: foglio.getUrl(), righe: vista.righe.length, message: 'Foglio operativo riallineato con ' + vista.righe.length + ' partecipanti.' };
 }
 
+/** Confronta il foglio evento con DB_MODULI senza scrivere alcun dato. */
+function preparaSincronizzazioneFoglioOperativo(form) {
+  form = form || {};
+  const idEvento = normalizzaTesto_(form.id_evento, 40);
+  if (!idEvento) throw new Error('Scegli un evento.');
+  const collegamento = trovaCollegamentoFoglioOperativo_(idEvento);
+  const foglio = SpreadsheetApp.openById(String(collegamento.id_foglio));
+  const scheda = foglio.getSheetByName('Dati operativi') || foglio.getSheets()[0];
+  const metadati = scheda.getDeveloperMetadata().reduce(function (indice, elemento) { indice[elemento.getKey()] = elemento.getValue(); return indice; }, {});
+  let campi = [];
+  try { campi = JSON.parse(String(metadati.MI_CAMPI || '[]')); } catch (errore) { campi = []; }
+  if (!Array.isArray(campi) || !campi.length) throw new Error('Riallinea prima il foglio operativo per abilitarne la sincronizzazione controllata.');
+  const vista = generaVistaOperativaEvento_(idEvento, campi);
+  const centrali = vista.righe.reduce(function (indice, riga) { indice[riga.codice_ordine + '|' + riga.numero_partecipante] = riga; return indice; }, {});
+  const valori = scheda.getLastRow() > 1 ? scheda.getRange(2, 1, scheda.getLastRow() - 1, 2 + campi.length).getDisplayValues() : [];
+  const vietati = ['event', 'order_code', 'participant_number', 'first_name', 'last_name', 'status', 'options', 'total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance'];
+  const modifiche = [];
+  const problemi = [];
+  const viste = {};
+  vista.colonne.forEach(function (colonna) { viste[colonna.key] = colonna.label; });
+  valori.forEach(function (riga, indiceRiga) {
+    const codice = normalizzaTesto_(riga[0], 64);
+    const numero = Math.max(0, Math.round(Number(riga[1]) || 0));
+    const centrale = centrali[codice + '|' + numero];
+    if (!codice || !numero || !centrale) { problemi.push('Riga ' + (indiceRiga + 2) + ': collegamento tecnico non valido.'); return; }
+    campi.forEach(function (campo, indiceCampo) {
+      const nuovo = normalizzaTesto_(riga[indiceCampo + 2], 1000);
+      const precedente = normalizzaTesto_(centrale.valori[campo], 1000);
+      if (nuovo === precedente) return;
+      if (vietati.indexOf(campo) >= 0) { problemi.push('Riga ' + (indiceRiga + 2) + ': “' + (viste[campo] || campo) + '” è calcolato o protetto.'); return; }
+      if (campo === 'room' && !nuovo) { problemi.push('Riga ' + (indiceRiga + 2) + ': la sistemazione non può essere cancellata dal foglio.'); return; }
+      modifiche.push({ codice_ordine: codice, numero_partecipante: numero, campo: campo, etichetta: viste[campo] || campo, precedente: precedente, nuovo: nuovo });
+    });
+  });
+  if (modifiche.length > 200) throw new Error('Sono state rilevate più di 200 modifiche: suddividere il lavoro in blocchi più piccoli.');
+  const firma = creaFirmaSincronizzazioneFoglio_(idEvento, modifiche);
+  return { id_evento: idEvento, modifiche: modifiche, problemi: problemi.slice(0, 50), firma: firma, applicabile: modifiche.length > 0 && problemi.length === 0 };
+}
+
+/** Applica soltanto una differenza appena ricalcolata e confermata dall'operatore. */
+function confermaSincronizzazioneFoglioOperativo(form) {
+  form = form || {};
+  const idEvento = normalizzaTesto_(form.id_evento, 40);
+  const firma = normalizzaTesto_(form.firma, 128);
+  const motivo = normalizzaTesto_(form.motivo, 500);
+  if (!idEvento || !firma || !motivo) throw new Error('Evento, firma e motivo della sincronizzazione sono obbligatori.');
+  const anteprima = preparaSincronizzazioneFoglioOperativo({ id_evento: idEvento });
+  if (!anteprima.applicabile || anteprima.firma !== firma) throw new Error('Il foglio è cambiato dopo l’anteprima: controllare nuovamente le differenze.');
+  const operatore = normalizzaTesto_(Session.getActiveUser().getEmail() || 'SEGRETERIA', 120);
+  anteprima.modifiche.forEach(function (modifica) {
+    if (modifica.campo === 'room') {
+      cambiaSistemazioneSegreteria({ order_code: modifica.codice_ordine, participant_number: modifica.numero_partecipante, room_code: modifica.nuovo, reason: motivo });
+      return;
+    }
+    registraOperazioneSegreteria_(modifica.codice_ordine, modifica.numero_partecipante, 'SYNC_EVENT_SHEET', { key: modifica.campo, value: modifica.nuovo, previous: modifica.precedente }, motivo, operatore, 'Modifica confermata dal foglio operativo dell’evento.');
+  });
+  aggiungiControllo_('FOGLIO_OPERATIVO', 'SYNC', idEvento, 'SUCCESS', operatore, String(anteprima.modifiche.length), 'SEGRETERIA');
+  return { ok: true, count: anteprima.modifiche.length, message: 'Sincronizzate ' + anteprima.modifiche.length + ' modifiche con storico.' };
+}
+
+function trovaCollegamentoFoglioOperativo_(idEvento) {
+  const collegamento = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES)).find(function (riga) { return String(riga.id_evento) === idEvento; });
+  if (!collegamento || !collegamento.id_foglio) throw new Error('Crea prima il foglio operativo dell’evento.');
+  return collegamento;
+}
+
+function creaFirmaSincronizzazioneFoglio_(idEvento, modifiche) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, idEvento + '|' + JSON.stringify(modifiche), Utilities.Charset.UTF_8).map(function (valore) { return ('0' + (valore & 255).toString(16)).slice(-2); }).join('');
+}
+
 function scriviFoglioOperativoEvento_(scheda, vista) {
   rimuoviRaggruppamentiColonne_(scheda);
   scheda.clear();
@@ -49,6 +119,9 @@ function scriviFoglioOperativoEvento_(scheda, vista) {
   scheda.hideColumns(1, 2);
   scheda.autoResizeColumns(3, Math.max(1, intestazioni.length - 2));
   raggruppaColonneFoglioOperativo_(scheda, vista.colonne);
+  impostaMetadatoVista_(scheda, 'MI_ID_EVENTO', vista.evento.id);
+  impostaMetadatoVista_(scheda, 'MI_CAMPI', JSON.stringify(vista.colonne.map(function (colonna) { return colonna.key; })));
+  impostaMetadatoVista_(scheda, 'MI_DATA_AGGIORNAMENTO', new Date().toISOString());
   scheda.getRange('A1').setNote('Le colonne tecniche nascoste collegano ogni riga a DB_MODULI. Usare le procedure di sincronizzazione della Segreteria per rendere definitive le modifiche.');
 }
 
