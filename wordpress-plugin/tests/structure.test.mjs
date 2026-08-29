@@ -33,7 +33,8 @@ test('il modello operativo dell evento è scelto in WordPress e consegnato a Wor
   assert.match(eventType, /_mi_operational_profile/);
   assert.match(portal, /_mi_operational_profile/);
   assert.match(registration, /operational_profile/);
-  assert.match(portalJs, /name="operational_profile"/);
+  assert.doesNotMatch(portalJs, /name="operational_profile"|Vista iniziale della segreteria/);
+  assert.match(portal, /\$_POST\['operational_profile'\] \?\? 'AUTOMATICO'/);
 });
 
 test('Workspace prevede modelli report standard senza sovrascrivere dati', async () => {
@@ -47,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.9\.4/);
+	assert.match(source, /Version:\s+3\.9\.5/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1109,11 +1110,11 @@ test('la scheda iscrizioni riprende la vista operativa con ricerca e filtri sicu
   assert.match(css, /\.mi-status-pill\.is-green/);
 });
 
-test('la ricerca iscrizioni privilegia il campo e mantiene Cerca piccolo e affiancato', async () => {
+test('la ricerca iscrizioni privilegia il campo e mantiene Cerca affiancato', async () => {
   const css = await read('assets/portal.css');
-  assert.match(css, /\.mi-registration-search\{width:min\(100%,760px\);grid-template-columns:minmax\(260px,1fr\) 86px/);
-  assert.match(css, /\.mi-registration-search \.mi-primary\{width:86px/);
-  assert.match(css, /grid-template-columns:minmax\(0,1fr\) 78px/);
+  assert.match(css, /mi-registrations-toolbar \.mi-registration-search\{[^}]*grid-template-columns:minmax\(0,3fr\) minmax\(82px,1fr\)/);
+  assert.match(css, /mi-registration-search>\.mi-primary\{[^}]*width:100%/);
+  assert.match(css, /@media\(max-width:520px\)[^{]*\{\.mi-registrations-toolbar \.mi-registration-search\{[^}]*grid-template-columns:minmax\(0,3fr\) minmax\(72px,1fr\)/);
 });
 
 test('i menu delle iscrizioni applicano subito i filtri mantenendo il comando manuale', async () => {
@@ -1181,6 +1182,7 @@ test('gli eventi annullati restano nella gestione come tessere compatte', async 
   assert.match(portal, /is-cancelled/);
   assert.match(portal, /\$status_label = \$is_cancelled \? 'Annullato'/);
   assert.match(css, /\.mi-event-card\.is-cancelled/);
+  assert.match(css, /\.mi-event-card\.is-cancelled\{height:150px;min-height:0;align-self:start/);
   assert.match(css, /\.mi-event-card\.is-cancelled \.mi-event-card__image/);
   assert.match(css, /background:#fdecef;color:#9f1930/);
 });
@@ -1326,4 +1328,27 @@ test('gli eventi annullati spariscono automaticamente dal filtro delle iscrizion
   assert.match(portal, /\$selectable_events = array_values\( array_filter\( \$events[\s\S]*?_mi_event_cancelled_at/);
   assert.match(portal, /\$selected && ! in_array\( \$selected, \$selectable_event_ids, true \) \) \$selected = 0/);
   assert.match(portal, /foreach \( \$selectable_events as \$event \)/);
+});
+
+test('la ricerca iscrizioni mantiene campo e pulsante affiancati in proporzione tre a uno', async () => {
+  const css = await read('assets/portal.css');
+  assert.match(css, /mi-registrations-toolbar \.mi-registration-search\{[^}]*grid-template-columns:minmax\(0,3fr\) minmax\(82px,1fr\)/);
+  assert.match(css, /mi-registration-search>input\{[^}]*width:100%[^}]*margin:0/);
+  assert.match(css, /mi-registration-search>\.mi-primary\{[^}]*width:100%/);
+});
+
+test('le quote accessorie usano righe compatte senza grandi spazi vuoti', async () => {
+  const css = await read('assets/portal.css');
+  assert.match(css, /\.mi-service-fee\{[^}]*grid-template-columns:minmax\(210px,360px\) minmax\(120px,180px\)[^}]*padding:\.38rem 0/);
+  assert.match(css, /\.mi-event-wizard \.mi-service-fee>label\{margin:0\}/);
+  assert.match(css, /\.mi-service-fee input:not\(\[type=checkbox\]\)\{[^}]*min-height:40px/);
+});
+
+test('la scelta della quota usa tre opzioni chiare nell ordine richiesto', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const start = portal.indexOf('Come viene calcolata la quota?');
+  const free = portal.indexOf('Evento totalmente gratuito', start);
+  const fixed = portal.indexOf('Quota uguale per tutti', start);
+  const services = portal.indexOf('In base ai servizi scelti', start);
+  assert.ok(start >= 0 && free > start && fixed > free && services > fixed);
 });
