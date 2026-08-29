@@ -105,9 +105,9 @@ test('la migrazione aggiunge riepilogo economico e sistemazioni operative', () =
 });
 
 test('la console Sheets consulta prenotazioni e genera elenchi operativi per evento', () => {
-	assert.match(sources['Setup.gs'], /Apri segreteria/);
+	assert.doesNotMatch(sources['Setup.gs'], /Apri segreteria/);
 	assert.match(sources['Setup.gs'], /Configura elenco operativo/);
-	assert.match(sources['Setup.gs'], /Comunicazioni operative/);
+	assert.doesNotMatch(sources['Setup.gs'], /Comunicazioni operative/);
 	assert.match(sources['Segreteria.gs'], /showSidebar/);
 	assert.match(sources['Segreteria.gs'], /showModelessDialog/);
 	assert.doesNotMatch(sources['Segreteria.gs'], /SpreadsheetApp\.create/);
@@ -170,18 +170,12 @@ test('la segreteria essenziale apre un foglio operativo dedicato per evento', ()
 	assert.doesNotMatch(segreteriaHtml.match(/function navigazioneSegreteria[\s\S]*?\n/)[0], /Viste operative|Camere e pullman/);
 });
 
-test('la segreteria Web è autonoma e rifiuta accessi anonimi', () => {
-	assert.match(sources['Setup.gs'], /apriSegreteriaWeb/);
-	assert.match(sources['WebApp.gs'], /view \|\| ''\) === 'segreteria'/);
-	assert.match(sources['WebApp.gs'], /utenteSegreteriaAutorizzato_/);
-	assert.match(sources['WebApp.gs'], /if \(!active\) return false/);
-	assert.match(sources['Segreteria.gs'], /MI_SECRETARY_WEBAPP_URL/);
-	assert.match(segreteriaHtml, /IS_WEB_APP/);
-	assert.match(sources['WebApp.gs'], /pulisciUrlWebAppSegreteria_/);
-	assert.match(segreteriaHtml, /new URL\(base,location\.href\)/);
-	assert.match(segreteriaHtml, /searchParams\.set\('order',order\)/);
-	assert.match(segreteriaHtml, /if\(IS_WEB_APP\)\{await loadBooking\(code\);return\}/);
-	assert.doesNotMatch(segreteriaHtml, /location\.assign\(secretaryUrl/);
+test('Workspace non espone una seconda pagina Segreteria eventi', () => {
+	assert.doesNotMatch(sources['Setup.gs'], /apriSegreteriaWeb/);
+	assert.doesNotMatch(sources['WebApp.gs'], /view \|\| ''\) === 'segreteria'/);
+	assert.doesNotMatch(sources['WebApp.gs'], /utenteSegreteriaAutorizzato_/);
+	assert.match(sources['WebApp.gs'], /service: 'modulo-iscrizioni-workspace'/);
+	assert.match(sources['WebApp.gs'], /mode: 'PREVIEW'/);
 });
 
 test('lo stato individuale dei partecipanti arriva nelle schede e negli elenchi', () => {
