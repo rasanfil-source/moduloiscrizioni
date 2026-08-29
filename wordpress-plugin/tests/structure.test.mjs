@@ -670,8 +670,9 @@ test('i metadati tecnici dei consensi non compaiono nel pannello evento', async 
 test('email e cellulare dei partecipanti sono campi configurabili e validati', async () => {
 	const schema = await read('includes/class-mi-field-schema.php');
 	const script = await read('assets/public.js');
-	assert.match(schema, /'email'\s*=>[\s\S]*Email del partecipante/);
-	assert.match(schema, /'phone'\s*=>[\s\S]*Cellulare del partecipante/);
+	assert.match(schema, /'email'\s*=>[\s\S]*'label'\s*=>\s*'Email'/);
+	assert.match(schema, /'phone'\s*=>[\s\S]*'label'\s*=>\s*'Cellulare'/);
+	assert.doesNotMatch(schema, /Email del partecipante|Cellulare del partecipante/);
 	assert.match(schema, /mi_participant_email_invalid/);
 	assert.match(schema, /mi_participant_phone_invalid/);
 	assert.match(script, /\['date', 'email', 'tel'\]/);

@@ -7,7 +7,7 @@ final class MI_Field_Schema {
 		return array(
 			'email' => array(
 				'key'          => 'email',
-				'label'        => 'Email del partecipante',
+				'label'        => 'Email',
 				'type'         => 'email',
 				'max_length'   => 254,
 				'autocomplete' => 'email',
@@ -15,7 +15,7 @@ final class MI_Field_Schema {
 			),
 			'phone' => array(
 				'key'          => 'phone',
-				'label'        => 'Cellulare del partecipante',
+				'label'        => 'Cellulare',
 				'type'         => 'tel',
 				'max_length'   => 32,
 				'autocomplete' => 'tel',
