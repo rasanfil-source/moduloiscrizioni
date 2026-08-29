@@ -162,7 +162,11 @@ test('la segreteria essenziale apre un foglio operativo dedicato per evento', ()
 	assert.match(sources['FogliOperativi.gs'], /SpreadsheetApp\.create/);
 	assert.match(sources['FogliOperativi.gs'], /MI_SHEETS\.EVENT_WORKSPACES/);
 	assert.match(sources['FogliOperativi.gs'], /function raggruppaColonneFoglioOperativo_/);
+	assert.match(sources['FogliOperativi.gs'], /function preparaSincronizzazioneFoglioOperativo/);
+	assert.match(sources['FogliOperativi.gs'], /function confermaSincronizzazioneFoglioOperativo/);
+	assert.match(sources['FogliOperativi.gs'], /Il foglio è cambiato dopo l’anteprima/);
 	assert.match(segreteriaHtml, /Apri il foglio operativo dell’evento/);
+	assert.match(segreteriaHtml, /Controlla modifiche del foglio/);
 	assert.doesNotMatch(segreteriaHtml.match(/function navigazioneSegreteria[\s\S]*?\n/)[0], /Viste operative|Camere e pullman/);
 });
 
