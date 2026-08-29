@@ -267,7 +267,7 @@ final class MI_Activator {
 
 		add_role( 'mi_event_manager', 'Gestore iscrizioni', $capabilities );
 		add_role( 'mi_secretary', 'Segretario iscrizioni', array( 'read' => true, 'mi_portal_access' => true, 'mi_manage_all_events' => true, 'mi_create_events' => true, 'mi_view_registrations' => true ) );
-		add_role( 'mi_event_operator', 'Operatore evento', array( 'read' => true, 'mi_portal_access' => true, 'mi_view_registrations' => true ) );
+		add_role( 'mi_event_operator', 'Operatore di gruppo', array( 'read' => true, 'mi_portal_access' => true, 'mi_view_registrations' => true ) );
 		$manager = get_role( 'mi_event_manager' );
 		if ( $manager ) {
 			foreach ( $capabilities as $capability => $grant ) {

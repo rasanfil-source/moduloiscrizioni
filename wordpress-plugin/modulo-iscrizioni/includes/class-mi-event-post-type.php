@@ -96,19 +96,7 @@ final class MI_Event_Post_Type {
 	public static function add_meta_boxes() {
 		add_meta_box( 'mi_event_configuration', 'Configurazione iscrizioni', array( __CLASS__, 'render_event_box' ), self::EVENT_TYPE, 'normal', 'high' );
 		add_meta_box( 'mi_event_shortcode', 'Pubblicazione nel sito', array( __CLASS__, 'render_shortcode_box' ), self::EVENT_TYPE, 'side', 'default' );
-		add_meta_box( 'mi_event_operators', 'Operatori dell’evento', array( __CLASS__, 'render_operators_box' ), self::EVENT_TYPE, 'side', 'default' );
 		add_meta_box( 'mi_activity_branding', 'Identità del gruppo', array( __CLASS__, 'render_activity_box' ), self::GROUP_TYPE, 'side', 'default' );
-	}
-
-	public static function render_operators_box( $post ) {
-		if ( ! current_user_can( 'manage_options' ) ) { echo '<p>Solo l’amministratore può modificare gli operatori.</p>'; return; }
-		$operators = get_users( array( 'role' => 'mi_event_operator', 'orderby' => 'display_name' ) );
-		echo '<p class="description">Un operatore può essere associato a più eventi. La password è gestita da WordPress e non viene salvata nell’evento.</p>';
-		foreach ( $operators as $operator ) {
-			$scope = MI_Access::event_ids( $operator->ID );
-			echo '<label style="display:block;margin:6px 0"><input type="checkbox" name="mi_event_operators[]" value="' . esc_attr( $operator->ID ) . '" ' . checked( in_array( $post->ID, (array) $scope, true ), true, false ) . '> ' . esc_html( $operator->display_name . ' (' . $operator->user_login . ')' ) . '</label>';
-		}
-		echo '<details style="margin-top:12px"><summary>Crea un nuovo operatore</summary><p><label>Nome utente<br><input name="mi_new_operator_login" autocomplete="off"></label></p><p><label>Password iniziale<br><input type="password" name="mi_new_operator_password" autocomplete="new-password"></label></p><p class="description">Almeno 12 caratteri con maiuscola, minuscola, numero e simbolo. Esempi deboli come “Francesco:26” vengono rifiutati.</p></details>';
 	}
 
 	public static function render_event_box( $post ) {
@@ -281,7 +269,6 @@ final class MI_Event_Post_Type {
 		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) || ! current_user_can( 'mi_manage_events' ) ) {
 			return;
 		}
-		if ( current_user_can( 'manage_options' ) ) self::save_event_operators( $post_id );
 
 		$activity_id = isset( $_POST['mi_activity_id'] ) ? absint( $_POST['mi_activity_id'] ) : 0;
 		$current_activity_id = absint( get_post_meta( $post_id, '_mi_activity_id', true ) );
@@ -426,28 +413,6 @@ final class MI_Event_Post_Type {
 			);
 		}
 		update_post_meta( $post_id, '_mi_options', $options );
-	}
-
-	private static function save_event_operators( $event_id ) {
-		$selected = array_values( array_unique( array_filter( array_map( 'absint', (array) wp_unslash( $_POST['mi_event_operators'] ?? array() ) ) ) ) );
-		$login = sanitize_user( wp_unslash( $_POST['mi_new_operator_login'] ?? '' ), true );
-		$password = (string) wp_unslash( $_POST['mi_new_operator_password'] ?? '' );
-		if ( $login || $password ) {
-			$strong = strlen( $password ) >= 12 && preg_match( '/[a-z]/', $password ) && preg_match( '/[A-Z]/', $password ) && preg_match( '/\d/', $password ) && preg_match( '/[^A-Za-z0-9]/', $password );
-			if ( ! $login || ! $strong || username_exists( $login ) ) {
-				set_transient( 'mi_publication_error_' . get_current_user_id(), 'Nuovo operatore non creato: controlla nome utente, unicità e robustezza della password.', MINUTE_IN_SECONDS );
-			} else {
-				$user_id = wp_create_user( $login, $password );
-				if ( ! is_wp_error( $user_id ) ) { ( new WP_User( $user_id ) )->set_role( 'mi_event_operator' ); $selected[] = (int) $user_id; }
-			}
-		}
-		$operators = get_users( array( 'role' => 'mi_event_operator', 'fields' => 'ID' ) );
-		foreach ( $operators as $operator_id ) {
-			$scope = MI_Access::event_ids( (int) $operator_id );
-			$scope = is_array( $scope ) ? $scope : array();
-			if ( in_array( (int) $operator_id, $selected, true ) ) $scope[] = $event_id; else $scope = array_values( array_diff( $scope, array( $event_id ) ) );
-			update_user_meta( (int) $operator_id, '_mi_event_scope', array_values( array_unique( array_map( 'absint', $scope ) ) ) );
-		}
 	}
 
 	public static function publish_revision( $post_id, $post ) {

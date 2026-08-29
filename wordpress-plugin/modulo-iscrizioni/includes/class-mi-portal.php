@@ -46,6 +46,7 @@ final class MI_Portal {
 			return self::redirect_cancel_result( MI_Registration_Service::cancel_participant( $participant_id, wp_get_current_user()->display_name ) );
 		}
 		if ( in_array( $action, array( 'update_event', 'cancel_event' ), true ) ) return self::handle_event_management_action( $action );
+		if ( 'prepare_communication' === $action ) return self::handle_communication_action();
 		if ( 'create_event' !== $action ) return;
 		if ( ! is_user_logged_in() || ! current_user_can( 'mi_create_events' ) ) wp_die( 'Accesso non consentito.', 403 );
 		check_admin_referer( 'mi_portal_create_event', 'mi_portal_nonce' );
@@ -134,6 +135,32 @@ final class MI_Portal {
 		self::redirect_result( $upload_warning ? 'Bozza creata; immagine non caricata: ' . $upload_warning : 'Bozza creata correttamente.', false, $event_id );
 	}
 
+	private static function handle_communication_action() {
+		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_portal_access' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
+		check_admin_referer( 'mi_portal_prepare_communication', 'mi_portal_nonce' );
+		$event_id = absint( $_POST['event_id'] ?? 0 );
+		if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Evento non accessibile.', 403 );
+		$template = strtoupper( sanitize_key( wp_unslash( $_POST['template_type'] ?? '' ) ) );
+		if ( ! in_array( $template, array( 'PRE_DEPARTURE_REMINDER', 'BALANCE_REMINDER' ), true ) ) return self::redirect_portal_result( 'Tipo di comunicazione non valido.', true, 'communications' );
+		$message = mb_substr( sanitize_textarea_field( wp_unslash( $_POST['message'] ?? '' ) ), 0, 4000 );
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT order_code,total_cents,balance_cents FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status IN ('CONFIRMED','PENDING_PAYMENT') AND capacity_released_at IS NULL ORDER BY id LIMIT 1000", $event_id ), ARRAY_A );
+		$recipients = array();
+		foreach ( $rows as $row ) $recipients[] = array( 'order_code' => $row['order_code'], 'paid_cents' => max( 0, (int) $row['total_cents'] - (int) $row['balance_cents'] ), 'balance_cents' => max( 0, (int) $row['balance_cents'] ) );
+		$result = MI_Spedizione_Email::accoda_comunicazione_operativa( array(
+			'communication_id' => 'portal-' . $event_id . '-' . get_current_user_id() . '-' . time() . '-' . wp_generate_password( 6, false, false ),
+			'event_id' => $event_id, 'template_type' => $template, 'message' => $message,
+			'allow_operational' => false, 'recipients' => $recipients,
+		) );
+		if ( is_wp_error( $result ) ) return self::redirect_portal_result( $result->get_error_message(), true, 'communications' );
+		return self::redirect_portal_result( (string) ( $result['message'] ?? 'Comunicazione preparata.' ) . ' Destinatari: ' . absint( $result['count'] ?? 0 ) . '. Modalità ANTEPRIMA.', false, 'communications' );
+	}
+
+	private static function redirect_portal_result( $message, $error, $view ) {
+		wp_safe_redirect( add_query_arg( array( 'mi_portal' => '1', 'mi_portal_view' => sanitize_key( $view ), 'mi_portal_message' => $message, 'mi_portal_error' => $error ? '1' : '0' ), self::url() ) );
+		exit;
+	}
+
 	private static function handle_event_management_action( $action ) {
 		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_portal_access' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
 		$event_id = absint( $_POST['event_id'] ?? 0 );
@@ -195,7 +222,7 @@ final class MI_Portal {
 		status_header( 200 );
 		nocache_headers();
 		$asset_version = rawurlencode( MI_VERSION );
-		$page_title = ! empty( $_GET['mi_status'] ) ? 'Stato della prenotazione' : 'Gestione iscrizioni';
+		$page_title = ! empty( $_GET['mi_status'] ) ? 'Stato della prenotazione' : 'Segreteria eventi';
 		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><title><?php echo esc_html( get_bloginfo( 'name' ) . ' — ' . $page_title ); ?></title><link rel="stylesheet" href="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal.css?ver=' . $asset_version ); ?>"></head><body class="mi-portal-standalone"><?php echo self::render(); ?><script defer src="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal.js?ver=' . $asset_version ); ?>"></script></body></html><?php
 		exit;
 	}
@@ -260,10 +287,10 @@ final class MI_Portal {
 		$view = sanitize_key( wp_unslash( $_GET['mi_portal_view'] ?? 'manage' ) );
 		$can_create = current_user_can( 'mi_create_events' ) || current_user_can( 'manage_options' );
 		ob_start();
-		?><main class="mi-portal"><header class="mi-portal-header"><div><span class="mi-portal-eyebrow">Servizio iscrizioni</span><h1>Gestione eventi</h1></div><a class="mi-portal-logout" href="<?php echo esc_url( wp_logout_url( self::base_url() ) ); ?>"><span aria-hidden="true">↗</span> Esci</a></header>
-		<nav class="mi-portal-switcher" aria-label="Vista portale"><?php if ( $can_create ) : ?><a class="<?php echo 'create' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'create' ) ); ?>">Crea evento</a><?php endif; ?><a class="<?php echo 'create' !== $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'manage' ) ); ?>"><?php echo esc_html( self::manage_label() ); ?></a></nav>
+		?><main class="mi-portal"><header class="mi-portal-header"><div><span class="mi-portal-eyebrow">Area riservata</span><h1>Segreteria eventi</h1></div><a class="mi-portal-logout" href="<?php echo esc_url( wp_logout_url( self::base_url() ) ); ?>"><span aria-hidden="true">↗</span> Esci</a></header>
+		<nav class="mi-portal-switcher" aria-label="Segreteria eventi"><a class="<?php echo 'manage' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'manage' ) ); ?>"><?php echo esc_html( self::manage_label() ); ?></a><?php if ( $can_create ) : ?><a class="<?php echo 'create' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'create' ) ); ?>">Crea evento</a><?php endif; ?><a class="<?php echo 'registrations' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'registrations' ) ); ?>">Iscrizioni</a><a class="<?php echo 'communications' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'communications' ) ); ?>">Comunicazioni</a></nav>
 		<?php self::notice(); ?>
-		<?php if ( 'create' === $view && $can_create ) self::create_view(); else self::manage_view(); ?>
+		<?php if ( 'create' === $view && $can_create ) self::create_view(); elseif ( 'registrations' === $view ) self::portal_registrations_view(); elseif ( 'communications' === $view ) self::communications_view(); else self::manage_view(); ?>
 		</main><?php
 		return ob_get_clean();
 	}
@@ -307,7 +334,37 @@ final class MI_Portal {
 	}
 
 	private static function login_view() {
-		ob_start(); ?><section class="mi-portal mi-portal-login"><span class="mi-portal-eyebrow">Area riservata</span><h1>Gestione iscrizioni</h1><p>Accedi come segretario o operatore. Se sei già autenticato in WordPress entrerai direttamente.</p><?php wp_login_form( array( 'redirect' => self::base_url(), 'label_username' => 'Utente', 'label_password' => 'Parola d’accesso', 'label_log_in' => 'Accedi', 'remember' => true ) ); ?></section><?php return ob_get_clean();
+		ob_start(); ?><section class="mi-portal mi-portal-login"><span class="mi-portal-eyebrow">Area riservata</span><h1>Segreteria eventi</h1><p>Accedi con le tue credenziali personali. Il segretario opera su tutto; ogni operatore vede soltanto i gruppi che gli sono stati assegnati.</p><?php wp_login_form( array( 'redirect' => self::base_url(), 'label_username' => 'Codice utente', 'label_password' => 'Parola d’accesso', 'label_log_in' => 'Accedi', 'remember' => true ) ); ?></section><?php return ob_get_clean();
+	}
+
+	private static function accessible_events() {
+		$scope = MI_Access::event_ids();
+		$query = array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' );
+		if ( 'ALL' !== $scope ) $query['post__in'] = $scope ?: array( 0 );
+		return get_posts( $query );
+	}
+
+	private static function portal_registrations_view() {
+		$events = self::accessible_events();
+		$event_ids = array_map( 'absint', wp_list_pluck( $events, 'ID' ) );
+		if ( ! $event_ids ) { echo '<section><h2>Iscrizioni</h2><p class="mi-portal-muted">Non ci sono eventi accessibili.</p></section>'; return; }
+		$selected = absint( $_GET['mi_portal_event'] ?? 0 );
+		if ( $selected && ! in_array( $selected, $event_ids, true ) ) wp_die( 'Evento non accessibile.', 403 );
+		echo '<section><h2>Iscrizioni</h2><form class="mi-portal-filter" method="get"><input type="hidden" name="mi_portal" value="1"><input type="hidden" name="mi_portal_view" value="registrations"><label>Evento<select name="mi_portal_event" onchange="this.form.submit()"><option value="">Tutti gli eventi accessibili</option>';
+		foreach ( $events as $event ) echo '<option value="' . esc_attr( $event->ID ) . '" ' . selected( $selected, $event->ID, false ) . '>' . esc_html( $event->post_title ) . '</option>';
+		echo '</select></label><noscript><button class="mi-secondary" type="submit">Mostra</button></noscript></form></section>';
+		self::registrations_view( $selected, $event_ids );
+	}
+
+	private static function communications_view() {
+		$events = self::accessible_events();
+		echo '<section class="mi-portal-communications"><h2>Comunicazioni</h2><p class="mi-portal-notice"><strong>Modalità ANTEPRIMA.</strong> La comunicazione viene preparata nella coda WordPress, ma non viene spedita.</p>';
+		if ( ! $events ) { echo '<p class="mi-portal-muted">Non ci sono eventi accessibili.</p></section>'; return; }
+		echo '<form method="post"><input type="hidden" name="mi_portal_action" value="prepare_communication">';
+		wp_nonce_field( 'mi_portal_prepare_communication', 'mi_portal_nonce' );
+		echo '<label>Evento<select name="event_id" required><option value="">Scegli un evento</option>';
+		foreach ( $events as $event ) echo '<option value="' . esc_attr( $event->ID ) . '">' . esc_html( $event->post_title ) . '</option>';
+		echo '</select></label><label>Tipo<select name="template_type" required><option value="PRE_DEPARTURE_REMINDER">Informazioni prima dell’evento</option><option value="BALANCE_REMINDER">Promemoria del saldo</option></select></label><label>Messaggio<textarea name="message" rows="8" maxlength="4000" placeholder="Punto di ritrovo, orario, cosa portare e altre indicazioni…"></textarea></label><button class="mi-primary" type="submit">Prepara in anteprima</button></form></section>';
 	}
 
 	private static function manage_label() {
@@ -388,7 +445,7 @@ final class MI_Portal {
 		echo '</section>';
 		if ( $ids ) {
 			$selected = absint( $_GET['mi_portal_event'] ?? 0 );
-			if ( $selected && in_array( $selected, $ids, true ) ) { self::event_management_card( $selected ); self::registrations_view( $selected ); } else self::registrations_view( 0, $ids );
+			if ( $selected && in_array( $selected, $ids, true ) ) self::event_management_card( $selected );
 		}
 		$history_url = $show_past
 			? add_query_arg( 'mi_portal_view', 'manage', $base_url )

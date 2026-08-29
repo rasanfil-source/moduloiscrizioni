@@ -47,7 +47,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.7\.0/);
+	assert.match(source, /Version:\s+3\.8\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -207,12 +207,13 @@ test('il portale web riusa WordPress e limita operatori ed eventi sul server', a
   assert.match(portal, /Gestisci eventi/);
   assert.match(portal, /C’è qualcuno qui/);
   assert.match(portal, /MI_Access::can_access_event/);
-  assert.match(access, /_mi_event_scope/);
+  assert.match(access, /_mi_activity_scope/);
+  assert.match(access, /meta_query/);
   assert.match(activator, /mi_secretary/);
   assert.match(activator, /mi_event_operator/);
-  assert.match(eventType, /Operatori dell’evento/);
-  assert.match(eventType, /wp_create_user/);
-  assert.match(eventType, /strlen\( \$password \) >= 12/);
+  assert.doesNotMatch(eventType, /Operatori dell’evento/);
+  assert.match(portal, /Segreteria eventi/);
+  assert.match(portal, /prepare_communication/);
   assert.match(script, /reportValidity/);
 });
 

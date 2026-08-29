@@ -21,7 +21,13 @@ Se questi dati sono richiesti nel modulo iniziale, transitano temporaneamente da
 
 Non aggiungere campi di caricamento file, collegamenti a servizi di upload o istruzioni che invitino a inviare documenti via email.
 
-## Console della segreteria
+## Segreteria eventi unificata
+
+La Segreteria eventi è il portale WordPress autonomo e leggero. Riunisce eventi, creazione, schede delle iscrizioni e comunicazioni. Il ruolo `Segretario iscrizioni` accede a tutti i gruppi; l’operatore accede soltanto ai gruppi assegnati mediante credenziali WordPress personali e non dispone del normale pannello amministrativo.
+
+Google Sheets non espone una seconda segreteria concorrente: resta l’ambiente operativo dei fogli evento, delle assegnazioni e dei movimenti economici, sincronizzato in modo esplicito e auditabile con `DB_MODULI`.
+
+## Strumenti del foglio
 
 La creazione e pubblicazione dell'evento restano in WordPress, perché è WordPress a produrre il modulo pubblico. Il foglio non crea un secondo evento concorrente.
 
