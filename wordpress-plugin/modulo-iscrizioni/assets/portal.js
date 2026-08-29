@@ -108,6 +108,16 @@ document.addEventListener('DOMContentLoaded', () => {
     window.requestAnimationFrame(() => selectedEvent.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' }));
   }
 
+  document.querySelectorAll('.mi-registrations-toolbar select[data-mi-auto-submit]').forEach((filter) => {
+    filter.addEventListener('change', () => {
+      const toolbar = filter.closest('form');
+      if (!toolbar) return;
+	  if (toolbar.dataset.miSubmitting === '1') return;
+	  toolbar.dataset.miSubmitting = '1';
+      toolbar.requestSubmit();
+    });
+  });
+
   const bookingLinks = [...document.querySelectorAll('[data-mi-portal-booking-open]')]
     .filter((link, index, links) => links.findIndex((candidate) => candidate.href === link.href) === index);
   const inlineDetail = document.getElementById('mi-portal-booking-detail');

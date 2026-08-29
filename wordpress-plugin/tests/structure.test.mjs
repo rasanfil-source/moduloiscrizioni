@@ -47,7 +47,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.9\.1/);
+	assert.match(source, /Version:\s+3\.9\.2/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1114,6 +1114,17 @@ test('la ricerca iscrizioni privilegia il campo e mantiene Cerca piccolo e affia
   assert.match(css, /\.mi-registration-search\{width:min\(100%,760px\);grid-template-columns:minmax\(260px,1fr\) 86px/);
   assert.match(css, /\.mi-registration-search \.mi-primary\{width:86px/);
   assert.match(css, /grid-template-columns:minmax\(0,1fr\) 78px/);
+});
+
+test('i menu delle iscrizioni applicano subito i filtri mantenendo il comando manuale', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  assert.match(portal, /name="mi_portal_event" data-mi-auto-submit/);
+  assert.match(portal, /name="mi_portal_status" data-mi-auto-submit/);
+  assert.match(portal, />Applica filtri<\/button>/);
+  assert.match(script, /select\[data-mi-auto-submit\]/);
+  assert.match(script, /toolbar\.requestSubmit\(\)/);
+  assert.match(portal, /if \( \$selected && ! in_array\( \$selected, \$event_ids, true \) \) wp_die\( 'Evento non accessibile\.', 403 \)/);
 });
 
 test('i tipi personalizzati di comunicazione si aggiungono e si eliminano senza inviare email', async () => {
