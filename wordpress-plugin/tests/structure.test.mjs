@@ -47,7 +47,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.8\.0/);
+	assert.match(source, /Version:\s+3\.8\.1/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1089,9 +1089,24 @@ test('gli eventi passati sono separati dalla vista operativa ordinaria', async (
 
 test('l’elenco iscrizioni indica l’evento selezionato', async () => {
   const portal = await read('includes/class-mi-portal.php');
-  assert.match(portal, /\$list_title = 'Ultime iscrizioni'/);
+  assert.match(portal, /\$list_title = 'Prenotazioni'/);
   assert.match(portal, /\$list_title \.= ' — ' \. \$event_title/);
   assert.match(portal, /esc_html\( \$list_title \)/);
+});
+
+test('la scheda iscrizioni riprende la vista operativa con ricerca e filtri sicuri', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /name="mi_portal_query"/);
+  assert.match(portal, /name="mi_portal_status"/);
+  assert.match(portal, /\$wpdb->esc_like\( \$query \)/);
+  assert.match(portal, /\$allowed_statuses/);
+  assert.match(portal, /LIMIT 30/);
+  assert.match(portal, /class="mi-booking-card"/);
+  assert.match(portal, /mi-status-pill/);
+  assert.match(css, /\.mi-registrations-toolbar/);
+  assert.match(css, /\.mi-booking-card__avatar/);
+  assert.match(css, /\.mi-status-pill\.is-green/);
 });
 
 test('il wizard crea una bozza completa e mostra collegamenti espliciti', async () => {

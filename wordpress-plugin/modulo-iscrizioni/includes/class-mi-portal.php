@@ -350,9 +350,15 @@ final class MI_Portal {
 		if ( ! $event_ids ) { echo '<section><h2>Iscrizioni</h2><p class="mi-portal-muted">Non ci sono eventi accessibili.</p></section>'; return; }
 		$selected = absint( $_GET['mi_portal_event'] ?? 0 );
 		if ( $selected && ! in_array( $selected, $event_ids, true ) ) wp_die( 'Evento non accessibile.', 403 );
-		echo '<section><h2>Iscrizioni</h2><form class="mi-portal-filter" method="get"><input type="hidden" name="mi_portal" value="1"><input type="hidden" name="mi_portal_view" value="registrations"><label>Evento<select name="mi_portal_event" onchange="this.form.submit()"><option value="">Tutti gli eventi accessibili</option>';
+		$query = sanitize_text_field( wp_unslash( $_GET['mi_portal_query'] ?? '' ) );
+		$status = strtoupper( sanitize_text_field( wp_unslash( $_GET['mi_portal_status'] ?? '' ) ) );
+		$statuses = array( 'CONFIRMED' => 'Confermate', 'PENDING_PAYMENT' => 'In attesa di pagamento', 'WAITLISTED' => 'Lista d’attesa', 'CANCELLED' => 'Annullate', 'EXPIRED' => 'Scadute' );
+		if ( ! isset( $statuses[ $status ] ) ) $status = '';
+		echo '<section class="mi-registrations"><div class="mi-registrations__heading"><div><span class="mi-portal-eyebrow">Archivio operativo</span><h2>Iscrizioni</h2></div><p class="mi-portal-muted">Cerca una prenotazione e apri la scheda completa senza lasciare la pagina.</p></div><form class="mi-registrations-toolbar" method="get"><input type="hidden" name="mi_portal" value="1"><input type="hidden" name="mi_portal_view" value="registrations"><div class="mi-registration-search"><label class="screen-reader-text" for="mi-portal-query">Cerca nelle iscrizioni</label><input id="mi-portal-query" type="search" name="mi_portal_query" value="' . esc_attr( $query ) . '" placeholder="Nome, email, cellulare o codice prenotazione"><button class="mi-primary" type="submit">Cerca</button></div><div class="mi-registration-chips"><label>Evento<select name="mi_portal_event"><option value="">Tutti gli eventi accessibili</option>';
 		foreach ( $events as $event ) echo '<option value="' . esc_attr( $event->ID ) . '" ' . selected( $selected, $event->ID, false ) . '>' . esc_html( $event->post_title ) . '</option>';
-		echo '</select></label><noscript><button class="mi-secondary" type="submit">Mostra</button></noscript></form></section>';
+		echo '</select></label><label>Stato<select name="mi_portal_status"><option value="">Tutti gli stati</option>';
+		foreach ( $statuses as $value => $label ) echo '<option value="' . esc_attr( $value ) . '" ' . selected( $status, $value, false ) . '>' . esc_html( $label ) . '</option>';
+		echo '</select></label><button class="mi-secondary" type="submit">Applica filtri</button></div></form></section>';
 		self::registrations_view( $selected, $event_ids );
 	}
 
@@ -478,19 +484,42 @@ final class MI_Portal {
 
 	private static function registrations_view( $event_id = 0, $event_ids = array() ) {
 		global $wpdb;
-		if ( $event_id ) { $where = $wpdb->prepare( 'r.event_id=%d', $event_id ); } else { $safe = array_values( array_filter( array_map( 'absint', $event_ids ) ) ); $where = 'r.event_id IN (' . implode( ',', $safe ) . ')'; }
-		$rows = $wpdb->get_results( "SELECT r.id registration_id,r.event_id,r.created_at,r.buyer_email,p.id participant_id,p.first_name,p.last_name,events.post_title event_title FROM {$wpdb->prefix}mi_registrations r JOIN {$wpdb->prefix}mi_participants p ON p.registration_id=r.id JOIN {$wpdb->posts} events ON events.ID=r.event_id WHERE {$where} ORDER BY r.created_at DESC,p.id ASC LIMIT 10", ARRAY_A );
+		if ( $event_id ) { $conditions = array( $wpdb->prepare( 'r.event_id=%d', $event_id ) ); } else { $safe = array_values( array_filter( array_map( 'absint', $event_ids ) ) ); $conditions = array( 'r.event_id IN (' . implode( ',', $safe ) . ')' ); }
+		$query = sanitize_text_field( wp_unslash( $_GET['mi_portal_query'] ?? '' ) );
+		$status = strtoupper( sanitize_text_field( wp_unslash( $_GET['mi_portal_status'] ?? '' ) ) );
+		$allowed_statuses = array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'CANCELLED', 'EXPIRED' );
+		if ( in_array( $status, $allowed_statuses, true ) ) $conditions[] = $wpdb->prepare( 'r.status=%s', $status );
+		if ( '' !== $query ) {
+			$like = '%' . $wpdb->esc_like( $query ) . '%';
+			$conditions[] = $wpdb->prepare( '(r.order_code LIKE %s OR r.buyer_first_name LIKE %s OR r.buyer_last_name LIKE %s OR r.buyer_email LIKE %s OR r.buyer_phone LIKE %s)', $like, $like, $like, $like, $like );
+		}
+		$where = implode( ' AND ', $conditions );
+		$rows = $wpdb->get_results( "SELECT r.id registration_id,r.event_id,r.order_code,r.status,r.created_at,r.buyer_first_name,r.buyer_last_name,r.buyer_email,r.buyer_phone,r.total_qty,r.total_cents,r.balance_cents,events.post_title event_title FROM {$wpdb->prefix}mi_registrations r JOIN {$wpdb->posts} events ON events.ID=r.event_id WHERE {$where} ORDER BY r.created_at DESC,r.id DESC LIMIT 30", ARRAY_A );
 		$base_url = self::base_url();
 		if ( $event_id ) $base_url = add_query_arg( 'mi_portal_event', $event_id, $base_url );
-		if ( ! empty( $_GET['mi_portal_history'] ) ) $base_url = add_query_arg( 'mi_portal_history', '1', $base_url );
-		$list_title = 'Ultime iscrizioni';
+		if ( '' !== $query ) $base_url = add_query_arg( 'mi_portal_query', $query, $base_url );
+		if ( in_array( $status, $allowed_statuses, true ) ) $base_url = add_query_arg( 'mi_portal_status', $status, $base_url );
+		$list_title = 'Prenotazioni';
 		if ( $event_id ) {
 			$event_title = sanitize_text_field( get_the_title( $event_id ) );
 			if ( $event_title ) $list_title .= ' — ' . $event_title;
 		}
-		echo '<section><h2>' . esc_html( $list_title ) . '</h2><div class="mi-booking-list">';
-		foreach ( $rows as $index => $row ) { $url = add_query_arg( array( 'mi_portal_view' => 'manage', 'mi_portal_booking' => $row['registration_id'] ), $base_url ); echo '<a data-mi-portal-booking-open href="' . esc_url( $url ) . '"><span>' . esc_html( $index + 1 ) . '</span><strong>' . esc_html( $row['first_name'] . ' ' . $row['last_name'] ) . '</strong><small>' . esc_html( $row['event_title'] . ' · ' . self::format_utc_date( $row['created_at'] ) . ' · ' . $row['buyer_email'] ) . '</small></a>'; }
-		if ( ! $rows ) echo '<p class="mi-portal-muted">Nessuna iscrizione presente.</p>';
+		echo '<section class="mi-registration-results"><div class="mi-registration-results__heading"><h2>' . esc_html( $list_title ) . '</h2><span>' . esc_html( count( $rows ) . ( 30 === count( $rows ) ? '+' : '' ) ) . '</span></div><div class="mi-booking-list">';
+		$status_labels = array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'Pagamento atteso', 'WAITLISTED' => 'Lista d’attesa', 'CANCELLED' => 'Annullata', 'EXPIRED' => 'Scaduta' );
+		$status_classes = array( 'CONFIRMED' => 'is-green', 'PENDING_PAYMENT' => 'is-yellow', 'WAITLISTED' => 'is-blue', 'CANCELLED' => 'is-red', 'EXPIRED' => 'is-red' );
+		foreach ( $rows as $row ) {
+			$url = add_query_arg( array( 'mi_portal_view' => 'registrations', 'mi_portal_booking' => $row['registration_id'] ), $base_url );
+			$name = trim( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] );
+			$initials = strtoupper( substr( (string) $row['buyer_first_name'], 0, 1 ) . substr( (string) $row['buyer_last_name'], 0, 1 ) );
+			$contact = $row['buyer_phone'] ?: $row['buyer_email'];
+			$status_label = $status_labels[ $row['status'] ] ?? $row['status'];
+			$status_class = $status_classes[ $row['status'] ] ?? 'is-blue';
+			if ( (int) $row['total_cents'] < 1 ) { $payment_label = 'Gratuito'; $payment_class = 'is-blue'; }
+			elseif ( (int) $row['balance_cents'] < 1 ) { $payment_label = 'Saldato'; $payment_class = 'is-green'; }
+			else { $payment_label = 'Saldo ' . self::format_money( $row['balance_cents'] ); $payment_class = 'is-yellow'; }
+			echo '<a class="mi-booking-card" data-mi-portal-booking-open href="' . esc_url( $url ) . '"><span class="mi-booking-card__avatar" aria-hidden="true">' . esc_html( $initials ?: '—' ) . '</span><span class="mi-booking-card__content"><strong>' . esc_html( $name ?: 'Referente non indicato' ) . '</strong><small>' . esc_html( $row['event_title'] . ' · ' . $row['order_code'] ) . '</small><small>' . esc_html( self::format_utc_date( $row['created_at'] ) . ( $contact ? ' · ' . $contact : '' ) . ' · ' . (int) $row['total_qty'] . ' partecipanti' ) . '</small></span><span class="mi-booking-card__states"><small class="mi-status-pill ' . esc_attr( $status_class ) . '">' . esc_html( $status_label ) . '</small><small class="mi-status-pill ' . esc_attr( $payment_class ) . '">' . esc_html( $payment_label ) . '</small></span></a>';
+		}
+		if ( ! $rows ) echo '<div class="mi-registration-empty"><strong>Nessuna iscrizione trovata</strong><p class="mi-portal-muted">Prova a modificare il testo cercato o i filtri selezionati.</p></div>';
 		echo '</div></section>';
 		$booking_id = absint( $_GET['mi_portal_booking'] ?? 0 ); if ( $booking_id ) self::booking_detail( $booking_id );
 	}
