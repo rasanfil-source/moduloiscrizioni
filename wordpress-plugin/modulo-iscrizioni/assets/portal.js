@@ -40,11 +40,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const updateOvernight = () => {
       rooms.hidden = !overnight.checked;
       if (!overnight.checked) rooms.querySelectorAll('input').forEach((input) => { input.checked = false; });
+	  rooms.querySelectorAll('[data-mi-accommodation]').forEach((accommodation) => {
+		const price = accommodation.closest('.mi-accommodation-fee')?.querySelector('input[name^="accommodation_price"]');
+		if (!price) return;
+		price.disabled = !overnight.checked || !accommodation.checked;
+		price.required = overnight.checked && accommodation.checked;
+		if (!accommodation.checked) price.value = '';
+	  });
     };
     if (overnight) {
       overnight.addEventListener('change', updateOvernight);
       updateOvernight();
     }
+	form.querySelectorAll('[data-mi-accommodation]').forEach((accommodation) => accommodation.addEventListener('change', updateOvernight));
 	form.querySelectorAll('[data-mi-service-fee]').forEach((service) => {
 	  const price = service.closest('.mi-service-fee')?.querySelector('input[name^="service_price"]');
 	  const updateService = () => {

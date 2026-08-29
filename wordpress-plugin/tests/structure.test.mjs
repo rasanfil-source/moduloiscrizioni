@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.9\.6/);
+	assert.match(source, /Version:\s+3\.9\.7/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1340,9 +1340,9 @@ test('la ricerca iscrizioni mantiene campo e pulsante affiancati in proporzione 
 
 test('le quote accessorie usano righe compatte senza grandi spazi vuoti', async () => {
   const css = await read('assets/portal.css');
-  assert.match(css, /\.mi-service-fee\{[^}]*grid-template-columns:minmax\(210px,360px\) minmax\(120px,180px\)[^}]*padding:\.38rem 0/);
-  assert.match(css, /\.mi-event-wizard \.mi-service-fee>label\{margin:0\}/);
-  assert.match(css, /\.mi-service-fee input:not\(\[type=checkbox\]\)\{[^}]*min-height:40px/);
+  assert.match(css, /\.mi-service-fee,\.mi-accommodation-fee\{[^}]*grid-template-columns:minmax\(210px,360px\) minmax\(120px,180px\)[^}]*padding:\.38rem 0/);
+  assert.match(css, /\.mi-event-wizard \.mi-service-fee>label,\.mi-event-wizard \.mi-accommodation-fee>label\{margin:0\}/);
+  assert.match(css, /\.mi-service-fee input:not\(\[type=checkbox\]\),\.mi-event-wizard \.mi-accommodation-fee input:not\(\[type=checkbox\]\)\{[^}]*min-height:40px/);
 });
 
 test('la scelta della quota usa tre opzioni chiare nell ordine richiesto', async () => {
@@ -1363,4 +1363,15 @@ test('Crea evento apre un wizard nuovo e non eredita la bozza precedente', async
 test('il wizard non mostra la nota ridondante sull email del referente', async () => {
   const schema = await read('includes/class-mi-field-schema.php');
   assert.doesNotMatch(schema, /Può essere diversa dall’email del referente/);
+});
+
+test('ogni sistemazione dispone di un costo che entra nelle opzioni economiche', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /name="accommodation_price\[/);
+  assert.match(portal, /\$accommodation_options\[\] = array\([^;]*'scope' => 'TICKET'[^;]*'price_cents' => \$accommodation_price/);
+  assert.match(portal, /\$priced_options = array_merge\( \$accommodation_options, \$service_options \)/);
+  assert.match(script, /data-mi-accommodation/);
+  assert.match(css, /\.mi-accommodation-fee/);
 });
