@@ -38,7 +38,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const overnight = form.querySelector('[data-mi-overnight]');
     const rooms = form.querySelector('[data-mi-accommodations]');
     const updateOvernight = () => {
-      rooms.hidden = !overnight.checked;
+	  const servicePricing = form.querySelector('[data-mi-pricing]')?.value === 'NONE';
+      rooms.hidden = !servicePricing || !overnight.checked;
       if (!overnight.checked) rooms.querySelectorAll('input').forEach((input) => { input.checked = false; });
 	  rooms.querySelectorAll('[data-mi-accommodation]').forEach((accommodation) => {
 		const price = accommodation.closest('.mi-accommodation-fee')?.querySelector('input[name^="accommodation_price"]');
@@ -74,19 +75,35 @@ document.addEventListener('DOMContentLoaded', () => {
     }));
     const pricing = form.querySelector('[data-mi-pricing]');
     const fixedPrice = form.querySelector('[data-mi-fixed-price]');
-    const updatePricing = () => { if (pricing && fixedPrice) fixedPrice.hidden = pricing.value !== 'FIXED'; };
-    pricing?.addEventListener('change', updatePricing);
-    updatePricing();
+    const pricingLabel = pricing?.closest('label');
+    const serviceFees = [...form.querySelectorAll('.mi-service-fee')];
+    const serviceIntroduction = serviceFees.length ? [serviceFees[0].previousElementSibling, serviceFees[0].previousElementSibling?.previousElementSibling] : [];
+    const servicePricingNodes = [overnight?.closest('label'), rooms, ...serviceIntroduction, ...serviceFees].filter(Boolean);
+    if (pricingLabel && overnight?.closest('label')) {
+	  pricingLabel.firstChild.textContent = 'Come sarà l’evento?';
+	  overnight.closest('.mi-wizard-step')?.insertBefore(pricingLabel, overnight.closest('label'));
+	}
     const economic = form.querySelector('[data-mi-economic]');
     const payment = form.querySelector('[data-mi-payment]');
     const deposit = form.querySelector('[data-mi-deposit]');
+	const economicLabel = economic?.closest('label');
     const updateEconomic = () => {
-      const collects = ['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(economic?.value);
+	  const paidEvent = pricing?.value !== 'ZERO';
+	  if (economicLabel) economicLabel.hidden = !paidEvent;
+	  const collects = paidEvent && ['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(economic?.value);
       if (payment) payment.hidden = !collects;
       if (deposit) deposit.hidden = economic?.value !== 'DEPOSIT_BALANCE';
     };
+	const updatePricing = () => {
+	  if (!pricing) return;
+	  if (fixedPrice) fixedPrice.hidden = pricing.value !== 'FIXED';
+	  servicePricingNodes.forEach((node) => { node.hidden = pricing.value !== 'NONE'; });
+	  updateOvernight();
+	  updateEconomic();
+	};
+    pricing?.addEventListener('change', updatePricing);
     economic?.addEventListener('change', updateEconomic);
-    updateEconomic();
+    updatePricing();
     const opensAt = form.querySelector('[data-mi-opens]');
     const closesAt = form.querySelector('[data-mi-closes]');
     const startsAt = form.querySelector('[data-mi-starts]');

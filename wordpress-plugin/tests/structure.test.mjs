@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.9\.7/);
+	assert.match(source, /Version:\s+3\.9\.8/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -296,7 +296,7 @@ test('il wizard guidato crea solo bozze e rende gli alloggi condizionali', async
   assert.match(portal, /Vuoi partire dalla configurazione di un evento precedente/);
   assert.match(portal, /data-mi-overnight/);
   assert.match(portal, /data-mi-accommodations hidden/);
-  assert.match(script, /rooms\.hidden\s*=\s*!overnight\.checked/);
+  assert.match(script, /rooms\.hidden\s*=\s*!servicePricing \|\| !overnight\.checked/);
   assert.doesNotMatch(portal, /post_type'\s*=>\s*MI_Event_Post_Type::EVENT_TYPE[\s\S]{0,160}post_status'\s*=>\s*'publish'/);
 });
 
@@ -1347,7 +1347,7 @@ test('le quote accessorie usano righe compatte senza grandi spazi vuoti', async 
 
 test('la scelta della quota usa tre opzioni chiare nell ordine richiesto', async () => {
   const portal = await read('includes/class-mi-portal.php');
-  const start = portal.indexOf('Come viene calcolata la quota?');
+  const start = portal.indexOf('Come sarà l’evento?');
   const free = portal.indexOf('Evento totalmente gratuito', start);
   const fixed = portal.indexOf('Quota uguale per tutti', start);
   const services = portal.indexOf('In base ai servizi scelti', start);
@@ -1374,4 +1374,15 @@ test('ogni sistemazione dispone di un costo che entra nelle opzioni economiche',
   assert.match(portal, /\$priced_options = array_merge\( \$accommodation_options, \$service_options \)/);
   assert.match(script, /data-mi-accommodation/);
   assert.match(css, /\.mi-accommodation-fee/);
+});
+
+test('il wizard mostra soltanto i costi coerenti con il tipo di evento', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  assert.match(portal, /Come sarà l’evento\?/);
+  assert.match(portal, /Evento totalmente gratuito[\s\S]*Quota uguale per tutti[\s\S]*In base ai servizi scelti/);
+  assert.doesNotMatch(portal.match(/Modalità di pagamento richiesta<select[\s\S]*?<\/select>/)[0], /PRICE_ONLY|Prezzo solamente informativo|Nessun pagamento previsto/);
+  assert.match(portal, />Unica soluzione<\/option>[\s\S]*>Caparra e saldo<\/option>/);
+  assert.match(script, /servicePricingNodes\.forEach\(\(node\) => \{ node\.hidden = pricing\.value !== 'NONE'; \}\)/);
+  assert.match(script, /economicLabel\.hidden = !paidEvent/);
 });
