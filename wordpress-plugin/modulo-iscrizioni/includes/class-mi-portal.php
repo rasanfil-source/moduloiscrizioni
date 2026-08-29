@@ -257,6 +257,13 @@ final class MI_Portal {
 		if ( empty( $_GET['mi_portal'] ) && empty( $_GET['mi_status'] ) ) return;
 		status_header( 200 );
 		nocache_headers();
+		$is_detail_request = ! empty( $_GET['mi_portal_booking'] ) && 'xmlhttprequest' === strtolower( sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_REQUESTED_WITH'] ?? '' ) ) );
+		if ( $is_detail_request ) {
+			if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_portal_access' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
+			header( 'Content-Type: text/html; charset=' . get_option( 'blog_charset' ) );
+			self::booking_detail( absint( $_GET['mi_portal_booking'] ) );
+			exit;
+		}
 		$asset_version = rawurlencode( MI_VERSION );
 		$page_title = ! empty( $_GET['mi_status'] ) ? 'Stato della prenotazione' : 'Segreteria eventi';
 		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><title><?php echo esc_html( get_bloginfo( 'name' ) . ' — ' . $page_title ); ?></title><link rel="stylesheet" href="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal.css?ver=' . $asset_version ); ?>"></head><body class="mi-portal-standalone"><?php echo self::render(); ?><script defer src="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal.js?ver=' . $asset_version ); ?>"></script></body></html><?php

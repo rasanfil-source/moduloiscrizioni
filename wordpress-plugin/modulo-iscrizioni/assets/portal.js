@@ -122,6 +122,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let previousFocus = null;
   let activeRequest = null;
   let activeBookingIndex = -1;
+  const detailCache = new Map();
+
+  const parseDetail = (html) => new DOMParser().parseFromString(html, 'text/html').getElementById('mi-portal-booking-detail');
 
   const updateNavigation = () => {
     previousButton.disabled = activeBookingIndex <= 0;
@@ -147,23 +150,32 @@ document.addEventListener('DOMContentLoaded', () => {
     previousFocus?.focus();
   };
   const openBooking = async (link, historyMode = 'push') => {
-    activeRequest?.abort();
-    const request = new AbortController();
-    activeRequest = request;
-    previousFocus = link;
-    activeBookingIndex = bookingLinks.indexOf(link);
-    updateNavigation();
-    modal.hidden = false;
+	activeRequest?.abort();
+	previousFocus = link;
+	activeBookingIndex = bookingLinks.indexOf(link);
+	updateNavigation();
+	const cachedDetail = detailCache.get(link.href);
+	if (cachedDetail) {
+	  const detail = parseDetail(cachedDetail);
+	  if (detail) {
+		showBooking(detail, link.href, historyMode);
+		return;
+	  }
+	  detailCache.delete(link.href);
+	}
+	const request = new AbortController();
+	activeRequest = request;
+	modal.hidden = false;
     document.body.classList.add('mi-portal-modal-open');
     content.innerHTML = '<p class="mi-portal-modal__loading">Apertura della prenotazione…</p>';
     closeButton.focus();
     try {
       const response = await fetch(link.href, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' }, signal: request.signal });
       if (!response.ok) throw new Error('detail_unavailable');
-      const detailDocument = new DOMParser().parseFromString(await response.text(), 'text/html');
-      const detail = detailDocument.getElementById('mi-portal-booking-detail');
-      if (!detail) throw new Error('detail_missing');
-      showBooking(detail, link.href, historyMode);
+	  const detail = parseDetail(await response.text());
+	  if (!detail) throw new Error('detail_missing');
+	  detailCache.set(link.href, detail.outerHTML);
+	  showBooking(detail, link.href, historyMode);
     } catch (error) {
       if ('AbortError' === error.name) return;
       window.location.assign(link.href);

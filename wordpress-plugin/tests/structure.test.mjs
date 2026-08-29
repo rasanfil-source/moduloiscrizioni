@@ -1125,6 +1125,21 @@ test('i tipi personalizzati di comunicazione si aggiungono e si eliminano senza 
   assert.match(css, /\.mi-text-danger/);
 });
 
+test('il portale apre rapidamente le schede e riduce il lavoro fuori schermo', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /HTTP_X_REQUESTED_WITH/);
+  assert.match(portal, /\$is_detail_request/);
+  assert.match(portal, /self::booking_detail\( absint\( \$_GET\['mi_portal_booking'\] \) \)/);
+  assert.match(script, /const detailCache = new Map\(\)/);
+  assert.match(script, /detailCache\.set\(link\.href, detail\.outerHTML\)/);
+  assert.match(css, /content-visibility:auto/);
+  assert.match(css, /contain-intrinsic-size:78px/);
+  assert.match(css, /overscroll-behavior-inline:contain/);
+  assert.match(css, /prefers-reduced-motion:reduce/);
+});
+
 test('il wizard crea una bozza completa e mostra collegamenti espliciti', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const script = await read('assets/portal.js');
