@@ -439,14 +439,19 @@ final class MI_Portal {
 		$events = self::accessible_events();
 		$event_ids = array_map( 'absint', wp_list_pluck( $events, 'ID' ) );
 		if ( ! $event_ids ) { echo '<section><h2>Iscrizioni</h2><p class="mi-portal-muted">Non ci sono eventi accessibili.</p></section>'; return; }
+		$selectable_events = array_values( array_filter( $events, static function ( $event ) {
+			return ! get_post_meta( $event->ID, '_mi_event_cancelled_at', true );
+		} ) );
+		$selectable_event_ids = array_map( 'absint', wp_list_pluck( $selectable_events, 'ID' ) );
 		$selected = absint( $_GET['mi_portal_event'] ?? 0 );
 		if ( $selected && ! in_array( $selected, $event_ids, true ) ) wp_die( 'Evento non accessibile.', 403 );
+		if ( $selected && ! in_array( $selected, $selectable_event_ids, true ) ) $selected = 0;
 		$query = sanitize_text_field( wp_unslash( $_GET['mi_portal_query'] ?? '' ) );
 		$status = strtoupper( sanitize_text_field( wp_unslash( $_GET['mi_portal_status'] ?? '' ) ) );
 		$statuses = array( 'CONFIRMED' => 'Confermate', 'PENDING_PAYMENT' => 'In attesa di pagamento', 'WAITLISTED' => 'Lista d’attesa', 'CANCELLED' => 'Annullate', 'EXPIRED' => 'Scadute' );
 		if ( ! isset( $statuses[ $status ] ) ) $status = '';
 		echo '<section class="mi-registrations"><div class="mi-registrations__heading"><div><span class="mi-portal-eyebrow">Archivio operativo</span><h2>Iscrizioni</h2></div><p class="mi-portal-muted">Cerca una prenotazione e apri la scheda completa senza lasciare la pagina.</p></div><form class="mi-registrations-toolbar" method="get"><input type="hidden" name="mi_portal" value="1"><input type="hidden" name="mi_portal_view" value="registrations"><div class="mi-registration-search"><label class="screen-reader-text" for="mi-portal-query">Cerca nelle iscrizioni</label><input id="mi-portal-query" type="search" name="mi_portal_query" value="' . esc_attr( $query ) . '" placeholder="Nome, email, cellulare o codice prenotazione"><button class="mi-primary" type="submit">Cerca</button></div><div class="mi-registration-chips"><label>Evento<select name="mi_portal_event" data-mi-auto-submit><option value="">Tutti gli eventi accessibili</option>';
-		foreach ( $events as $event ) echo '<option value="' . esc_attr( $event->ID ) . '" ' . selected( $selected, $event->ID, false ) . '>' . esc_html( $event->post_title ) . '</option>';
+		foreach ( $selectable_events as $event ) echo '<option value="' . esc_attr( $event->ID ) . '" ' . selected( $selected, $event->ID, false ) . '>' . esc_html( $event->post_title ) . '</option>';
 		echo '</select></label><label>Stato<select name="mi_portal_status" data-mi-auto-submit><option value="">Tutti gli stati</option>';
 		foreach ( $statuses as $value => $label ) echo '<option value="' . esc_attr( $value ) . '" ' . selected( $status, $value, false ) . '>' . esc_html( $label ) . '</option>';
 		echo '</select></label><button class="mi-secondary" type="submit">Applica filtri</button></div></form></section>';
