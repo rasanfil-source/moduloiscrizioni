@@ -347,7 +347,7 @@ final class MI_Admin {
 		<input type="hidden" name="post_type" value="<?php echo esc_attr( MI_Event_Post_Type::EVENT_TYPE ); ?>">
 		<input type="hidden" name="page" value="mi-registrations">
 		<label for="mi-event-filter">Evento</label>
-		<select id="mi-event-filter" name="event_id"><option value="0">Tutti gli eventi accessibili</option><?php foreach ( $visible_events as $visible_event ) : ?><option value="<?php echo esc_attr( $visible_event->ID ); ?>" <?php selected( $event_id, $visible_event->ID ); ?>><?php echo esc_html( $visible_event->post_title ); ?></option><?php endforeach; ?></select>
+		<select id="mi-event-filter" name="event_id"><option value="0">Tutti gli eventi</option><?php foreach ( $visible_events as $visible_event ) : ?><option value="<?php echo esc_attr( $visible_event->ID ); ?>" <?php selected( $event_id, $visible_event->ID ); ?>><?php echo esc_html( $visible_event->post_title ); ?></option><?php endforeach; ?></select>
 		<label for="mi-search">Ricerca</label>
 		<input id="mi-search" type="search" name="mi_search" value="<?php echo esc_attr( $search ); ?>" placeholder="Codice, referente o email">
 		<label for="mi-workspace-filter">Workspace</label>

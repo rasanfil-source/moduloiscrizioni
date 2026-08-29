@@ -176,6 +176,13 @@ test('WordPress può preparare il foglio dell evento senza duplicarlo', () => {
 	assert.match(sources['FogliOperativi.gs'], /String\(riga\.id_evento\) === idEvento/);
 	assert.match(sources['FogliOperativi.gs'], /apriFoglioOperativoEvento\(\{ id_evento: idEvento \}\)/);
 	assert.match(sources['FogliOperativi.gs'], /mode: 'PREVIEW'/);
+	assert.match(sources['FogliOperativi.gs'], /Evento ' \+ idEvento \+ ' - '/);
+	assert.match(sources['FogliOperativi.gs'], /function spostaFoglioAccantoAlDatabase_/);
+	assert.match(sources['FogliOperativi.gs'], /DriveApp\.getFileById\(database\.getId\(\)\)/);
+	assert.match(sources['FogliOperativi.gs'], /moveTo\(cartella\)/);
+	assert.match(sources['FogliOperativi.gs'], /function aggiornaCollegamentiProduzioneEvento_/);
+	assert.match(sources['FogliOperativi.gs'], /url_iscrizione/);
+	assert.match(sources['FogliOperativi.gs'], /url_saldo/);
 });
 
 test('Workspace non espone una seconda pagina Segreteria eventi', () => {

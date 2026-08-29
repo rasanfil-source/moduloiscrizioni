@@ -7,11 +7,34 @@ final class MI_Shortcode {
 
 	public static function boot() {
 		add_shortcode( 'modulo_iscrizioni', array( __CLASS__, 'render' ) );
+		add_action( 'template_redirect', array( __CLASS__, 'mostra_pagina_iscrizione_pubblica' ), -80 );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'maybe_enqueue_assets' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'maybe_disable_page_cache' ), 0 );
 		add_filter( 'theme_page_templates', array( __CLASS__, 'register_focused_template' ) );
 		add_filter( 'template_include', array( __CLASS__, 'use_focused_template' ) );
 		add_action( 'admin_post_mi_anteprima_evento', array( __CLASS__, 'mostra_anteprima_riservata' ) );
+	}
+
+	public static function url_iscrizione( $event_id ) {
+		return add_query_arg( 'mi_iscrizione', absint( $event_id ), home_url( '/' ) );
+	}
+
+	public static function mostra_pagina_iscrizione_pubblica() {
+		$event_id = absint( $_GET['mi_iscrizione'] ?? 0 );
+		if ( ! $event_id ) return;
+		$content = self::render( array( 'event' => $event_id ) );
+		if ( '' === trim( $content ) ) {
+			status_header( 404 );
+			$content = '<p class="mi-registration__notice">Questo evento non è disponibile.</p>';
+		} else {
+			status_header( 200 );
+		}
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) define( 'DONOTCACHEPAGE', true );
+		nocache_headers();
+		header( 'X-Robots-Tag: noindex, nofollow, noarchive', true );
+		show_admin_bar( false );
+		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width, initial-scale=1"><?php wp_head(); ?></head><body class="mi-focused-page"><main class="mi-focused-page__main"><?php echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- HTML protetto dal renderer. ?></main><?php wp_footer(); ?></body></html><?php
+		exit;
 	}
 
 	public static function maybe_disable_page_cache() {
