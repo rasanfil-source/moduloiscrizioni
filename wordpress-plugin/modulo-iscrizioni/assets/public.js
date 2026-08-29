@@ -143,8 +143,9 @@
         economicSummary.querySelector('[data-mi-initial]').textContent = formatCurrency(total);
         economicSummary.querySelector('[data-mi-economic-note]').textContent = 'Il modulo registra l’iscrizione; il versamento sarà registrato manualmente dall’organizzazione.';
       } else if (mode === 'DEPOSIT_BALANCE') {
-        const initial = Math.round(total * Number(config.event.deposit_percentage || 30) / 100);
-        economicSummary.querySelector('[data-mi-initial-label]').textContent = `Caparra (${config.event.deposit_percentage}%):`;
+		const fixedDeposit = config.event.deposit_mode === 'FIXED';
+		const initial = fixedDeposit ? Math.min(total, Number(config.event.deposit_fixed_cents || 0)) : Math.round(total * Number(config.event.deposit_percentage || 30) / 100);
+		economicSummary.querySelector('[data-mi-initial-label]').textContent = fixedDeposit ? 'Caparra fissa:' : `Caparra (${config.event.deposit_percentage}%):`;
         economicSummary.querySelector('[data-mi-initial]').textContent = formatCurrency(initial);
         economicSummary.querySelector('[data-mi-balance]').textContent = formatCurrency(total - initial);
         economicSummary.querySelector('[data-mi-economic-note]').textContent = 'Il modulo registra gli importi previsti; i versamenti saranno registrati manualmente dall’organizzazione.';

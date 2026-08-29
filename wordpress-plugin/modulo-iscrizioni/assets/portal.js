@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	  return coverImage.reportValidity();
 	};
 	coverImage?.addEventListener('change', validateCoverImage);
-    let index = 0;
+    let index = Math.min(steps.length - 1, Math.max(0, Number.parseInt(form.dataset.miInitialStep || '0', 10) || 0));
     const show = () => {
       steps.forEach((step, stepIndex) => step.classList.toggle('is-active', stepIndex === index));
       back.disabled = index === 0;
@@ -98,7 +98,36 @@ document.addEventListener('DOMContentLoaded', () => {
 	}
     const economic = form.querySelector('[data-mi-economic]');
     const payment = form.querySelector('[data-mi-payment]');
-    const deposit = form.querySelector('[data-mi-deposit]');
+	let deposit = form.querySelector('[data-mi-deposit]');
+	if (deposit && deposit.tagName === 'LABEL') {
+	  deposit.firstChild.textContent = 'Percentuale caparra (%)';
+	  deposit.hidden = false;
+	  const container = document.createElement('div');
+	  container.dataset.miDeposit = '';
+	  const modeLabel = document.createElement('label');
+	  modeLabel.innerHTML = '<span>Come calcolare la caparra</span><select name="deposit_mode" data-mi-deposit-mode><option value="PERCENTAGE">Percentuale (%)</option><option value="FIXED">Importo fisso (€)</option></select>';
+	  const fixedLabel = document.createElement('label');
+	  fixedLabel.dataset.miDepositFixed = '';
+	  fixedLabel.innerHTML = '<span>Importo fisso della caparra (€)</span><input name="deposit_fixed" inputmode="decimal" placeholder="Es. 150,00">';
+	  deposit.dataset.miDepositPercentage = '';
+	  deposit.parentNode.insertBefore(container, deposit);
+	  container.append(modeLabel, deposit, fixedLabel);
+	  modeLabel.querySelector('select').value = form.dataset.miDepositMode === 'FIXED' ? 'FIXED' : 'PERCENTAGE';
+	  fixedLabel.querySelector('input').value = form.dataset.miDepositFixed || '';
+	  deposit = container;
+	}
+	const depositMode = form.querySelector('select[name="deposit_mode"]');
+	const depositPercentage = form.querySelector('[data-mi-deposit-percentage]');
+	const depositFixed = form.querySelector('[data-mi-deposit-fixed]');
+	const updateDeposit = () => {
+	  const fixed = depositMode?.value === 'FIXED';
+	  if (depositPercentage) depositPercentage.hidden = fixed;
+	  if (depositFixed) depositFixed.hidden = !fixed;
+	  const percentageInput = depositPercentage?.querySelector('input');
+	  const fixedInput = depositFixed?.querySelector('input');
+	  if (percentageInput) percentageInput.disabled = fixed;
+	  if (fixedInput) { fixedInput.disabled = !fixed; fixedInput.required = fixed && economic?.value === 'DEPOSIT_BALANCE'; }
+	};
 	const economicLabel = economic?.closest('label');
     const updateEconomic = () => {
 	  const paidEvent = pricing?.value !== 'ZERO';
@@ -106,6 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	  const collects = paidEvent && ['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(economic?.value);
       if (payment) payment.hidden = !collects;
       if (deposit) deposit.hidden = economic?.value !== 'DEPOSIT_BALANCE';
+	  updateDeposit();
     };
 	const updatePricing = () => {
 	  if (!pricing) return;
@@ -117,31 +147,47 @@ document.addEventListener('DOMContentLoaded', () => {
 	};
     pricing?.addEventListener('change', updatePricing);
     economic?.addEventListener('change', updateEconomic);
+	depositMode?.addEventListener('change', updateDeposit);
     updatePricing();
     const opensAt = form.querySelector('[data-mi-opens]');
     const closesAt = form.querySelector('[data-mi-closes]');
     const startsAt = form.querySelector('[data-mi-starts]');
     const dateFields = [opensAt, closesAt, startsAt].filter(Boolean);
-    const formatDateEntry = (field) => {
-      const digits = field.value.replace(/\D/g, '').slice(0, 12);
-      let formatted = digits.slice(0, 2);
-      if (digits.length > 2) formatted += `/${digits.slice(2, 4)}`;
-      if (digits.length > 4) formatted += `/${digits.slice(4, 8)}`;
-      if (digits.length > 8) formatted += ` ${digits.slice(8, 10)}`;
-      if (digits.length > 10) formatted += `:${digits.slice(10, 12)}`;
-      field.value = formatted;
+    const enforceFourDigitYear = (field) => {
+      const match = field.value.match(/^(\d{2}\/\d{2}\/)(\d{5,})(.*)$/);
+      if (!match) return;
+      const selection = field.selectionStart;
+      field.value = `${match[1]}${match[2].slice(0, 4)}${match[3]}`;
+      if (selection !== null) field.setSelectionRange(Math.min(selection - 1, field.value.length), Math.min(selection - 1, field.value.length));
+    };
+    const parseItalianDate = (value) => {
+      const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})$/);
+      if (!match) return null;
+      const date = new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]), Number(match[4]), Number(match[5]), 0, 0);
+      if (date.getFullYear() !== Number(match[3]) || date.getMonth() !== Number(match[2]) - 1 || date.getDate() !== Number(match[1]) || date.getHours() !== Number(match[4]) || date.getMinutes() !== Number(match[5])) return null;
+      return date;
     };
     const validateFourDigitYear = (field) => {
       const value = field.value;
-      field.setCustomValidity(value && !/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/.test(value) ? 'Usa il formato gg/mm/aaaa hh:mm, con un anno di quattro cifre.' : '');
+      if (!value) { field.setCustomValidity(''); return; }
+      const date = parseItalianDate(value);
+      if (!date) { field.setCustomValidity('Usa una data reale nel formato gg/mm/aaaa hh:mm, con ore e minuti completi.'); return; }
+      const latest = new Date();
+      latest.setFullYear(latest.getFullYear() + 10);
+      field.setCustomValidity(date > latest ? 'La data dell’evento non può essere oltre dieci anni nel futuro.' : '');
     };
     dateFields.forEach((field) => {
-      field.addEventListener('input', () => { formatDateEntry(field); validateFourDigitYear(field); });
+      field.addEventListener('input', () => { enforceFourDigitYear(field); validateFourDigitYear(field); });
       field.addEventListener('change', () => validateFourDigitYear(field));
       validateFourDigitYear(field);
     });
     const updateDateLimits = () => {
       dateFields.forEach((field) => validateFourDigitYear(field));
+      const opening = parseItalianDate(opensAt?.value || '');
+      const closing = parseItalianDate(closesAt?.value || '');
+      const start = parseItalianDate(startsAt?.value || '');
+      if (opening && closing && closing < opening) closesAt.setCustomValidity('La chiusura non può precedere l’apertura delle iscrizioni.');
+      if (closing && start && start < closing) startsAt.setCustomValidity('L’inizio dell’evento non può precedere la chiusura delle iscrizioni.');
     };
     opensAt?.addEventListener('change', updateDateLimits);
     closesAt?.addEventListener('change', updateDateLimits);
@@ -150,7 +196,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const selectedEvent = document.querySelector('[data-mi-selected-event]');
-  if (selectedEvent) {
+  const eventOutputs = document.querySelector('[data-mi-event-outputs]');
+  if (eventOutputs) {
+	const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+	window.requestAnimationFrame(() => {
+	  eventOutputs.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
+	  eventOutputs.focus({ preventScroll: true });
+	});
+  } else if (selectedEvent) {
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     window.requestAnimationFrame(() => selectedEvent.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' }));
   }
@@ -163,6 +216,28 @@ document.addEventListener('DOMContentLoaded', () => {
 	  toolbar.dataset.miSubmitting = '1';
       toolbar.requestSubmit();
     });
+  });
+
+  document.querySelectorAll('.mi-event-card-menu').forEach((menu) => {
+	menu.addEventListener('toggle', () => {
+	  if (!menu.open) return;
+	  document.querySelectorAll('.mi-event-card-menu[open]').forEach((other) => {
+		if (other !== menu) other.open = false;
+	  });
+	});
+  });
+
+  document.querySelectorAll('[data-mi-operator-form]').forEach((operatorForm) => {
+	const role = operatorForm.querySelector('select[name="operator_role"]');
+	const groups = operatorForm.querySelector('[data-mi-operator-groups]');
+	if (!role || !groups) return;
+	const updateOperatorGroups = () => {
+	  const globalAccess = role.value === 'mi_secretary';
+	  groups.hidden = globalAccess;
+	  groups.querySelectorAll('input[name="operator_groups[]"]').forEach((field) => { field.disabled = globalAccess; });
+	};
+	role.addEventListener('change', updateOperatorGroups);
+	updateOperatorGroups();
   });
 
   const bookingLinks = [...document.querySelectorAll('[data-mi-portal-booking-open]')]

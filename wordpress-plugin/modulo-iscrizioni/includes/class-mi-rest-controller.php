@@ -144,7 +144,10 @@ final class MI_REST_Controller {
 		update_post_meta( $event_id, '_mi_pricing_mode', $fixed_price > 0 ? 'FIXED' : 'NONE' );
 		update_post_meta( $event_id, '_mi_fixed_price_cents', $fixed_price );
 		update_post_meta( $event_id, '_mi_operational_profile', MI_Field_Schema::sanitize_operational_profile( $payload['operational_profile'] ?? 'AUTOMATICO' ) );
+		$deposit_mode = 'FIXED' === strtoupper( sanitize_key( $payload['deposit_mode'] ?? 'PERCENTAGE' ) ) ? 'FIXED' : 'PERCENTAGE';
+		update_post_meta( $event_id, '_mi_deposit_mode', $deposit_mode );
 		update_post_meta( $event_id, '_mi_deposit_percentage', min( 99, max( 1, absint( $payload['deposit_percentage'] ?? 30 ) ) ) );
+		update_post_meta( $event_id, '_mi_deposit_fixed_cents', 'DEPOSIT_BALANCE' === $economic_mode && 'FIXED' === $deposit_mode ? max( 0, absint( $payload['deposit_fixed_cents'] ?? 0 ) ) : 0 );
 		update_post_meta( $event_id, '_mi_ticket_types', array( array( 'code' => 'standard', 'name' => 'Quota di partecipazione', 'price_cents' => 0, 'max_per_order' => 20, 'capacity' => 0 ) ) );
 		$options = self::workspace_service_options( (array) ( $payload['services'] ?? array() ), (array) ( $payload['accommodations'] ?? array() ) );
 		update_post_meta( $event_id, '_mi_options', $options );

@@ -166,6 +166,9 @@
   const modalitaEconomica = document.getElementById('mi_economic_mode');
   const modalitaPrezzo = document.getElementById('mi_pricing_mode');
   const riquadroCaparra = document.querySelector('[data-mi-economic-deposit]');
+  const modalitaCaparra = document.getElementById('mi_deposit_mode');
+  const riquadroCaparraPercentuale = document.querySelector('[data-mi-deposit-percentage]');
+  const riquadroCaparraFissa = document.querySelector('[data-mi-deposit-fixed]');
   const riquadroPagamenti = document.querySelector('[data-mi-economic-payments]');
 	const riquadroPrezzoFisso = document.querySelector('[data-mi-fixed-price]');
   const aiutoEconomico = document.querySelector('[data-mi-economic-help]');
@@ -180,13 +183,25 @@
 		if (campoPrezzoFisso) { campoPrezzoFisso.required = modalitaPrezzo.value === 'FIXED'; campoPrezzoFisso.disabled = modalitaPrezzo.value !== 'FIXED'; }
 	  }
       riquadroCaparra.hidden = modalita !== 'DEPOSIT_BALANCE';
+	  const caparraFissa = modalitaCaparra?.value === 'FIXED';
+	  if (riquadroCaparraPercentuale) {
+		riquadroCaparraPercentuale.hidden = caparraFissa;
+		const campo = riquadroCaparraPercentuale.querySelector('input');
+		if (campo) { campo.disabled = modalita !== 'DEPOSIT_BALANCE' || caparraFissa; campo.required = modalita === 'DEPOSIT_BALANCE' && !caparraFissa; }
+	  }
+	  if (riquadroCaparraFissa) {
+		riquadroCaparraFissa.hidden = !caparraFissa;
+		const campo = riquadroCaparraFissa.querySelector('input');
+		if (campo) { campo.disabled = modalita !== 'DEPOSIT_BALANCE' || !caparraFissa; campo.required = modalita === 'DEPOSIT_BALANCE' && caparraFissa; }
+	  }
       riquadroPagamenti.hidden = !incassa;
       Array.from(riquadroPagamenti.querySelectorAll('input')).forEach((campo) => { campo.disabled = !incassa; });
 	  modalitaPrezzo.setCustomValidity(prezzoCoerente ? '' : modalita === 'REGISTRATION_ONLY' ? 'Per la sola iscrizione scegli “Nessun prezzo” oppure “Gratuito”.' : 'Seleziona una quota uguale per tutti oppure prezzi diversi secondo la tipologia.');
-      aiutoEconomico.textContent = modalita === 'REGISTRATION_ONLY' ? (modalitaPrezzo.value === 'ZERO' ? 'L’evento è dichiarato esplicitamente gratuito.' : 'Il modulo raccoglie soltanto le iscrizioni senza dichiarare un prezzo.') : modalita === 'PRICE_ONLY' ? 'Il prezzo viene mostrato, ma non vengono richieste fonti di pagamento.' : modalita === 'FULL_PAYMENT' ? 'È richiesto il versamento dell’intero importo tramite almeno una fonte ammessa.' : 'Sono previsti una caparra percentuale e il successivo saldo.';
+	  aiutoEconomico.textContent = modalita === 'REGISTRATION_ONLY' ? (modalitaPrezzo.value === 'ZERO' ? 'L’evento è dichiarato esplicitamente gratuito.' : 'Il modulo raccoglie soltanto le iscrizioni senza dichiarare un prezzo.') : modalita === 'PRICE_ONLY' ? 'Il prezzo viene mostrato, ma non vengono richieste fonti di pagamento.' : modalita === 'FULL_PAYMENT' ? 'È richiesto il versamento dell’intero importo tramite almeno una fonte ammessa.' : `Sono previsti ${caparraFissa ? 'un importo fisso di caparra' : 'una caparra percentuale'} e il successivo saldo.`;
     };
     modalitaEconomica.addEventListener('change', aggiornaConfigurazioneEconomica);
     modalitaPrezzo.addEventListener('change', aggiornaConfigurazioneEconomica);
+	modalitaCaparra?.addEventListener('change', aggiornaConfigurazioneEconomica);
     aggiornaConfigurazioneEconomica();
   }
 
