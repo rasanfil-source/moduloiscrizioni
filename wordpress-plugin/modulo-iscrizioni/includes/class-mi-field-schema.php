@@ -11,7 +11,7 @@ final class MI_Field_Schema {
 				'type'         => 'email',
 				'max_length'   => 254,
 				'autocomplete' => 'email',
-				'help'         => 'Può essere diversa dall’email del referente.',
+				'help'         => '',
 			),
 			'phone' => array(
 				'key'          => 'phone',

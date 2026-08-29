@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.9\.5/);
+	assert.match(source, /Version:\s+3\.9\.6/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1351,4 +1351,15 @@ test('la scelta della quota usa tre opzioni chiare nell ordine richiesto', async
   const fixed = portal.indexOf('Quota uguale per tutti', start);
   const services = portal.indexOf('In base ai servizi scelti', start);
   assert.ok(start >= 0 && free > start && fixed > free && services > fixed);
+});
+
+test('Crea evento apre un wizard nuovo e non eredita la bozza precedente', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(portal, /add_query_arg\( 'mi_portal_view', 'create', self::base_url\(\) \)/);
+  assert.doesNotMatch(portal, /add_query_arg\( 'mi_portal_view', 'create' \)/);
+});
+
+test('il wizard non mostra la nota ridondante sull email del referente', async () => {
+  const schema = await read('includes/class-mi-field-schema.php');
+  assert.doesNotMatch(schema, /Può essere diversa dall’email del referente/);
 });
