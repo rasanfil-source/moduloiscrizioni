@@ -47,7 +47,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.9\.0/);
+	assert.match(source, /Version:\s+3\.9\.1/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1107,6 +1107,13 @@ test('la scheda iscrizioni riprende la vista operativa con ricerca e filtri sicu
   assert.match(css, /\.mi-registrations-toolbar/);
   assert.match(css, /\.mi-booking-card__avatar/);
   assert.match(css, /\.mi-status-pill\.is-green/);
+});
+
+test('la ricerca iscrizioni privilegia il campo e mantiene Cerca piccolo e affiancato', async () => {
+  const css = await read('assets/portal.css');
+  assert.match(css, /\.mi-registration-search\{width:min\(100%,760px\);grid-template-columns:minmax\(260px,1fr\) 86px/);
+  assert.match(css, /\.mi-registration-search \.mi-primary\{width:86px/);
+  assert.match(css, /grid-template-columns:minmax\(0,1fr\) 78px/);
 });
 
 test('i tipi personalizzati di comunicazione si aggiungono e si eliminano senza inviare email', async () => {

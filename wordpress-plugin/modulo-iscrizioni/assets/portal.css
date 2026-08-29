@@ -38,3 +38,7 @@
 
 /* Produzioni richieste al termine della configurazione dell'evento. */
 .mi-event-outputs{margin-top:18px;padding:16px;border:1px solid #cbd5e1;border-radius:14px;background:#fff}.mi-event-outputs h3{margin:0 0 10px}.mi-event-outputs ol{display:grid;gap:10px;margin:0 0 14px;padding-left:22px}.mi-event-outputs li strong,.mi-event-outputs li span,.mi-event-outputs li a,.mi-event-outputs li code{display:block}.mi-event-outputs code{width:max-content;max-width:100%;margin-top:4px;padding:6px 9px;border-radius:7px;background:#eef2ff;overflow-wrap:anywhere}
+
+/* Ricerca iscrizioni: il campo resta predominante e il comando compatto, entrambi allineati a sinistra. */
+.mi-registration-search{width:min(100%,760px);grid-template-columns:minmax(260px,1fr) 86px;align-items:stretch;margin-right:auto}.mi-registration-search .mi-primary{width:86px;min-width:0;padding:.55rem .7rem;white-space:nowrap}
+@media(max-width:680px){.mi-registration-search{grid-template-columns:minmax(0,1fr) 78px}.mi-registration-search .mi-primary{width:78px;padding:.5rem}}
