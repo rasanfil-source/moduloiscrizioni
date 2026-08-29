@@ -170,6 +170,14 @@ test('la segreteria essenziale apre un foglio operativo dedicato per evento', ()
 	assert.doesNotMatch(segreteriaHtml.match(/function navigazioneSegreteria[\s\S]*?\n/)[0], /Viste operative|Camere e pullman/);
 });
 
+test('WordPress può preparare il foglio dell evento senza duplicarlo', () => {
+	assert.match(sources['WebApp.gs'], /PREPARA_PRODUZIONI_EVENTO/);
+	assert.match(sources['FogliOperativi.gs'], /function preparaProduzioniEventoDaWordPress_/);
+	assert.match(sources['FogliOperativi.gs'], /String\(riga\.id_evento\) === idEvento/);
+	assert.match(sources['FogliOperativi.gs'], /apriFoglioOperativoEvento\(\{ id_evento: idEvento \}\)/);
+	assert.match(sources['FogliOperativi.gs'], /mode: 'PREVIEW'/);
+});
+
 test('Workspace non espone una seconda pagina Segreteria eventi', () => {
 	assert.doesNotMatch(sources['Setup.gs'], /apriSegreteriaWeb/);
 	assert.doesNotMatch(sources['WebApp.gs'], /view \|\| ''\) === 'segreteria'/);

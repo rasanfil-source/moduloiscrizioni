@@ -42,11 +42,16 @@ document.addEventListener('DOMContentLoaded', () => {
 	  const profileField = document.createElement('label');
 	  profileField.innerHTML = 'Vista iniziale della segreteria<select name="operational_profile"><option value="AUTOMATICO">Automatico in base ai dati e alle quote</option><option value="MINIMO">Elenco minimo: nominativo e cellulare</option><option value="QUOTA_UNICA">Quota unica con dettaglio degli incassi</option><option value="SERVIZI_MULTIPLI">Più servizi: per esempio pullman e pranzo</option><option value="VIAGGIO_COMPLESSO">Viaggio complesso: documenti, servizi, sistemazioni e rate</option></select><small>La Segreteria consente comunque di personalizzare le colonne.</small>';
 	  servicesStep.insertBefore(profileField, overnight.closest('label'));
+	  profileField.querySelector('select').value = form.dataset.miOperationalProfile || 'AUTOMATICO';
 	}
-    if (overnight) overnight.addEventListener('change', () => {
+    const updateOvernight = () => {
       rooms.hidden = !overnight.checked;
       if (!overnight.checked) rooms.querySelectorAll('input').forEach((input) => { input.checked = false; });
-    });
+    };
+    if (overnight) {
+      overnight.addEventListener('change', updateOvernight);
+      updateOvernight();
+    }
 	form.querySelectorAll('[data-mi-service-fee]').forEach((service) => {
 	  const price = service.closest('.mi-service-fee')?.querySelector('input[name^="service_price"]');
 	  const updateService = () => {
@@ -103,6 +108,16 @@ document.addEventListener('DOMContentLoaded', () => {
     window.requestAnimationFrame(() => selectedEvent.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' }));
   }
 
+  document.querySelectorAll('.mi-registrations-toolbar select[data-mi-auto-submit]').forEach((filter) => {
+    filter.addEventListener('change', () => {
+      const toolbar = filter.closest('form');
+      if (!toolbar) return;
+	  if (toolbar.dataset.miSubmitting === '1') return;
+	  toolbar.dataset.miSubmitting = '1';
+      toolbar.requestSubmit();
+    });
+  });
+
   const bookingLinks = [...document.querySelectorAll('[data-mi-portal-booking-open]')]
     .filter((link, index, links) => links.findIndex((candidate) => candidate.href === link.href) === index);
   const inlineDetail = document.getElementById('mi-portal-booking-detail');
@@ -122,6 +137,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let previousFocus = null;
   let activeRequest = null;
   let activeBookingIndex = -1;
+  const detailCache = new Map();
+
+  const parseDetail = (html) => new DOMParser().parseFromString(html, 'text/html').getElementById('mi-portal-booking-detail');
 
   const updateNavigation = () => {
     previousButton.disabled = activeBookingIndex <= 0;
@@ -147,23 +165,32 @@ document.addEventListener('DOMContentLoaded', () => {
     previousFocus?.focus();
   };
   const openBooking = async (link, historyMode = 'push') => {
-    activeRequest?.abort();
-    const request = new AbortController();
-    activeRequest = request;
-    previousFocus = link;
-    activeBookingIndex = bookingLinks.indexOf(link);
-    updateNavigation();
-    modal.hidden = false;
+	activeRequest?.abort();
+	previousFocus = link;
+	activeBookingIndex = bookingLinks.indexOf(link);
+	updateNavigation();
+	const cachedDetail = detailCache.get(link.href);
+	if (cachedDetail) {
+	  const detail = parseDetail(cachedDetail);
+	  if (detail) {
+		showBooking(detail, link.href, historyMode);
+		return;
+	  }
+	  detailCache.delete(link.href);
+	}
+	const request = new AbortController();
+	activeRequest = request;
+	modal.hidden = false;
     document.body.classList.add('mi-portal-modal-open');
     content.innerHTML = '<p class="mi-portal-modal__loading">Apertura della prenotazione…</p>';
     closeButton.focus();
     try {
       const response = await fetch(link.href, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' }, signal: request.signal });
       if (!response.ok) throw new Error('detail_unavailable');
-      const detailDocument = new DOMParser().parseFromString(await response.text(), 'text/html');
-      const detail = detailDocument.getElementById('mi-portal-booking-detail');
-      if (!detail) throw new Error('detail_missing');
-      showBooking(detail, link.href, historyMode);
+	  const detail = parseDetail(await response.text());
+	  if (!detail) throw new Error('detail_missing');
+	  detailCache.set(link.href, detail.outerHTML);
+	  showBooking(detail, link.href, historyMode);
     } catch (error) {
       if ('AbortError' === error.name) return;
       window.location.assign(link.href);

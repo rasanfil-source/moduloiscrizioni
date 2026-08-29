@@ -12,7 +12,9 @@ La parrocchia è l'ente base. Ogni gruppo può avere logo, immagine, colori e co
 
 ## Stato
 
-Il repository contiene il plugin WordPress `3.8.0` e lo schema Apps Script `1.8.0`. Il portale WordPress autenticato è l’unica **Segreteria eventi**: riunisce gestione degli eventi, creazione, schede delle iscrizioni e comunicazioni. Il segretario generale opera su tutti i gruppi; ogni operatore usa credenziali personali WordPress e vede soltanto gli eventi dei gruppi assegnati, senza entrare nel resto di `wp-admin`.
+Il repository contiene il plugin WordPress `3.9.4` e lo schema Apps Script `1.8.0`. Il portale WordPress autenticato è l’unica **Segreteria eventi**: riunisce gestione degli eventi, creazione, schede delle iscrizioni e comunicazioni. Il segretario generale opera su tutti i gruppi; ogni operatore usa credenziali personali WordPress e vede soltanto gli eventi dei gruppi assegnati, senza entrare nel resto di `wp-admin`.
+
+Una bozza è una creazione interrotta: selezionandola da **Gestisci eventi** si riapre lo stesso percorso guidato, già popolato con i dati salvati. Al termine, la sezione **Produzioni dell’evento** espone il codice del pulsante iscrizioni e può richiedere a Workspace la creazione idempotente del foglio operativo dedicato. WordPress conserva l’identificativo restituito dal foglio per collegare, negli eventi con caparra e saldo, il successivo modulo di completamento del pagamento. La produzione non pubblica l’evento e non invia email.
 
 WordPress raccoglie le iscrizioni e le consegna in modo firmato a Workspace. I fogli Google restano lo strumento operativo per pagamenti, sistemazioni, assegnazioni e viste adattive, mentre `DB_MODULI` conserva l’archivio centrale e lo storico. Il referente può consultare conferma e saldo senza vedere note interne o altri dati personali. Email, QR e barcode sono generati localmente; la modalità email iniziale resta `ANTEPRIMA` e `OPERATIVO` richiede una prova sintetica accettata dal sistema di posta.
 

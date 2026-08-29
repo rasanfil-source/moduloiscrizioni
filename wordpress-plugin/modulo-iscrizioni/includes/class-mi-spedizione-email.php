@@ -40,8 +40,10 @@ final class MI_Spedizione_Email {
 		$template_type = strtoupper( sanitize_key( (string) ( $payload['template_type'] ?? '' ) ) );
 		$message = sanitize_textarea_field( (string) ( $payload['message'] ?? '' ) );
 		$allow_operational = ! empty( $payload['allow_operational'] );
-		if ( ! $communication_id || ! $event_id || ! in_array( $template_type, array( 'PRE_DEPARTURE_REMINDER', 'BALANCE_REMINDER', 'EVENT_CANCELLATION' ), true ) ) return new WP_Error( 'mi_operational_email_invalid', 'Comunicazione non valida.', array( 'status' => 400 ) );
-		if ( 'PRE_DEPARTURE_REMINDER' === $template_type && ! $message ) return new WP_Error( 'mi_operational_email_message_required', 'Il promemoria richiede un testo.', array( 'status' => 400 ) );
+		$custom_types = get_option( 'mi_custom_communication_types', array() );
+		$custom_allowed = is_array( $custom_types ) && isset( $custom_types[ $template_type ] ) && preg_match( '/^CUSTOM_[A-Z0-9_]{1,24}$/', $template_type );
+		if ( ! $communication_id || ! $event_id || ( ! in_array( $template_type, array( 'PRE_DEPARTURE_REMINDER', 'BALANCE_REMINDER', 'EVENT_CANCELLATION' ), true ) && ! $custom_allowed ) ) return new WP_Error( 'mi_operational_email_invalid', 'Comunicazione non valida.', array( 'status' => 400 ) );
+		if ( ( 'PRE_DEPARTURE_REMINDER' === $template_type || $custom_allowed ) && ! $message ) return new WP_Error( 'mi_operational_email_message_required', 'La comunicazione richiede un testo.', array( 'status' => 400 ) );
 		$recipient_payload = is_array( $payload['recipients'] ?? null ) ? array_slice( $payload['recipients'], 0, 1000 ) : array();
 		$recipient_state = array();
 		foreach ( $recipient_payload as $recipient ) {

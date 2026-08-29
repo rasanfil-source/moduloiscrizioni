@@ -47,7 +47,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.8\.0/);
+	assert.match(source, /Version:\s+3\.9\.4/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1089,9 +1089,100 @@ test('gli eventi passati sono separati dalla vista operativa ordinaria', async (
 
 test('l’elenco iscrizioni indica l’evento selezionato', async () => {
   const portal = await read('includes/class-mi-portal.php');
-  assert.match(portal, /\$list_title = 'Ultime iscrizioni'/);
+  assert.match(portal, /\$list_title = 'Prenotazioni'/);
   assert.match(portal, /\$list_title \.= ' — ' \. \$event_title/);
   assert.match(portal, /esc_html\( \$list_title \)/);
+});
+
+test('la scheda iscrizioni riprende la vista operativa con ricerca e filtri sicuri', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /name="mi_portal_query"/);
+  assert.match(portal, /name="mi_portal_status"/);
+  assert.match(portal, /\$wpdb->esc_like\( \$query \)/);
+  assert.match(portal, /\$allowed_statuses/);
+  assert.match(portal, /LIMIT 30/);
+  assert.match(portal, /class="mi-booking-card"/);
+  assert.match(portal, /mi-status-pill/);
+  assert.match(css, /\.mi-registrations-toolbar/);
+  assert.match(css, /\.mi-booking-card__avatar/);
+  assert.match(css, /\.mi-status-pill\.is-green/);
+});
+
+test('la ricerca iscrizioni privilegia il campo e mantiene Cerca piccolo e affiancato', async () => {
+  const css = await read('assets/portal.css');
+  assert.match(css, /\.mi-registration-search\{width:min\(100%,760px\);grid-template-columns:minmax\(260px,1fr\) 86px/);
+  assert.match(css, /\.mi-registration-search \.mi-primary\{width:86px/);
+  assert.match(css, /grid-template-columns:minmax\(0,1fr\) 78px/);
+});
+
+test('i menu delle iscrizioni applicano subito i filtri mantenendo il comando manuale', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  assert.match(portal, /name="mi_portal_event" data-mi-auto-submit/);
+  assert.match(portal, /name="mi_portal_status" data-mi-auto-submit/);
+  assert.match(portal, />Applica filtri<\/button>/);
+  assert.match(script, /select\[data-mi-auto-submit\]/);
+  assert.match(script, /toolbar\.requestSubmit\(\)/);
+  assert.match(portal, /if \( \$selected && ! in_array\( \$selected, \$event_ids, true \) \) wp_die\( 'Evento non accessibile\.', 403 \)/);
+});
+
+test('i tipi personalizzati di comunicazione si aggiungono e si eliminano senza inviare email', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const sender = await read('includes/class-mi-spedizione-email.php');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /CUSTOM_COMMUNICATION_TYPES_OPTION/);
+  assert.match(portal, /add_communication_type/);
+  assert.match(portal, /delete_communication_type/);
+  assert.match(portal, /mi_manage_all_events/);
+  assert.match(portal, /I tipi di sistema non possono essere eliminati/);
+  assert.match(portal, /Modalità ANTEPRIMA/);
+  assert.match(sender, /mi_custom_communication_types/);
+  assert.match(sender, /\^CUSTOM_\[A-Z0-9_\]/);
+  assert.match(css, /\.mi-communication-types/);
+  assert.match(css, /\.mi-text-danger/);
+});
+
+test('il portale apre rapidamente le schede e riduce il lavoro fuori schermo', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /HTTP_X_REQUESTED_WITH/);
+  assert.match(portal, /\$is_detail_request/);
+  assert.match(portal, /self::booking_detail\( absint\( \$_GET\['mi_portal_booking'\] \) \)/);
+  assert.match(script, /const detailCache = new Map\(\)/);
+  assert.match(script, /detailCache\.set\(link\.href, detail\.outerHTML\)/);
+  assert.match(css, /content-visibility:auto/);
+  assert.match(css, /contain-intrinsic-size:78px/);
+  assert.match(css, /overscroll-behavior-inline:contain/);
+  assert.match(css, /prefers-reduced-motion:reduce/);
+});
+
+test('una bozza vuota può essere cestinata e la scheda torna sempre all’elenco', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /'trash_event'/);
+  assert.match(portal, /'draft' !== \$event->post_status/);
+  assert.match(portal, /SELECT COUNT\(\*\) FROM \{\$wpdb->prefix\}mi_registrations WHERE event_id=%d/);
+  assert.match(portal, /wp_trash_post\( \$event_id \)/);
+  assert.match(portal, /Bozza spostata nel cestino/);
+  assert.match(portal, /Torna all’elenco eventi/);
+  assert.match(portal, /mi-event-management__back/);
+  assert.match(css, /\.mi-event-management__back/);
+  assert.match(css, /\.mi-event-trash/);
+});
+
+test('gli eventi annullati restano nella gestione come tessere compatte', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /\$cancelled_events/);
+  assert.match(portal, /_mi_event_cancelled_at/);
+  assert.match(portal, /\$cancelled_events\[ \$event->ID \] \) \$current_events\[\] = \$event/);
+  assert.match(portal, /is-cancelled/);
+  assert.match(portal, /\$status_label = \$is_cancelled \? 'Annullato'/);
+  assert.match(css, /\.mi-event-card\.is-cancelled/);
+  assert.match(css, /\.mi-event-card\.is-cancelled \.mi-event-card__image/);
+  assert.match(css, /background:#fdecef;color:#9f1930/);
 });
 
 test('il wizard crea una bozza completa e mostra collegamenti espliciti', async () => {
@@ -1129,6 +1220,22 @@ test('il wizard crea una bozza completa e mostra collegamenti espliciti', async 
   assert.match(script, /data-mi-opens/);
   assert.match(script, /closesAt\.min/);
   assert.match(script, /startsAt\.min/);
+});
+
+test('selezionare una bozza riprende lo stesso percorso guidato e prepara le produzioni', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  assert.match(portal, /'draft' === \$event->post_status[\s\S]*?'mi_portal_view' => 'create'/);
+  assert.match(portal, /'mi_portal_draft' => \$event->ID/);
+  assert.match(portal, /name="draft_event_id"/);
+  assert.match(portal, /wp_update_post\( array\( 'ID' => \$draft_event_id/);
+  assert.match(portal, /Riprendi la creazione/);
+  assert.match(portal, /PREPARA_PRODUZIONI_EVENTO/);
+  assert.match(portal, /_mi_operational_sheet_id/);
+  assert.match(portal, /\[modulo_iscrizioni event=&quot;/);
+  assert.match(portal, /Pulsante saldo/);
+  assert.match(portal, /data-mi-operational-profile/);
+  assert.match(script, /updateOvernight\(\)/);
 });
 
 test('il portale consente di creare un gruppo senza duplicare lo slug', async () => {
@@ -1204,4 +1311,19 @@ test('la scheda evento consente modifiche sicure e annullamento con avviso', asy
   assert.match(portal, /data-mi-selected-event/);
   assert.match(portalJs, /scrollIntoView/);
   assert.match(portalJs, /prefers-reduced-motion/);
+});
+
+test('gli esiti della gestione tornano sempre alla Segreteria eventi', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(portal, /private static function redirect_result[\s\S]*?\$url = self::url\(\)/);
+  assert.match(portal, /'mi_portal' => '1'[\s\S]*?'mi_portal_view' => 'manage'/);
+  assert.doesNotMatch(portal.match(/private static function redirect_result[\s\S]*?\n\t\}/)[0], /wp_get_referer|home_url/);
+  assert.match(portal, /Evento annullato\. Avvisi preparati:[\s\S]*?false \)/);
+});
+
+test('gli eventi annullati spariscono automaticamente dal filtro delle iscrizioni', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(portal, /\$selectable_events = array_values\( array_filter\( \$events[\s\S]*?_mi_event_cancelled_at/);
+  assert.match(portal, /\$selected && ! in_array\( \$selected, \$selectable_event_ids, true \) \) \$selected = 0/);
+  assert.match(portal, /foreach \( \$selectable_events as \$event \)/);
 });
