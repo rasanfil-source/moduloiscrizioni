@@ -145,9 +145,17 @@ final class MI_Access {
 	}
 
 	public static function login_redirect( $redirect_to, $requested, $user ) {
-		if ( $user instanceof WP_User && ( user_can( $user, 'mi_portal_access' ) || user_can( $user, 'manage_options' ) ) ) {
-			return MI_Portal::url();
+		if ( ! $user instanceof WP_User || ( ! user_can( $user, 'mi_portal_access' ) && ! user_can( $user, 'manage_options' ) ) ) {
+			return $redirect_to;
 		}
+
+		// La Segreteria è una funzione del sito: non deve sostituire la normale destinazione di WordPress.
+		// Il pannello viene aperto automaticamente soltanto dal suo modulo di accesso dedicato.
+		$destinazione_richiesta = wp_validate_redirect( (string) $requested, '' );
+		if ( $destinazione_richiesta && false !== strpos( $destinazione_richiesta, 'mi_portal=1' ) ) {
+			return $destinazione_richiesta;
+		}
+
 		return $redirect_to;
 	}
 
