@@ -15,6 +15,7 @@ final class MI_Activator {
 		wp_clear_scheduled_hook( 'mi_sync_workspace_registration' );
 		wp_clear_scheduled_hook( 'mi_spedisci_email_in_coda' );
 		wp_clear_scheduled_hook( 'mi_expire_registrations' );
+		wp_clear_scheduled_hook( 'mi_pulisci_bozze_cestinate' );
 	}
 
 	public static function maybe_upgrade() {
@@ -32,6 +33,9 @@ final class MI_Activator {
 		}
 		if ( ! wp_next_scheduled( 'mi_expire_registrations' ) ) {
 			wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', 'mi_expire_registrations' );
+		}
+		if ( ! wp_next_scheduled( 'mi_pulisci_bozze_cestinate' ) ) {
+			wp_schedule_event( time() + DAY_IN_SECONDS, 'daily', 'mi_pulisci_bozze_cestinate' );
 		}
 	}
 

@@ -83,7 +83,7 @@ final class MI_Registration_Service {
 		$activity_thumbnail_id = $activity ? get_post_thumbnail_id( $activity ) : 0;
 		$event_thumbnail_id = get_post_thumbnail_id( $event_id );
 		$group_cover_id = $activity ? absint( get_post_meta( $activity_id, '_mi_group_cover_image_id', true ) ) : 0;
-		$resolved_cover_id = $event_thumbnail_id ?: $group_cover_id;
+		$resolved_cover_id = $event_thumbnail_id ?: ( $group_cover_id ?: $activity_thumbnail_id );
 		$external_group_logo = $activity ? esc_url_raw( get_post_meta( $activity_id, '_mi_group_logo_url', true ), array( 'https' ) ) : '';
 		$external_group_cover = $activity ? esc_url_raw( get_post_meta( $activity_id, '_mi_group_cover_image_url', true ), array( 'https' ) ) : '';
 		$legacy_activity_color = $activity ? sanitize_hex_color( get_post_meta( $activity_id, '_mi_accent_color', true ) ) : '';
@@ -103,7 +103,7 @@ final class MI_Registration_Service {
 				'primary_color'   => $activity_primary_color,
 				'secondary_color' => $activity_secondary_color,
 			),
-			'cover_image'      => $resolved_cover_id ? (string) wp_get_attachment_image_url( $resolved_cover_id, 'large' ) : $external_group_cover,
+			'cover_image'      => $resolved_cover_id ? (string) wp_get_attachment_image_url( $resolved_cover_id, 'large' ) : ( $external_group_cover ?: $external_group_logo ),
 			'cover_image_alt'  => $resolved_cover_id ? (string) get_post_meta( $resolved_cover_id, '_wp_attachment_image_alt', true ) : '',
 			'event_starts_at'  => (string) get_post_meta( $event_id, '_mi_event_starts_at', true ),
 			'event_location'   => (string) get_post_meta( $event_id, '_mi_event_location', true ),
@@ -116,6 +116,8 @@ final class MI_Registration_Service {
 			'economic_mode'    => (string) ( get_post_meta( $event_id, '_mi_economic_mode', true ) ?: 'REGISTRATION_ONLY' ),
 			'operational_profile' => MI_Field_Schema::sanitize_operational_profile( get_post_meta( $event_id, '_mi_operational_profile', true ) ),
 			'deposit_percentage' => min( 99, max( 1, absint( get_post_meta( $event_id, '_mi_deposit_percentage', true ) ?: 30 ) ) ),
+			'deposit_mode'       => 'FIXED' === strtoupper( (string) get_post_meta( $event_id, '_mi_deposit_mode', true ) ) ? 'FIXED' : 'PERCENTAGE',
+			'deposit_fixed_cents'=> max( 0, (int) get_post_meta( $event_id, '_mi_deposit_fixed_cents', true ) ),
 			'payment_methods'  => (array) get_post_meta( $event_id, '_mi_payment_methods', true ),
 			'identifier_display' => in_array( strtoupper( (string) get_post_meta( $event_id, '_mi_identifier_display', true ) ), array( 'NONE', 'TEXT', 'QR', 'BARCODE' ), true ) ? strtoupper( (string) get_post_meta( $event_id, '_mi_identifier_display', true ) ) : 'TEXT',
 			'ticket_types'     => array_values( $ticket_types ),
@@ -458,8 +460,12 @@ final class MI_Registration_Service {
 		if ( in_array( $status, array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) && 'FULL_PAYMENT' === $mode ) {
 			$initial_due = $total_cents;
 		} elseif ( in_array( $status, array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) && 'DEPOSIT_BALANCE' === $mode ) {
-			$percentage = min( 99, max( 1, absint( $event['deposit_percentage'] ?? 30 ) ) );
-			$initial_due = (int) round( $total_cents * $percentage / 100 );
+			if ( 'FIXED' === strtoupper( (string) ( $event['deposit_mode'] ?? '' ) ) ) {
+				$initial_due = min( $total_cents, max( 0, (int) ( $event['deposit_fixed_cents'] ?? 0 ) ) );
+			} else {
+				$percentage = min( 99, max( 1, absint( $event['deposit_percentage'] ?? 30 ) ) );
+				$initial_due = (int) round( $total_cents * $percentage / 100 );
+			}
 			$balance = max( 0, $total_cents - $initial_due );
 		}
 		return array( 'mode' => $mode, 'total_cents' => $total_cents, 'initial_due_cents' => $initial_due, 'balance_cents' => $balance, 'payment_methods' => in_array( $mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ? array_values( (array) ( $event['payment_methods'] ?? array() ) ) : array() );

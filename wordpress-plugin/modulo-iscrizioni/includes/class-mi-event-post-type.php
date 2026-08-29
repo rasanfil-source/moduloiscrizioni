@@ -111,7 +111,9 @@ final class MI_Event_Post_Type {
 		$pricing_mode = get_post_meta( $post->ID, '_mi_pricing_mode', true ) ?: 'NONE';
 		$fixed_price_cents = max( 0, (int) get_post_meta( $post->ID, '_mi_fixed_price_cents', true ) );
 		$economic_mode = get_post_meta( $post->ID, '_mi_economic_mode', true ) ?: 'REGISTRATION_ONLY';
+		$deposit_mode = 'FIXED' === get_post_meta( $post->ID, '_mi_deposit_mode', true ) ? 'FIXED' : 'PERCENTAGE';
 		$deposit_percentage = min( 99, max( 1, absint( get_post_meta( $post->ID, '_mi_deposit_percentage', true ) ?: 30 ) ) );
+		$deposit_fixed_cents = max( 0, absint( get_post_meta( $post->ID, '_mi_deposit_fixed_cents', true ) ) );
 		$payment_methods = get_post_meta( $post->ID, '_mi_payment_methods', true );
 		$payment_methods = is_array( $payment_methods ) ? $payment_methods : array();
 		$identifier_display = get_post_meta( $post->ID, '_mi_identifier_display', true ) ?: 'TEXT';
@@ -154,7 +156,7 @@ final class MI_Event_Post_Type {
 			<p><label for="mi_pricing_mode"><strong>Prezzo</strong></label><br><select id="mi_pricing_mode" name="mi_pricing_mode"><option value="NONE" <?php selected( $pricing_mode, 'NONE' ); ?>>Nessun prezzo</option><option value="ZERO" <?php selected( $pricing_mode, 'ZERO' ); ?>>Gratuito</option><option value="FIXED" <?php selected( $pricing_mode, 'FIXED' ); ?>>Quota di partecipazione uguale per tutti</option><option value="CALCULATED" <?php selected( $pricing_mode, 'CALCULATED' ); ?>>Prezzi diversi secondo la tipologia</option></select></p>
 			<p data-mi-fixed-price><label for="mi_fixed_price"><strong>Quota di partecipazione per persona</strong></label><br><input id="mi_fixed_price" name="mi_fixed_price" type="number" min="0.01" step="0.01" value="<?php echo esc_attr( number_format( $fixed_price_cents / 100, 2, '.', '' ) ); ?>"> €</p>
 			<p><label for="mi_economic_mode"><strong>Modalità di pagamento richiesta</strong></label><br><select id="mi_economic_mode" name="mi_economic_mode"><option value="REGISTRATION_ONLY" <?php selected( $economic_mode, 'REGISTRATION_ONLY' ); ?>>Nessun pagamento previsto</option><option value="PRICE_ONLY" <?php selected( $economic_mode, 'PRICE_ONLY' ); ?>>Prezzo solamente informativo</option><option value="FULL_PAYMENT" <?php selected( $economic_mode, 'FULL_PAYMENT' ); ?>>Pagamento completo richiesto</option><option value="DEPOSIT_BALANCE" <?php selected( $economic_mode, 'DEPOSIT_BALANCE' ); ?>>Caparra richiesta, saldo successivo</option></select></p>
-			<p data-mi-economic-deposit><label for="mi_deposit_percentage"><strong>Caparra percentuale</strong></label><br><input id="mi_deposit_percentage" name="mi_deposit_percentage" type="number" min="1" max="99" value="<?php echo esc_attr( $deposit_percentage ); ?>"> %</p>
+			<div data-mi-economic-deposit><p><label for="mi_deposit_mode"><strong>Come calcolare la caparra</strong></label><br><select id="mi_deposit_mode" name="mi_deposit_mode"><option value="PERCENTAGE" <?php selected( $deposit_mode, 'PERCENTAGE' ); ?>>Percentuale (%)</option><option value="FIXED" <?php selected( $deposit_mode, 'FIXED' ); ?>>Importo fisso (€)</option></select></p><p data-mi-deposit-percentage><label for="mi_deposit_percentage"><strong>Percentuale caparra</strong></label><br><input id="mi_deposit_percentage" name="mi_deposit_percentage" type="number" min="1" max="99" value="<?php echo esc_attr( $deposit_percentage ); ?>"> %</p><p data-mi-deposit-fixed><label for="mi_deposit_fixed"><strong>Importo fisso della caparra</strong></label><br><input id="mi_deposit_fixed" name="mi_deposit_fixed" type="number" min="0.01" step="0.01" value="<?php echo esc_attr( number_format( $deposit_fixed_cents / 100, 2, '.', '' ) ); ?>"> €</p></div>
 			<fieldset data-mi-economic-payments><legend><strong>Fonti di pagamento ammesse</strong></legend><label><input type="checkbox" name="mi_payment_methods[]" value="BANK_TRANSFER" <?php checked( in_array( 'BANK_TRANSFER', $payment_methods, true ) ); ?>> Bonifico</label><br><label><input type="checkbox" name="mi_payment_methods[]" value="CARD" <?php checked( in_array( 'CARD', $payment_methods, true ) ); ?>> Carta</label><br><label><input type="checkbox" name="mi_payment_methods[]" value="CASH" <?php checked( in_array( 'CASH', $payment_methods, true ) ); ?>> Contante</label></fieldset>
 			<p class="description" data-mi-economic-help aria-live="polite"></p>
 			<p><label for="mi_identifier_display"><strong>Identificativo nell’email</strong></label><br><select id="mi_identifier_display" name="mi_identifier_display"><option value="NONE" <?php selected( $identifier_display, 'NONE' ); ?>>Non mostrare</option><option value="TEXT" <?php selected( $identifier_display, 'TEXT' ); ?>>Testo</option><option value="QR" <?php selected( $identifier_display, 'QR' ); ?>>QR facoltativo</option><option value="BARCODE" <?php selected( $identifier_display, 'BARCODE' ); ?>>Barcode facoltativo</option></select></p>
@@ -328,8 +330,13 @@ final class MI_Event_Post_Type {
 		$economic_modes = array( 'REGISTRATION_ONLY', 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE' );
 		$economic_mode = in_array( $economic_mode, $economic_modes, true ) ? $economic_mode : 'REGISTRATION_ONLY';
 		update_post_meta( $post_id, '_mi_economic_mode', $economic_mode );
+		$deposit_mode = isset( $_POST['mi_deposit_mode'] ) && 'FIXED' === strtoupper( sanitize_key( wp_unslash( $_POST['mi_deposit_mode'] ) ) ) ? 'FIXED' : 'PERCENTAGE';
 		$deposit_percentage = isset( $_POST['mi_deposit_percentage'] ) ? min( 99, max( 1, absint( $_POST['mi_deposit_percentage'] ) ) ) : 30;
+		$deposit_fixed_raw = isset( $_POST['mi_deposit_fixed'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['mi_deposit_fixed'] ) ) ) : '';
+		$deposit_fixed = preg_match( '/^\d+(?:[\.,]\d{1,2})?$/', $deposit_fixed_raw ) ? max( 0, (int) round( (float) str_replace( ',', '.', $deposit_fixed_raw ) * 100 ) ) : 0;
+		update_post_meta( $post_id, '_mi_deposit_mode', $deposit_mode );
 		update_post_meta( $post_id, '_mi_deposit_percentage', $deposit_percentage );
+		update_post_meta( $post_id, '_mi_deposit_fixed_cents', 'DEPOSIT_BALANCE' === $economic_mode && 'FIXED' === $deposit_mode ? $deposit_fixed : 0 );
 		$raw_payment_methods = isset( $_POST['mi_payment_methods'] ) ? (array) wp_unslash( $_POST['mi_payment_methods'] ) : array();
 		$payment_methods = array_values( array_intersect( array( 'BANK_TRANSFER', 'CARD', 'CASH' ), array_map( 'strtoupper', array_map( 'sanitize_key', $raw_payment_methods ) ) ) );
 		if ( ! in_array( $economic_mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) {

@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.12\.0/);
+	assert.match(source, /Version:\s+3\.13\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -949,9 +949,32 @@ test('il modulo mostra totale, caparra e saldo senza pagamenti online', async ()
   assert.match(shortcode, /data-mi-economic-summary/);
   assert.match(script, /renderEconomicSummary/);
   assert.match(script, /deposit_percentage/);
+  assert.match(script, /deposit_mode === 'FIXED'/);
+  assert.match(script, /deposit_fixed_cents/);
   assert.match(script, /Importo da versare/);
   assert.match(script, /registrat[oi] manualmente dall’organizzazione/);
   assert.doesNotMatch(script, /stripe|paypal|checkout/i);
+});
+
+test('la caparra può essere percentuale o di importo fisso', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const portalScript = await read('assets/portal.js');
+  const service = await read('includes/class-mi-registration-service.php');
+  const eventType = await read('includes/class-mi-event-post-type.php');
+  const adminScript = await read('assets/admin.js');
+  const rest = await read('includes/class-mi-rest-controller.php');
+  assert.match(portal, /_mi_deposit_mode/);
+  assert.match(portal, /_mi_deposit_fixed_cents/);
+  assert.match(portal, /data-mi-deposit-mode/);
+  assert.match(portalScript, /Percentuale \(%\)/);
+  assert.match(portalScript, /Importo fisso \(€\)/);
+  assert.match(portalScript, /name="deposit_fixed"/);
+  assert.match(service, /'FIXED'.*deposit_mode/);
+  assert.match(service, /min\( \$total_cents, max\( 0, \(int\).*deposit_fixed_cents/s);
+  assert.match(eventType, /name="mi_deposit_mode"/);
+  assert.match(eventType, /_mi_deposit_fixed_cents/);
+  assert.match(adminScript, /modalitaCaparra/);
+  assert.match(rest, /deposit_fixed_cents/);
 });
 
 test('le prenotazioni a pagamento attendono il versamento prima della conferma', async () => {
@@ -1172,7 +1195,9 @@ test('una bozza vuota può essere cestinata e la scheda torna sempre all’elenc
   assert.match(portal, /SELECT COUNT\(\*\) FROM \{\$wpdb->prefix\}mi_registrations WHERE event_id=%d/);
   assert.match(portal, /wp_trash_post\( \$event_id \)/);
   assert.match(portal, /Bozza spostata nel cestino/);
-  assert.match(portal, /Torna all’elenco eventi/);
+  assert.match(portal, /Chiudi la scheda/);
+  assert.match(portal, /aria-label="Chiudi la scheda dell’evento"/);
+  assert.match(portal, /#mi-elenco-eventi/);
   assert.match(portal, /mi-event-management__back/);
   assert.match(css, /\.mi-event-management__back/);
   assert.match(css, /\.mi-event-trash/);
@@ -1226,10 +1251,10 @@ test('il wizard crea una bozza completa e mostra collegamenti espliciti', async 
   assert.match(portal, /\$close_date > \$start_date/);
   assert.match(script, /data-mi-opens/);
   assert.match(script, /validateFourDigitYear/);
-  assert.match(script, /formatDateEntry/);
+  assert.match(script, /enforceFourDigitYear/);
 });
 
-test('selezionare una bozza riprende lo stesso percorso guidato e prepara le produzioni', async () => {
+test('selezionare una bozza riprende il percorso guidato e conduce ad Attiva l’evento', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const script = await read('assets/portal.js');
   assert.match(portal, /'draft' === \$event->post_status[\s\S]*?'mi_portal_view' => 'create'/);
@@ -1394,8 +1419,19 @@ test('il wizard distingue il salvataggio della bozza dalla produzione del foglio
   const portal = await read('includes/class-mi-portal.php');
   const shortcode = await read('includes/class-mi-shortcode.php');
   const activator = await read('includes/class-mi-activator.php');
-  assert.match(portal, /Salva la bozza e vai alle produzioni/);
-  assert.match(portal, /Crea la bozza e vai alle produzioni/);
+  assert.match(portal, /Salva la bozza e vai ad Attiva l’evento/);
+  assert.match(portal, /Crea la bozza e vai ad Attiva l’evento/);
+  assert.match(portal, /<h2>Attiva l’evento<\/h2>/);
+  assert.match(portal, /mi_portal_outputs/);
+  assert.match(portal, /draft_configuration_complete/);
+  assert.match(portal, /draft_initial_step/);
+  assert.match(portal, /data-mi-initial-step/);
+  assert.match(portal, /event_outputs_panel/);
+  assert.match(portal, /update_post_meta\( \$event_id, '_mi_ticket_types'/);
+  assert.match(portal, /#mi-produzioni-evento/);
+  assert.match(portal, /id="mi-produzioni-evento"[^>]*data-mi-event-outputs/);
+  const portalScript = await read('assets/portal.js');
+  assert.match(portalScript, /eventOutputs\.scrollIntoView/);
   assert.match(portal, /Crea e collega il foglio Google/);
   assert.doesNotMatch(portal, /Salva e continua la produzione|Produci pulsante e foglio Google/);
   assert.match(portal, /Pulsante Iscriviti/);
@@ -1410,6 +1446,55 @@ test('il wizard distingue il salvataggio della bozza dalla produzione del foglio
   assert.match(portal, /Pubblica e attiva i collegamenti/);
   assert.match(portal, /ensure_published_revision\( \$event_id, true \)/);
   assert.match(activator, /mi_secretary[\s\S]*mi_publish_events/);
+});
+
+test('gli eventi senza copertina ereditano anche l’immagine in evidenza del gruppo', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const service = await read('includes/class-mi-registration-service.php');
+  assert.match(service, /\$event_thumbnail_id \?: \( \$group_cover_id \?: \$activity_thumbnail_id \)/);
+  assert.match(service, /\$external_group_cover \?: \$external_group_logo/);
+  assert.match(portal, /function group_cover_url/);
+  assert.match(portal, /get_post_thumbnail_id\( \$activity_id \)/);
+  assert.match(portal, /self::group_cover_url\( \$activity_id, 'thumbnail' \)/);
+});
+
+test('le tessere evento espongono azioni coerenti nel menu a tre puntini', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /mi-event-card-menu/);
+  assert.match(portal, /Elimina bozza/);
+  assert.match(portal, /Elimina questa bozza/);
+  assert.match(portal, /mi-draft-resume__delete/);
+  assert.match(portal, /Annulla evento/);
+  assert.match(portal, /value="archive_event"/);
+  assert.match(portal, /Evento annullato spostato nello storico/);
+  assert.match(portal, /_mi_event_archived_at/);
+  assert.match(script, /mi-event-card-menu\[open\]/);
+  assert.match(css, /\.mi-event-card-menu/);
+});
+
+test('i gruppi degli operatori compaiono soltanto per i ruoli limitati', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  assert.match(portal, /'mi_secretary'\s*=>\s*'Segretario/);
+  assert.match(portal, /data-mi-operator-form/);
+  assert.match(portal, /data-mi-operator-groups hidden/);
+  assert.match(script, /role\.value === 'mi_secretary'/);
+  assert.match(script, /groups\.hidden = globalAccess/);
+});
+
+test('il portale allinea Ricordami e conserva per trenta giorni le bozze cestinate', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const activator = await read('includes/class-mi-activator.php');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /Nome utente per l’accesso/);
+  assert.match(css, /\.mi-portal-login \.login-remember label\{display:inline-flex;align-items:center/);
+  assert.match(portal, /function purge_trashed_drafts/);
+  assert.match(portal, /30 \* DAY_IN_SECONDS/);
+  assert.match(portal, /wp_delete_post\( \$event_id, true \)/);
+  assert.match(activator, /wp_schedule_event\( time\(\) \+ DAY_IN_SECONDS, 'daily', 'mi_pulisci_bozze_cestinate' \)/);
+  assert.match(activator, /wp_clear_scheduled_hook\( 'mi_pulisci_bozze_cestinate' \)/);
 });
 
 test('il controllo saldo può essere limitato all evento del pulsante', async () => {
@@ -1436,9 +1521,12 @@ test('il wizard limita l anno delle date a quattro cifre', async () => {
   assert.match(portal, /function valid_portal_date/);
   assert.match(portal, /function normalize_portal_date/);
   assert.match(portal, /anno di quattro cifre/);
-  assert.match(script, /formatDateEntry/);
-  assert.match(script, /slice\(0, 12\)/);
+  assert.match(script, /enforceFourDigitYear/);
+  assert.match(script, /slice\(0, 4\)/);
   assert.match(script, /formato gg\/mm\/aaaa hh:mm/);
+  assert.match(script, /parseItalianDate/);
+  assert.match(script, /dieci anni nel futuro/);
+  assert.match(portal, /modify\( '\+10 years' \)/);
 });
 
 test('la Segreteria eventi gestisce operatori, ruoli, gruppi, password e sospensione', async () => {
