@@ -46,7 +46,7 @@ final class MI_Portal {
 			if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Partecipante non accessibile.', 403 );
 			return self::redirect_cancel_result( MI_Registration_Service::cancel_participant( $participant_id, wp_get_current_user()->display_name ) );
 		}
-		if ( in_array( $action, array( 'update_event', 'cancel_event' ), true ) ) return self::handle_event_management_action( $action );
+		if ( in_array( $action, array( 'update_event', 'cancel_event', 'trash_event' ), true ) ) return self::handle_event_management_action( $action );
 		if ( 'prepare_communication' === $action ) return self::handle_communication_action();
 		if ( in_array( $action, array( 'add_communication_type', 'delete_communication_type' ), true ) ) return self::handle_communication_type_action( $action );
 		if ( 'create_event' !== $action ) return;
@@ -202,6 +202,15 @@ final class MI_Portal {
 		$event_id = absint( $_POST['event_id'] ?? 0 );
 		if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Evento non accessibile.', 403 );
 		check_admin_referer( 'mi_portal_manage_event_' . $event_id, 'mi_portal_nonce' );
+		if ( 'trash_event' === $action ) {
+			$event = get_post( $event_id );
+			if ( ! $event || 'draft' !== $event->post_status ) return self::redirect_result( 'Soltanto una bozza può essere spostata nel cestino.', true, $event_id );
+			global $wpdb;
+			$registration_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d", $event_id ) );
+			if ( $registration_count > 0 ) return self::redirect_result( 'La bozza possiede iscrizioni e non può essere eliminata. Puoi conservarla nello storico.', true, $event_id );
+			if ( ! wp_trash_post( $event_id ) ) return self::redirect_result( 'Non è stato possibile spostare la bozza nel cestino.', true, $event_id );
+			return self::redirect_result( 'Bozza spostata nel cestino. Può essere ripristinata dal pannello WordPress.', false );
+		}
 		if ( 'update_event' === $action ) {
 			$title = sanitize_text_field( wp_unslash( $_POST['title'] ?? '' ) );
 			if ( ! $title ) return self::redirect_result( 'Il titolo è obbligatorio.', true, $event_id );
@@ -529,7 +538,11 @@ final class MI_Portal {
 		$cancelled = (string) get_post_meta( $event_id, '_mi_event_cancelled_at', true );
 		global $wpdb;
 		$active_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED') AND capacity_released_at IS NULL", $event_id ) );
-		echo '<section class="mi-event-management" data-mi-selected-event tabindex="-1"><div class="mi-event-management__heading"><div><span class="mi-portal-eyebrow">Evento selezionato</span><h2>' . esc_html( $event->post_title ) . '</h2></div><span class="mi-event-management__state">' . esc_html( $cancelled ? 'Annullato' : ( 'publish' === $event->post_status ? 'Attivo' : 'Bozza' ) ) . '</span></div>';
+		$registration_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d", $event_id ) );
+		$list_args = array( 'mi_portal_view' => 'manage' );
+		if ( ! empty( $_GET['mi_portal_history'] ) ) $list_args['mi_portal_history'] = '1';
+		$list_url = add_query_arg( $list_args, self::base_url() );
+		echo '<section class="mi-event-management" data-mi-selected-event tabindex="-1"><a class="mi-event-management__back" href="' . esc_url( $list_url ) . '"><span aria-hidden="true">←</span> Torna all’elenco eventi</a><div class="mi-event-management__heading"><div><span class="mi-portal-eyebrow">Evento selezionato</span><h2>' . esc_html( $event->post_title ) . '</h2></div><span class="mi-event-management__state">' . esc_html( $cancelled ? 'Annullato' : ( 'publish' === $event->post_status ? 'Attivo' : 'Bozza' ) ) . '</span></div>';
 		if ( $cancelled ) { echo '<div class="mi-portal-notice mi-portal-error"><strong>Evento annullato</strong><p>La scheda e le iscrizioni sono conservate nello storico.</p></div></section>'; return; }
 		echo '<details open><summary>Modifica i dettagli principali</summary><form class="mi-event-management__form" method="post"><input type="hidden" name="mi_portal_action" value="update_event"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
 		wp_nonce_field( 'mi_portal_manage_event_' . $event_id, 'mi_portal_nonce' );
@@ -538,6 +551,11 @@ final class MI_Portal {
 			echo '<details class="mi-event-danger"><summary>Annulla l’evento</summary><div class="mi-event-danger__body"><p><strong>Attenzione:</strong> saranno annullate ' . esc_html( $active_count ) . ' prenotazioni attive o in lista d’attesa. I dati resteranno nello storico e gli eventuali rimborsi dovranno essere gestiti separatamente.</p><p>Per ogni referente con prenotazione attiva sarà preparato un avviso. L’invio effettivo dipende dalla modalità email generale; in ANTEPRIMA non parte alcuna email.</p><form method="post" onsubmit="return confirm(\'Confermi definitivamente l’annullamento di questo evento?\')"><input type="hidden" name="mi_portal_action" value="cancel_event"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
 			wp_nonce_field( 'mi_portal_manage_event_' . $event_id, 'mi_portal_nonce' );
 			echo '<label>Motivo da comunicare agli iscritti <small>(facoltativo)</small><textarea name="cancellation_reason" rows="5" maxlength="2000" placeholder="Spiega brevemente perché l’evento è stato annullato."></textarea></label><label class="mi-check"><input type="checkbox" name="confirm_cancellation" value="1" required> Ho compreso che tutte le iscrizioni saranno annullate</label><button class="mi-danger" type="submit">Annulla definitivamente l’evento</button></form></div></details>';
+		}
+		if ( 'draft' === $event->post_status && 0 === $registration_count ) {
+			echo '<details class="mi-event-trash"><summary>Elimina questa bozza</summary><div><p>La bozza sarà spostata nel cestino di WordPress e potrà essere ripristinata. Questa opzione è disponibile soltanto quando non esistono iscrizioni.</p><form method="post" onsubmit="return confirm(\'Spostare questa bozza nel cestino? Potrai ripristinarla dal pannello WordPress.\')"><input type="hidden" name="mi_portal_action" value="trash_event"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
+			wp_nonce_field( 'mi_portal_manage_event_' . $event_id, 'mi_portal_nonce' );
+			echo '<button class="mi-danger" type="submit">Sposta la bozza nel cestino</button></form></div></details>';
 		}
 		echo '</section>';
 	}

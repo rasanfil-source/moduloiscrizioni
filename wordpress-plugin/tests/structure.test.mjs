@@ -47,7 +47,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.8\.1/);
+	assert.match(source, /Version:\s+3\.8\.2/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1138,6 +1138,20 @@ test('il portale apre rapidamente le schede e riduce il lavoro fuori schermo', a
   assert.match(css, /contain-intrinsic-size:78px/);
   assert.match(css, /overscroll-behavior-inline:contain/);
   assert.match(css, /prefers-reduced-motion:reduce/);
+});
+
+test('una bozza vuota può essere cestinata e la scheda torna sempre all’elenco', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /'trash_event'/);
+  assert.match(portal, /'draft' !== \$event->post_status/);
+  assert.match(portal, /SELECT COUNT\(\*\) FROM \{\$wpdb->prefix\}mi_registrations WHERE event_id=%d/);
+  assert.match(portal, /wp_trash_post\( \$event_id \)/);
+  assert.match(portal, /Bozza spostata nel cestino/);
+  assert.match(portal, /Torna all’elenco eventi/);
+  assert.match(portal, /mi-event-management__back/);
+  assert.match(css, /\.mi-event-management__back/);
+  assert.match(css, /\.mi-event-trash/);
 });
 
 test('il wizard crea una bozza completa e mostra collegamenti espliciti', async () => {
