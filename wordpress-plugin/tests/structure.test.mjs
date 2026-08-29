@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.13\.0/);
+	assert.match(source, /Version:\s+3\.13\.1/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1545,6 +1545,16 @@ test('la Segreteria eventi gestisce operatori, ruoli, gruppi, password e sospens
   assert.match(access, /wp_authenticate_user/);
   assert.match(access, /function block_suspended_user/);
   assert.match(css, /\.mi-operator-card/);
+});
+
+test('il login dedicato apre la Segreteria senza sostituire il normale accesso WordPress', async () => {
+  const access = await read('includes/class-mi-access.php');
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(portal, /wp_login_form\( array\( 'redirect' => self::base_url\(\)/);
+  assert.match(access, /wp_validate_redirect\( \(string\) \$requested, '' \)/);
+  assert.match(access, /false !== strpos\( \$destinazione_richiesta, 'mi_portal=1' \)/);
+  assert.match(access, /return \$redirect_to;/);
+  assert.doesNotMatch(access, /return MI_Portal::url\(\);/);
 });
 
 test('un evento gratuito nasconde realmente pernottamento e quote accessorie', async () => {
