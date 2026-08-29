@@ -109,7 +109,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const startsAt = form.querySelector('[data-mi-starts]');
     const updateDateLimits = () => {
       if (!closesAt || !startsAt) return;
-      closesAt.min = opensAt?.value || '';
+      const closingBounds = [closesAt.dataset.miNow, opensAt?.value].filter(Boolean).sort();
+      closesAt.min = closingBounds[closingBounds.length - 1] || '';
       const lowerBounds = [startsAt.dataset.miToday, opensAt?.value, closesAt.value].filter(Boolean);
       lowerBounds.sort();
       startsAt.min = lowerBounds[lowerBounds.length - 1] || startsAt.dataset.miToday;

@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.9\.8/);
+	assert.match(source, /Version:\s+3\.10\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1385,4 +1385,19 @@ test('il wizard mostra soltanto i costi coerenti con il tipo di evento', async (
   assert.match(portal, />Unica soluzione<\/option>[\s\S]*>Caparra e saldo<\/option>/);
   assert.match(script, /servicePricingNodes\.forEach\(\(node\) => \{ node\.hidden = pricing\.value !== 'NONE'; \}\)/);
   assert.match(script, /economicLabel\.hidden = !paidEvent/);
+});
+test('il wizard distingue il salvataggio della bozza dalla produzione del foglio', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(portal, /Salva la bozza e vai alle produzioni/);
+  assert.match(portal, /Crea la bozza e vai alle produzioni/);
+  assert.match(portal, /Crea e collega il foglio Google/);
+  assert.doesNotMatch(portal, /Salva e continua la produzione|Produci pulsante e foglio Google/);
+});
+
+test('la coerenza temporale impedisce nuove scadenze passate e segnala quelle già presenti', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(portal, /La chiusura delle iscrizioni non può essere precedente a questo momento\./);
+  assert.match(portal, /\$is_expired = self::is_past_event\( \$closes_at \)/);
+  assert.match(portal, /\$is_expired \? 'Scaduto'/);
+  assert.match(portal, /current_time\( 'Y-m-d\\TH:i' \)/);
 });
