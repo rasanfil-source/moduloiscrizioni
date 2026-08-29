@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — versione 3.8.2
+# Modulo Iscrizioni — versione 3.8.3
 
 Plugin WordPress per configurare e pubblicare moduli, raccogliere iscrizioni e consegnarle in modo firmato alla console operativa Google Workspace.
 
@@ -25,6 +25,7 @@ Plugin WordPress per configurare e pubblicare moduli, raccogliere iscrizioni e c
 - scheda Iscrizioni con ricerca, filtri compatti e tessere operative che evidenziano referente, contatto, evento, stato e saldo;
 - caricamento leggero del dettaglio prenotazione, cache nella sessione della pagina e rendering differito delle schede fuori schermo;
 - ritorno esplicito all’elenco e spostamento recuperabile nel cestino delle sole bozze prive di iscrizioni;
+- eventi annullati conservati nella gestione ordinaria come tessere compatte, attenuate e chiaramente contrassegnate;
 - consultazione riservata dello stato e del saldo mediante codice/email o collegamento firmato, senza esporre note o dati dei partecipanti;
 - promemoria pre-evento e promemoria saldo preparati da Sheets e consegnati alla coda WordPress firmata;
 - tipi di comunicazione personalizzati aggiungibili ed eliminabili dal segretario, senza alterare i tipi di sistema o lo storico;

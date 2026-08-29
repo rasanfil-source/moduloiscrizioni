@@ -47,7 +47,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.8\.2/);
+	assert.match(source, /Version:\s+3\.8\.3/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1152,6 +1152,19 @@ test('una bozza vuota può essere cestinata e la scheda torna sempre all’elenc
   assert.match(portal, /mi-event-management__back/);
   assert.match(css, /\.mi-event-management__back/);
   assert.match(css, /\.mi-event-trash/);
+});
+
+test('gli eventi annullati restano nella gestione come tessere compatte', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /\$cancelled_events/);
+  assert.match(portal, /_mi_event_cancelled_at/);
+  assert.match(portal, /\$cancelled_events\[ \$event->ID \] \) \$current_events\[\] = \$event/);
+  assert.match(portal, /is-cancelled/);
+  assert.match(portal, /\$status_label = \$is_cancelled \? 'Annullato'/);
+  assert.match(css, /\.mi-event-card\.is-cancelled/);
+  assert.match(css, /\.mi-event-card\.is-cancelled \.mi-event-card__image/);
+  assert.match(css, /background:#fdecef;color:#9f1930/);
 });
 
 test('il wizard crea una bozza completa e mostra collegamenti espliciti', async () => {

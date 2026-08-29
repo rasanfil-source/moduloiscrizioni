@@ -471,14 +471,19 @@ final class MI_Portal {
 		$current_events = array();
 		$past_events = array();
 		$start_timestamps = array();
+		$cancelled_events = array();
 		foreach ( $all_events as $event ) {
 			$published = (array) ( $published_summaries[ $event->ID ] ?? array() );
 			$starts_at = (string) ( $published['event_starts_at'] ?? get_post_meta( $event->ID, '_mi_event_starts_at', true ) );
 			$start_timestamps[ $event->ID ] = self::date_timestamp( $starts_at );
-			if ( self::is_past_event( $starts_at ) ) $past_events[] = $event; else $current_events[] = $event;
+			$cancelled_events[ $event->ID ] = (bool) get_post_meta( $event->ID, '_mi_event_cancelled_at', true );
+			if ( $cancelled_events[ $event->ID ] ) $current_events[] = $event;
+			elseif ( self::is_past_event( $starts_at ) ) $past_events[] = $event;
+			else $current_events[] = $event;
 		}
 		$events = $show_past ? $past_events : $current_events;
-		usort( $events, static function ( $a, $b ) use ( $start_timestamps, $show_past ) {
+		usort( $events, static function ( $a, $b ) use ( $start_timestamps, $cancelled_events, $show_past ) {
+			if ( ! $show_past && $cancelled_events[ $a->ID ] !== $cancelled_events[ $b->ID ] ) return $cancelled_events[ $a->ID ] ? 1 : -1;
 			$a_time = (int) ( $start_timestamps[ $a->ID ] ?? 0 );
 			$b_time = (int) ( $start_timestamps[ $b->ID ] ?? 0 );
 			if ( ! $a_time ) $a_time = $show_past ? 0 : PHP_INT_MAX;
@@ -496,6 +501,7 @@ final class MI_Portal {
 		if ( $events ) echo '<div class="mi-event-grid">';
 		foreach ( $events as $event ) {
 			$count = (int) ( $counts[ $event->ID ] ?? 0 );
+			$is_cancelled = ! empty( $cancelled_events[ $event->ID ] );
 			$published = (array) ( $published_summaries[ $event->ID ] ?? array() );
 			$capacity = max( 1, absint( $published['capacity'] ?? get_post_meta( $event->ID, '_mi_capacity', true ) ) );
 			$starts_at = (string) ( $published['event_starts_at'] ?? get_post_meta( $event->ID, '_mi_event_starts_at', true ) );
@@ -509,11 +515,11 @@ final class MI_Portal {
 			$url_args = array( 'mi_portal_view' => 'manage', 'mi_portal_event' => $event->ID );
 			if ( $show_past ) $url_args['mi_portal_history'] = '1';
 			$url = add_query_arg( $url_args, $base_url );
-			echo '<a class="mi-event-card" href="' . esc_url( $url ) . '"><span class="mi-event-card__date"><small>' . esc_html( $date_badge['month'] ) . '</small><strong>' . esc_html( $date_badge['day'] ) . '</strong></span><span class="mi-event-card__content"><span class="mi-event-card__image">';
+			echo '<a class="mi-event-card' . ( $is_cancelled ? ' is-cancelled' : '' ) . '" href="' . esc_url( $url ) . '"><span class="mi-event-card__date"><small>' . esc_html( $date_badge['month'] ) . '</small><strong>' . esc_html( $date_badge['day'] ) . '</strong></span><span class="mi-event-card__content"><span class="mi-event-card__image">';
 			if ( $cover_image ) echo '<img src="' . esc_url( $cover_image ) . '" alt="" loading="lazy" decoding="async" fetchpriority="low">';
 			echo '</span><span class="mi-event-card__identity"><strong>' . esc_html( $event_title ) . '</strong>';
 			if ( $activity_name ) echo '<small>' . esc_html( $activity_name ) . '</small>';
-			$status_label = 'publish' === $event->post_status ? ( $show_past ? 'Concluso' : 'Attivo' ) : 'Bozza';
+			$status_label = $is_cancelled ? 'Annullato' : ( 'publish' === $event->post_status ? ( $show_past ? 'Concluso' : 'Attivo' ) : 'Bozza' );
 			echo '<small>' . esc_html( self::format_date( $starts_at ) ) . '</small></span><span class="mi-event-card__footer"><span class="mi-event-card__capacity"><small>Posti occupati</small><strong>' . esc_html( $count . ' / ' . $capacity ) . '</strong><i aria-hidden="true"><b style="width:' . esc_attr( $occupancy_percentage ) . '%"></b></i></span><span class="mi-event-card__status"><strong>' . esc_html( $status_label ) . '</strong><small>Scadenza: ' . esc_html( self::format_date( $closes_at ) ) . '</small></span></span></span></a>';
 		}
 		if ( $events ) echo '</div>'; else echo '<p class="mi-portal-muted">' . ( $show_past ? 'Non ci sono eventi passati.' : 'Non ci sono eventi in corso, futuri o in bozza.' ) . '</p>';
