@@ -11,8 +11,20 @@ final class MI_Access {
 		add_action( 'personal_options_update', array( __CLASS__, 'save_profile_scope' ) );
 		add_action( 'edit_user_profile_update', array( __CLASS__, 'save_profile_scope' ) );
 		add_filter( 'login_redirect', array( __CLASS__, 'login_redirect' ), 10, 3 );
+		add_filter( 'wp_authenticate_user', array( __CLASS__, 'block_suspended_user' ), 10, 2 );
 		add_action( 'admin_menu', array( __CLASS__, 'trim_delegate_menu' ), 999 );
 		add_filter( 'map_meta_cap', array( __CLASS__, 'map_event_meta_cap' ), 10, 4 );
+	}
+
+	public static function block_suspended_user( $user, $password ) {
+		if ( $user instanceof WP_User && get_user_meta( $user->ID, '_mi_access_suspended', true ) ) {
+			return new WP_Error( 'mi_access_suspended', 'Accesso alla Segreteria eventi sospeso. Contatta un amministratore.' );
+		}
+		return $user;
+	}
+
+	public static function is_suspended( $user_id = 0 ) {
+		return (bool) get_user_meta( $user_id ?: get_current_user_id(), '_mi_access_suspended', true );
 	}
 
 	public static function is_global_manager( $user_id = 0 ) {

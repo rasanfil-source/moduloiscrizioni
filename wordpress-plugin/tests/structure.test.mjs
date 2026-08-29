@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.11\.0/);
+	assert.match(source, /Version:\s+3\.12\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1219,14 +1219,14 @@ test('il wizard crea una bozza completa e mostra collegamenti espliciti', async 
   assert.match(portal, /Apri anteprima/);
   assert.match(script, /data-mi-review/);
   assert.match(script, /data-mi-pricing/);
-  assert.match(portal, /name="starts_at" min=/);
+  assert.match(portal, /name="starts_at"[\s\S]*placeholder="gg\/mm\/aaaa hh:mm"/);
   assert.match(portal, /La data di inizio non può essere precedente a oggi/);
   assert.match(portal, /start_date->format\( 'Y-m-d' \) < current_time\( 'Y-m-d' \)/);
   assert.match(portal, /\$close_date < \$open_date/);
   assert.match(portal, /\$close_date > \$start_date/);
   assert.match(script, /data-mi-opens/);
-  assert.match(script, /closesAt\.min/);
-  assert.match(script, /startsAt\.min/);
+  assert.match(script, /validateFourDigitYear/);
+  assert.match(script, /formatDateEntry/);
 });
 
 test('selezionare una bozza riprende lo stesso percorso guidato e prepara le produzioni', async () => {
@@ -1426,4 +1426,51 @@ test('la coerenza temporale impedisce nuove scadenze passate e segnala quelle gi
   assert.match(portal, /\$is_expired = self::is_past_event\( \$closes_at \)/);
   assert.match(portal, /\$is_expired \? 'Scaduto'/);
   assert.match(portal, /current_time\( 'Y-m-d\\TH:i' \)/);
+});
+
+test('il wizard limita l anno delle date a quattro cifre', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  assert.equal((portal.match(/maxlength="16"/g) || []).length, 3);
+  assert.equal((portal.match(/placeholder="gg\/mm\/aaaa hh:mm"/g) || []).length, 3);
+  assert.match(portal, /function valid_portal_date/);
+  assert.match(portal, /function normalize_portal_date/);
+  assert.match(portal, /anno di quattro cifre/);
+  assert.match(script, /formatDateEntry/);
+  assert.match(script, /slice\(0, 12\)/);
+  assert.match(script, /formato gg\/mm\/aaaa hh:mm/);
+});
+
+test('la Segreteria eventi gestisce operatori, ruoli, gruppi, password e sospensione', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const access = await read('includes/class-mi-access.php');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /mi_portal_view', 'operators'/);
+  assert.match(portal, /current_user_can\( 'manage_options' \)[\s\S]*>Operatori</);
+  assert.match(portal, /function handle_operator_action/);
+  assert.match(portal, /wp_insert_user/);
+  assert.match(portal, /wp_update_user/);
+  assert.match(portal, /operator_password/);
+  assert.match(portal, /_mi_activity_scope/);
+  assert.match(portal, /_mi_access_suspended/);
+  assert.match(portal, /mi_secretary[\s\S]*mi_event_manager[\s\S]*mi_event_operator/);
+  assert.match(access, /wp_authenticate_user/);
+  assert.match(access, /function block_suspended_user/);
+  assert.match(css, /\.mi-operator-card/);
+});
+
+test('un evento gratuito nasconde realmente pernottamento e quote accessorie', async () => {
+  const script = await read('assets/portal.js');
+  const css = await read('assets/portal.css');
+  assert.match(script, /node\.hidden = pricing\.value !== 'NONE'/);
+  assert.match(css, /\.mi-event-wizard \[hidden\]\{display:none!important\}/);
+  assert.match(script, /const active = servicePricing && overnight\.checked && accommodation\.checked/);
+  assert.match(script, /const active = pricing\?\.value === 'NONE' && service\.checked/);
+  assert.match(script, /serviceUpdaters\.forEach/);
+});
+
+test('il riepilogo finale nasconde Continua e riporta al campo non valido', async () => {
+  const script = await read('assets/portal.js');
+  assert.match(script, /next\.hidden = index === steps\.length - 1/);
+  assert.match(script, /form\.elements[\s\S]*field\.validity[\s\S]*invalidStep[\s\S]*invalid\.reportValidity/);
 });
