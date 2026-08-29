@@ -1109,6 +1109,22 @@ test('la scheda iscrizioni riprende la vista operativa con ricerca e filtri sicu
   assert.match(css, /\.mi-status-pill\.is-green/);
 });
 
+test('i tipi personalizzati di comunicazione si aggiungono e si eliminano senza inviare email', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const sender = await read('includes/class-mi-spedizione-email.php');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /CUSTOM_COMMUNICATION_TYPES_OPTION/);
+  assert.match(portal, /add_communication_type/);
+  assert.match(portal, /delete_communication_type/);
+  assert.match(portal, /mi_manage_all_events/);
+  assert.match(portal, /I tipi di sistema non possono essere eliminati/);
+  assert.match(portal, /Modalità ANTEPRIMA/);
+  assert.match(sender, /mi_custom_communication_types/);
+  assert.match(sender, /\^CUSTOM_\[A-Z0-9_\]/);
+  assert.match(css, /\.mi-communication-types/);
+  assert.match(css, /\.mi-text-danger/);
+});
+
 test('il wizard crea una bozza completa e mostra collegamenti espliciti', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const script = await read('assets/portal.js');

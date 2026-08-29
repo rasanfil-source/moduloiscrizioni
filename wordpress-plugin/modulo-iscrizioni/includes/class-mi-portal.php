@@ -4,6 +4,7 @@ defined( 'ABSPATH' ) || exit;
 
 final class MI_Portal {
 	const SHORTCODE = 'mi_portale_gestione';
+	const CUSTOM_COMMUNICATION_TYPES_OPTION = 'mi_custom_communication_types';
 
 	public static function boot() {
 		add_shortcode( self::SHORTCODE, array( __CLASS__, 'render' ) );
@@ -47,6 +48,7 @@ final class MI_Portal {
 		}
 		if ( in_array( $action, array( 'update_event', 'cancel_event' ), true ) ) return self::handle_event_management_action( $action );
 		if ( 'prepare_communication' === $action ) return self::handle_communication_action();
+		if ( in_array( $action, array( 'add_communication_type', 'delete_communication_type' ), true ) ) return self::handle_communication_type_action( $action );
 		if ( 'create_event' !== $action ) return;
 		if ( ! is_user_logged_in() || ! current_user_can( 'mi_create_events' ) ) wp_die( 'Accesso non consentito.', 403 );
 		check_admin_referer( 'mi_portal_create_event', 'mi_portal_nonce' );
@@ -141,7 +143,8 @@ final class MI_Portal {
 		$event_id = absint( $_POST['event_id'] ?? 0 );
 		if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Evento non accessibile.', 403 );
 		$template = strtoupper( sanitize_key( wp_unslash( $_POST['template_type'] ?? '' ) ) );
-		if ( ! in_array( $template, array( 'PRE_DEPARTURE_REMINDER', 'BALANCE_REMINDER' ), true ) ) return self::redirect_portal_result( 'Tipo di comunicazione non valido.', true, 'communications' );
+		$allowed_templates = array_merge( array( 'PRE_DEPARTURE_REMINDER', 'BALANCE_REMINDER' ), array_keys( self::custom_communication_types() ) );
+		if ( ! in_array( $template, $allowed_templates, true ) ) return self::redirect_portal_result( 'Tipo di comunicazione non valido.', true, 'communications' );
 		$message = mb_substr( sanitize_textarea_field( wp_unslash( $_POST['message'] ?? '' ) ), 0, 4000 );
 		global $wpdb;
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT order_code,total_cents,balance_cents FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status IN ('CONFIRMED','PENDING_PAYMENT') AND capacity_released_at IS NULL ORDER BY id LIMIT 1000", $event_id ), ARRAY_A );
@@ -154,6 +157,39 @@ final class MI_Portal {
 		) );
 		if ( is_wp_error( $result ) ) return self::redirect_portal_result( $result->get_error_message(), true, 'communications' );
 		return self::redirect_portal_result( (string) ( $result['message'] ?? 'Comunicazione preparata.' ) . ' Destinatari: ' . absint( $result['count'] ?? 0 ) . '. Modalità ANTEPRIMA.', false, 'communications' );
+	}
+
+	private static function handle_communication_type_action( $action ) {
+		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_manage_all_events' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Solo il segretario generale può modificare i tipi di comunicazione.', 403 );
+		check_admin_referer( 'mi_portal_manage_communication_types', 'mi_portal_nonce' );
+		$types = self::custom_communication_types();
+		if ( 'add_communication_type' === $action ) {
+			$label = mb_substr( sanitize_text_field( wp_unslash( $_POST['communication_type_label'] ?? '' ) ), 0, 80 );
+			if ( ! $label ) return self::redirect_portal_result( 'Indica il nome del nuovo tipo di comunicazione.', true, 'communications' );
+			$base = strtoupper( str_replace( '-', '_', sanitize_title( $label ) ) );
+			$base = preg_replace( '/[^A-Z0-9_]/', '', $base );
+			$code = 'CUSTOM_' . substr( $base ?: 'MESSAGGIO', 0, 24 );
+			if ( isset( $types[ $code ] ) ) return self::redirect_portal_result( 'Esiste già un tipo di comunicazione con questo nome.', true, 'communications' );
+			$types[ $code ] = $label;
+			update_option( self::CUSTOM_COMMUNICATION_TYPES_OPTION, $types, false );
+			return self::redirect_portal_result( 'Nuovo tipo di comunicazione salvato.', false, 'communications' );
+		}
+		$code = strtoupper( sanitize_key( wp_unslash( $_POST['communication_type_code'] ?? '' ) ) );
+		if ( ! isset( $types[ $code ] ) ) return self::redirect_portal_result( 'Il tipo personalizzato non esiste.', true, 'communications' );
+		unset( $types[ $code ] );
+		update_option( self::CUSTOM_COMMUNICATION_TYPES_OPTION, $types, false );
+		return self::redirect_portal_result( 'Tipo di comunicazione eliminato. Le comunicazioni storiche restano conservate.', false, 'communications' );
+	}
+
+	private static function custom_communication_types() {
+		$stored = get_option( self::CUSTOM_COMMUNICATION_TYPES_OPTION, array() );
+		$types = array();
+		foreach ( is_array( $stored ) ? $stored : array() as $code => $label ) {
+			$code = strtoupper( sanitize_key( (string) $code ) );
+			$label = mb_substr( sanitize_text_field( (string) $label ), 0, 80 );
+			if ( preg_match( '/^CUSTOM_[A-Z0-9_]{1,24}$/', $code ) && $label ) $types[ $code ] = $label;
+		}
+		return $types;
 	}
 
 	private static function redirect_portal_result( $message, $error, $view ) {
@@ -364,13 +400,30 @@ final class MI_Portal {
 
 	private static function communications_view() {
 		$events = self::accessible_events();
+		$custom_types = self::custom_communication_types();
 		echo '<section class="mi-portal-communications"><h2>Comunicazioni</h2><p class="mi-portal-notice"><strong>Modalità ANTEPRIMA.</strong> La comunicazione viene preparata nella coda WordPress, ma non viene spedita.</p>';
 		if ( ! $events ) { echo '<p class="mi-portal-muted">Non ci sono eventi accessibili.</p></section>'; return; }
 		echo '<form method="post"><input type="hidden" name="mi_portal_action" value="prepare_communication">';
 		wp_nonce_field( 'mi_portal_prepare_communication', 'mi_portal_nonce' );
 		echo '<label>Evento<select name="event_id" required><option value="">Scegli un evento</option>';
 		foreach ( $events as $event ) echo '<option value="' . esc_attr( $event->ID ) . '">' . esc_html( $event->post_title ) . '</option>';
-		echo '</select></label><label>Tipo<select name="template_type" required><option value="PRE_DEPARTURE_REMINDER">Informazioni prima dell’evento</option><option value="BALANCE_REMINDER">Promemoria del saldo</option></select></label><label>Messaggio<textarea name="message" rows="8" maxlength="4000" placeholder="Punto di ritrovo, orario, cosa portare e altre indicazioni…"></textarea></label><button class="mi-primary" type="submit">Prepara in anteprima</button></form></section>';
+		echo '</select></label><label>Tipo<select name="template_type" required><option value="PRE_DEPARTURE_REMINDER">Informazioni prima dell’evento</option><option value="BALANCE_REMINDER">Promemoria del saldo</option>';
+		foreach ( $custom_types as $code => $label ) echo '<option value="' . esc_attr( $code ) . '">' . esc_html( $label ) . '</option>';
+		echo '</select></label><label>Messaggio<textarea name="message" rows="8" maxlength="4000" placeholder="Punto di ritrovo, orario, cosa portare e altre indicazioni…"></textarea></label><button class="mi-primary" type="submit">Prepara in anteprima</button></form>';
+		if ( current_user_can( 'mi_manage_all_events' ) || current_user_can( 'manage_options' ) ) {
+			echo '<details class="mi-communication-types"><summary>Gestisci i tipi di messaggio</summary><div><form method="post"><input type="hidden" name="mi_portal_action" value="add_communication_type">';
+			wp_nonce_field( 'mi_portal_manage_communication_types', 'mi_portal_nonce' );
+			echo '<label>Nuovo tipo<input name="communication_type_label" maxlength="80" placeholder="Per esempio: Cambio del punto di ritrovo" required></label><button class="mi-secondary" type="submit">Aggiungi e salva</button></form>';
+			if ( $custom_types ) {
+				echo '<form class="mi-communication-type-delete" method="post" onsubmit="return confirm(\'Eliminare questo tipo di comunicazione? Le comunicazioni già preparate resteranno conservate.\')"><input type="hidden" name="mi_portal_action" value="delete_communication_type">';
+				wp_nonce_field( 'mi_portal_manage_communication_types', 'mi_portal_nonce' );
+				echo '<label>Tipo personalizzato<select name="communication_type_code" required>';
+				foreach ( $custom_types as $code => $label ) echo '<option value="' . esc_attr( $code ) . '">' . esc_html( $label ) . '</option>';
+				echo '</select></label><button class="mi-text-danger" type="submit">Elimina</button></form>';
+			}
+			echo '<p class="mi-portal-muted"><small>I tipi di sistema non possono essere eliminati.</small></p></div></details>';
+		}
+		echo '</section>';
 	}
 
 	private static function manage_label() {

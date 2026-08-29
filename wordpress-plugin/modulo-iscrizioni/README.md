@@ -25,6 +25,7 @@ Plugin WordPress per configurare e pubblicare moduli, raccogliere iscrizioni e c
 - scheda Iscrizioni con ricerca, filtri compatti e tessere operative che evidenziano referente, contatto, evento, stato e saldo;
 - consultazione riservata dello stato e del saldo mediante codice/email o collegamento firmato, senza esporre note o dati dei partecipanti;
 - promemoria pre-evento e promemoria saldo preparati da Sheets e consegnati alla coda WordPress firmata;
+- tipi di comunicazione personalizzati aggiungibili ed eliminabili dal segretario, senza alterare i tipi di sistema o lo storico;
 - gli eventi in bozza forzano sempre le comunicazioni operative nello stato `PREVIEW`.
 
 ## Migrazione amministrativa del gruppo
