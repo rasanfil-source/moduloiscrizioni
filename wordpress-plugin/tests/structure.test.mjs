@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.13\.1/);
+	assert.match(source, /Version:\s+3\.13\.2/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1545,6 +1545,13 @@ test('la Segreteria eventi gestisce operatori, ruoli, gruppi, password e sospens
   assert.match(access, /wp_authenticate_user/);
   assert.match(access, /function block_suspended_user/);
   assert.match(css, /\.mi-operator-card/);
+});
+
+test('il Gestore iscrizioni riceve accesso al portale anche se il ruolo esiste già', async () => {
+  const activator = await read('includes/class-mi-activator.php');
+  assert.match(activator, /\$capabilities = array\([\s\S]*'mi_portal_access'\s*=>\s*true/);
+  assert.match(activator, /add_role\( 'mi_event_manager', 'Gestore iscrizioni', \$capabilities \)/);
+  assert.match(activator, /foreach \( \$capabilities as \$capability => \$grant \)[\s\S]*\$manager->add_cap\( \$capability, \$grant \)/);
 });
 
 test('il login dedicato apre la Segreteria senza sostituire il normale accesso WordPress', async () => {
