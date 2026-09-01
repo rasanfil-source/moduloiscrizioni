@@ -263,6 +263,7 @@ final class MI_Activator {
 	private static function add_roles_and_capabilities() {
 		$capabilities = array(
 			'read'                  => true,
+			'mi_portal_access'      => true,
 			'mi_manage_events'      => true,
 			'mi_publish_events'     => true,
 			'mi_view_registrations' => true,
