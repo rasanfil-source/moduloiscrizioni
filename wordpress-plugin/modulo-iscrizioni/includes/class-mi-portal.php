@@ -54,6 +54,7 @@ final class MI_Portal {
 	public static function handle_actions() {
 		if ( 'POST' !== strtoupper( $_SERVER['REQUEST_METHOD'] ?? '' ) ) return;
 		$action = sanitize_key( wp_unslash( $_POST['mi_portal_action'] ?? '' ) );
+		if ( 'accedi_portale' === $action ) return self::gestisci_accesso_portale();
 		if ( 'cancel_participant_public' === $action ) {
 			$participant_id = absint( $_POST['participant_id'] ?? 0 );
 			check_admin_referer( 'mi_cancel_participant_public_' . $participant_id, 'mi_portal_nonce' );
@@ -600,7 +601,67 @@ final class MI_Portal {
 	}
 
 	private static function login_view() {
-		ob_start(); ?><section class="mi-portal mi-portal-login"><span class="mi-portal-eyebrow">Area riservata</span><h1>Segreteria eventi</h1><p>Accedi con le tue credenziali personali. Il segretario opera su tutto; ogni operatore vede soltanto i gruppi che gli sono stati assegnati.</p><?php wp_login_form( array( 'redirect' => self::base_url(), 'label_username' => 'Nome utente per l’accesso', 'label_password' => 'Parola d’accesso', 'label_log_in' => 'Accedi', 'remember' => true ) ); ?></section><?php return ob_get_clean();
+		$errore = ! empty( $_GET['mi_errore_accesso'] );
+		$attesa = ! empty( $_GET['mi_accesso_in_attesa'] );
+		ob_start(); ?><section class="mi-portal mi-portal-login"><span class="mi-portal-eyebrow">Area riservata</span><h1>Segreteria eventi</h1><p>Accedi con le credenziali personali del servizio. Il segretario opera su tutto; ogni operatore vede soltanto i gruppi assegnati.</p><?php if ( $errore ) : ?><div class="mi-portal-notice mi-portal-error" role="alert"><strong>Accesso non riuscito.</strong><p><?php echo $attesa ? 'Troppi tentativi ravvicinati. Attendi quindici minuti prima di riprovare.' : 'Controlla nome utente e parola d’accesso oppure contatta un amministratore.'; ?></p></div><?php endif; ?><form class="mi-portal-login__form" method="post" action="<?php echo esc_url( self::base_url() ); ?>"><input type="hidden" name="mi_portal_action" value="accedi_portale"><?php wp_nonce_field( 'mi_accesso_portale', 'mi_portal_nonce' ); ?><label for="mi-login-utente">Nome utente per l’accesso</label><input id="mi-login-utente" name="mi_nome_utente" type="text" maxlength="60" autocomplete="username" required><label for="mi-login-password">Parola d’accesso</label><input id="mi-login-password" name="mi_parola_accesso" type="password" autocomplete="current-password" required><p class="login-remember"><label><input name="mi_ricordami" type="checkbox" value="1"> Ricordami</label></p><button class="mi-primary" type="submit">Accedi</button></form></section><?php return ob_get_clean();
+	}
+
+	/** Autentica esclusivamente nella pagina autonoma della Segreteria, senza passare da wp-login.php. */
+	private static function gestisci_accesso_portale() {
+		if ( empty( $_GET['mi_portal'] ) ) wp_die( 'Richiesta di accesso non valida.', 400 );
+		if ( is_user_logged_in() ) {
+			wp_safe_redirect( self::base_url() );
+			exit;
+		}
+		check_admin_referer( 'mi_accesso_portale', 'mi_portal_nonce' );
+		$nome_utente = sanitize_user( wp_unslash( $_POST['mi_nome_utente'] ?? '' ), true );
+		$parola_accesso = (string) wp_unslash( $_POST['mi_parola_accesso'] ?? '' );
+		$ricordami = ! empty( $_POST['mi_ricordami'] );
+		$chiave_limite = self::chiave_limite_accesso( $nome_utente );
+		$tentativi = (int) get_transient( $chiave_limite );
+		if ( $tentativi >= 5 ) return self::reindirizza_errore_accesso( true );
+		if ( ! $nome_utente || '' === $parola_accesso ) return self::registra_errore_accesso( $chiave_limite, $tentativi );
+
+		$utente = wp_signon(
+			array(
+				'user_login'    => $nome_utente,
+				'user_password' => $parola_accesso,
+				'remember'      => $ricordami,
+			),
+			is_ssl()
+		);
+		$parola_accesso = '';
+		if ( is_wp_error( $utente ) ) return self::registra_errore_accesso( $chiave_limite, $tentativi );
+		if ( ! user_can( $utente, 'mi_portal_access' ) && ! user_can( $utente, 'manage_options' ) ) {
+			wp_clear_auth_cookie();
+			return self::registra_errore_accesso( $chiave_limite, $tentativi );
+		}
+		delete_transient( $chiave_limite );
+		wp_safe_redirect( self::base_url() );
+		exit;
+	}
+
+	private static function chiave_limite_accesso( $nome_utente ) {
+		$indirizzo = sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ?? '' ) );
+		$impronta = hash_hmac( 'sha256', strtolower( (string) $nome_utente ) . '|' . $indirizzo, wp_salt( 'auth' ) );
+		return 'mi_accesso_' . substr( $impronta, 0, 32 );
+	}
+
+	private static function registra_errore_accesso( $chiave_limite, $tentativi ) {
+		set_transient( $chiave_limite, min( 5, (int) $tentativi + 1 ), 15 * MINUTE_IN_SECONDS );
+		return self::reindirizza_errore_accesso( false );
+	}
+
+	private static function reindirizza_errore_accesso( $attesa ) {
+		$destinazione = add_query_arg(
+			array(
+				'mi_errore_accesso'    => '1',
+				'mi_accesso_in_attesa' => $attesa ? '1' : false,
+			),
+			self::base_url()
+		);
+		wp_safe_redirect( $destinazione );
+		exit;
 	}
 
 	private static function accessible_events() {

@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.13\.2/);
+	assert.match(source, /Version:\s+3\.14\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -203,7 +203,7 @@ test('il portale web riusa WordPress e limita operatori ed eventi sul server', a
   const eventType = await read('includes/class-mi-event-post-type.php');
   const script = await read('assets/portal.js');
   assert.match(portal, /mi_portale_gestione/);
-  assert.match(portal, /wp_login_form/);
+  assert.match(portal, /wp_signon/);
   assert.match(portal, /Crea evento/);
   assert.match(portal, /Gestisci eventi/);
   assert.match(portal, /C’è qualcuno qui/);
@@ -1554,14 +1554,29 @@ test('il Gestore iscrizioni riceve accesso al portale anche se il ruolo esiste g
   assert.match(activator, /foreach \( \$capabilities as \$capability => \$grant \)[\s\S]*\$manager->add_cap\( \$capability, \$grant \)/);
 });
 
-test('il login dedicato apre la Segreteria senza sostituire il normale accesso WordPress', async () => {
+test('il normale accesso WordPress non viene sostituito dalla Segreteria', async () => {
   const access = await read('includes/class-mi-access.php');
   const portal = await read('includes/class-mi-portal.php');
-  assert.match(portal, /wp_login_form\( array\( 'redirect' => self::base_url\(\)/);
+  assert.match(portal, /name="mi_portal_action" value="accedi_portale"/);
+  assert.doesNotMatch(portal, /wp_login_form\(/);
   assert.match(access, /wp_validate_redirect\( \(string\) \$requested, '' \)/);
   assert.match(access, /false !== strpos\( \$destinazione_richiesta, 'mi_portal=1' \)/);
   assert.match(access, /return \$redirect_to;/);
   assert.doesNotMatch(access, /return MI_Portal::url\(\);/);
+});
+
+test('la Segreteria autentica nella propria pagina senza usare wp-login.php', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /'accedi_portale' === \$action/);
+  assert.match(portal, /function gestisci_accesso_portale/);
+  assert.match(portal, /check_admin_referer\( 'mi_accesso_portale', 'mi_portal_nonce' \)/);
+  assert.match(portal, /wp_signon\(/);
+  assert.match(portal, /user_can\( \$utente, 'mi_portal_access' \)/);
+  assert.match(portal, /set_transient\( \$chiave_limite[\s\S]*15 \* MINUTE_IN_SECONDS/);
+  assert.match(portal, /hash_hmac\( 'sha256'/);
+  assert.doesNotMatch(portal, /wp_login_form\(/);
+  assert.match(css, /\.mi-portal-login__form/);
 });
 
 test('un evento gratuito nasconde realmente pernottamento e quote accessorie', async () => {
