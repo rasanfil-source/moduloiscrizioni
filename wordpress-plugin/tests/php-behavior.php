@@ -177,6 +177,7 @@ $email_html = MI_Modello_Email::componi_html( array(
 ) );
 expect( false !== strpos( $email_html, 'max-width:600px' ), 'card email da 600px assente' );
 expect( false !== strpos( $email_html, 'opacity:0;color:transparent' ), 'preheader nascosto incompleto' );
+expect( false !== strpos( $email_html, '<meta name="viewport"' ) && false !== strpos( $email_html, 'border:1px solid #e4e8ef' ), 'struttura responsive del modello email assente' );
 expect( false !== strpos( $email_html, 'role="presentation"' ) && false !== strpos( $email_html, 'cellpadding="0"' ) && false !== strpos( $email_html, 'bgcolor="#151b38"' ), 'markup email-safe incompleto' );
 expect( false !== strpos( $email_html, 'Assistenza' ) && false !== strpos( $email_html, 'border-radius:12px' ) && false !== strpos( $email_html, 'font-style:italic' ), 'componenti del restyling email assenti' );
 

@@ -15,8 +15,9 @@ function doPost(event) {
     if (envelope.action !== 'APPEND_REGISTRATION') return creaRispostaJson_({ ok: false, error: 'ACTION_NOT_ALLOWED' });
     return creaRispostaJson_(aggiungiIscrizione_(envelope.payload));
   } catch (error) {
+		console.error('WEBAPP_REQUEST_FAILED', error && error.stack ? error.stack : String(error));
 		try { aggiungiControllo_('WEBAPP_REQUEST', 'REQUEST', 'UNAVAILABLE', 'ERROR', 'WORDPRESS', 'UNHANDLED_ERROR', 'WORDPRESS_PROXY'); } catch (auditError) {}
-    return creaRispostaJson_({ ok: false, error: 'REQUEST_FAILED' });
+    return creaRispostaJson_({ ok: false, error: 'REQUEST_FAILED', diagnostic: normalizzaTesto_(error && error.message ? error.message : String(error), 300) });
   }
 }
 
@@ -37,7 +38,24 @@ function verificaBusta_(envelope) {
   const signature = normalizzaTesto_(envelope.signature, 200);
   if (!timestamp || Math.abs(Date.now() - timestamp) > 120000) return { ok: false, error: 'STALE_REQUEST' };
   if (nonce.length < 16 || signature.length < 32) return { ok: false, error: 'INVALID_SIGNATURE' };
-  const message = timestamp + '\n' + nonce + '\n' + String(envelope.action || '') + '\n' + serializzaInModoStabile_(envelope.payload || {});
+  let payloadFirmato = '';
+  if (typeof envelope.payload_firmato === 'string' && envelope.payload_firmato.length <= 100000) {
+    payloadFirmato = envelope.payload_firmato;
+    let payloadDecodificato;
+    try { payloadDecodificato = JSON.parse(payloadFirmato); } catch (errore) { return { ok: false, error: 'INVALID_SIGNATURE' }; }
+    if (!payloadDecodificato || typeof payloadDecodificato !== 'object' || Array.isArray(payloadDecodificato)) return { ok: false, error: 'INVALID_SIGNATURE' };
+    envelope.payload = payloadDecodificato;
+  } else {
+    payloadFirmato = serializzaInModoStabile_(envelope.payload || {});
+  }
+  let contenutoFirma = payloadFirmato;
+  if (Number(envelope.protocollo || 1) === 2) {
+    const payloadHash = normalizzaTesto_(envelope.payload_hash, 64).toLowerCase();
+    const hashCalcolato = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, payloadFirmato, Utilities.Charset.UTF_8).map(function (valore) { return ('0' + (valore & 255).toString(16)).slice(-2); }).join('');
+    if (!/^[a-f0-9]{64}$/.test(payloadHash) || !confrontaInTempoCostante_(hashCalcolato, payloadHash)) return { ok: false, error: 'INVALID_PAYLOAD_HASH' };
+    contenutoFirma = payloadHash;
+  }
+  const message = timestamp + '\n' + nonce + '\n' + String(envelope.action || '') + '\n' + contenutoFirma;
   const digest = Utilities.computeHmacSha256Signature(message, ottieniSegretoScript_());
   const expected = Utilities.base64EncodeWebSafe(digest).replace(/=+$/, '');
   if (!confrontaInTempoCostante_(expected, signature)) return { ok: false, error: 'INVALID_SIGNATURE' };

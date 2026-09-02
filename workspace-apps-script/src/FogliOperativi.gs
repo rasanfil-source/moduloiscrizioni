@@ -23,25 +23,22 @@ function preparaProduzioniEventoDaWordPress_(payload) {
 	const urlIscrizione = normalizzaUrlPubblico_(payload.url_iscrizione);
 	const urlSaldo = normalizzaUrlPubblico_(payload.url_saldo);
 	const emailGestore = normalizzaEmailGestore_(payload.email_gestore);
-	condividiFoglioSoltantoConGestore_(risultato.id_foglio, emailGestore);
+	const condivisione = { ok: false, email: emailGestore, avviso: 'Il foglio è privato. La condivisione al gestore va completata separatamente secondo le regole del dominio Workspace.' };
 	aggiornaCollegamentiProduzioneEvento_(idEvento, urlIscrizione, urlSaldo);
   aggiungiControllo_('PRODUZIONI_EVENTO', 'PREPARE', idEvento, 'SUCCESS', 'WORDPRESS', risultato.creato ? 'SHEET_CREATED' : 'SHEET_REUSED', 'WORDPRESS_PROXY');
-  return { ok: true, id_evento: idEvento, id_foglio: risultato.id_foglio, url_foglio: risultato.url_foglio, url_iscrizione: urlIscrizione, url_saldo: urlSaldo, cartella: risultato.cartella || '', creato: risultato.creato, mode: 'PREVIEW' };
+  return { ok: true, id_evento: idEvento, id_foglio: risultato.id_foglio, url_foglio: risultato.url_foglio, url_iscrizione: urlIscrizione, url_saldo: urlSaldo, cartella: risultato.cartella || '', creato: risultato.creato, condivisione: condivisione, mode: 'PREVIEW' };
 }
 
 /** Mantiene il proprietario Workspace e un solo gestore esplicitamente indicato da WordPress. */
 function condividiFoglioSoltantoConGestore_(idFoglio, emailGestore) {
 	const file = DriveApp.getFileById(String(idFoglio));
-	file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
-	file.getEditors().forEach(function (utente) {
-		const email = String(utente.getEmail() || '').toLowerCase();
-		if (email && email !== emailGestore) file.removeEditor(email);
-	});
-	file.getViewers().forEach(function (utente) {
-		const email = String(utente.getEmail() || '').toLowerCase();
-		if (email && email !== emailGestore) file.removeViewer(email);
-	});
-	file.addEditor(emailGestore);
+	try {
+		file.addEditor(emailGestore);
+		return { ok: true, email: emailGestore };
+	} catch (errore) {
+		aggiungiControllo_('PRODUZIONI_EVENTO', 'SHARE', String(idFoglio), 'WARNING', 'WORDPRESS', normalizzaTesto_(errore && errore.message ? errore.message : errore, 500), 'WORDPRESS_PROXY');
+		return { ok: false, email: emailGestore, avviso: 'Il foglio è stato creato, ma Workspace non ha consentito la condivisione automatica con il gestore.' };
+	}
 }
 
 function normalizzaEmailGestore_(valore) {
