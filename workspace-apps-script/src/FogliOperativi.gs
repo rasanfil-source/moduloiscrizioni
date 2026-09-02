@@ -55,7 +55,15 @@ function apriFoglioOperativoEvento(form) {
   const registro = ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES);
   const esistente = convertiRigheInOggetti_(registro).find(function (riga) { return String(riga.id_evento) === idEvento; });
   if (esistente && esistente.id_foglio) {
-    return { id_evento: idEvento, id_foglio: String(esistente.id_foglio), url_foglio: String(esistente.url_foglio || ('https://docs.google.com/spreadsheets/d/' + esistente.id_foglio + '/edit')), cartella: '', creato: false };
+		try {
+			const fileEsistente = DriveApp.getFileById(String(esistente.id_foglio));
+			if (!fileEsistente.isTrashed()) {
+				SpreadsheetApp.openById(String(esistente.id_foglio));
+				return { id_evento: idEvento, id_foglio: String(esistente.id_foglio), url_foglio: String(esistente.url_foglio || ('https://docs.google.com/spreadsheets/d/' + esistente.id_foglio + '/edit')), cartella: '', creato: false };
+			}
+		} catch (errore) {
+			aggiungiControllo_('FOGLIO_OPERATIVO', 'VERIFY', idEvento, 'WARNING', 'WORDPRESS', 'SHEET_MISSING_RECREATE', 'WORDPRESS_PROXY');
+		}
   }
   const vista = generaVistaOperativaEvento_(idEvento);
 	const titoloPulito = String(vista.evento.titolo || idEvento).replace(/[\\/:*?"<>|#%{}]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140);
@@ -66,9 +74,74 @@ function apriFoglioOperativoEvento(form) {
   scheda.setName('Dati operativi');
   scriviFoglioOperativoEvento_(scheda, vista);
   const valori = [idEvento, neutralizzaFormula_(vista.evento.titolo, 200), foglio.getId(), foglio.getUrl(), '', '', new Date()];
-  registro.appendRow(valori);
+	if (esistente) registro.getRange(esistente._row, 1, 1, valori.length).setValues([valori]);
+	else registro.appendRow(valori);
   aggiungiControllo_('FOGLIO_OPERATIVO', 'CREATE', idEvento, 'SUCCESS', normalizzaTesto_(Session.getActiveUser().getEmail() || 'SEGRETERIA', 120), 'CREATED', 'SEGRETERIA');
   return { id_evento: idEvento, id_foglio: foglio.getId(), url_foglio: foglio.getUrl(), cartella: cartella, creato: true };
+}
+
+/** Controlla che il documento registrato esista davvero e sia accessibile. */
+function verificaFoglioEventoDaWordPress_(payload) {
+	const idEvento = normalizzaTesto_((payload || {}).id_evento, 40);
+	if (!/^\d+$/.test(idEvento)) return { ok: false, error: 'EVENTO_NON_VALIDO' };
+	const registro = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES));
+	const collegamento = registro.find(function (riga) { return String(riga.id_evento) === idEvento; });
+	if (!collegamento || !collegamento.id_foglio) return { ok: true, esiste: false, id_evento: idEvento };
+	try {
+		const file = DriveApp.getFileById(String(collegamento.id_foglio));
+		if (file.isTrashed()) return { ok: true, esiste: false, id_evento: idEvento };
+		SpreadsheetApp.openById(String(collegamento.id_foglio));
+		return { ok: true, esiste: true, id_evento: idEvento, id_foglio: String(collegamento.id_foglio), url_foglio: String(collegamento.url_foglio || file.getUrl()) };
+	} catch (errore) {
+		return { ok: true, esiste: false, id_evento: idEvento };
+	}
+}
+
+/** Verifica in una sola richiesta i documenti di più eventi. */
+function verificaFogliEventoDaWordPress_(payload) {
+	const ids = (Array.isArray((payload || {}).id_eventi) ? payload.id_eventi : []).slice(0, 100).map(function (id) { return normalizzaTesto_(id, 40); }).filter(function (id) { return /^\d+$/.test(id); });
+	const visti = {};
+	const stati = [];
+	ids.forEach(function (idEvento) {
+		if (visti[idEvento]) return;
+		visti[idEvento] = true;
+		const stato = verificaFoglioEventoDaWordPress_({ id_evento: idEvento });
+		stati.push({ id_evento: idEvento, esiste: !!stato.esiste, id_foglio: String(stato.id_foglio || ''), url_foglio: String(stato.url_foglio || '') });
+	});
+	return { ok: true, stati: stati };
+}
+
+/** Sposta in «Eventi conclusi» il foglio di un evento scaduto, senza cancellarlo. */
+function archiviaFoglioEventoDaWordPress_(payload) {
+	const idEvento = normalizzaTesto_((payload || {}).id_evento, 40);
+	if (!/^\d+$/.test(idEvento)) return { ok: false, error: 'EVENTO_NON_VALIDO' };
+	const collegamento = trovaCollegamentoFoglioOperativo_(idEvento);
+	const file = DriveApp.getFileById(String(collegamento.id_foglio));
+	if (file.isTrashed()) return { ok: false, error: 'FOGLIO_NON_DISPONIBILE' };
+	const database = ottieniFoglioDiLavoroAssociato_();
+	const genitori = DriveApp.getFileById(database.getId()).getParents();
+	if (!genitori.hasNext()) throw new Error('DB_MODULI non si trova in una cartella Drive utilizzabile.');
+	const cartellaPrincipale = genitori.next();
+	const cartelle = cartellaPrincipale.getFoldersByName('Eventi conclusi');
+	const archivio = cartelle.hasNext() ? cartelle.next() : cartellaPrincipale.createFolder('Eventi conclusi');
+	file.moveTo(archivio);
+	aggiungiControllo_('FOGLIO_OPERATIVO', 'ARCHIVE', idEvento, 'SUCCESS', 'WORDPRESS', 'MOVED_TO_COMPLETED', 'WORDPRESS_PROXY');
+	return { ok: true, id_evento: idEvento, id_foglio: String(collegamento.id_foglio), cartella: 'Eventi conclusi' };
+}
+
+/** Cestina il foglio collegato e rimuove l'associazione di una bozza eliminata. */
+function eliminaFoglioEventoDaWordPress_(payload) {
+	const idEvento = normalizzaTesto_((payload || {}).id_evento, 40);
+	if (!/^\d+$/.test(idEvento)) return { ok: false, error: 'EVENTO_NON_VALIDO' };
+	const registro = ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES);
+	const collegamento = convertiRigheInOggetti_(registro).find(function (riga) { return String(riga.id_evento) === idEvento; });
+	if (!collegamento) return { ok: true, id_evento: idEvento, eliminato: false };
+	if (collegamento.id_foglio) {
+		try { DriveApp.getFileById(String(collegamento.id_foglio)).setTrashed(true); } catch (errore) {}
+	}
+	registro.deleteRow(collegamento._row);
+	aggiungiControllo_('FOGLIO_OPERATIVO', 'DELETE', idEvento, 'SUCCESS', 'WORDPRESS', 'MOVED_TO_TRASH', 'WORDPRESS_PROXY');
+	return { ok: true, id_evento: idEvento, eliminato: true };
 }
 
 /** Sposta il nuovo foglio nella stessa cartella Drive che contiene DB_MODULI. */
