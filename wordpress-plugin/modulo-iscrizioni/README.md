@@ -20,6 +20,7 @@ Plugin WordPress per configurare e pubblicare moduli, raccogliere iscrizioni e c
 - shortcode `[modulo_iscrizioni event="ID"]`, pagina concentrata e modulo Divi 4;
 - indirizzo pubblico autonomo per il pulsante Iscriviti e indirizzo evento-specifico per consultare stato e saldo;
 - schermata Produzioni con collegamenti pronti da copiare e foglio operativo Workspace associato all’evento.
+- condivisione privata del foglio con il solo gestore responsabile e comunicazione dedicata, mantenuta in anteprima finché la spedizione generale non è operativa.
 - anteprima riservata isolata dalla toolbar e dagli hook amministrativi del tema;
 - scheda prenotazione in sovrimpressione accessibile sia nel pannello sia nel portale, con collegamento normale come fallback.
 - gerarchia della scheda portale centrata sui partecipanti, con codice marginale e referente indicato solo nelle prenotazioni multiple;

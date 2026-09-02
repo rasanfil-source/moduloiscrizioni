@@ -122,6 +122,8 @@ final class MI_Portal {
 			if ( is_wp_error( $activity_id ) ) return self::redirect_result( $activity_id->get_error_message(), true );
 		}
 		if ( $activity_id && MI_Access::can_access_activity( $activity_id ) ) update_post_meta( $event_id, '_mi_activity_id', $activity_id );
+		$gestore = self::risolvi_gestore_evento( $event_id, false );
+		if ( $gestore instanceof WP_User ) update_post_meta( $event_id, '_mi_manager_user_id', $gestore->ID );
 		self::save_date( $event_id, '_mi_event_starts_at', $starts_at );
 		self::save_date( $event_id, '_mi_registration_opens_at', $opens_at );
 		self::save_date( $event_id, '_mi_registration_closes_at', $closes_at );
@@ -224,6 +226,8 @@ final class MI_Portal {
 	private static function prepara_produzioni_workspace( $event_id, $stato ) {
 		$event = get_post( $event_id );
 		if ( ! $event || MI_Event_Post_Type::EVENT_TYPE !== $event->post_type ) return new WP_Error( 'mi_evento_non_valido', 'Evento non valido.' );
+		$gestore = self::risolvi_gestore_evento( $event_id, true );
+		if ( is_wp_error( $gestore ) ) return $gestore;
 		$url_iscrizione = MI_Shortcode::url_iscrizione( $event_id );
 		$ha_saldo = 'DEPOSIT_BALANCE' === get_post_meta( $event_id, '_mi_economic_mode', true );
 		$url_saldo = $ha_saldo ? add_query_arg( array( 'mi_status' => '1', 'evento' => $event_id ), home_url( '/' ) ) : '';
@@ -238,6 +242,7 @@ final class MI_Portal {
 			'modalita_prezzo' => (string) get_post_meta( $event_id, '_mi_economic_mode', true ),
 			'url_iscrizione' => $url_iscrizione,
 			'url_saldo' => $url_saldo,
+			'email_gestore' => $gestore->user_email,
 		) );
 		if ( is_wp_error( $result ) ) return $result;
 		$sheet_id = sanitize_text_field( (string) ( $result['id_foglio'] ?? '' ) );
@@ -249,7 +254,36 @@ final class MI_Portal {
 		if ( $url_saldo ) update_post_meta( $event_id, '_mi_balance_url', esc_url_raw( $url_saldo ) );
 		else delete_post_meta( $event_id, '_mi_balance_url' );
 		update_post_meta( $event_id, '_mi_outputs_prepared_at', current_time( 'mysql', true ) );
+		update_post_meta( $event_id, '_mi_manager_user_id', $gestore->ID );
 		return $result;
+	}
+
+	/** Individua un solo gestore responsabile, senza ampliare implicitamente l'accesso ai dati. */
+	private static function risolvi_gestore_evento( $event_id, $obbligatorio ) {
+		$event_id = absint( $event_id );
+		$group_id = absint( get_post_meta( $event_id, '_mi_activity_id', true ) );
+		$stored_id = absint( get_post_meta( $event_id, '_mi_manager_user_id', true ) );
+		$candidates = array();
+		if ( $stored_id ) $candidates[] = $stored_id;
+		$author_id = absint( get_post_field( 'post_author', $event_id ) );
+		if ( $author_id ) $candidates[] = $author_id;
+		$users = get_users( array( 'role__in' => array( 'mi_event_manager', 'mi_event_operator' ), 'fields' => array( 'ID', 'user_email', 'roles' ) ) );
+		foreach ( $users as $user ) {
+			if ( ! MI_Access::is_suspended( $user->ID ) && MI_Access::can_access_activity( $group_id, $user->ID ) ) $candidates[] = $user->ID;
+		}
+		$candidates = array_values( array_unique( array_filter( array_map( 'absint', $candidates ) ) ) );
+		$valid = array();
+		foreach ( $candidates as $user_id ) {
+			$user = get_user_by( 'id', $user_id );
+			if ( ! $user || ! is_email( $user->user_email ) || MI_Access::is_suspended( $user_id ) || ! MI_Access::can_access_activity( $group_id, $user_id ) ) continue;
+			if ( ! array_intersect( array( 'mi_event_manager', 'mi_event_operator' ), (array) $user->roles ) ) continue;
+			$valid[ $user_id ] = $user;
+		}
+		if ( $stored_id && isset( $valid[ $stored_id ] ) ) return $valid[ $stored_id ];
+		if ( $author_id && isset( $valid[ $author_id ] ) ) return $valid[ $author_id ];
+		if ( 1 === count( $valid ) ) return reset( $valid );
+		if ( ! $obbligatorio ) return null;
+		return new WP_Error( 'mi_gestore_evento_ambiguo', $valid ? 'Al gruppo risultano assegnati più gestori. Indica un solo responsabile prima di pubblicare.' : 'Assegna al gruppo un gestore con un indirizzo email valido prima di pubblicare.' );
 	}
 
 	private static function handle_event_publication_action() {
@@ -267,7 +301,10 @@ final class MI_Portal {
 		MI_Registration_Service::ensure_published_revision( $event_id, true );
 		$workspace = self::prepara_produzioni_workspace( $event_id, 'PUBBLICATO' );
 		if ( is_wp_error( $workspace ) ) return self::redirect_result( 'Evento pubblicato; Workspace non ha ancora registrato lo stato aggiornato: ' . $workspace->get_error_message(), true, $event_id, true );
-		return self::redirect_result( 'Evento pubblicato. Foglio Google e collegamenti operativi sono pronti.', false, $event_id, true );
+		$gestore = self::risolvi_gestore_evento( $event_id, true );
+		$notifica = is_wp_error( $gestore ) ? $gestore : MI_Spedizione_Email::accoda_notifica_gestore_evento( $event_id, $gestore, (string) ( $workspace['url_foglio'] ?? '' ) );
+		if ( is_wp_error( $notifica ) ) return self::redirect_result( 'Evento pubblicato e foglio condiviso; non è stato possibile preparare la comunicazione al gestore: ' . $notifica->get_error_message(), true, $event_id, true );
+		return self::redirect_result( 'Evento pubblicato. Foglio Google condiviso con il gestore e comunicazione preparata in modalità ' . esc_html( $notifica['mode'] ?? 'ANTEPRIMA' ) . '.', false, $event_id, true );
 	}
 
 	private static function handle_communication_action() {

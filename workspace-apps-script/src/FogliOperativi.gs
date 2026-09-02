@@ -22,9 +22,32 @@ function preparaProduzioniEventoDaWordPress_(payload) {
   const risultato = apriFoglioOperativoEvento({ id_evento: idEvento });
 	const urlIscrizione = normalizzaUrlPubblico_(payload.url_iscrizione);
 	const urlSaldo = normalizzaUrlPubblico_(payload.url_saldo);
+	const emailGestore = normalizzaEmailGestore_(payload.email_gestore);
+	condividiFoglioSoltantoConGestore_(risultato.id_foglio, emailGestore);
 	aggiornaCollegamentiProduzioneEvento_(idEvento, urlIscrizione, urlSaldo);
   aggiungiControllo_('PRODUZIONI_EVENTO', 'PREPARE', idEvento, 'SUCCESS', 'WORDPRESS', risultato.creato ? 'SHEET_CREATED' : 'SHEET_REUSED', 'WORDPRESS_PROXY');
   return { ok: true, id_evento: idEvento, id_foglio: risultato.id_foglio, url_foglio: risultato.url_foglio, url_iscrizione: urlIscrizione, url_saldo: urlSaldo, cartella: risultato.cartella || '', creato: risultato.creato, mode: 'PREVIEW' };
+}
+
+/** Mantiene il proprietario Workspace e un solo gestore esplicitamente indicato da WordPress. */
+function condividiFoglioSoltantoConGestore_(idFoglio, emailGestore) {
+	const file = DriveApp.getFileById(String(idFoglio));
+	file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+	file.getEditors().forEach(function (utente) {
+		const email = String(utente.getEmail() || '').toLowerCase();
+		if (email && email !== emailGestore) file.removeEditor(email);
+	});
+	file.getViewers().forEach(function (utente) {
+		const email = String(utente.getEmail() || '').toLowerCase();
+		if (email && email !== emailGestore) file.removeViewer(email);
+	});
+	file.addEditor(emailGestore);
+}
+
+function normalizzaEmailGestore_(valore) {
+	const email = normalizzaTesto_(valore, 254).toLowerCase();
+	if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Indirizzo email del gestore non valido.');
+	return email;
 }
 
 /** Restituisce il foglio operativo dell'evento, creandolo soltanto se manca. */
