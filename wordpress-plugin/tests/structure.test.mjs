@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.14\.0/);
+	assert.match(source, /Version:\s+3\.15\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -70,6 +70,14 @@ test('il client Workspace firma le richieste e non contiene configurazione priva
   assert.match(source, /MI_WORKSPACE_SHARED_SECRET/);
   assert.match(source, /stable_json/);
   assert.doesNotMatch(source, /script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+/);
+});
+
+test('gli errori Workspace indicano una causa operativa senza esporre dettagli riservati', async () => {
+	const client = await read('includes/class-mi-workspace-client.php');
+	assert.match(client, /ACTION_NOT_ALLOWED/);
+	assert.match(client, /la distribuzione Apps Script non riconosce ancora questa operazione/);
+	assert.match(client, /REQUEST_FAILED/);
+	assert.doesNotMatch(client, /\$decoded\['error'\].*get_error_message/);
 });
 
 test('le iscrizioni vengono replicate con idempotenza senza perdere il salvataggio locale', async () => {
@@ -1109,7 +1117,9 @@ test('gli eventi passati sono separati dalla vista operativa ordinaria', async (
   assert.match(portal, /Torna agli eventi attuali/);
   assert.match(portal, /is_past_event/);
   assert.match(portal, /Eventi passati/);
-  assert.match(css, /\.mi-event-history-link/);
+	assert.match(portal, /is_past_event\( \$closes_at \?: \$starts_at \)/);
+	assert.match(css, /\.mi-event-history-link/);
+	assert.match(css, /\.mi-event-card\.is-expired \.mi-event-card__status strong/);
 });
 
 test('l’elenco iscrizioni indica l’evento selezionato', async () => {
@@ -1264,8 +1274,8 @@ test('selezionare una bozza riprende il percorso guidato e conduce ad Attiva l�
   assert.match(portal, /Riprendi la creazione/);
   assert.match(portal, /PREPARA_PRODUZIONI_EVENTO/);
   assert.match(portal, /_mi_operational_sheet_id/);
-  assert.match(portal, /\[modulo_iscrizioni event=&quot;/);
-  assert.match(portal, /Pulsante Saldo/);
+	assert.match(portal, /\[modulo_iscrizioni event=/);
+	assert.match(portal, /pulsante Saldo/);
   assert.match(portal, /data-mi-operational-profile/);
   assert.match(script, /updateOvernight\(\)/);
 });
@@ -1415,13 +1425,14 @@ test('il wizard mostra soltanto i costi coerenti con il tipo di evento', async (
   assert.match(script, /servicePricingNodes\.forEach\(\(node\) => \{ node\.hidden = pricing\.value !== 'NONE'; \}\)/);
   assert.match(script, /economicLabel\.hidden = !paidEvent/);
 });
-test('il wizard distingue il salvataggio della bozza dalla produzione del foglio', async () => {
+test('il wizard distingue anteprima e pubblicazione e crea il foglio pubblicando', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const shortcode = await read('includes/class-mi-shortcode.php');
   const activator = await read('includes/class-mi-activator.php');
   assert.match(portal, /Salva la bozza e vai ad Attiva l’evento/);
   assert.match(portal, /Crea la bozza e vai ad Attiva l’evento/);
-  assert.match(portal, /<h2>Attiva l’evento<\/h2>/);
+	assert.match(portal, /Visualizza anteprima/);
+	assert.match(portal, /Apri l’anteprima del modulo di iscrizione/);
   assert.match(portal, /mi_portal_outputs/);
   assert.match(portal, /draft_configuration_complete/);
   assert.match(portal, /draft_initial_step/);
@@ -1432,18 +1443,22 @@ test('il wizard distingue il salvataggio della bozza dalla produzione del foglio
   assert.match(portal, /id="mi-produzioni-evento"[^>]*data-mi-event-outputs/);
   const portalScript = await read('assets/portal.js');
   assert.match(portalScript, /eventOutputs\.scrollIntoView/);
-  assert.match(portal, /Crea e collega il foglio Google/);
-  assert.doesNotMatch(portal, /Salva e continua la produzione|Produci pulsante e foglio Google/);
-  assert.match(portal, /Pulsante Iscriviti/);
-  assert.match(portal, /Pulsante Saldo/);
+	assert.doesNotMatch(portal, />Crea e collega il foglio Google</);
+	assert.doesNotMatch(portal, /Salva e continua la produzione|Produci pulsante e foglio Google/);
+	assert.match(portal, /Collegamento per il pulsante Iscriviti/);
+	assert.match(portal, /Collegamento per il pulsante Saldo/);
+	assert.match(portal, /Per operare sul foglio iscrizioni di questo evento/);
+	assert.match(portal, /Codice per WordPress e Divi/);
   assert.match(portal, /_mi_registration_url/);
   assert.match(portal, /_mi_balance_url/);
   assert.match(portal, /'url_iscrizione' => \$url_iscrizione/);
   assert.match(portal, /'url_saldo' => \$url_saldo/);
   assert.match(shortcode, /function url_iscrizione/);
   assert.match(shortcode, /function mostra_pagina_iscrizione_pubblica/);
-  assert.match(portal, /publish_event_portal/);
-  assert.match(portal, /Pubblica e attiva i collegamenti/);
+	assert.match(portal, /publish_event_portal/);
+	assert.match(portal, />Pubblica evento</);
+	assert.match(portal, /prepara_produzioni_workspace\( \$event_id, 'BOZZA' \)/);
+	assert.match(portal, /prepara_produzioni_workspace\( \$event_id, 'PUBBLICATO' \)/);
   assert.match(portal, /ensure_published_revision\( \$event_id, true \)/);
   assert.match(activator, /mi_secretary[\s\S]*mi_publish_events/);
 });

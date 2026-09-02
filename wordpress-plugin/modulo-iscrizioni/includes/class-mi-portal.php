@@ -215,6 +215,15 @@ final class MI_Portal {
 		check_admin_referer( 'mi_portal_prepare_event_outputs_' . $event_id, 'mi_portal_nonce' );
 		$event = get_post( $event_id );
 		if ( ! $event || MI_Event_Post_Type::EVENT_TYPE !== $event->post_type || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Evento non accessibile.', 403 );
+		$result = self::prepara_produzioni_workspace( $event_id, 'BOZZA' );
+		if ( is_wp_error( $result ) ) return self::redirect_result( 'Il foglio Google non è stato creato: ' . $result->get_error_message(), true, $event_id );
+		return self::redirect_result( 'Foglio Google collegato. Ora puoi pubblicare l’evento.', false, $event_id, true );
+	}
+
+	/** Crea o riallinea il foglio operativo e conserva tutti i collegamenti restituiti. */
+	private static function prepara_produzioni_workspace( $event_id, $stato ) {
+		$event = get_post( $event_id );
+		if ( ! $event || MI_Event_Post_Type::EVENT_TYPE !== $event->post_type ) return new WP_Error( 'mi_evento_non_valido', 'Evento non valido.' );
 		$url_iscrizione = MI_Shortcode::url_iscrizione( $event_id );
 		$ha_saldo = 'DEPOSIT_BALANCE' === get_post_meta( $event_id, '_mi_economic_mode', true );
 		$url_saldo = $ha_saldo ? add_query_arg( array( 'mi_status' => '1', 'evento' => $event_id ), home_url( '/' ) ) : '';
@@ -222,7 +231,7 @@ final class MI_Portal {
 			'id_evento' => (string) $event_id,
 			'id_gruppo' => (string) absint( get_post_meta( $event_id, '_mi_activity_id', true ) ),
 			'titolo' => $event->post_title,
-			'stato' => 'publish' === $event->post_status ? 'PUBBLICATO' : ( 'private' === $event->post_status ? 'PRIVATO' : 'BOZZA' ),
+			'stato' => in_array( $stato, array( 'BOZZA', 'PUBBLICATO', 'PRIVATO' ), true ) ? $stato : 'BOZZA',
 			'capienza' => max( 1, absint( get_post_meta( $event_id, '_mi_capacity', true ) ) ),
 			'apertura_iscrizioni' => (string) get_post_meta( $event_id, '_mi_registration_opens_at', true ),
 			'chiusura_iscrizioni' => (string) get_post_meta( $event_id, '_mi_registration_closes_at', true ),
@@ -230,17 +239,17 @@ final class MI_Portal {
 			'url_iscrizione' => $url_iscrizione,
 			'url_saldo' => $url_saldo,
 		) );
-		if ( is_wp_error( $result ) ) return self::redirect_result( 'Il pulsante iscrizioni è pronto, ma il foglio Google non è stato creato: ' . $result->get_error_message(), true, $event_id );
+		if ( is_wp_error( $result ) ) return $result;
 		$sheet_id = sanitize_text_field( (string) ( $result['id_foglio'] ?? '' ) );
 		$sheet_url = esc_url_raw( (string) ( $result['url_foglio'] ?? '' ) );
-		if ( ! preg_match( '/^[A-Za-z0-9_-]{20,}$/', $sheet_id ) || 0 !== strpos( $sheet_url, 'https://docs.google.com/spreadsheets/' ) ) return self::redirect_result( 'Workspace non ha restituito un collegamento al foglio valido.', true, $event_id );
+		if ( ! preg_match( '/^[A-Za-z0-9_-]{20,}$/', $sheet_id ) || 0 !== strpos( $sheet_url, 'https://docs.google.com/spreadsheets/' ) ) return new WP_Error( 'mi_foglio_non_valido', 'Workspace non ha restituito un collegamento al foglio valido.' );
 		update_post_meta( $event_id, '_mi_operational_sheet_id', $sheet_id );
 		update_post_meta( $event_id, '_mi_operational_sheet_url', $sheet_url );
 		update_post_meta( $event_id, '_mi_registration_url', esc_url_raw( $url_iscrizione ) );
 		if ( $url_saldo ) update_post_meta( $event_id, '_mi_balance_url', esc_url_raw( $url_saldo ) );
 		else delete_post_meta( $event_id, '_mi_balance_url' );
 		update_post_meta( $event_id, '_mi_outputs_prepared_at', current_time( 'mysql', true ) );
-		return self::redirect_result( 'Strumenti pronti: pulsante iscrizioni e foglio Google collegato. Il codice del foglio è conservato per l’eventuale pulsante saldo.', false, $event_id, true );
+		return $result;
 	}
 
 	private static function handle_event_publication_action() {
@@ -249,26 +258,16 @@ final class MI_Portal {
 		check_admin_referer( 'mi_portal_publish_event_' . $event_id, 'mi_portal_nonce' );
 		$event = get_post( $event_id );
 		if ( ! $event || MI_Event_Post_Type::EVENT_TYPE !== $event->post_type || 'draft' !== $event->post_status || ! MI_Access::can_access_event( $event_id ) ) return self::redirect_result( 'La bozza non è pubblicabile.', true, $event_id );
-		if ( ! get_post_meta( $event_id, '_mi_operational_sheet_id', true ) ) return self::redirect_result( 'Crea e collega prima il foglio Google.', true, $event_id );
 		$configuration = MI_Registration_Service::public_event( $event_id, true );
 		if ( is_wp_error( $configuration ) ) return self::redirect_result( 'Completa la configurazione prima di pubblicare: ' . $configuration->get_error_message(), true, $event_id );
+		$preparazione = self::prepara_produzioni_workspace( $event_id, 'BOZZA' );
+		if ( is_wp_error( $preparazione ) ) return self::redirect_result( 'L’evento resta in bozza perché Workspace non ha creato il foglio Google: ' . $preparazione->get_error_message(), true, $event_id );
 		$result = wp_update_post( array( 'ID' => $event_id, 'post_status' => 'publish' ), true );
 		if ( is_wp_error( $result ) || 'publish' !== get_post_status( $event_id ) ) return self::redirect_result( 'WordPress non ha potuto pubblicare l’evento.', true, $event_id );
 		MI_Registration_Service::ensure_published_revision( $event_id, true );
-		$workspace = MI_Workspace_Client::request( 'PREPARA_PRODUZIONI_EVENTO', array(
-			'id_evento' => (string) $event_id,
-			'id_gruppo' => (string) absint( get_post_meta( $event_id, '_mi_activity_id', true ) ),
-			'titolo' => $event->post_title,
-			'stato' => 'PUBBLICATO',
-			'capienza' => max( 1, absint( get_post_meta( $event_id, '_mi_capacity', true ) ) ),
-			'apertura_iscrizioni' => (string) get_post_meta( $event_id, '_mi_registration_opens_at', true ),
-			'chiusura_iscrizioni' => (string) get_post_meta( $event_id, '_mi_registration_closes_at', true ),
-			'modalita_prezzo' => (string) get_post_meta( $event_id, '_mi_economic_mode', true ),
-			'url_iscrizione' => (string) get_post_meta( $event_id, '_mi_registration_url', true ),
-			'url_saldo' => (string) get_post_meta( $event_id, '_mi_balance_url', true ),
-		) );
+		$workspace = self::prepara_produzioni_workspace( $event_id, 'PUBBLICATO' );
 		if ( is_wp_error( $workspace ) ) return self::redirect_result( 'Evento pubblicato; Workspace non ha ancora registrato lo stato aggiornato: ' . $workspace->get_error_message(), true, $event_id );
-		return self::redirect_result( 'Evento pubblicato. I collegamenti Iscriviti e Saldo sono ora attivi.', false, $event_id );
+		return self::redirect_result( 'Evento pubblicato. Foglio Google e collegamenti operativi sono pronti.', false, $event_id, true );
 	}
 
 	private static function handle_communication_action() {
@@ -775,12 +774,13 @@ final class MI_Portal {
 		foreach ( $all_events as $event ) {
 			$published = (array) ( $published_summaries[ $event->ID ] ?? array() );
 			$starts_at = (string) ( $published['event_starts_at'] ?? get_post_meta( $event->ID, '_mi_event_starts_at', true ) );
+			$closes_at = (string) ( $published['closes_at'] ?? get_post_meta( $event->ID, '_mi_registration_closes_at', true ) );
 			$start_timestamps[ $event->ID ] = self::date_timestamp( $starts_at );
 			$cancelled_events[ $event->ID ] = (bool) get_post_meta( $event->ID, '_mi_event_cancelled_at', true );
 			$archived_events[ $event->ID ] = (bool) get_post_meta( $event->ID, '_mi_event_archived_at', true );
 			if ( $archived_events[ $event->ID ] ) $past_events[] = $event;
 			elseif ( $cancelled_events[ $event->ID ] ) $current_events[] = $event;
-			elseif ( self::is_past_event( $starts_at ) ) $past_events[] = $event;
+			elseif ( self::is_past_event( $closes_at ?: $starts_at ) ) $past_events[] = $event;
 			else $current_events[] = $event;
 		}
 		$events = $show_past ? $past_events : $current_events;
@@ -832,7 +832,7 @@ final class MI_Portal {
 			}
 			if ( $show_past ) $url_args['mi_portal_history'] = '1';
 			$url = add_query_arg( $url_args, $base_url );
-			echo '<article class="mi-event-card-shell"><a class="mi-event-card' . ( $is_cancelled ? ' is-cancelled' : '' ) . '" href="' . esc_url( $url ) . '"><span class="mi-event-card__date"><small>' . esc_html( $date_badge['month'] ) . '</small><strong>' . esc_html( $date_badge['day'] ) . '</strong></span><span class="mi-event-card__content"><span class="mi-event-card__image">';
+			echo '<article class="mi-event-card-shell"><a class="mi-event-card' . ( $is_cancelled ? ' is-cancelled' : ( $is_expired ? ' is-expired' : '' ) ) . '" href="' . esc_url( $url ) . '"><span class="mi-event-card__date"><small>' . esc_html( $date_badge['month'] ) . '</small><strong>' . esc_html( $date_badge['day'] ) . '</strong></span><span class="mi-event-card__content"><span class="mi-event-card__image">';
 			if ( $cover_image ) echo '<img src="' . esc_url( $cover_image ) . '" alt="" loading="lazy" decoding="async" fetchpriority="low">';
 			echo '</span><span class="mi-event-card__identity"><strong>' . esc_html( $event_title ) . '</strong>';
 			if ( $activity_name ) echo '<small>' . esc_html( $activity_name ) . '</small>';
@@ -1132,19 +1132,20 @@ final class MI_Portal {
 		if ( ! $registration_url ) $registration_url = esc_url( MI_Shortcode::url_iscrizione( $event_id ) );
 		$balance_url = esc_url( (string) get_post_meta( $event_id, '_mi_balance_url', true ) );
 		$has_balance = 'DEPOSIT_BALANCE' === get_post_meta( $event_id, '_mi_economic_mode', true );
-		echo '<section class="mi-event-outputs" id="mi-produzioni-evento" tabindex="-1" data-mi-event-outputs><span class="mi-portal-eyebrow">Passaggio conclusivo</span><h2>Attiva l’evento</h2><p>La configurazione della bozza è completa. Prepara gli strumenti operativi e, dopo il controllo, pubblica l’evento.</p><ol><li><strong>Pulsante Iscriviti</strong><a href="' . $registration_url . '" target="_blank" rel="noopener">Apri il modulo di iscrizione</a><label>Indirizzo da collegare al pulsante<input type="url" readonly value="' . esc_attr( $registration_url ) . '"></label><small>In WordPress o Divi puoi usare anche <code>[modulo_iscrizioni event=&quot;' . esc_html( $event_id ) . '&quot;]</code>.</small></li>';
-		if ( $sheet_url ) echo '<li><strong>Foglio Google</strong><a href="' . $sheet_url . '" target="_blank" rel="noopener">Apri il foglio operativo dell’evento</a></li>';
-		else echo '<li><strong>Foglio Google</strong><span>Da produrre e collegare.</span></li>';
-		echo '<li><strong>Pulsante Saldo</strong>' . ( $has_balance && $balance_url ? '<a href="' . $balance_url . '" target="_blank" rel="noopener">Apri controllo stato e saldo</a><label>Indirizzo da collegare al pulsante<input type="url" readonly value="' . esc_attr( $balance_url ) . '"></label>' : '<span>' . ( $has_balance ? 'Sarà disponibile dopo la creazione del foglio.' : 'Non previsto dalla modalità economica scelta.' ) . '</span>' ) . '</li></ol>';
-		if ( ! $sheet_url ) {
-			echo '<form method="post"><input type="hidden" name="mi_portal_action" value="prepare_event_outputs"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
-			wp_nonce_field( 'mi_portal_prepare_event_outputs_' . $event_id, 'mi_portal_nonce' );
-			echo '<button class="mi-primary" type="submit">Crea e collega il foglio Google</button></form>';
+		$is_published = 'publish' === get_post_status( $event_id );
+		$preview_url = wp_nonce_url( admin_url( 'admin-post.php?action=mi_anteprima_evento&event=' . $event_id ), 'mi_anteprima_evento_' . $event_id );
+		echo '<section class="mi-event-outputs" id="mi-produzioni-evento" tabindex="-1" data-mi-event-outputs><span class="mi-portal-eyebrow">Passaggio conclusivo</span><h2>' . ( $is_published ? 'Collegamenti dell’evento' : 'Controlla e pubblica' ) . '</h2>';
+		if ( ! $is_published ) {
+			echo '<p>Controlla il modulo senza renderlo pubblico. Quando confermi, WordPress pubblica l’evento e crea automaticamente il relativo foglio Google.</p><ol><li><strong>Visualizza anteprima</strong><a href="' . esc_url( $preview_url ) . '" target="_blank" rel="noopener">Apri l’anteprima del modulo di iscrizione</a></li><li><strong>Pubblica evento</strong><span>Crea il foglio Google e attiva il modulo di iscrizione.</span></li></ol>';
 		}
-		if ( $sheet_url && 'draft' === get_post_status( $event_id ) && ( current_user_can( 'mi_publish_events' ) || current_user_can( 'manage_options' ) ) ) {
+		if ( ! $is_published && ( current_user_can( 'mi_publish_events' ) || current_user_can( 'manage_options' ) ) ) {
 			echo '<form method="post"><input type="hidden" name="mi_portal_action" value="publish_event_portal"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
 			wp_nonce_field( 'mi_portal_publish_event_' . $event_id, 'mi_portal_nonce' );
-			echo '<button class="mi-primary" type="submit">Pubblica e attiva i collegamenti</button></form>';
+			echo '<button class="mi-primary" type="submit">Pubblica evento</button></form>';
+		} elseif ( $is_published ) {
+			echo '<ol><li><strong>Modulo iscrizioni pubblicato</strong><a href="' . $registration_url . '" target="_blank" rel="noopener">Apri il modulo di iscrizione</a><label>Collegamento per il pulsante Iscriviti<input type="url" readonly value="' . esc_attr( $registration_url ) . '"></label></li><li><strong>Codice per WordPress e Divi</strong><label>Modulo da inserire nella pagina<input type="text" readonly value="' . esc_attr( '[modulo_iscrizioni event="' . $event_id . '"]' ) . '"></label><small>Il modulo “Modulo iscrizioni” di Divi permette di scegliere lo stesso evento senza scrivere il codice.</small></li><li><strong>Foglio iscrizioni</strong>' . ( $sheet_url ? '<a href="' . $sheet_url . '" target="_blank" rel="noopener">Per operare sul foglio iscrizioni di questo evento: apri il foglio Google</a><label>Collegamento al foglio<input type="url" readonly value="' . esc_attr( $sheet_url ) . '"></label>' : '<span>Collegamento al foglio non ancora disponibile.</span>' ) . '</li>';
+			if ( $has_balance ) echo '<li><strong>Controllo stato e saldo</strong>' . ( $balance_url ? '<a href="' . $balance_url . '" target="_blank" rel="noopener">Apri la pagina stato e saldo</a><label>Collegamento per il pulsante Saldo<input type="url" readonly value="' . esc_attr( $balance_url ) . '"></label>' : '<span>Collegamento non ancora disponibile.</span>' ) . '</li>';
+			echo '</ol>';
 		}
 		echo '</section>';
 	}
@@ -1157,29 +1158,11 @@ final class MI_Portal {
 		if ( ! $error && $event_id && MI_Access::can_access_event( $event_id ) ) {
 			$edit_url = get_edit_post_link( $event_id, 'raw' );
 			$preview_url = wp_nonce_url( admin_url( 'admin-post.php?action=mi_anteprima_evento&event=' . $event_id ), 'mi_anteprima_evento_' . $event_id );
-			$sheet_url = esc_url( (string) get_post_meta( $event_id, '_mi_operational_sheet_url', true ) );
-			$registration_url = esc_url( (string) get_post_meta( $event_id, '_mi_registration_url', true ) );
-			if ( ! $registration_url ) $registration_url = esc_url( MI_Shortcode::url_iscrizione( $event_id ) );
-			$balance_url = esc_url( (string) get_post_meta( $event_id, '_mi_balance_url', true ) );
-			$has_balance = 'DEPOSIT_BALANCE' === get_post_meta( $event_id, '_mi_economic_mode', true );
-			echo '<p>La bozza #' . esc_html( $event_id ) . ' è stata salvata e resta non pubblicata.</p><div class="mi-portal-notice__actions">';
-			if ( $edit_url ) echo '<a class="mi-primary" href="' . esc_url( $edit_url ) . '">Completa la bozza</a>';
+			$is_published = 'publish' === get_post_status( $event_id );
+			echo '<p>' . ( $is_published ? 'L’evento #' . esc_html( $event_id ) . ' è pubblicato.' : 'La bozza #' . esc_html( $event_id ) . ' è stata salvata e resta non pubblicata.' ) . '</p><div class="mi-portal-notice__actions">';
+			if ( ! $is_published && $edit_url ) echo '<a class="mi-primary" href="' . esc_url( $edit_url ) . '">Completa la bozza</a>';
 			echo '<a class="mi-secondary" href="' . esc_url( $preview_url ) . '">Apri anteprima</a></div>';
-			echo '<div class="mi-event-outputs" id="mi-produzioni-evento" tabindex="-1" data-mi-event-outputs><h3>Attiva l’evento</h3><ol><li><strong>Pulsante Iscriviti</strong><a href="' . $registration_url . '" target="_blank" rel="noopener">Apri il modulo di iscrizione</a><label>Indirizzo da collegare al pulsante<input type="url" readonly value="' . esc_attr( $registration_url ) . '"></label><small>In alternativa, dentro WordPress o Divi: <code>[modulo_iscrizioni event=&quot;' . esc_html( $event_id ) . '&quot;]</code></small></li>';
-			if ( $sheet_url ) echo '<li><strong>Foglio Google</strong><a href="' . $sheet_url . '" target="_blank" rel="noopener">Apri il foglio operativo dell’evento</a></li>';
-			else echo '<li><strong>Foglio Google</strong><span>Da produrre e collegare.</span></li>';
-			echo '<li><strong>Pulsante Saldo</strong>' . ( $has_balance && $balance_url ? '<a href="' . $balance_url . '" target="_blank" rel="noopener">Apri controllo stato e saldo</a><label>Indirizzo da collegare al pulsante<input type="url" readonly value="' . esc_attr( $balance_url ) . '"></label>' : '<span>' . ( $has_balance ? 'Sarà disponibile dopo la creazione del foglio.' : 'Non previsto dalla modalità economica scelta.' ) . '</span>' ) . '</li></ol>';
-			if ( ! $sheet_url ) {
-				echo '<form method="post"><input type="hidden" name="mi_portal_action" value="prepare_event_outputs"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
-				wp_nonce_field( 'mi_portal_prepare_event_outputs_' . $event_id, 'mi_portal_nonce' );
-				echo '<button class="mi-primary" type="submit">Crea e collega il foglio Google</button></form>';
-			}
-			if ( $sheet_url && 'draft' === get_post_status( $event_id ) && ( current_user_can( 'mi_publish_events' ) || current_user_can( 'manage_options' ) ) ) {
-				echo '<form method="post"><input type="hidden" name="mi_portal_action" value="publish_event_portal"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
-				wp_nonce_field( 'mi_portal_publish_event_' . $event_id, 'mi_portal_nonce' );
-				echo '<button class="mi-primary" type="submit">Pubblica e attiva i collegamenti</button></form>';
-			}
-			echo '</div>';
+			self::event_outputs_panel( $event_id );
 		}
 		echo '</div>';
 	}
