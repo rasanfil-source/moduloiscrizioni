@@ -257,16 +257,16 @@ final class MI_Portal {
 		$event_id = absint( $_POST['event_id'] ?? 0 );
 		check_admin_referer( 'mi_portal_publish_event_' . $event_id, 'mi_portal_nonce' );
 		$event = get_post( $event_id );
-		if ( ! $event || MI_Event_Post_Type::EVENT_TYPE !== $event->post_type || 'draft' !== $event->post_status || ! MI_Access::can_access_event( $event_id ) ) return self::redirect_result( 'La bozza non è pubblicabile.', true, $event_id );
+		if ( ! $event || MI_Event_Post_Type::EVENT_TYPE !== $event->post_type || 'draft' !== $event->post_status || ! MI_Access::can_access_event( $event_id ) ) return self::redirect_result( 'La bozza non è pubblicabile.', true, $event_id, true );
 		$configuration = MI_Registration_Service::public_event( $event_id, true );
-		if ( is_wp_error( $configuration ) ) return self::redirect_result( 'Completa la configurazione prima di pubblicare: ' . $configuration->get_error_message(), true, $event_id );
+		if ( is_wp_error( $configuration ) ) return self::redirect_result( 'Completa la configurazione prima di pubblicare: ' . $configuration->get_error_message(), true, $event_id, true );
 		$preparazione = self::prepara_produzioni_workspace( $event_id, 'BOZZA' );
-		if ( is_wp_error( $preparazione ) ) return self::redirect_result( 'L’evento resta in bozza perché Workspace non ha creato il foglio Google: ' . $preparazione->get_error_message(), true, $event_id );
+		if ( is_wp_error( $preparazione ) ) return self::redirect_result( 'L’evento resta in bozza perché Workspace non ha creato il foglio Google: ' . $preparazione->get_error_message(), true, $event_id, true );
 		$result = wp_update_post( array( 'ID' => $event_id, 'post_status' => 'publish' ), true );
-		if ( is_wp_error( $result ) || 'publish' !== get_post_status( $event_id ) ) return self::redirect_result( 'WordPress non ha potuto pubblicare l’evento.', true, $event_id );
+		if ( is_wp_error( $result ) || 'publish' !== get_post_status( $event_id ) ) return self::redirect_result( 'WordPress non ha potuto pubblicare l’evento.', true, $event_id, true );
 		MI_Registration_Service::ensure_published_revision( $event_id, true );
 		$workspace = self::prepara_produzioni_workspace( $event_id, 'PUBBLICATO' );
-		if ( is_wp_error( $workspace ) ) return self::redirect_result( 'Evento pubblicato; Workspace non ha ancora registrato lo stato aggiornato: ' . $workspace->get_error_message(), true, $event_id );
+		if ( is_wp_error( $workspace ) ) return self::redirect_result( 'Evento pubblicato; Workspace non ha ancora registrato lo stato aggiornato: ' . $workspace->get_error_message(), true, $event_id, true );
 		return self::redirect_result( 'Evento pubblicato. Foglio Google e collegamenti operativi sono pronti.', false, $event_id, true );
 	}
 
@@ -554,7 +554,7 @@ final class MI_Portal {
 		ob_start();
 		?><main class="mi-portal"><header class="mi-portal-header"><div><span class="mi-portal-eyebrow">Area riservata</span><h1>Segreteria eventi</h1></div><a class="mi-portal-logout" href="<?php echo esc_url( wp_logout_url( self::base_url() ) ); ?>"><span aria-hidden="true">↗</span> Esci</a></header>
 		<nav class="mi-portal-switcher" aria-label="Segreteria eventi"><a class="<?php echo 'manage' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'manage', self::base_url() ) ); ?>"><?php echo esc_html( self::manage_label() ); ?></a><?php if ( $can_create ) : ?><a class="<?php echo 'create' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'create', self::base_url() ) ); ?>">Crea evento</a><?php endif; ?><a class="<?php echo 'registrations' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'registrations', self::base_url() ) ); ?>">Iscrizioni</a><a class="<?php echo 'communications' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'communications', self::base_url() ) ); ?>">Comunicazioni</a><?php if ( current_user_can( 'manage_options' ) ) : ?><a class="<?php echo 'operators' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'operators', self::base_url() ) ); ?>">Operatori</a><?php endif; ?></nav>
-		<?php self::notice(); ?>
+		<?php $notice_near_outputs = 'manage' === $view && ! empty( $_GET['mi_portal_event'] ) && ! empty( $_GET['mi_portal_outputs'] ); if ( ! $notice_near_outputs ) self::notice(); ?>
 		<?php if ( 'create' === $view && $can_create ) self::create_view( absint( $_GET['mi_portal_draft'] ?? 0 ) ); elseif ( 'registrations' === $view ) self::portal_registrations_view(); elseif ( 'communications' === $view ) self::communications_view(); elseif ( 'operators' === $view && current_user_can( 'manage_options' ) ) self::operators_view(); else self::manage_view(); ?>
 		</main><?php
 		return ob_get_clean();
@@ -870,7 +870,10 @@ final class MI_Portal {
 			$selected = absint( $_GET['mi_portal_event'] ?? 0 );
 			if ( $selected && in_array( $selected, $ids, true ) ) {
 				self::event_management_card( $selected );
-				if ( ! empty( $_GET['mi_portal_outputs'] ) && empty( $_GET['mi_portal_message'] ) ) self::event_outputs_panel( $selected );
+				if ( ! empty( $_GET['mi_portal_outputs'] ) ) {
+					self::event_outputs_panel( $selected );
+					self::notice();
+				}
 			}
 		}
 		$history_url = $show_past
@@ -1141,7 +1144,7 @@ final class MI_Portal {
 		if ( ! $is_published && ( current_user_can( 'mi_publish_events' ) || current_user_can( 'manage_options' ) ) ) {
 			echo '<form method="post"><input type="hidden" name="mi_portal_action" value="publish_event_portal"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
 			wp_nonce_field( 'mi_portal_publish_event_' . $event_id, 'mi_portal_nonce' );
-			echo '<button class="mi-primary" type="submit">Pubblica evento</button></form>';
+			echo '<button class="mi-primary" type="submit">Pubblica evento</button><span class="mi-action-progress" role="status" aria-live="polite" hidden></span></form>';
 		} elseif ( $is_published ) {
 			echo '<ol><li><strong>Modulo iscrizioni pubblicato</strong><a href="' . $registration_url . '" target="_blank" rel="noopener">Apri il modulo di iscrizione</a><label>Collegamento per il pulsante Iscriviti<input type="url" readonly value="' . esc_attr( $registration_url ) . '"></label></li><li><strong>Codice per WordPress e Divi</strong><label>Modulo da inserire nella pagina<input type="text" readonly value="' . esc_attr( '[modulo_iscrizioni event="' . $event_id . '"]' ) . '"></label><small>Il modulo “Modulo iscrizioni” di Divi permette di scegliere lo stesso evento senza scrivere il codice.</small></li><li><strong>Foglio iscrizioni</strong>' . ( $sheet_url ? '<a href="' . $sheet_url . '" target="_blank" rel="noopener">Per operare sul foglio iscrizioni di questo evento: apri il foglio Google</a><label>Collegamento al foglio<input type="url" readonly value="' . esc_attr( $sheet_url ) . '"></label>' : '<span>Collegamento al foglio non ancora disponibile.</span>' ) . '</li>';
 			if ( $has_balance ) echo '<li><strong>Controllo stato e saldo</strong>' . ( $balance_url ? '<a href="' . $balance_url . '" target="_blank" rel="noopener">Apri la pagina stato e saldo</a><label>Collegamento per il pulsante Saldo<input type="url" readonly value="' . esc_attr( $balance_url ) . '"></label>' : '<span>Collegamento non ancora disponibile.</span>' ) . '</li>';
@@ -1162,7 +1165,6 @@ final class MI_Portal {
 			echo '<p>' . ( $is_published ? 'L’evento #' . esc_html( $event_id ) . ' è pubblicato.' : 'La bozza #' . esc_html( $event_id ) . ' è stata salvata e resta non pubblicata.' ) . '</p><div class="mi-portal-notice__actions">';
 			if ( ! $is_published && $edit_url ) echo '<a class="mi-primary" href="' . esc_url( $edit_url ) . '">Completa la bozza</a>';
 			echo '<a class="mi-secondary" href="' . esc_url( $preview_url ) . '">Apri anteprima</a></div>';
-			self::event_outputs_panel( $event_id );
 		}
 		echo '</div>';
 	}

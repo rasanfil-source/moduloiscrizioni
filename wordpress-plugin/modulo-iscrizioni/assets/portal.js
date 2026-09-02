@@ -197,6 +197,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const selectedEvent = document.querySelector('[data-mi-selected-event]');
   const eventOutputs = document.querySelector('[data-mi-event-outputs]');
+
+  document.querySelectorAll('form').forEach((actionForm) => {
+	const action = actionForm.querySelector('input[name="mi_portal_action"]')?.value;
+	if (!['create_event', 'publish_event_portal', 'prepare_event_outputs'].includes(action)) return;
+	actionForm.addEventListener('submit', (event) => {
+	  if (event.defaultPrevented || !actionForm.checkValidity()) return;
+	  const button = event.submitter || actionForm.querySelector('button[type="submit"]');
+	  if (button) {
+		button.disabled = true;
+		button.textContent = 'Attendere, prego…';
+	  }
+	  actionForm.setAttribute('aria-busy', 'true');
+	  let progress = actionForm.querySelector('.mi-action-progress');
+	  if (!progress) {
+		progress = document.createElement('span');
+		progress.className = 'mi-action-progress';
+		progress.setAttribute('role', 'status');
+		progress.setAttribute('aria-live', 'polite');
+		actionForm.append(progress);
+	  }
+	  progress.hidden = false;
+	  progress.textContent = action === 'publish_event_portal'
+		? 'Attendere, prego: sto creando il foglio Google e pubblicando l’evento.'
+		: 'Attendere, prego: sto salvando i dati dell’evento.';
+	});
+  });
+
   if (eventOutputs) {
 	const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 	window.requestAnimationFrame(() => {

@@ -48,8 +48,18 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.15\.0/);
+	assert.match(source, /Version:\s+3\.15\.1/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
+});
+
+test('la pubblicazione mostra attesa ed esito vicino al comando senza duplicare il pannello', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const portalJs = await read('assets/portal.js');
+  const shortcode = await read('includes/class-mi-shortcode.php');
+  assert.match(portalJs, /Attendere, prego: sto creando il foglio Google e pubblicando l.evento/);
+  assert.match(portal, /event_outputs_panel\( \$selected \);\s*self::notice\(\);/);
+  assert.doesNotMatch(portal, /self::event_outputs_panel\( \$event_id \);\s*\}\s*echo '<\/div>'/);
+  assert.match(shortcode, /<small>Gratuita<\/small>/);
 });
 
 test('la configurazione Workspace è riservata e non mostra il segreto salvato', async () => {
@@ -645,7 +655,7 @@ test('la gratuità è visibile e compatibile soltanto con la sola iscrizione', a
   const shortcode = await read('includes/class-mi-shortcode.php');
   const admin = await read('includes/class-mi-admin.php');
   const script = await read('assets/admin.js');
-  assert.match(shortcode, /'ZERO'.+<small>Gratuito<\/small>/);
+  assert.match(shortcode, /'ZERO'.+<small>Gratuita<\/small>/);
   assert.match(admin, /registration_only_price/);
   assert.match(admin, /array\(\s*'NONE',\s*'ZERO'\s*\)/);
 	assert.match(admin, /“Gratuito” richiede “Nessun pagamento previsto”/);
