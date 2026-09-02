@@ -69,7 +69,17 @@ final class MI_Workspace_Client {
 		}
 		$decoded = json_decode( wp_remote_retrieve_body( $response ), true );
 		if ( ! is_array( $decoded ) || empty( $decoded['ok'] ) ) {
-			return new WP_Error( 'mi_workspace_rejected', 'Workspace ha rifiutato la richiesta.' );
+			$remote_code = is_array( $decoded ) ? strtoupper( sanitize_key( (string) ( $decoded['error'] ?? '' ) ) ) : '';
+			$motivi = array(
+				'ACTION_NOT_ALLOWED' => 'la distribuzione Apps Script non riconosce ancora questa operazione',
+				'INVALID_SIGNATURE'  => 'la firma condivisa non coincide',
+				'STALE_REQUEST'      => 'la richiesta è arrivata fuori tempo',
+				'REPLAYED_NONCE'     => 'la richiesta risulta già utilizzata',
+				'REQUEST_FAILED'     => 'Apps Script ha incontrato un errore durante l’elaborazione',
+				'EMPTY_PAYLOAD'      => 'la richiesta è arrivata vuota',
+			);
+			$detail = $motivi[ $remote_code ] ?? 'la richiesta non è stata accettata';
+			return new WP_Error( 'mi_workspace_rejected', 'Workspace ha rifiutato la richiesta: ' . $detail . '.' );
 		}
 		return $decoded;
 	}
