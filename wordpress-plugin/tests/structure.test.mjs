@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.20\.1/);
+	assert.match(source, /Version:\s+3\.20\.2/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -92,7 +92,9 @@ test('la pubblicazione assegna un solo gestore, condivide il foglio e prepara la
   const portal = await read('includes/class-mi-portal.php');
   const email = await read('includes/class-mi-spedizione-email.php');
   assert.match(portal, /function risolvi_gestore_evento/);
-  assert.match(portal, /'email_gestore' => \$gestore->user_email/);
+  assert.match(portal, /'email_gestore' => \$gestore \? \$gestore->user_email : ''/);
+  assert.doesNotMatch(portal, /risolvi_gestore_evento\( \$event_id, true \)/);
+  assert.match(portal, /if \( ! \$gestore \) return self::redirect_result/);
   assert.match(portal, /_mi_manager_user_id/);
   assert.match(portal, /accoda_notifica_gestore_evento/);
   assert.match(email, /function accoda_notifica_gestore_evento/);
@@ -1362,7 +1364,7 @@ test('ogni tessera bozza riapre tutti i campi e indica dove assegnare il gestore
 	const portal = await read('includes/class-mi-portal.php');
 	assert.match(portal, /'draft' === \$event->post_status[\s\S]{0,400}'mi_portal_view' => 'create'[\s\S]{0,120}'mi_portal_draft'/);
 	assert.match(portal, /Controlla gli operatori e i gruppi assegnati/);
-	assert.match(portal, /il gruppo deve avere un solo gestore attivo con email valida/);
+	assert.match(portal, /Il gestore è facoltativo/);
 });
 
 test('il portale gestisce i gruppi in una scheda dedicata e il wizard vi rimanda', async () => {

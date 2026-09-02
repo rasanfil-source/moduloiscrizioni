@@ -22,8 +22,8 @@ function preparaProduzioniEventoDaWordPress_(payload) {
   const risultato = apriFoglioOperativoEvento({ id_evento: idEvento });
 	const urlIscrizione = normalizzaUrlPubblico_(payload.url_iscrizione);
 	const urlSaldo = normalizzaUrlPubblico_(payload.url_saldo);
-	const emailGestore = normalizzaEmailGestore_(payload.email_gestore);
-	const condivisione = { ok: false, email: emailGestore, avviso: 'Il foglio è privato. La condivisione al gestore va completata separatamente secondo le regole del dominio Workspace.' };
+	const emailGestore = payload.email_gestore ? normalizzaEmailGestore_(payload.email_gestore) : '';
+	const condivisione = { ok: false, email: emailGestore, avviso: emailGestore ? 'Il foglio è privato. La condivisione al gestore va completata separatamente secondo le regole del dominio Workspace.' : 'Nessun gestore indicato: nessuna nuova condivisione. Restano invariati gli accessi Google già autorizzati.' };
 	aggiornaCollegamentiProduzioneEvento_(idEvento, urlIscrizione, urlSaldo);
   aggiungiControllo_('PRODUZIONI_EVENTO', 'PREPARE', idEvento, 'SUCCESS', 'WORDPRESS', risultato.creato ? 'SHEET_CREATED' : 'SHEET_REUSED', 'WORDPRESS_PROXY');
   return { ok: true, id_evento: idEvento, id_foglio: risultato.id_foglio, url_foglio: risultato.url_foglio, url_iscrizione: urlIscrizione, url_saldo: urlSaldo, cartella: risultato.cartella || '', creato: risultato.creato, condivisione: condivisione, mode: 'PREVIEW' };
