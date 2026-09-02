@@ -170,6 +170,15 @@ test('la segreteria essenziale apre un foglio operativo dedicato per evento', ()
 	assert.doesNotMatch(segreteriaHtml.match(/function navigazioneSegreteria[\s\S]*?\n/)[0], /Viste operative|Camere e pullman/);
 });
 
+test('il foglio evento resta privato ed è condiviso soltanto con il gestore indicato', () => {
+  const source = sources['FogliOperativi.gs'];
+  assert.match(source, /normalizzaEmailGestore_\(payload\.email_gestore\)/);
+  assert.match(source, /setSharing\(DriveApp\.Access\.PRIVATE, DriveApp\.Permission\.NONE\)/);
+  assert.match(source, /getEditors\(\)[\s\S]*removeEditor/);
+  assert.match(source, /getViewers\(\)[\s\S]*removeViewer/);
+  assert.match(source, /addEditor\(emailGestore\)/);
+});
+
 test('WordPress può preparare il foglio dell evento senza duplicarlo', () => {
 	assert.match(sources['WebApp.gs'], /PREPARA_PRODUZIONI_EVENTO/);
 	assert.match(sources['FogliOperativi.gs'], /function preparaProduzioniEventoDaWordPress_/);

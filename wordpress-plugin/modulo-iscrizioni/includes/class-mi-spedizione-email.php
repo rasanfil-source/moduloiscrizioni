@@ -33,6 +33,33 @@ final class MI_Spedizione_Email {
 		}
 	}
 
+	/** Prepara la comunicazione privata destinata al solo gestore responsabile dell'evento. */
+	public static function accoda_notifica_gestore_evento( $event_id, WP_User $gestore, $sheet_url ) {
+		$event_id = absint( $event_id );
+		$recipient = sanitize_email( $gestore->user_email );
+		$sheet_url = esc_url_raw( (string) $sheet_url, array( 'https' ) );
+		$event_url = MI_Shortcode::url_iscrizione( $event_id );
+		if ( ! $event_id || ! is_email( $recipient ) || 0 !== strpos( $sheet_url, 'https://docs.google.com/spreadsheets/' ) ) return new WP_Error( 'mi_notifica_gestore_non_valida', 'Dati della comunicazione al gestore non validi.' );
+		$values = array( '{{evento.titolo}}' => get_the_title( $event_id ), '{{ordine.codice}}' => '', '{{referente.nome_completo}}' => $gestore->display_name );
+		$snapshot = MI_Modello_Email::crea_istantanea( $event_id, $values );
+		$snapshot['attivo'] = true;
+		$snapshot['oggetto'] = 'Evento pronto — ' . sanitize_text_field( get_the_title( $event_id ) );
+		$snapshot['preheader'] = 'Il modulo e il foglio operativo sono pronti.';
+		$snapshot['evento']['url'] = esc_url_raw( $event_url, array( 'https' ) );
+		$snapshot['html'] = '<p>Gentile ' . esc_html( $gestore->display_name ) . ',</p><p>l’evento <strong>' . esc_html( get_the_title( $event_id ) ) . '</strong> è stato pubblicato.</p><p>Il foglio operativo è condiviso esclusivamente con <strong>' . esc_html( $recipient ) . '</strong>, oltre che con il proprietario Workspace. Per aprirlo devi essere autenticato in Google con questo indirizzo.</p><p><strong>Foglio operativo:</strong><br><a href="' . esc_url( $sheet_url ) . '">' . esc_html( $sheet_url ) . '</a><br><span aria-hidden="true">⧉</span> Seleziona e copia il collegamento quando ti serve.</p>';
+		$snapshot['testo'] = "Gentile " . sanitize_text_field( $gestore->display_name ) . ",\n\nl’evento “" . sanitize_text_field( get_the_title( $event_id ) ) . "” è stato pubblicato.\n\nAccedi a Google con {$recipient} per aprire il foglio operativo:\n{$sheet_url}\n\nPagina dell’evento:\n{$event_url}";
+		$snapshot['identificativo'] = array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' );
+		$payload_json = wp_json_encode( array( 'event_id' => $event_id, 'template_type' => 'EVENT_MANAGER_READY', 'email_preview' => $snapshot ) );
+		if ( false === $payload_json ) return new WP_Error( 'mi_notifica_gestore_json', 'Comunicazione al gestore non serializzabile.' );
+		global $wpdb;
+		$status = 'OPERATIVO' === self::modalita() && self::prova_verificata() ? 'PENDING' : 'PREVIEW';
+		$origin_key = hash( 'sha256', 'event-manager-ready|' . $event_id . '|' . strtolower( $recipient ) . '|' . $sheet_url );
+		$inserted = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->prefix}mi_email_outbox (registration_id,recipient,template_type,origin_key,payload_json,status,created_at) VALUES (0,%s,'EVENT_MANAGER_READY',%s,%s,%s,%s)", $recipient, $origin_key, $payload_json, $status, current_time( 'mysql', true ) ) );
+		if ( false === $inserted ) return new WP_Error( 'mi_notifica_gestore_archivio', 'Comunicazione al gestore non salvata.' );
+		if ( 'PENDING' === $status && $inserted ) self::pianifica_spedizione();
+		return array( 'ok' => true, 'count' => $inserted ? 1 : 0, 'mode' => 'PENDING' === $status ? 'OPERATIVO' : 'ANTEPRIMA' );
+	}
+
 	public static function accoda_comunicazione_operativa( array $payload ) {
 		global $wpdb;
 		$communication_id = sanitize_key( (string) ( $payload['communication_id'] ?? '' ) );
