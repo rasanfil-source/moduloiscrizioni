@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.20\.0/);
+	assert.match(source, /Version:\s+3\.20\.1/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1356,6 +1356,13 @@ test('selezionare una bozza riprende il percorso guidato e conduce ad Attiva lâ€
 	assert.match(portal, /pulsante Saldo/);
   assert.match(portal, /data-mi-operational-profile/);
   assert.match(script, /updateOvernight\(\)/);
+});
+
+test('ogni tessera bozza riapre tutti i campi e indica dove assegnare il gestore', async () => {
+	const portal = await read('includes/class-mi-portal.php');
+	assert.match(portal, /'draft' === \$event->post_status[\s\S]{0,400}'mi_portal_view' => 'create'[\s\S]{0,120}'mi_portal_draft'/);
+	assert.match(portal, /Controlla gli operatori e i gruppi assegnati/);
+	assert.match(portal, /il gruppo deve avere un solo gestore attivo con email valida/);
 });
 
 test('il portale gestisce i gruppi in una scheda dedicata e il wizard vi rimanda', async () => {
