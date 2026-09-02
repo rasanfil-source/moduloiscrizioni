@@ -9,6 +9,9 @@ Progetto Google Apps Script associato a uno spreadsheet dedicato. Il repository 
 - `convalidaPagamentiInAttesa()` elabora tutte le righe nuove;
 - la **Segreteria eventi** unificata si trova nel portale WordPress; Workspace non espone una seconda pagina gestionale;
 - per ogni evento, WordPress può richiedere un foglio operativo idempotente nella stessa cartella Drive di `DB_MODULI`, denominato `Evento ID - Titolo`; la scheda `Fogli iniziative` conserva collegamenti al foglio, al modulo Iscriviti e all’eventuale controllo Saldo;
+- se un foglio operativo viene cancellato, la verifica periodica lo segnala e il comando di ripristino lo ricrea dai dati centrali aggiornando la stessa riga di `Fogli iniziative`;
+- trascorsa la data dell’evento, il foglio viene spostato nella cartella `Eventi conclusi`; il documento e lo storico restano disponibili;
+- quando una bozza vuota viene eliminata definitivamente dopo 30 giorni, anche l’eventuale foglio viene cestinato e la relativa associazione viene rimossa;
 - dalla scheda si registrano versamenti usando la stessa validazione del foglio `Inserimento pagamenti` e si cambiano sistemazioni senza superarne la capienza;
 - **Configura elenco operativo** permette di scegliere per evento soltanto le colonne utili e produce un collegamento PDF A4 stampabile;
 - la prima vista operativa è dimostrativa; dopo l'approvazione viene conservata in una scheda dedicata e si riapre rapidamente. L'operatore può aggiornare soltanto i dati oppure rigenerare anche modello e colonne;

@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.19\.4/);
+	assert.match(source, /Version:\s+3\.20\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -128,6 +128,26 @@ test('il client Workspace riconosce un esito applicativo positivo anche dopo il 
 	const controlloHttp = source.indexOf('200 !== $http_status', decodifica);
 	assert.ok(decodifica >= 0 && esitoPositivo > decodifica);
 	assert.ok(controlloHttp > esitoPositivo);
+});
+
+test('i fogli evento vengono verificati, ricreati, archiviati e ripuliti senza perdere DB_MODULI', async () => {
+	const portal = await read('includes/class-mi-portal.php');
+	const webApp = await readFile(new URL('../../workspace-apps-script/src/WebApp.gs', import.meta.url), 'utf8');
+	const fogli = await readFile(new URL('../../workspace-apps-script/src/FogliOperativi.gs', import.meta.url), 'utf8');
+	assert.match(portal, /VERIFICA_FOGLIO_EVENTO/);
+	assert.match(portal, /VERIFICA_FOGLI_EVENTO/);
+	assert.match(portal, /ARCHIVIA_FOGLIO_EVENTO/);
+	assert.match(portal, /ELIMINA_FOGLIO_EVENTO/);
+	assert.match(portal, /Verifica o ricrea il foglio Google/);
+	assert.match(webApp, /VERIFICA_FOGLIO_EVENTO/);
+	assert.match(webApp, /VERIFICA_FOGLI_EVENTO/);
+	assert.match(webApp, /ARCHIVIA_FOGLIO_EVENTO/);
+	assert.match(webApp, /ELIMINA_FOGLIO_EVENTO/);
+	assert.match(fogli, /fileEsistente\.isTrashed\(\)/);
+	assert.match(fogli, /function verificaFogliEventoDaWordPress_/);
+	assert.match(fogli, /Eventi conclusi/);
+	assert.match(fogli, /setTrashed\(true\)/);
+	assert.match(fogli, /registro\.getRange\(esistente\._row/);
 });
 
 test('gli errori Workspace indicano una causa operativa senza esporre dettagli riservati', async () => {

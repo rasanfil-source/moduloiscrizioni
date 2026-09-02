@@ -15,6 +15,7 @@ final class MI_Portal {
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ) );
 		add_action( 'send_headers', array( __CLASS__, 'secure_cancellation_headers' ) );
 		add_action( 'mi_pulisci_bozze_cestinate', array( __CLASS__, 'purge_trashed_drafts' ) );
+		add_action( 'mi_pulisci_bozze_cestinate', array( __CLASS__, 'archive_completed_event_sheets' ), 20 );
 	}
 
 	/** Elimina definitivamente soltanto le bozze-evento nel cestino da oltre 30 giorni e prive di iscrizioni. */
@@ -33,7 +34,35 @@ final class MI_Portal {
 		global $wpdb;
 		foreach ( $drafts as $event_id ) {
 			$registrations = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d", $event_id ) );
-			if ( 0 === $registrations ) wp_delete_post( $event_id, true );
+			if ( 0 !== $registrations ) continue;
+			if ( ! get_post_meta( $event_id, '_mi_operational_sheet_id', true ) ) { wp_delete_post( $event_id, true ); continue; }
+			$pulizia = MI_Workspace_Client::request( 'ELIMINA_FOGLIO_EVENTO', array( 'id_evento' => (string) $event_id ) );
+			// In caso di indisponibilità Workspace conserviamo la bozza e riproviamo:
+			// è preferibile non lasciare un documento Drive senza riferimento.
+			if ( ! is_wp_error( $pulizia ) ) wp_delete_post( $event_id, true );
+		}
+	}
+
+	/** Archivia una sola volta i fogli degli eventi la cui data di inizio è trascorsa. */
+	public static function archive_completed_event_sheets() {
+		$published_status = 'publish';
+		$events = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => $published_status, 'numberposts' => 100, 'fields' => 'ids', 'meta_key' => '_mi_operational_sheet_id', 'no_found_rows' => true ) );
+		if ( $events ) {
+			$verifica = MI_Workspace_Client::request( 'VERIFICA_FOGLI_EVENTO', array( 'id_eventi' => array_map( 'strval', $events ) ) );
+			if ( ! is_wp_error( $verifica ) && ! empty( $verifica['stati'] ) && is_array( $verifica['stati'] ) ) {
+				foreach ( $verifica['stati'] as $stato ) {
+					$id = absint( $stato['id_evento'] ?? 0 );
+					if ( ! $id || ! in_array( $id, $events, true ) ) continue;
+					if ( empty( $stato['esiste'] ) ) update_post_meta( $id, '_mi_sheet_missing', '1' );
+					else delete_post_meta( $id, '_mi_sheet_missing' );
+				}
+			}
+		}
+		foreach ( $events as $event_id ) {
+			if ( get_post_meta( $event_id, '_mi_sheet_archived_at', true ) ) continue;
+			if ( ! self::is_past_event( (string) get_post_meta( $event_id, '_mi_event_starts_at', true ) ) ) continue;
+			$result = MI_Workspace_Client::request( 'ARCHIVIA_FOGLIO_EVENTO', array( 'id_evento' => (string) $event_id ) );
+			if ( ! is_wp_error( $result ) ) update_post_meta( $event_id, '_mi_sheet_archived_at', current_time( 'mysql', true ) );
 		}
 	}
 
@@ -70,6 +99,7 @@ final class MI_Portal {
 		}
 		if ( in_array( $action, array( 'update_event', 'cancel_event', 'archive_event', 'trash_event' ), true ) ) return self::handle_event_management_action( $action );
 		if ( 'prepare_event_outputs' === $action ) return self::handle_event_outputs_action();
+		if ( 'repair_event_sheet' === $action ) return self::handle_event_sheet_repair_action();
 		if ( 'publish_event_portal' === $action ) return self::handle_event_publication_action();
 		if ( 'prepare_communication' === $action ) return self::handle_communication_action();
 		if ( in_array( $action, array( 'add_communication_type', 'delete_communication_type' ), true ) ) return self::handle_communication_type_action( $action );
@@ -217,6 +247,21 @@ final class MI_Portal {
 		return self::redirect_result( 'Foglio Google collegato. Ora puoi pubblicare l’evento.', false, $event_id, true );
 	}
 
+	/** Verifica il collegamento e ricrea dai dati centrali un foglio mancante. */
+	private static function handle_event_sheet_repair_action() {
+		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_portal_access' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
+		$event_id = absint( $_POST['event_id'] ?? 0 );
+		check_admin_referer( 'mi_portal_repair_event_sheet_' . $event_id, 'mi_portal_nonce' );
+		if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Evento non accessibile.', 403 );
+		$verifica = MI_Workspace_Client::request( 'VERIFICA_FOGLIO_EVENTO', array( 'id_evento' => (string) $event_id ) );
+		if ( is_wp_error( $verifica ) ) return self::redirect_result( 'Non è stato possibile verificare il foglio: ' . $verifica->get_error_message(), true, $event_id, true );
+		if ( ! empty( $verifica['esiste'] ) ) return self::redirect_result( 'Il foglio Google è disponibile e correttamente collegato.', false, $event_id, true );
+		update_post_meta( $event_id, '_mi_sheet_missing', '1' );
+		$ricreato = self::prepara_produzioni_workspace( $event_id, 'publish' === get_post_status( $event_id ) ? 'PUBBLICATO' : 'BOZZA' );
+		if ( is_wp_error( $ricreato ) ) return self::redirect_result( 'Il foglio non è disponibile e non è stato possibile ricrearlo: ' . $ricreato->get_error_message(), true, $event_id, true );
+		return self::redirect_result( 'Il foglio mancante è stato ricreato dai dati conservati in DB_MODULI.', false, $event_id, true );
+	}
+
 	/** Crea o riallinea il foglio operativo e conserva tutti i collegamenti restituiti. */
 	private static function prepara_produzioni_workspace( $event_id, $stato ) {
 		$event = get_post( $event_id );
@@ -249,6 +294,7 @@ final class MI_Portal {
 		if ( $url_saldo ) update_post_meta( $event_id, '_mi_balance_url', esc_url_raw( $url_saldo ) );
 		else delete_post_meta( $event_id, '_mi_balance_url' );
 		update_post_meta( $event_id, '_mi_outputs_prepared_at', current_time( 'mysql', true ) );
+		delete_post_meta( $event_id, '_mi_sheet_missing' );
 		update_post_meta( $event_id, '_mi_manager_user_id', $gestore->ID );
 		return $result;
 	}
@@ -1255,6 +1301,7 @@ final class MI_Portal {
 			update_post_meta( $event_id, '_mi_ticket_types', array( array( 'code' => 'standard', 'name' => 'ZERO' === $pricing_mode ? 'Iscrizione' : 'Quota di partecipazione', 'price_cents' => 'FIXED' === $pricing_mode ? $fixed_price : 0, 'max_per_order' => 20, 'capacity' => 0 ) ) );
 		}
 		$sheet_url = esc_url( (string) get_post_meta( $event_id, '_mi_operational_sheet_url', true ) );
+		$sheet_missing = '1' === get_post_meta( $event_id, '_mi_sheet_missing', true );
 		$registration_url = esc_url( (string) get_post_meta( $event_id, '_mi_registration_url', true ) );
 		if ( ! $registration_url ) $registration_url = esc_url( MI_Shortcode::url_iscrizione( $event_id ) );
 		$balance_url = esc_url( (string) get_post_meta( $event_id, '_mi_balance_url', true ) );
@@ -1274,8 +1321,11 @@ final class MI_Portal {
 		} elseif ( $is_published ) {
 			echo '<div class="mi-event-outputs__success"><span aria-hidden="true">✓</span><div><strong>L’evento è pubblicato</strong><p>Il modulo di iscrizione è pronto. Puoi condividerlo con le persone interessate.</p></div></div>';
 			echo '<div class="mi-event-outputs__grid"><article class="mi-output-card mi-output-card--public"><span class="mi-output-card__audience">Per i partecipanti</span><h3>Condividi il modulo</h3><label>Link per le iscrizioni<div class="mi-output-copy"><input type="url" readonly value="' . esc_attr( $registration_url ) . '"><button type="button" class="mi-primary" data-mi-copy="' . esc_attr( $registration_url ) . '">Copia link</button></div></label><a class="mi-secondary mi-output-link" href="' . $registration_url . '" target="_blank" rel="noopener noreferrer">Apri il modulo <span aria-hidden="true">↗</span><span class="screen-reader-text"> (si apre in una nuova scheda)</span></a></article>';
-			echo '<article class="mi-output-card mi-output-card--internal"><span class="mi-output-card__audience">Per gli operatori</span><h3>Gestisci le iscrizioni</h3><p>Consulta e aggiorna i dati nel foglio Google dell’evento.</p><div class="mi-output-document"><span aria-hidden="true">▦</span><div><strong>Foglio iscrizioni</strong><small>' . esc_html( $event_title ) . '</small></div></div>' . ( $sheet_url ? '<a class="mi-secondary mi-output-link" href="' . $sheet_url . '" target="_blank" rel="noopener noreferrer">Apri il foglio Google <span aria-hidden="true">↗</span><span class="screen-reader-text"> (si apre in una nuova scheda)</span></a><details class="mi-output-disclosure"><summary>Mostra il collegamento al foglio</summary><label>Link del foglio Google<div class="mi-output-copy"><input type="url" readonly value="' . esc_attr( $sheet_url ) . '"><button type="button" class="mi-secondary" data-mi-copy="' . esc_attr( $sheet_url ) . '">Copia</button></div></label></details>' : '<p class="mi-portal-muted">Collegamento al foglio non ancora disponibile.</p>' ) . '</article></div>';
+			echo '<article class="mi-output-card mi-output-card--internal"><span class="mi-output-card__audience">Per gli operatori</span><h3>Gestisci le iscrizioni</h3><p>Consulta e aggiorna i dati nel foglio Google dell’evento.</p><div class="mi-output-document"><span aria-hidden="true">▦</span><div><strong>Foglio iscrizioni</strong><small>' . esc_html( $event_title ) . '</small></div></div>' . ( $sheet_missing ? '<p class="mi-portal-notice mi-portal-error"><strong>Foglio non disponibile.</strong> Usa il comando qui sotto per ricrearlo dai dati conservati.</p>' : ( $sheet_url ? '<a class="mi-secondary mi-output-link" href="' . $sheet_url . '" target="_blank" rel="noopener noreferrer">Apri il foglio Google <span aria-hidden="true">↗</span><span class="screen-reader-text"> (si apre in una nuova scheda)</span></a><details class="mi-output-disclosure"><summary>Mostra il collegamento al foglio</summary><label>Link del foglio Google<div class="mi-output-copy"><input type="url" readonly value="' . esc_attr( $sheet_url ) . '"><button type="button" class="mi-secondary" data-mi-copy="' . esc_attr( $sheet_url ) . '">Copia</button></div></label></details>' : '<p class="mi-portal-muted">Collegamento al foglio non ancora disponibile.</p>' ) ) . '</article></div>';
 			echo '<details class="mi-output-integration"><summary><span><strong>Inserisci il modulo nel sito</strong><small>Codice e indicazioni per WordPress e Divi</small></span><em>Facoltativo</em></summary><div><label>Codice da inserire nella pagina<div class="mi-output-copy"><input type="text" readonly value="' . esc_attr( '[modulo_iscrizioni event="' . $event_id . '"]' ) . '"><button type="button" class="mi-secondary" data-mi-copy="' . esc_attr( '[modulo_iscrizioni event="' . $event_id . '"]' ) . '">Copia codice</button></div></label><p>In Divi puoi anche aggiungere il modulo <strong>“Modulo iscrizioni”</strong> e selezionare <strong>' . esc_html( $event_title ) . '</strong>.</p></div></details>';
+			echo '<form method="post" class="mi-output-sheet-check"><input type="hidden" name="mi_portal_action" value="repair_event_sheet"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
+			wp_nonce_field( 'mi_portal_repair_event_sheet_' . $event_id, 'mi_portal_nonce' );
+			echo '<button type="submit" class="mi-secondary">Verifica o ricrea il foglio Google</button></form>';
 			if ( $has_balance ) echo '<div class="mi-output-balance"><h3>Controllo stato e saldo</h3>' . ( $balance_url ? '<a class="mi-secondary mi-output-link" href="' . $balance_url . '" target="_blank" rel="noopener noreferrer">Apri la pagina stato e saldo <span aria-hidden="true">↗</span></a><label>Collegamento per il pulsante Saldo<div class="mi-output-copy"><input type="url" readonly value="' . esc_attr( $balance_url ) . '"><button type="button" class="mi-secondary" data-mi-copy="' . esc_attr( $balance_url ) . '">Copia</button></div></label>' : '<p>Collegamento non ancora disponibile.</p>' ) . '</div>';
 		}
 		echo '</section>';
