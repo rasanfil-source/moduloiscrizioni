@@ -209,7 +209,10 @@ final class MI_Spedizione_Email {
 		$corpo = MI_Modello_Email::componi_html( $istantanea );
 		self::$corpo_testo = MI_Modello_Email::componi_testo( $istantanea );
 		add_action( 'phpmailer_init', array( __CLASS__, 'incorpora_codice' ) );
-		$inviata = wp_mail( $destinatario, $oggetto, $corpo, array( 'Content-Type: text/html; charset=UTF-8' ) );
+		// La prova usa esclusivamente il canale firmato del progetto MODULI.
+		// La posta generale di WordPress e degli altri plugin resta invariata.
+		$risposta_workspace = MI_Workspace_Client::request( 'INVIA_EMAIL_PROVA', array( 'destinatario' => $destinatario, 'oggetto' => $oggetto, 'html' => $corpo, 'testo' => self::$corpo_testo ) );
+		$inviata = ! is_wp_error( $risposta_workspace ) && ! empty( $risposta_workspace['ok'] );
 		remove_action( 'phpmailer_init', array( __CLASS__, 'incorpora_codice' ) );
 		self::$corpo_testo = '';
 		if ( $inviata ) {
