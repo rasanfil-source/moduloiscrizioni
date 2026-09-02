@@ -1,6 +1,6 @@
 # Progetto: sistema multi-evento di iscrizione e pagamento
 
-Stato: implementazione revisionata — WordPress 3.12.0 / Workspace 1.8.0
+Stato: implementazione revisionata — WordPress 3.19.0 / Workspace 1.8.0
 Data: 27 agosto 2026
 
 Per lo stato puntuale delle funzioni confermate, parziali e fuori scope della v1 si applica `docs/ALLINEAMENTO_CODICE_DOCUMENTAZIONE.md`.

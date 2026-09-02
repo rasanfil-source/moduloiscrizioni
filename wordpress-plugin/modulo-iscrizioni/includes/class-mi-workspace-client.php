@@ -25,22 +25,32 @@ final class MI_Workspace_Client {
 		$action = strtoupper( sanitize_key( $action ) );
 		$timestamp = (int) floor( microtime( true ) * 1000 );
 		$nonce = bin2hex( random_bytes( 16 ) );
-		$message = $timestamp . "\n" . $nonce . "\n" . $action . "\n" . self::stable_json( $payload );
+		$payload_firmato = self::stable_json( $payload );
+		// Il protocollo 2 firma l'impronta ASCII del contenuto. In questo modo PHP e
+		// Apps Script non possono interpretare diversamente caratteri Unicode o URL.
+		$payload_hash = hash( 'sha256', $payload_firmato );
+		$message = $timestamp . "\n" . $nonce . "\n" . $action . "\n" . $payload_hash;
 		$signature = rtrim( strtr( base64_encode( hash_hmac( 'sha256', $message, self::shared_secret(), true ) ), '+/', '-_' ), '=' );
 		$body = wp_json_encode(
 			array(
+				'protocollo' => 2,
 				'timestamp' => $timestamp,
 				'nonce'     => $nonce,
 				'action'    => $action,
 				'payload'   => $payload,
+				'payload_firmato' => $payload_firmato,
+				'payload_hash' => $payload_hash,
 				'signature' => $signature,
 			),
 			JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 		);
+		// La prima preparazione del foglio può richiedere più tempo delle normali repliche.
+		// L'operazione remota è idempotente e un nuovo tentativo non duplica il foglio.
+		$timeout = 'PREPARA_PRODUZIONI_EVENTO' === $action ? 45 : 15;
 		$response = wp_remote_post(
 			self::webapp_url(),
 			array(
-				'timeout'     => 15,
+				'timeout'     => $timeout,
 				'redirection' => 0,
 				'headers'     => array( 'Content-Type' => 'application/json; charset=utf-8' ),
 				'body'        => $body,
@@ -58,7 +68,7 @@ final class MI_Workspace_Client {
 			if ( 'https' !== $scheme || ! $host_google ) {
 				return new WP_Error( 'mi_workspace_redirect_invalid', 'Workspace ha restituito un reindirizzamento non valido.' );
 			}
-			$response = wp_remote_get( $location, array( 'timeout' => 15, 'redirection' => 3 ) );
+			$response = wp_remote_get( $location, array( 'timeout' => $timeout, 'redirection' => 3 ) );
 			if ( is_wp_error( $response ) ) {
 				return new WP_Error( 'mi_workspace_unreachable', 'Workspace non raggiungibile.' );
 			}
@@ -73,12 +83,17 @@ final class MI_Workspace_Client {
 			$motivi = array(
 				'ACTION_NOT_ALLOWED' => 'la distribuzione Apps Script non riconosce ancora questa operazione',
 				'INVALID_SIGNATURE'  => 'la firma condivisa non coincide',
+				'INVALID_PAYLOAD_HASH' => 'il contenuto ricevuto non coincide con quello firmato',
 				'STALE_REQUEST'      => 'la richiesta è arrivata fuori tempo',
 				'REPLAYED_NONCE'     => 'la richiesta risulta già utilizzata',
 				'REQUEST_FAILED'     => 'Apps Script ha incontrato un errore durante l’elaborazione',
 				'EMPTY_PAYLOAD'      => 'la richiesta è arrivata vuota',
 			);
 			$detail = $motivi[ $remote_code ] ?? 'la richiesta non è stata accettata';
+			if ( 'REQUEST_FAILED' === $remote_code && current_user_can( 'manage_options' ) && ! empty( $decoded['diagnostic'] ) ) {
+				$diagnostic = sanitize_text_field( (string) $decoded['diagnostic'] );
+				if ( $diagnostic ) $detail .= ' (' . $diagnostic . ')';
+			}
 			return new WP_Error( 'mi_workspace_rejected', 'Workspace ha rifiutato la richiesta: ' . $detail . '.' );
 		}
 		return $decoded;

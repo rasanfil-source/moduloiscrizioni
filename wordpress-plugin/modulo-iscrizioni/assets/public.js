@@ -323,11 +323,11 @@
       const label = document.createElement('label');
 	  label.textContent = required && field.required ? `${field.label} *` : field.label;
       let input;
-      if (field.type === 'select') {
+      if (field.type === 'select' || field.type === 'yesno') {
         input = document.createElement('select');
         const empty = document.createElement('option');
         empty.value = '';
-        empty.textContent = 'Seleziona';
+        empty.textContent = field.type === 'yesno' ? 'Scegli la risposta appropriata' : 'Seleziona';
         input.append(empty);
         (field.options || []).forEach((choice) => {
           const option = document.createElement('option');

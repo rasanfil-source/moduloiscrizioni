@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.17\.0/);
+	assert.match(source, /Version:\s+3\.19\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -62,6 +62,19 @@ test('il passaggio conclusivo usa identità del gruppo, nome evento e azioni dis
   assert.doesNotMatch(portal, /Un unico link per raccogliere|condividerlo con la tua comunità|Uno spazio per la nostra comunità/);
   assert.match(portalJs, /navigator\.clipboard\?\.writeText/);
   assert.match(portalJs, /Copia automatica non disponibile/);
+});
+
+test('le domande aggiuntive possono richiedere una risposta sì o no', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const schema = await read('includes/class-mi-field-schema.php');
+  const publicScript = await read('assets/public.js');
+  assert.match(portal, /option value="yesno"/);
+  assert.match(portal, />Sì \/ No<\/option>/);
+  assert.match(schema, /array\( 'Sì', 'No' \)/);
+  assert.match(schema, /Scegli la risposta appropriata\./);
+  assert.match(schema, /array\( 'select', 'yesno' \)/);
+  assert.match(publicScript, /field\.type === 'select' \|\| field\.type === 'yesno'/);
+  assert.match(publicScript, /Scegli la risposta appropriata/);
 });
 
 test('la pubblicazione mostra attesa ed esito vicino al comando senza duplicare il pannello', async () => {
@@ -1315,13 +1328,19 @@ test('selezionare una bozza riprende il percorso guidato e conduce ad Attiva l�
   assert.match(script, /updateOvernight\(\)/);
 });
 
-test('il portale consente di creare un gruppo senza duplicare lo slug', async () => {
+test('il portale gestisce i gruppi in una scheda dedicata e il wizard vi rimanda', async () => {
   const portal = await read('includes/class-mi-portal.php');
-  assert.match(portal, /name="new_group_name"/);
-  assert.match(portal, /find_or_create_group/);
-  assert.match(portal, /get_page_by_path/);
+  const css = await read('assets/portal.css');
+  assert.doesNotMatch(portal, /name="new_group_name"/);
+  assert.match(portal, /mi_portal_view', 'groups'/);
+  assert.match(portal, /Apri Gestisci gruppi/);
+  assert.match(portal, /create_group', 'update_group', 'delete_group/);
+  assert.match(portal, /Logo/);
+  assert.match(portal, /Immagine in evidenza/);
+  assert.match(portal, /2 \* MB_IN_BYTES/);
   assert.match(portal, /GROUP_TYPE/);
   assert.match(portal, /mi_manage_all_events/);
+  assert.match(css, /\.mi-group-form-grid/);
 });
 
 test('Workspace può creare gruppi WordPress e risolverli per slug', async () => {

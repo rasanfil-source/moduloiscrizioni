@@ -169,12 +169,15 @@ final class MI_Field_Schema {
 			$label = mb_substr( sanitize_text_field( $raw['label'] ?? '' ), 0, 120 );
 			$key = sanitize_key( $raw['key'] ?? '' );
 			$key = $key ? 'custom_' . preg_replace( '/^custom_/', '', $key ) : 'custom_domanda_' . ( $index + 1 );
-			$type = in_array( $raw['type'] ?? '', array( 'text', 'textarea', 'date', 'select', 'email', 'tel' ), true ) ? $raw['type'] : 'text';
+			$type = in_array( $raw['type'] ?? '', array( 'text', 'textarea', 'date', 'select', 'yesno', 'email', 'tel' ), true ) ? $raw['type'] : 'text';
 			if ( ! $label || isset( $seen[ $key ] ) ) continue;
 			$seen[ $key ] = true;
 			$retention = 'SHEETS_ONLY' === strtoupper( sanitize_key( $raw['retention'] ?? '' ) ) ? 'SHEETS_ONLY' : 'STANDARD';
 			$field = array( 'key' => $key, 'label' => $label, 'type' => $type, 'required' => ! empty( $raw['required'] ), 'max_length' => 'textarea' === $type ? 1000 : ( 'email' === $type ? 254 : 180 ), 'help' => '', 'retention' => $retention );
-			if ( 'select' === $type ) {
+			if ( 'yesno' === $type ) {
+				$field['options'] = array( 'Sì', 'No' );
+				$field['help'] = 'Scegli la risposta appropriata.';
+			} elseif ( 'select' === $type ) {
 				$options = array_values( array_unique( array_filter( array_map( 'sanitize_text_field', preg_split( '/[\r\n|]+/', (string) ( $raw['options'] ?? '' ) ) ) ) ) );
 				if ( count( $options ) < 2 ) continue;
 				$field['options'] = array_slice( $options, 0, 30 );
@@ -228,7 +231,7 @@ final class MI_Field_Schema {
 					return new WP_Error( 'mi_participant_date_invalid', 'Controlla le date dei partecipanti.', array( 'status' => 400 ) );
 				}
 				$answers[ $key ] = $value;
-			} elseif ( 'select' === $field['type'] ) {
+			} elseif ( in_array( $field['type'], array( 'select', 'yesno' ), true ) ) {
 				if ( ! in_array( $value, $field['options'], true ) ) {
 					return new WP_Error( 'mi_participant_choice_invalid', 'Controlla le opzioni dei partecipanti.', array( 'status' => 400 ) );
 				}
