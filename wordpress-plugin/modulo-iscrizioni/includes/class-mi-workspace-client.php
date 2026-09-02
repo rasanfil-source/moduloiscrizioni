@@ -88,6 +88,9 @@ final class MI_Workspace_Client {
 				'REPLAYED_NONCE'     => 'la richiesta risulta già utilizzata',
 				'REQUEST_FAILED'     => 'Apps Script ha incontrato un errore durante l’elaborazione',
 				'EMPTY_PAYLOAD'      => 'la richiesta è arrivata vuota',
+				'TEST_RECIPIENT_NOT_CONFIGURED' => 'il destinatario di prova non è configurato nel progetto MODULI',
+				'TEST_RECIPIENT_MISMATCH' => 'il destinatario non coincide con quello autorizzato nel progetto MODULI',
+				'INVALID_EMAIL_PAYLOAD' => 'il contenuto dell’email di prova non è valido',
 			);
 			$detail = $motivi[ $remote_code ] ?? 'la richiesta non è stata accettata';
 			if ( 'REQUEST_FAILED' === $remote_code && current_user_can( 'manage_options' ) && ! empty( $decoded['diagnostic'] ) ) {

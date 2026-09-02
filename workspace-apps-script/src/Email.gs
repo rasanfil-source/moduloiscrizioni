@@ -1,5 +1,21 @@
 const MI_TEST_EMAIL_PROPERTY = 'MI_EMAIL_TEST_RECIPIENT';
 
+/** Invia soltanto la prova del Modulo Iscrizioni richiesta da WordPress. */
+function inviaEmailProvaDaWordPress_(payload) {
+  payload = payload && typeof payload === 'object' ? payload : {};
+  const destinatarioConfigurato = String(PropertiesService.getScriptProperties().getProperty(MI_TEST_EMAIL_PROPERTY) || '').trim().toLowerCase();
+  const destinatario = normalizzaTesto_(payload.destinatario, 254).trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destinatarioConfigurato)) return { ok: false, error: 'TEST_RECIPIENT_NOT_CONFIGURED' };
+  if (destinatario !== destinatarioConfigurato) return { ok: false, error: 'TEST_RECIPIENT_MISMATCH' };
+  const oggetto = normalizzaTesto_(payload.oggetto, 180);
+  const testo = String(payload.testo || '').slice(0, 12000);
+  const html = String(payload.html || '').slice(0, 60000);
+  if (!oggetto || !testo || !html) return { ok: false, error: 'INVALID_EMAIL_PAYLOAD' };
+  MailApp.sendEmail({ to: destinatarioConfigurato, subject: oggetto, body: testo, htmlBody: html, name: 'Modulo Iscrizioni' });
+  aggiungiControllo_('SEND_TEST_EMAIL', 'EMAIL', 'PROVA_WORDPRESS', 'SUCCESS', 'WORDPRESS', 'SIGNED_TEST_RECIPIENT', 'WORDPRESS_PROXY');
+  return { ok: true, channel: 'GOOGLE_WORKSPACE' };
+}
+
 function configuraDestinatarioTestEmail() {
   const ui = SpreadsheetApp.getUi();
   const response = ui.prompt('Destinatario email di test', 'Inserisci l’indirizzo privato che riceverà tutte le prove. Non sarà salvato nel foglio né nel repository.', ui.ButtonSet.OK_CANCEL);
