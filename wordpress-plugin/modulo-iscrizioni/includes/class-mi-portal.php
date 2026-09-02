@@ -1161,6 +1161,16 @@ final class MI_Portal {
 	}
 	private static function event_outputs_panel( $event_id ) {
 		if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) return;
+		$event = get_post( $event_id );
+		$event_title = $event ? trim( (string) $event->post_title ) : '';
+		if ( ! $event_title ) $event_title = 'Evento';
+		$group_id = absint( get_post_meta( $event_id, '_mi_activity_id', true ) );
+		$group_title = $group_id ? trim( (string) get_the_title( $group_id ) ) : '';
+		if ( ! $group_title ) $group_title = 'Parrocchia Sant’Eugenio';
+		$group_logo_id = $group_id ? get_post_thumbnail_id( $group_id ) : 0;
+		$group_logo = $group_logo_id ? (string) wp_get_attachment_image_url( $group_logo_id, 'thumbnail' ) : '';
+		if ( ! $group_logo && $group_id ) $group_logo = esc_url( (string) get_post_meta( $group_id, '_mi_group_logo_url', true ) );
+		$group_initials = implode( '', array_map( static function ( $word ) { return function_exists( 'mb_substr' ) ? mb_substr( $word, 0, 1 ) : substr( $word, 0, 1 ); }, array_slice( preg_split( '/\s+/', $group_title ) ?: array(), 0, 2 ) ) );
 		$ticket_types = get_post_meta( $event_id, '_mi_ticket_types', true );
 		if ( ! is_array( $ticket_types ) || empty( $ticket_types ) ) {
 			$pricing_mode = (string) get_post_meta( $event_id, '_mi_pricing_mode', true );
@@ -1174,8 +1184,10 @@ final class MI_Portal {
 		$has_balance = 'DEPOSIT_BALANCE' === get_post_meta( $event_id, '_mi_economic_mode', true );
 		$is_published = 'publish' === get_post_status( $event_id );
 		$preview_url = wp_nonce_url( admin_url( 'admin-post.php?action=mi_anteprima_evento&event=' . $event_id ), 'mi_anteprima_evento_' . $event_id );
-		echo '<section class="mi-event-outputs" id="mi-produzioni-evento" tabindex="-1" data-mi-event-outputs><span class="mi-portal-eyebrow">Passaggio conclusivo</span><h2>' . ( $is_published ? 'Collegamenti dell’evento' : 'Controlla e pubblica' ) . '</h2>';
+		echo '<section class="mi-event-outputs' . ( $is_published ? ' is-published' : '' ) . '" id="mi-produzioni-evento" tabindex="-1" data-mi-event-outputs>';
+		echo '<header class="mi-event-outputs__header"><div class="mi-event-outputs__brand">' . ( $group_logo ? '<img src="' . esc_url( $group_logo ) . '" alt="">' : '<span aria-hidden="true">' . esc_html( strtoupper( $group_initials ?: 'SE' ) ) . '</span>' ) . '<div><small>Gruppo organizzatore</small><strong>' . esc_html( $group_title ) . '</strong></div></div><div class="mi-event-outputs__event"><span class="mi-portal-eyebrow">Passaggio conclusivo</span><h2>' . esc_html( $event_title ) . '</h2></div></header>';
 		if ( ! $is_published ) {
+			echo '<h3>Controlla e pubblica</h3>';
 			echo '<p>Controlla il modulo senza renderlo pubblico. Quando confermi, WordPress pubblica l’evento e crea automaticamente il relativo foglio Google.</p><ol><li><strong>Visualizza anteprima</strong><a href="' . esc_url( $preview_url ) . '" target="_blank" rel="noopener">Apri l’anteprima del modulo di iscrizione</a></li><li><strong>Pubblica evento</strong><span>Crea il foglio Google e attiva il modulo di iscrizione.</span></li></ol>';
 		}
 		if ( ! $is_published && ( current_user_can( 'mi_publish_events' ) || current_user_can( 'manage_options' ) ) ) {
@@ -1183,9 +1195,12 @@ final class MI_Portal {
 			wp_nonce_field( 'mi_portal_publish_event_' . $event_id, 'mi_portal_nonce' );
 			echo '<button class="mi-primary" type="submit">Pubblica evento</button><span class="mi-action-progress" role="status" aria-live="polite" hidden></span></form>';
 		} elseif ( $is_published ) {
-			echo '<ol><li><strong>Modulo iscrizioni pubblicato</strong><a href="' . $registration_url . '" target="_blank" rel="noopener">Apri il modulo di iscrizione</a><label>Collegamento per il pulsante Iscriviti<input type="url" readonly value="' . esc_attr( $registration_url ) . '"></label></li><li><strong>Codice per WordPress e Divi</strong><label>Modulo da inserire nella pagina<input type="text" readonly value="' . esc_attr( '[modulo_iscrizioni event="' . $event_id . '"]' ) . '"></label><small>Il modulo “Modulo iscrizioni” di Divi permette di scegliere lo stesso evento senza scrivere il codice.</small></li><li><strong>Foglio iscrizioni</strong>' . ( $sheet_url ? '<a href="' . $sheet_url . '" target="_blank" rel="noopener">Per operare sul foglio iscrizioni di questo evento: apri il foglio Google</a><label>Collegamento al foglio<input type="url" readonly value="' . esc_attr( $sheet_url ) . '"></label>' : '<span>Collegamento al foglio non ancora disponibile.</span>' ) . '</li>';
-			if ( $has_balance ) echo '<li><strong>Controllo stato e saldo</strong>' . ( $balance_url ? '<a href="' . $balance_url . '" target="_blank" rel="noopener">Apri la pagina stato e saldo</a><label>Collegamento per il pulsante Saldo<input type="url" readonly value="' . esc_attr( $balance_url ) . '"></label>' : '<span>Collegamento non ancora disponibile.</span>' ) . '</li>';
-			echo '</ol>';
+			echo '<div class="mi-event-outputs__success"><span aria-hidden="true">✓</span><div><strong>L’evento è pubblicato</strong><p>Il modulo di iscrizione è pronto. Puoi condividerlo con le persone interessate.</p></div></div>';
+			echo '<div class="mi-event-outputs__grid"><article class="mi-output-card mi-output-card--public"><span class="mi-output-card__audience">Per i partecipanti</span><h3>Condividi il modulo</h3><label>Link per le iscrizioni<div class="mi-output-copy"><input type="url" readonly value="' . esc_attr( $registration_url ) . '"><button type="button" class="mi-primary" data-mi-copy="' . esc_attr( $registration_url ) . '">Copia link</button></div></label><a class="mi-secondary mi-output-link" href="' . $registration_url . '" target="_blank" rel="noopener noreferrer">Apri il modulo <span aria-hidden="true">↗</span><span class="screen-reader-text"> (si apre in una nuova scheda)</span></a></article>';
+			echo '<article class="mi-output-card mi-output-card--internal"><span class="mi-output-card__audience">Per gli operatori</span><h3>Gestisci le iscrizioni</h3><p>Consulta e aggiorna i dati nel foglio Google dell’evento.</p><div class="mi-output-document"><span aria-hidden="true">▦</span><div><strong>' . esc_html( $event_title ) . '</strong><small>Foglio Google</small></div></div>' . ( $sheet_url ? '<a class="mi-secondary mi-output-link" href="' . $sheet_url . '" target="_blank" rel="noopener noreferrer">Apri il foglio Google <span aria-hidden="true">↗</span><span class="screen-reader-text"> (si apre in una nuova scheda)</span></a><details class="mi-output-disclosure"><summary>Mostra il collegamento al foglio</summary><label>Link del foglio Google<div class="mi-output-copy"><input type="url" readonly value="' . esc_attr( $sheet_url ) . '"><button type="button" class="mi-secondary" data-mi-copy="' . esc_attr( $sheet_url ) . '">Copia</button></div></label></details>' : '<p class="mi-portal-muted">Collegamento al foglio non ancora disponibile.</p>' ) . '</article></div>';
+			echo '<details class="mi-output-integration"><summary><span><strong>Inserisci il modulo nel sito</strong><small>Codice e indicazioni per WordPress e Divi</small></span><em>Facoltativo</em></summary><div><label>Codice da inserire nella pagina<div class="mi-output-copy"><input type="text" readonly value="' . esc_attr( '[modulo_iscrizioni event="' . $event_id . '"]' ) . '"><button type="button" class="mi-secondary" data-mi-copy="' . esc_attr( '[modulo_iscrizioni event="' . $event_id . '"]' ) . '">Copia codice</button></div></label><p>In Divi puoi anche aggiungere il modulo <strong>“Modulo iscrizioni”</strong> e selezionare <strong>' . esc_html( $event_title ) . '</strong>.</p></div></details>';
+			if ( $has_balance ) echo '<div class="mi-output-balance"><h3>Controllo stato e saldo</h3>' . ( $balance_url ? '<a class="mi-secondary mi-output-link" href="' . $balance_url . '" target="_blank" rel="noopener noreferrer">Apri la pagina stato e saldo <span aria-hidden="true">↗</span></a><label>Collegamento per il pulsante Saldo<div class="mi-output-copy"><input type="url" readonly value="' . esc_attr( $balance_url ) . '"><button type="button" class="mi-secondary" data-mi-copy="' . esc_attr( $balance_url ) . '">Copia</button></div></label>' : '<p>Collegamento non ancora disponibile.</p>' ) . '</div>';
+			echo '<p class="mi-output-privacy"><strong>Due strumenti, due destinatari.</strong> Condividi il modulo con le persone interessate; usa il foglio Google soltanto per la gestione interna.</p><footer class="mi-event-outputs__footer">Segreteria eventi · ' . esc_html( $group_title ) . '</footer>';
 		}
 		echo '</section>';
 	}

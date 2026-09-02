@@ -48,8 +48,20 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.16\.0/);
+	assert.match(source, /Version:\s+3\.17\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
+});
+
+test('il passaggio conclusivo usa identità del gruppo, nome evento e azioni distinte', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const portalJs = await read('assets/portal.js');
+  assert.match(portal, /Gruppo organizzatore/);
+  assert.match(portal, /Il modulo di iscrizione è pronto\. Puoi condividerlo con le persone interessate\./);
+  assert.match(portal, /esc_html\( \$event_title \).*Foglio Google/s);
+  assert.match(portal, /Due strumenti, due destinatari\./);
+  assert.doesNotMatch(portal, /Un unico link per raccogliere|condividerlo con la tua comunità|Uno spazio per la nostra comunità/);
+  assert.match(portalJs, /navigator\.clipboard\?\.writeText/);
+  assert.match(portalJs, /Copia automatica non disponibile/);
 });
 
 test('la pubblicazione mostra attesa ed esito vicino al comando senza duplicare il pannello', async () => {
@@ -1468,10 +1480,10 @@ test('il wizard distingue anteprima e pubblicazione e crea il foglio pubblicando
   assert.match(portalScript, /eventOutputs\.scrollIntoView/);
 	assert.doesNotMatch(portal, />Crea e collega il foglio Google</);
 	assert.doesNotMatch(portal, /Salva e continua la produzione|Produci pulsante e foglio Google/);
-	assert.match(portal, /Collegamento per il pulsante Iscriviti/);
+	assert.match(portal, /Link per le iscrizioni/);
 	assert.match(portal, /Collegamento per il pulsante Saldo/);
-	assert.match(portal, /Per operare sul foglio iscrizioni di questo evento/);
-	assert.match(portal, /Codice per WordPress e Divi/);
+	assert.match(portal, /Apri il foglio Google/);
+	assert.match(portal, /Codice e indicazioni per WordPress e Divi/);
   assert.match(portal, /_mi_registration_url/);
   assert.match(portal, /_mi_balance_url/);
   assert.match(portal, /'url_iscrizione' => \$url_iscrizione/);
