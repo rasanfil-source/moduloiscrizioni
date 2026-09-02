@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.20\.2/);
+	assert.match(source, /Version:\s+3\.20\.3/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -94,7 +94,11 @@ test('la pubblicazione assegna un solo gestore, condivide il foglio e prepara la
   assert.match(portal, /function risolvi_gestore_evento/);
   assert.match(portal, /'email_gestore' => \$gestore \? \$gestore->user_email : ''/);
   assert.doesNotMatch(portal, /risolvi_gestore_evento\( \$event_id, true \)/);
-  assert.match(portal, /if \( ! \$gestore \) return self::redirect_result/);
+  assert.match(portal, /if \( ! \$gestore \) \{/);
+  assert.match(portal, /get_option\( 'mi_email_segreteria_eventi', '' \)/);
+  assert.match(portal, /accoda_notifica_gestore_evento\( \$event_id, null,/);
+  assert.match(email, /\$gestore \? \$gestore->user_email : \$email_segreteria/);
+  assert.match(email, /\?WP_User \$gestore/);
   assert.match(portal, /_mi_manager_user_id/);
   assert.match(portal, /accoda_notifica_gestore_evento/);
   assert.match(email, /function accoda_notifica_gestore_evento/);

@@ -343,7 +343,13 @@ final class MI_Portal {
 		$workspace = self::prepara_produzioni_workspace( $event_id, 'PUBBLICATO' );
 		if ( is_wp_error( $workspace ) ) return self::redirect_result( 'Evento pubblicato; Workspace non ha ancora registrato lo stato aggiornato: ' . $workspace->get_error_message(), true, $event_id, true );
 		$gestore = self::risolvi_gestore_evento( $event_id, false );
-		if ( ! $gestore ) return self::redirect_result( 'Evento pubblicato e foglio Google collegato. Nessun gestore univoco con email valida: non sono state aggiunte condivisioni né preparate comunicazioni a un operatore del gruppo.', false, $event_id, true );
+		if ( ! $gestore ) {
+			$email_segreteria = sanitize_email( get_option( 'mi_email_segreteria_eventi', '' ) );
+			if ( ! is_email( $email_segreteria ) ) return self::redirect_result( 'Evento pubblicato e foglio Google collegato. Configura l’email della segreteria in Collegamento Workspace per ricevere la comunicazione in assenza di un operatore.', false, $event_id, true );
+			$notifica = MI_Spedizione_Email::accoda_notifica_gestore_evento( $event_id, null, (string) ( $workspace['url_foglio'] ?? '' ), $email_segreteria );
+			if ( is_wp_error( $notifica ) ) return self::redirect_result( 'Evento pubblicato; comunicazione alla segreteria non preparata: ' . $notifica->get_error_message(), true, $event_id, true );
+			return self::redirect_result( 'Evento pubblicato e foglio Google collegato. Comunicazione alla segreteria preparata in modalità ' . esc_html( $notifica['mode'] ?? 'ANTEPRIMA' ) . '.', false, $event_id, true );
+		}
 		$notifica = MI_Spedizione_Email::accoda_notifica_gestore_evento( $event_id, $gestore, (string) ( $workspace['url_foglio'] ?? '' ) );
 		if ( is_wp_error( $notifica ) ) return self::redirect_result( 'Evento pubblicato e foglio condiviso; non è stato possibile preparare la comunicazione al gestore: ' . $notifica->get_error_message(), true, $event_id, true );
 		return self::redirect_result( 'Evento pubblicato. Foglio Google condiviso con il gestore e comunicazione preparata in modalità ' . esc_html( $notifica['mode'] ?? 'ANTEPRIMA' ) . '.', false, $event_id, true );
