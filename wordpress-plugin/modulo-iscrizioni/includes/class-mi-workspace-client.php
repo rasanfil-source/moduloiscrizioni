@@ -46,7 +46,7 @@ final class MI_Workspace_Client {
 		);
 		// La prima preparazione del foglio può richiedere più tempo delle normali repliche.
 		// L'operazione remota è idempotente e un nuovo tentativo non duplica il foglio.
-		$timeout = 'PREPARA_PRODUZIONI_EVENTO' === $action ? 45 : 15;
+		$timeout = in_array( $action, array( 'PREPARA_PRODUZIONI_EVENTO', 'INVIA_EMAIL_PROVA' ), true ) ? 45 : 15;
 		$response = wp_remote_post(
 			self::webapp_url(),
 			array(
@@ -74,10 +74,16 @@ final class MI_Workspace_Client {
 			}
 			$http_status = (int) wp_remote_retrieve_response_code( $response );
 		}
-		if ( 200 !== $http_status ) {
-			return new WP_Error( 'mi_workspace_http_' . $http_status, 'Workspace ha restituito una risposta HTTP inattesa.' );
-		}
 		$decoded = json_decode( wp_remote_retrieve_body( $response ), true );
+		// ContentService può consegnare correttamente il JSON dopo un ponte Google
+		// con uno stato HTTP non canonico. Il contenuto applicativo firmato prevale:
+		// un esito positivo esplicito evita di dichiarare fallita un'email già inviata.
+		if ( is_array( $decoded ) && ! empty( $decoded['ok'] ) ) {
+			return $decoded;
+		}
+		if ( 200 !== $http_status ) {
+			return new WP_Error( 'mi_workspace_http_' . $http_status, 'Workspace ha restituito una risposta HTTP inattesa (' . $http_status . ').' );
+		}
 		if ( ! is_array( $decoded ) || empty( $decoded['ok'] ) ) {
 			$remote_code = is_array( $decoded ) ? strtoupper( sanitize_key( (string) ( $decoded['error'] ?? '' ) ) ) : '';
 			$motivi = array(
