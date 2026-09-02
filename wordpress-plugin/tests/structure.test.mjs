@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.19\.1/);
+	assert.match(source, /Version:\s+3\.19\.4/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -57,8 +57,9 @@ test('il passaggio conclusivo usa identità del gruppo, nome evento e azioni dis
   const portalJs = await read('assets/portal.js');
   assert.match(portal, /Gruppo organizzatore/);
   assert.match(portal, /Il modulo di iscrizione è pronto\. Puoi condividerlo con le persone interessate\./);
-  assert.match(portal, /esc_html\( \$event_title \).*Foglio Google/s);
-  assert.match(portal, /Due strumenti, due destinatari\./);
+  assert.match(portal, /Foglio iscrizioni.*esc_html\( \$event_title \)/s);
+  assert.doesNotMatch(portal, /Due strumenti, due destinatari\.|Segreteria eventi ·/);
+  assert.match(portal, /mi_portal_outputs.*'publish' === get_post_status/s);
   assert.doesNotMatch(portal, /Un unico link per raccogliere|condividerlo con la tua comunità|Uno spazio per la nostra comunità/);
   assert.match(portalJs, /navigator\.clipboard\?\.writeText/);
   assert.match(portalJs, /Copia automatica non disponibile/);
@@ -118,6 +119,15 @@ test('il client Workspace firma le richieste e non contiene configurazione priva
   assert.match(source, /MI_WORKSPACE_SHARED_SECRET/);
   assert.match(source, /stable_json/);
   assert.doesNotMatch(source, /script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+/);
+});
+
+test('il client Workspace riconosce un esito applicativo positivo anche dopo il ponte Google', async () => {
+	const source = await read('includes/class-mi-workspace-client.php');
+	const decodifica = source.indexOf("$decoded = json_decode");
+	const esitoPositivo = source.indexOf("! empty( $decoded['ok'] )", decodifica);
+	const controlloHttp = source.indexOf('200 !== $http_status', decodifica);
+	assert.ok(decodifica >= 0 && esitoPositivo > decodifica);
+	assert.ok(controlloHttp > esitoPositivo);
 });
 
 test('gli errori Workspace indicano una causa operativa senza esporre dettagli riservati', async () => {

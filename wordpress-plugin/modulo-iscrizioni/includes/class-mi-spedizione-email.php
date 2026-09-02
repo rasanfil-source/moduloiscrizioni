@@ -145,10 +145,12 @@ final class MI_Spedizione_Email {
 		$destinatario = (string) get_option( self::OPZIONE_DESTINATARIO_PROVA, '' );
 		$verificata = self::prova_verificata();
 		$esito = isset( $_GET['mi_esito'] ) ? sanitize_key( wp_unslash( $_GET['mi_esito'] ) ) : '';
+		$dettaglio_prova = get_transient( 'mi_esito_email_prova_' . get_current_user_id() );
+		delete_transient( 'mi_esito_email_prova_' . get_current_user_id() );
 		$messaggi = array(
 			'salvato' => array( 'success', 'Impostazioni salvate.' ),
 			'prova_ok' => array( 'success', 'Email sintetica di prova inviata. La modalità operativa può ora essere selezionata.' ),
-			'prova_ko' => array( 'error', 'Invio di prova non riuscito. Controlla la configurazione di posta del sito.' ),
+			'prova_ko' => array( 'error', $dettaglio_prova ? 'Invio di prova non riuscito: ' . $dettaglio_prova : 'Invio di prova non riuscito tramite MODULI.' ),
 			'indirizzo' => array( 'error', 'Inserisci un indirizzo di prova valido.' ),
 			'prova_richiesta' => array( 'error', 'La modalità operativa richiede prima un invio di prova riuscito verso l’indirizzo attuale.' ),
 		);
@@ -218,6 +220,9 @@ final class MI_Spedizione_Email {
 		if ( $inviata ) {
 			update_option( self::OPZIONE_PROVA_VERIFICATA, self::impronta_destinatario( $destinatario ), false );
 			self::torna_alla_pagina( 'prova_ok' );
+		}
+		if ( is_wp_error( $risposta_workspace ) ) {
+			set_transient( 'mi_esito_email_prova_' . get_current_user_id(), sanitize_text_field( $risposta_workspace->get_error_message() ), MINUTE_IN_SECONDS );
 		}
 		self::torna_alla_pagina( 'prova_ko' );
 	}
