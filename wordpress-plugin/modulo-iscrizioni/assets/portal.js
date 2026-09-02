@@ -198,6 +198,38 @@ document.addEventListener('DOMContentLoaded', () => {
   const selectedEvent = document.querySelector('[data-mi-selected-event]');
   const eventOutputs = document.querySelector('[data-mi-event-outputs]');
 
+  document.querySelectorAll('[data-mi-copy]').forEach((copyButton) => {
+	copyButton.addEventListener('click', async () => {
+	  if (copyButton.getAttribute('aria-busy') === 'true') return;
+	  const copyControl = copyButton.closest('.mi-output-copy');
+	  const copyInput = copyControl?.querySelector('input');
+	  const value = copyButton.dataset.miCopy || copyInput?.value || '';
+	  let status = copyControl?.nextElementSibling;
+	  if (!status || !status.classList.contains('mi-output-copy-status')) {
+		status = document.createElement('p');
+		status.className = 'mi-output-copy-status';
+		status.setAttribute('role', 'status');
+		status.setAttribute('aria-live', 'polite');
+		copyControl?.after(status);
+	  }
+	  copyButton.setAttribute('aria-busy', 'true');
+	  copyButton.disabled = true;
+	  try {
+		if (!navigator.clipboard?.writeText) throw new Error('clipboard-unavailable');
+		await navigator.clipboard.writeText(value);
+		status.classList.remove('is-error');
+		status.textContent = 'Copiato negli appunti.';
+	  } catch (error) {
+		if (copyInput) { copyInput.focus(); copyInput.select(); }
+		status.classList.add('is-error');
+		status.textContent = 'Copia automatica non disponibile. Il testo è selezionato: usa Ctrl+C oppure il comando Copia del dispositivo.';
+	  } finally {
+		copyButton.removeAttribute('aria-busy');
+		copyButton.disabled = false;
+	  }
+	});
+  });
+
   document.querySelectorAll('form').forEach((actionForm) => {
 	const action = actionForm.querySelector('input[name="mi_portal_action"]')?.value;
 	if (!['create_event', 'publish_event_portal', 'prepare_event_outputs'].includes(action)) return;
