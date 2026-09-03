@@ -183,7 +183,8 @@ test('WordPress può preparare il foglio dell evento senza duplicarlo', () => {
 	assert.match(sources['WebApp.gs'], /PREPARA_PRODUZIONI_EVENTO/);
 	assert.match(sources['FogliOperativi.gs'], /function preparaProduzioniEventoDaWordPress_/);
 	assert.match(sources['FogliOperativi.gs'], /String\(riga\.id_evento\) === idEvento/);
-	assert.match(sources['FogliOperativi.gs'], /apriFoglioOperativoEvento\(\{ id_evento: idEvento \}\)/);
+	assert.match(sources['FogliOperativi.gs'], /apriFoglioOperativoEvento\(\{ id_evento: idEvento, titolo: titolo, profilo_operativo: profiloOperativo \}\)/);
+	assert.match(sources['FogliOperativi.gs'], /generaVistaOperativaIniziale_/);
 	assert.match(sources['FogliOperativi.gs'], /mode: 'PREVIEW'/);
 	assert.match(sources['FogliOperativi.gs'], /Evento ' \+ idEvento \+ ' - '/);
 	assert.match(sources['FogliOperativi.gs'], /function spostaFoglioAccantoAlDatabase_/);

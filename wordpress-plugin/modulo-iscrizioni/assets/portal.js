@@ -256,6 +256,18 @@ document.addEventListener('DOMContentLoaded', () => {
 	});
   });
 
+  document.querySelectorAll('textarea[data-mi-max-lines]').forEach((field) => {
+	const maximum = Math.max(1, Number(field.dataset.miMaxLines) || 6);
+	field.addEventListener('input', () => {
+	  const lines = field.value.split(/\r?\n/);
+	  if (lines.length <= maximum) return;
+	  field.value = lines.slice(0, maximum).join('\n');
+	  field.setCustomValidity('Puoi inserire al massimo ' + maximum + ' righe.');
+	  field.reportValidity();
+	  window.setTimeout(() => field.setCustomValidity(''), 1200);
+	});
+  });
+
   if (eventOutputs) {
 	const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 	window.requestAnimationFrame(() => {

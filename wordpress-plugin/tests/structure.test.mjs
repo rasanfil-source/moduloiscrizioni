@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.21\.0/);
+	assert.match(source, /Version:\s+3\.22\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1373,8 +1373,8 @@ test('selezionare una bozza riprende il percorso guidato e conduce ad Attiva l�
 test('ogni tessera bozza riapre tutti i campi e indica dove assegnare il gestore', async () => {
 	const portal = await read('includes/class-mi-portal.php');
 	assert.match(portal, /'draft' === \$event->post_status[\s\S]{0,400}'mi_portal_view' => 'create'[\s\S]{0,120}'mi_portal_draft'/);
-	assert.match(portal, /Controlla gli operatori e i gruppi assegnati/);
-	assert.match(portal, /Il gestore è facoltativo/);
+	assert.match(portal, /Se vuoi dare a qualcuno il compito di seguire l.andamento delle iscrizioni/);
+	assert.match(portal, /scheda Operatori/);
 });
 
 test('il portale gestisce i gruppi in una scheda dedicata e il wizard vi rimanda', async () => {
@@ -1382,7 +1382,7 @@ test('il portale gestisce i gruppi in una scheda dedicata e il wizard vi rimanda
   const css = await read('assets/portal.css');
   assert.doesNotMatch(portal, /name="new_group_name"/);
   assert.match(portal, /mi_portal_view', 'groups'/);
-  assert.match(portal, /Apri Gestisci gruppi/);
+  assert.match(portal, /Apri la scheda Gruppi/);
   assert.match(portal, /create_group', 'update_group', 'delete_group/);
   assert.match(portal, /Logo/);
   assert.match(portal, /Immagine in evidenza/);
@@ -1390,6 +1390,31 @@ test('il portale gestisce i gruppi in una scheda dedicata e il wizard vi rimanda
   assert.match(portal, /GROUP_TYPE/);
   assert.match(portal, /mi_manage_all_events/);
   assert.match(css, /\.mi-group-form-grid/);
+});
+
+test('presentazione e operatori usano testi sintetici e informazioni concrete', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const shortcode = await read('includes/class-mi-shortcode.php');
+  const script = await read('assets/portal.js');
+  assert.match(portal, /data-mi-max-lines="6"/);
+  assert.match(portal, /self::limit_text_lines/);
+  assert.match(shortcode, /nl2br\( esc_html\( \$event\['description'\] \) \)/);
+  assert.match(script, /textarea\[data-mi-max-lines\]/);
+  assert.match(portal, /\$selected_names/);
+  assert.match(portal, /'gestisce ' : 'consulta '/);
+  assert.match(portal, /si apre in una nuova scheda/);
+});
+
+test('la pubblicazione inizializza rapidamente il foglio e recupera un 404 transitorio', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const client = await read('includes/class-mi-workspace-client.php');
+  const fogli = await readFile(new URL('../../workspace-apps-script/src/FogliOperativi.gs', import.meta.url), 'utf8');
+  const segreteria = await readFile(new URL('../../workspace-apps-script/src/Segreteria.gs', import.meta.url), 'utf8');
+  assert.match(portal, /'profilo_operativo'/);
+  assert.match(client, /404 === \$http_status[\s\S]*PREPARA_PRODUZIONI_EVENTO[\s\S]*self::request\( \$action, \$payload, 1 \)/);
+  assert.match(fogli, /generaVistaOperativaIniziale_/);
+  assert.match(fogli, /campiElencoOperativo_\(false\)/);
+  assert.match(segreteria, /if \(includiDinamici === false\) return fields/);
 });
 
 test('Workspace può creare gruppi WordPress e risolverli per slug', async () => {
