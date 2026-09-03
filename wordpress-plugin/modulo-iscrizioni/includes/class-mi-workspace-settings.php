@@ -45,6 +45,7 @@ final class MI_Workspace_Settings {
 				<table class="form-table"><tbody>
 				<tr><th scope="row"><label for="mi_workspace_webapp_url">URL Web App</label></th><td><input class="regular-text code" type="url" id="mi_workspace_webapp_url" name="mi_workspace_webapp_url" value="<?php echo esc_attr( $url ); ?>" required autocomplete="off"></td></tr>
 				<tr><th scope="row"><label for="mi_workspace_shared_secret">Nuovo segreto condiviso</label></th><td><input class="regular-text" type="password" id="mi_workspace_shared_secret" name="mi_workspace_shared_secret" value="" minlength="32" autocomplete="new-password"><p class="description"><?php echo $configured ? 'Un segreto è già configurato.' : 'Configura un segreto casuale di almeno 32 caratteri.'; ?></p></td></tr>
+				<tr><th scope="row"><label for="mi_email_segreteria_eventi">Email segreteria eventi</label></th><td><input class="regular-text" type="email" id="mi_email_segreteria_eventi" name="mi_email_segreteria_eventi" value="<?php echo esc_attr( get_option( 'mi_email_segreteria_eventi', '' ) ); ?>"><p class="description">Riceve la comunicazione dell’evento quando non è assegnato un operatore. Non modifica il mittente del sito né i permessi Google.</p></td></tr>
 				</tbody></table>
 				<?php submit_button( 'Salva configurazione' ); ?>
 			</form>
@@ -66,11 +67,14 @@ final class MI_Workspace_Settings {
 
 	public static function save() {
 		self::authorize( 'mi_save_workspace' );
+		$email_segreteria = sanitize_email( wp_unslash( $_POST['mi_email_segreteria_eventi'] ?? '' ) );
+		if ( ! empty( $_POST['mi_email_segreteria_eventi'] ) && ! is_email( $email_segreteria ) ) wp_die( 'Email della segreteria non valida.' );
 		$url = esc_url_raw( wp_unslash( $_POST['mi_workspace_webapp_url'] ?? '' ) );
 		if ( ! preg_match( '#^https://script\.google\.com/macros/s/[A-Za-z0-9_-]+/exec$#', $url ) ) {
 			wp_die( esc_html__( 'URL Web App non valido.', 'modulo-iscrizioni' ) );
 		}
 		update_option( 'mi_workspace_webapp_url', $url, false );
+		update_option( 'mi_email_segreteria_eventi', $email_segreteria, false );
 		$secret = (string) wp_unslash( $_POST['mi_workspace_shared_secret'] ?? '' );
 		if ( '' !== $secret ) {
 			if ( strlen( $secret ) < 32 || strlen( $secret ) > 200 ) {

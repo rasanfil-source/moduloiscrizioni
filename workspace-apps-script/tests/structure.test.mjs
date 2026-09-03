@@ -170,12 +170,12 @@ test('la segreteria essenziale apre un foglio operativo dedicato per evento', ()
 	assert.doesNotMatch(segreteriaHtml.match(/function navigazioneSegreteria[\s\S]*?\n/)[0], /Viste operative|Camere e pullman/);
 });
 
-test('il foglio evento resta privato ed è condiviso soltanto con il gestore indicato', () => {
+test('la preparazione del foglio non modifica le condivisioni e accetta il gestore assente', () => {
   const source = sources['FogliOperativi.gs'];
   assert.match(source, /normalizzaEmailGestore_\(payload\.email_gestore\)/);
-  assert.match(source, /setSharing\(DriveApp\.Access\.PRIVATE, DriveApp\.Permission\.NONE\)/);
-  assert.match(source, /getEditors\(\)[\s\S]*removeEditor/);
-  assert.match(source, /getViewers\(\)[\s\S]*removeViewer/);
+  const preparazione = source.slice(0, source.indexOf('function condividiFoglioSoltantoConGestore_'));
+  assert.doesNotMatch(preparazione, /addEditor|removeEditor|removeViewer|setSharing/);
+  assert.match(preparazione, /payload\.email_gestore \? normalizzaEmailGestore_\(payload\.email_gestore\) : ''/);
   assert.match(source, /addEditor\(emailGestore\)/);
 });
 
@@ -187,6 +187,10 @@ test('WordPress può preparare il foglio dell evento senza duplicarlo', () => {
 	assert.match(sources['FogliOperativi.gs'], /mode: 'PREVIEW'/);
 	assert.match(sources['FogliOperativi.gs'], /Evento ' \+ idEvento \+ ' - '/);
 	assert.match(sources['FogliOperativi.gs'], /function spostaFoglioAccantoAlDatabase_/);
+	assert.match(sources['FogliOperativi.gs'], /function ottieniCartelleEventi_/);
+	assert.match(sources['FogliOperativi.gs'], /createFolder\('EVENTI'\)/);
+	assert.match(sources['FogliOperativi.gs'], /createFolder\('EVENTI PASSATI'\)/);
+	assert.match(sources['FogliOperativi.gs'], /function organizzaFogliEventoDaWordPress_/);
 	assert.match(sources['FogliOperativi.gs'], /DriveApp\.getFileById\(database\.getId\(\)\)/);
 	assert.match(sources['FogliOperativi.gs'], /moveTo\(cartella\)/);
 	assert.match(sources['FogliOperativi.gs'], /function aggiornaCollegamentiProduzioneEvento_/);

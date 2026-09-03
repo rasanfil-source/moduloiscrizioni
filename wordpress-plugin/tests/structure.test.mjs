@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.20\.1/);
+	assert.match(source, /Version:\s+3\.21\.0/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -92,7 +92,13 @@ test('la pubblicazione assegna un solo gestore, condivide il foglio e prepara la
   const portal = await read('includes/class-mi-portal.php');
   const email = await read('includes/class-mi-spedizione-email.php');
   assert.match(portal, /function risolvi_gestore_evento/);
-  assert.match(portal, /'email_gestore' => \$gestore->user_email/);
+  assert.match(portal, /'email_gestore' => \$gestore \? \$gestore->user_email : ''/);
+  assert.doesNotMatch(portal, /risolvi_gestore_evento\( \$event_id, true \)/);
+  assert.match(portal, /if \( ! \$gestore \) \{/);
+  assert.match(portal, /get_option\( 'mi_email_segreteria_eventi', '' \)/);
+  assert.match(portal, /accoda_notifica_gestore_evento\( \$event_id, null,/);
+  assert.match(email, /\$gestore \? \$gestore->user_email : \$email_segreteria/);
+  assert.match(email, /\?WP_User \$gestore/);
   assert.match(portal, /_mi_manager_user_id/);
   assert.match(portal, /accoda_notifica_gestore_evento/);
   assert.match(email, /function accoda_notifica_gestore_evento/);
@@ -136,7 +142,6 @@ test('i fogli evento vengono verificati, ricreati, archiviati e ripuliti senza p
 	const fogli = await readFile(new URL('../../workspace-apps-script/src/FogliOperativi.gs', import.meta.url), 'utf8');
 	assert.match(portal, /VERIFICA_FOGLIO_EVENTO/);
 	assert.match(portal, /VERIFICA_FOGLI_EVENTO/);
-	assert.match(portal, /ARCHIVIA_FOGLIO_EVENTO/);
 	assert.match(portal, /ELIMINA_FOGLIO_EVENTO/);
 	assert.match(portal, /Verifica o ricrea il foglio Google/);
 	assert.match(webApp, /VERIFICA_FOGLIO_EVENTO/);
@@ -145,7 +150,14 @@ test('i fogli evento vengono verificati, ricreati, archiviati e ripuliti senza p
 	assert.match(webApp, /ELIMINA_FOGLIO_EVENTO/);
 	assert.match(fogli, /fileEsistente\.isTrashed\(\)/);
 	assert.match(fogli, /function verificaFogliEventoDaWordPress_/);
-	assert.match(fogli, /Eventi conclusi/);
+	assert.match(fogli, /EVENTI\/EVENTI PASSATI/);
+	assert.match(fogli, /function ottieniCartelleEventi_/);
+	assert.match(fogli, /createFolder\('EVENTI'\)/);
+	assert.match(fogli, /createFolder\('EVENTI PASSATI'\)/);
+	assert.match(fogli, /function organizzaFogliEventoDaWordPress_/);
+	assert.match(webApp, /ORGANIZZA_FOGLI_EVENTO/);
+	assert.match(portal, /ORGANIZZA_FOGLI_EVENTO/);
+	assert.match(portal, /\$archiviato \|\| \( ! \$annullato && self::is_past_event\( \$chiusura \?: \$inizio \) \)/);
 	assert.match(fogli, /setTrashed\(true\)/);
 	assert.match(fogli, /registro\.getRange\(esistente\._row/);
 });
@@ -1362,7 +1374,7 @@ test('ogni tessera bozza riapre tutti i campi e indica dove assegnare il gestore
 	const portal = await read('includes/class-mi-portal.php');
 	assert.match(portal, /'draft' === \$event->post_status[\s\S]{0,400}'mi_portal_view' => 'create'[\s\S]{0,120}'mi_portal_draft'/);
 	assert.match(portal, /Controlla gli operatori e i gruppi assegnati/);
-	assert.match(portal, /il gruppo deve avere un solo gestore attivo con email valida/);
+	assert.match(portal, /Il gestore è facoltativo/);
 });
 
 test('il portale gestisce i gruppi in una scheda dedicata e il wizard vi rimanda', async () => {
