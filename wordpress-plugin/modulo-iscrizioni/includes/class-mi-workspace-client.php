@@ -17,7 +17,7 @@ final class MI_Workspace_Client {
 		return self::request( 'STATO_SCHEMA', array( 'source' => 'WORDPRESS' ) );
 	}
 
-	public static function request( $action, array $payload ) {
+	public static function request( $action, array $payload, $attempt = 0 ) {
 		if ( ! self::is_configured() ) {
 			return new WP_Error( 'mi_workspace_not_configured', 'Collegamento Workspace non configurato.' );
 		}
@@ -46,7 +46,7 @@ final class MI_Workspace_Client {
 		);
 		// La prima preparazione del foglio può richiedere più tempo delle normali repliche.
 		// L'operazione remota è idempotente e un nuovo tentativo non duplica il foglio.
-		$timeout = in_array( $action, array( 'PREPARA_PRODUZIONI_EVENTO', 'INVIA_EMAIL_PROVA' ), true ) ? 45 : 15;
+		$timeout = in_array( $action, array( 'PREPARA_PRODUZIONI_EVENTO', 'INVIA_EMAIL_PROVA' ), true ) ? 30 : 15;
 		$response = wp_remote_post(
 			self::webapp_url(),
 			array(
@@ -80,6 +80,12 @@ final class MI_Workspace_Client {
 		// un esito positivo esplicito evita di dichiarare fallita un'email già inviata.
 		if ( is_array( $decoded ) && ! empty( $decoded['ok'] ) ) {
 			return $decoded;
+		}
+		// Un collegamento temporaneo di ContentService può eccezionalmente scadere
+		// con 404. La preparazione è idempotente: un solo nuovo tentativo, con una
+		// busta e un nonce nuovi, recupera il risultato senza duplicare il foglio.
+		if ( 404 === $http_status && 'PREPARA_PRODUZIONI_EVENTO' === $action && 0 === (int) $attempt ) {
+			return self::request( $action, $payload, 1 );
 		}
 		if ( 200 !== $http_status ) {
 			return new WP_Error( 'mi_workspace_http_' . $http_status, 'Workspace ha restituito una risposta HTTP inattesa (' . $http_status . ').' );

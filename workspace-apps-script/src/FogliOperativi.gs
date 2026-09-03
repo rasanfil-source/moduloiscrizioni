@@ -19,7 +19,8 @@ function preparaProduzioniEventoDaWordPress_(payload) {
   ];
   if (esistente) eventi.getRange(esistente._row, 1, 1, valori.length).setValues([valori]);
   else eventi.appendRow(valori);
-  const risultato = apriFoglioOperativoEvento({ id_evento: idEvento });
+	const profiloOperativo = normalizzaValoreElenco_(payload.profilo_operativo, ['AUTOMATICO', 'MINIMO', 'QUOTA_UNICA', 'SERVIZI_MULTIPLI', 'VIAGGIO_COMPLESSO']) || 'AUTOMATICO';
+  const risultato = apriFoglioOperativoEvento({ id_evento: idEvento, titolo: titolo, profilo_operativo: profiloOperativo });
 	const urlIscrizione = normalizzaUrlPubblico_(payload.url_iscrizione);
 	const urlSaldo = normalizzaUrlPubblico_(payload.url_saldo);
 	const emailGestore = payload.email_gestore ? normalizzaEmailGestore_(payload.email_gestore) : '';
@@ -65,7 +66,9 @@ function apriFoglioOperativoEvento(form) {
 			aggiungiControllo_('FOGLIO_OPERATIVO', 'VERIFY', idEvento, 'WARNING', 'WORDPRESS', 'SHEET_MISSING_RECREATE', 'WORDPRESS_PROXY');
 		}
   }
-  const vista = generaVistaOperativaEvento_(idEvento);
+	// Un evento appena creato non possiede ancora iscrizioni: evitiamo di rileggere
+	// l'intero database e prepariamo subito la struttura scelta in WordPress.
+	const vista = generaVistaOperativaIniziale_(idEvento, normalizzaTesto_(form.titolo, 200), normalizzaTesto_(form.profilo_operativo, 30));
 	const titoloPulito = String(vista.evento.titolo || idEvento).replace(/[\\/:*?"<>|#%{}]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140);
 	const titolo = 'Evento ' + idEvento + ' - ' + titoloPulito;
   const foglio = SpreadsheetApp.create(titolo);
@@ -78,6 +81,21 @@ function apriFoglioOperativoEvento(form) {
 	else registro.appendRow(valori);
   aggiungiControllo_('FOGLIO_OPERATIVO', 'CREATE', idEvento, 'SUCCESS', normalizzaTesto_(Session.getActiveUser().getEmail() || 'SEGRETERIA', 120), 'CREATED', 'SEGRETERIA');
   return { id_evento: idEvento, id_foglio: foglio.getId(), url_foglio: foglio.getUrl(), cartella: cartella, creato: true };
+}
+
+function generaVistaOperativaIniziale_(idEvento, titolo, profiloRichiesto) {
+	const profili = {
+		MINIMO: ['last_name', 'first_name', 'phone'],
+		QUOTA_UNICA: ['last_name', 'first_name', 'phone', 'total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance'],
+		SERVIZI_MULTIPLI: ['last_name', 'first_name', 'phone', 'transport', 'lunch', 'options', 'total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance'],
+		VIAGGIO_COMPLESSO: ['last_name', 'first_name', 'phone', 'birth_date', 'document_type', 'document_number', 'document_issue_date', 'document_expiry_date', 'nationality', 'transport', 'room', 'lunch', 'insurance', 'total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance']
+	};
+	const profilo = profili[profiloRichiesto] ? profiloRichiesto : 'MINIMO';
+	const catalogo = campiElencoOperativo_(false).reduce(function (indice, campo) { indice[campo.key] = campo; return indice; }, {});
+	const colonne = profili[profilo].filter(function (chiave) { return !!catalogo[chiave]; }).map(function (chiave) {
+		return { key: chiave, label: catalogo[chiave].label, gruppo: gruppoCampoVistaOperativa_(chiave), comprimibile: ['paid_cash', 'paid_transfer', 'paid_card'].indexOf(chiave) >= 0 };
+	});
+	return { evento: { id: idEvento, titolo: titolo || idEvento }, profilo: profilo, nome_profilo: profilo, personalizzata: false, conservata: false, colonne: colonne, righe: [] };
 }
 
 /** Controlla che il documento registrato esista davvero e sia accessibile. */
