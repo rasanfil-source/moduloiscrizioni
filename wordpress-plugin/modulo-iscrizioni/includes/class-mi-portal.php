@@ -43,10 +43,9 @@ final class MI_Portal {
 		}
 	}
 
-	/** Archivia una sola volta i fogli degli eventi la cui data di inizio è trascorsa. */
+	/** Allinea i fogli alla stessa distinzione tra eventi correnti e passati mostrata nel portale. */
 	public static function archive_completed_event_sheets() {
-		$published_status = 'publish';
-		$events = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => $published_status, 'numberposts' => 100, 'fields' => 'ids', 'meta_key' => '_mi_operational_sheet_id', 'no_found_rows' => true ) );
+		$events = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => 200, 'fields' => 'ids', 'meta_key' => '_mi_operational_sheet_id', 'no_found_rows' => true ) );
 		if ( $events ) {
 			$verifica = MI_Workspace_Client::request( 'VERIFICA_FOGLI_EVENTO', array( 'id_eventi' => array_map( 'strval', $events ) ) );
 			if ( ! is_wp_error( $verifica ) && ! empty( $verifica['stati'] ) && is_array( $verifica['stati'] ) ) {
@@ -58,11 +57,21 @@ final class MI_Portal {
 				}
 			}
 		}
+		$correnti = array();
+		$passati = array();
 		foreach ( $events as $event_id ) {
-			if ( get_post_meta( $event_id, '_mi_sheet_archived_at', true ) ) continue;
-			if ( ! self::is_past_event( (string) get_post_meta( $event_id, '_mi_event_starts_at', true ) ) ) continue;
-			$result = MI_Workspace_Client::request( 'ARCHIVIA_FOGLIO_EVENTO', array( 'id_evento' => (string) $event_id ) );
-			if ( ! is_wp_error( $result ) ) update_post_meta( $event_id, '_mi_sheet_archived_at', current_time( 'mysql', true ) );
+			$annullato = (bool) get_post_meta( $event_id, '_mi_event_cancelled_at', true );
+			$archiviato = (bool) get_post_meta( $event_id, '_mi_event_archived_at', true );
+			$chiusura = (string) get_post_meta( $event_id, '_mi_registration_closes_at', true );
+			$inizio = (string) get_post_meta( $event_id, '_mi_event_starts_at', true );
+			$passato = $archiviato || ( ! $annullato && self::is_past_event( $chiusura ?: $inizio ) );
+			if ( $passato ) $passati[] = (string) $event_id;
+			else $correnti[] = (string) $event_id;
+		}
+		$result = MI_Workspace_Client::request( 'ORGANIZZA_FOGLI_EVENTO', array( 'eventi_correnti' => $correnti, 'eventi_passati' => $passati ) );
+		if ( ! is_wp_error( $result ) ) {
+			foreach ( $passati as $event_id ) update_post_meta( (int) $event_id, '_mi_sheet_archived_at', current_time( 'mysql', true ) );
+			foreach ( $correnti as $event_id ) delete_post_meta( (int) $event_id, '_mi_sheet_archived_at' );
 		}
 	}
 

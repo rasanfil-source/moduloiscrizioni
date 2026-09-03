@@ -111,22 +111,49 @@ function verificaFogliEventoDaWordPress_(payload) {
 	return { ok: true, stati: stati };
 }
 
-/** Sposta in «Eventi conclusi» il foglio di un evento scaduto, senza cancellarlo. */
+/** Sposta in «EVENTI/EVENTI PASSATI» il foglio di un evento passato, senza cancellarlo. */
 function archiviaFoglioEventoDaWordPress_(payload) {
 	const idEvento = normalizzaTesto_((payload || {}).id_evento, 40);
 	if (!/^\d+$/.test(idEvento)) return { ok: false, error: 'EVENTO_NON_VALIDO' };
 	const collegamento = trovaCollegamentoFoglioOperativo_(idEvento);
 	const file = DriveApp.getFileById(String(collegamento.id_foglio));
 	if (file.isTrashed()) return { ok: false, error: 'FOGLIO_NON_DISPONIBILE' };
-	const database = ottieniFoglioDiLavoroAssociato_();
-	const genitori = DriveApp.getFileById(database.getId()).getParents();
-	if (!genitori.hasNext()) throw new Error('DB_MODULI non si trova in una cartella Drive utilizzabile.');
-	const cartellaPrincipale = genitori.next();
-	const cartelle = cartellaPrincipale.getFoldersByName('Eventi conclusi');
-	const archivio = cartelle.hasNext() ? cartelle.next() : cartellaPrincipale.createFolder('Eventi conclusi');
+	const archivio = ottieniCartelleEventi_().passati;
 	file.moveTo(archivio);
 	aggiungiControllo_('FOGLIO_OPERATIVO', 'ARCHIVE', idEvento, 'SUCCESS', 'WORDPRESS', 'MOVED_TO_COMPLETED', 'WORDPRESS_PROXY');
-	return { ok: true, id_evento: idEvento, id_foglio: String(collegamento.id_foglio), cartella: 'Eventi conclusi' };
+	return { ok: true, id_evento: idEvento, id_foglio: String(collegamento.id_foglio), cartella: 'EVENTI/EVENTI PASSATI' };
+}
+
+/** Riallinea in blocco i fogli esistenti alla stessa distinzione mostrata nel portale. */
+function organizzaFogliEventoDaWordPress_(payload) {
+	payload = payload || {};
+	const correnti = normalizzaIdentificativiEvento_(payload.eventi_correnti);
+	const passati = normalizzaIdentificativiEvento_(payload.eventi_passati);
+	const cartelle = ottieniCartelleEventi_();
+	const risultati = [];
+	const sposta = function (idEvento, cartella, destinazione) {
+		try {
+			const collegamento = trovaCollegamentoFoglioOperativo_(idEvento);
+			const file = DriveApp.getFileById(String(collegamento.id_foglio));
+			if (file.isTrashed()) throw new Error('FOGLIO_NON_DISPONIBILE');
+			file.moveTo(cartella);
+			risultati.push({ id_evento: idEvento, ok: true, cartella: destinazione });
+		} catch (errore) {
+			risultati.push({ id_evento: idEvento, ok: false, errore: normalizzaTesto_(errore && errore.message ? errore.message : errore, 200) });
+		}
+	};
+	correnti.forEach(function (idEvento) { sposta(idEvento, cartelle.eventi, 'EVENTI'); });
+	passati.forEach(function (idEvento) { sposta(idEvento, cartelle.passati, 'EVENTI/EVENTI PASSATI'); });
+	return { ok: true, risultati: risultati };
+}
+
+function normalizzaIdentificativiEvento_(valori) {
+	const visti = {};
+	return (Array.isArray(valori) ? valori : []).slice(0, 200).map(function (valore) { return normalizzaTesto_(valore, 40); }).filter(function (valore) {
+		if (!/^\d+$/.test(valore) || visti[valore]) return false;
+		visti[valore] = true;
+		return true;
+	});
 }
 
 /** Cestina il foglio collegato e rimuove l'associazione di una bozza eliminata. */
@@ -144,15 +171,24 @@ function eliminaFoglioEventoDaWordPress_(payload) {
 	return { ok: true, id_evento: idEvento, eliminato: true };
 }
 
-/** Sposta il nuovo foglio nella stessa cartella Drive che contiene DB_MODULI. */
-function spostaFoglioAccantoAlDatabase_(idFoglio) {
+/** Crea o riusa la struttura EVENTI accanto a DB_MODULI. */
+function ottieniCartelleEventi_() {
 	const database = ottieniFoglioDiLavoroAssociato_();
-	const fileDatabase = DriveApp.getFileById(database.getId());
-	const cartelle = fileDatabase.getParents();
+	const cartelle = DriveApp.getFileById(database.getId()).getParents();
 	if (!cartelle.hasNext()) throw new Error('DB_MODULI non si trova in una cartella Drive utilizzabile.');
-	const cartella = cartelle.next();
+	const principale = cartelle.next();
+	const esistenti = principale.getFoldersByName('EVENTI');
+	const eventi = esistenti.hasNext() ? esistenti.next() : principale.createFolder('EVENTI');
+	const archivi = eventi.getFoldersByName('EVENTI PASSATI');
+	const passati = archivi.hasNext() ? archivi.next() : eventi.createFolder('EVENTI PASSATI');
+	return { eventi: eventi, passati: passati };
+}
+
+/** Sposta il nuovo foglio nella cartella EVENTI accanto a DB_MODULI. */
+function spostaFoglioAccantoAlDatabase_(idFoglio) {
+	const cartella = ottieniCartelleEventi_().eventi;
 	DriveApp.getFileById(String(idFoglio)).moveTo(cartella);
-	return cartella.getName();
+	return 'EVENTI';
 }
 
 /** Registra gli indirizzi pubblici prodotti da WordPress senza accettare protocolli diversi da HTTPS. */
