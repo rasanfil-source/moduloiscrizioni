@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.22\.0/);
+	assert.match(source, /Version:\s+3\.22\.1/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1359,8 +1359,8 @@ test('selezionare una bozza riprende il percorso guidato e conduce ad Attiva lâ€
   const script = await read('assets/portal.js');
   assert.match(portal, /'draft' === \$event->post_status[\s\S]*?'mi_portal_view' => 'create'/);
   assert.match(portal, /'mi_portal_draft' => \$event->ID/);
-  assert.match(portal, /name="draft_event_id"/);
-  assert.match(portal, /wp_update_post\( array\( 'ID' => \$draft_event_id/);
+  assert.match(portal, /name="event_id"/);
+  assert.match(portal, /wp_update_post\( array\( 'ID' => \$existing_event_id/);
   assert.match(portal, /Riprendi la creazione/);
   assert.match(portal, /PREPARA_PRODUZIONI_EVENTO/);
   assert.match(portal, /_mi_operational_sheet_id/);
@@ -1370,19 +1370,35 @@ test('selezionare una bozza riprende il percorso guidato e conduce ad Attiva lâ€
   assert.match(script, /updateOvernight\(\)/);
 });
 
-test('ogni tessera bozza riapre tutti i campi e indica dove assegnare il gestore', async () => {
+test('la scheda rapida apre il wizard completo per modificare lo stesso evento attivo', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(portal, /Modifica tutti i dettagli/);
+  assert.match(portal, /'mi_portal_edit' => \$event_id/);
+  assert.match(portal, /array\( 'draft', 'publish', 'private' \)/);
+  assert.match(portal, /Stai aggiornando lo stesso evento/);
+  assert.match(portal, /Il modulo e il foglio giÃ  collegati non saranno duplicati/);
+  assert.match(portal, /Immagine attuale/);
+  assert.match(portal, /Salva le modifiche/);
+  assert.match(portal, /Evento aggiornato correttamente/);
+  assert.match(portal, /ensure_published_revision\( \$event_id, true \)/);
+  assert.match(portal, /prepara_produzioni_workspace\( \$event_id, 'PUBBLICATO' \)/);
+});
+
+test('ogni tessera bozza riapre tutti i campi del percorso di creazione', async () => {
 	const portal = await read('includes/class-mi-portal.php');
 	assert.match(portal, /'draft' === \$event->post_status[\s\S]{0,400}'mi_portal_view' => 'create'[\s\S]{0,120}'mi_portal_draft'/);
-	assert.match(portal, /Se vuoi dare a qualcuno il compito di seguire l.andamento delle iscrizioni/);
-	assert.match(portal, /scheda Operatori/);
 });
 
 test('il portale gestisce i gruppi in una scheda dedicata e il wizard vi rimanda', async () => {
   const portal = await read('includes/class-mi-portal.php');
+  const portalJs = await read('assets/portal.js');
   const css = await read('assets/portal.css');
   assert.doesNotMatch(portal, /name="new_group_name"/);
   assert.match(portal, /mi_portal_view', 'groups'/);
-  assert.match(portal, /Apri la scheda Gruppi/);
+  assert.match(portal, /Crea o modifica gruppo:[\s\S]*>Gruppi<\/a>/);
+  assert.doesNotMatch(portal, /Se vuoi dare a qualcuno il compito di seguire/);
+  assert.match(portalJs, /\.mi-portal-switcher/);
+  assert.match(portalJs, /touchstart[\s\S]*touchend[\s\S]*window\.location\.assign/);
   assert.match(portal, /create_group', 'update_group', 'delete_group/);
   assert.match(portal, /Logo/);
   assert.match(portal, /Immagine in evidenza/);
