@@ -219,20 +219,25 @@ document.addEventListener('DOMContentLoaded', () => {
   const selectedEvent = document.querySelector('[data-mi-selected-event]');
   const eventOutputs = document.querySelector('[data-mi-event-outputs]');
 
+  const outputStatus = (control) => {
+	let status = control?.nextElementSibling;
+	if (!status || !status.classList.contains('mi-output-copy-status')) {
+	  status = document.createElement('p');
+	  status.className = 'mi-output-copy-status';
+	  status.setAttribute('role', 'status');
+	  status.setAttribute('aria-live', 'polite');
+	  control?.after(status);
+	}
+	return status;
+  };
+
   document.querySelectorAll('[data-mi-copy]').forEach((copyButton) => {
 	copyButton.addEventListener('click', async () => {
 	  if (copyButton.getAttribute('aria-busy') === 'true') return;
 	  const copyControl = copyButton.closest('.mi-output-copy');
 	  const copyInput = copyControl?.querySelector('input');
 	  const value = copyButton.dataset.miCopy || copyInput?.value || '';
-	  let status = copyControl?.nextElementSibling;
-	  if (!status || !status.classList.contains('mi-output-copy-status')) {
-		status = document.createElement('p');
-		status.className = 'mi-output-copy-status';
-		status.setAttribute('role', 'status');
-		status.setAttribute('aria-live', 'polite');
-		copyControl?.after(status);
-	  }
+	  const status = outputStatus(copyControl);
 	  copyButton.setAttribute('aria-busy', 'true');
 	  copyButton.disabled = true;
 	  try {
@@ -247,6 +252,43 @@ document.addEventListener('DOMContentLoaded', () => {
 	  } finally {
 		copyButton.removeAttribute('aria-busy');
 		copyButton.disabled = false;
+	  }
+	});
+  });
+
+  document.querySelectorAll('[data-mi-share]').forEach((shareButton) => {
+	shareButton.addEventListener('click', async () => {
+	  if (shareButton.getAttribute('aria-busy') === 'true') return;
+	  const shareControl = shareButton.closest('.mi-output-copy');
+	  const shareInput = shareControl?.querySelector('input');
+	  const url = shareButton.dataset.miShare || shareInput?.value || '';
+	  const title = shareButton.dataset.miShareTitle || 'Iscrizione all’evento';
+	  const status = outputStatus(shareControl);
+	  shareButton.setAttribute('aria-busy', 'true');
+	  shareButton.disabled = true;
+	  try {
+		if (navigator.share) {
+		  await navigator.share({ title, text: `Iscriviti a ${title}`, url });
+		  status.classList.remove('is-error');
+		  status.textContent = 'Condivisione completata.';
+		} else {
+		  if (!navigator.clipboard?.writeText) throw new Error('condivisione-non-disponibile');
+		  await navigator.clipboard.writeText(url);
+		  status.classList.remove('is-error');
+		  status.textContent = 'Le modalità di condivisione non sono disponibili su questo dispositivo. Il link è stato copiato.';
+		}
+	  } catch (error) {
+		if (error?.name === 'AbortError') {
+		  status.classList.remove('is-error');
+		  status.textContent = 'Condivisione annullata.';
+		} else {
+		  if (shareInput) { shareInput.focus(); shareInput.select(); }
+		  status.classList.add('is-error');
+		  status.textContent = 'Condivisione non disponibile. Il link è selezionato e può essere copiato manualmente.';
+		}
+	  } finally {
+		shareButton.removeAttribute('aria-busy');
+		shareButton.disabled = false;
 	  }
 	});
   });

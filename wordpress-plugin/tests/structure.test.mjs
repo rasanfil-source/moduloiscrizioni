@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.22\.1/);
+	assert.match(source, /Version:\s+3\.22\.2/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1382,6 +1382,13 @@ test('la scheda rapida apre il wizard completo per modificare lo stesso evento a
   assert.match(portal, /Evento aggiornato correttamente/);
   assert.match(portal, /ensure_published_revision\( \$event_id, true \)/);
   assert.match(portal, /prepara_produzioni_workspace\( \$event_id, 'PUBBLICATO' \)/);
+  assert.match(portal, /<summary>Dettagli principali<\/summary>/);
+  assert.match(portal, /Link per le iscrizioni/);
+  assert.match(portal, /data-mi-share=/);
+  assert.match(portal, /aria-label="Condividi il link per le iscrizioni"/);
+  const script = await read('assets/portal.js');
+  assert.match(script, /navigator\.share/);
+  assert.match(script, /Le modalità di condivisione non sono disponibili/);
 });
 
 test('ogni tessera bozza riapre tutti i campi del percorso di creazione', async () => {
@@ -1395,7 +1402,7 @@ test('il portale gestisce i gruppi in una scheda dedicata e il wizard vi rimanda
   const css = await read('assets/portal.css');
   assert.doesNotMatch(portal, /name="new_group_name"/);
   assert.match(portal, /mi_portal_view', 'groups'/);
-  assert.match(portal, /Crea o modifica gruppo:[\s\S]*>Gruppi<\/a>/);
+  assert.match(portal, /Crea o modifica gruppo in:[\s\S]*>Gruppi<\/a>/);
   assert.doesNotMatch(portal, /Se vuoi dare a qualcuno il compito di seguire/);
   assert.match(portalJs, /\.mi-portal-switcher/);
   assert.match(portalJs, /touchstart[\s\S]*touchend[\s\S]*window\.location\.assign/);
