@@ -24,13 +24,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (review) review.innerHTML = `<strong>${value('title')}</strong><span>Inizio: ${value('starts_at')}</span><span>Chiusura iscrizioni: ${value('closes_at')}</span><span>Posti: ${value('capacity')}</span>`;
       }
     };
-    next.addEventListener('click', () => {
+    const advance = () => {
       const fields = [...steps[index].querySelectorAll('[required]')];
       if (fields.some((field) => !field.reportValidity())) return;
 	  if (coverImage && steps[index].contains(coverImage) && !validateCoverImage()) return;
       index = Math.min(steps.length - 1, index + 1);
       show();
-    });
+    };
+    next.addEventListener('click', advance);
     back.addEventListener('click', () => {
       index = Math.max(0, index - 1);
       show();
@@ -193,6 +194,26 @@ document.addEventListener('DOMContentLoaded', () => {
     closesAt?.addEventListener('change', updateDateLimits);
     updateDateLimits();
     show();
+  }
+
+  const portalSwitcher = document.querySelector('.mi-portal-switcher');
+  if (portalSwitcher) {
+    const links = [...portalSwitcher.querySelectorAll('a')];
+    let switcherTouchStart = null;
+    portalSwitcher.addEventListener('touchstart', (event) => {
+      if (event.touches.length !== 1) return;
+      switcherTouchStart = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+    }, { passive: true });
+    portalSwitcher.addEventListener('touchend', (event) => {
+      if (!switcherTouchStart || event.changedTouches.length !== 1) return;
+      const deltaX = event.changedTouches[0].clientX - switcherTouchStart.x;
+      const deltaY = event.changedTouches[0].clientY - switcherTouchStart.y;
+      switcherTouchStart = null;
+      if (Math.abs(deltaX) < 70 || Math.abs(deltaX) < Math.abs(deltaY) * 1.5) return;
+      const activeIndex = links.findIndex((link) => link.classList.contains('is-active'));
+      const destination = links[activeIndex + (deltaX < 0 ? 1 : -1)];
+      if (destination) window.location.assign(destination.href);
+    }, { passive: true });
   }
 
   const selectedEvent = document.querySelector('[data-mi-selected-event]');
