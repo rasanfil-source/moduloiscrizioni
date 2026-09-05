@@ -1253,16 +1253,15 @@ test('i menu delle iscrizioni applicano subito i filtri mantenendo il comando ma
 	assert.match(portal, /name="mi_portal_period" data-mi-auto-submit/);
 	assert.match(portal, />Eventi in corso<\/option>/);
 	assert.match(portal, />Eventi passati<\/option>/);
-	assert.match(portal, /name="mi_portal_event_mode" data-mi-event-mode data-mi-auto-submit/);
-	assert.match(portal, />Evento singolo<\/option>/);
-	assert.match(portal, /data-mi-single-event/);
-	assert.match(portal, /\$listed_event_ids = 'single' === \$event_mode \? array\(\) : \$period_event_ids/);
+	assert.doesNotMatch(portal, /mi_portal_event_mode|data-mi-event-mode|>Evento singolo<\/option>|data-mi-single-event/);
+	assert.match(portal, /name="mi_portal_event" data-mi-auto-submit><option value="">Tutti gli eventi<\/option>/);
+	assert.match(portal, /\$listed_event_ids = \$selected \? array\(\) : \$period_event_ids/);
   assert.match(portal, /name="mi_portal_status" data-mi-auto-submit/);
   assert.match(portal, />Applica filtri<\/button>/);
   assert.match(script, /select\[data-mi-auto-submit\]/);
   assert.match(script, /toolbar\.requestSubmit\(\)/);
-	assert.match(script, /singleEvent\.hidden = mode\.value !== 'single'/);
-	assert.match(css, /\.mi-registrations-toolbar \[hidden\]\{display:none!important\}/);
+	assert.doesNotMatch(script, /singleEvent\.hidden|data-mi-event-mode/);
+	assert.match(css, /@media\(min-width:800px\)\{\.mi-registration-chips\{flex-wrap:nowrap\}/);
   assert.match(portal, /if \( \$selected && ! in_array\( \$selected, \$event_ids, true \) \) wp_die\( 'Evento non accessibile\.', 403 \)/);
 });
 
@@ -1337,6 +1336,11 @@ test('il wizard crea una bozza completa e mostra collegamenti espliciti', async 
 	assert.match(portal, /file superiore a 2 MB/);
 	assert.match(portal, /massimo 2 MB/);
 	assert.match(script, /L’immagine in evidenza non può superare 2 MB/);
+	assert.match(script, /createImageBitmap\(file\)/);
+	assert.match(script, /canvas\.toBlob\(resolve, 'image\/jpeg', \.84\)/);
+	assert.match(portal, /wp_getimagesize\( \$file\['tmp_name'\] \)/);
+	assert.match(portal, /20000000/);
+	assert.match(portal, /catch \( Throwable \$error \)/);
   assert.match(portal, /participant_fields\[\]/);
   assert.match(portal, /participant_extra_scope/);
   assert.match(portal, /<details class="mi-additional-fields">/);
@@ -1374,7 +1378,7 @@ test('selezionare una bozza riprende il percorso guidato e conduce ad Attiva l�
   assert.match(portal, /Riprendi la creazione/);
   assert.match(portal, /PREPARA_PRODUZIONI_EVENTO/);
   assert.match(portal, /_mi_operational_sheet_id/);
-	assert.match(portal, /\[modulo_iscrizioni event=/);
+	assert.doesNotMatch(portal, /\[modulo_iscrizioni event=/);
 	assert.match(portal, /pulsante Saldo/);
   assert.match(portal, /data-mi-operational-profile/);
   assert.match(script, /updateOvernight\(\)/);
@@ -1407,7 +1411,33 @@ test('la scheda rapida apre il wizard completo per modificare lo stesso evento a
 
 test('ogni tessera bozza riapre tutti i campi del percorso di creazione', async () => {
 	const portal = await read('includes/class-mi-portal.php');
+	const script = await read('assets/portal.js');
 	assert.match(portal, /'draft' === \$event->post_status[\s\S]{0,400}'mi_portal_view' => 'create'[\s\S]{0,120}'mi_portal_draft'/);
+	assert.match(portal, /'mi_portal_view'\s*=> 'create',[\s\S]{0,100}'mi_portal_draft' => \$event_id/);
+	assert.doesNotMatch(portal, /\$edit_url = get_edit_post_link\( \$event_id/);
+	assert.match(portal, /href="' \. esc_url\( \$preview_url \) \. '" target="_blank" rel="noopener noreferrer">Apri anteprima/);
+	assert.match(portal, /La bozza è stata salvata e resta non pubblicata\./);
+	assert.doesNotMatch(portal, /La bozza #/);
+	assert.match(portal, /<h3>Condividi il modulo di iscrizione<\/h3>/);
+	assert.match(portal, /data-mi-copy-success-label="Copiato">Copia il collegamento al foglio<\/button>/);
+	assert.doesNotMatch(portal, /Mostra il collegamento al foglio/);
+	assert.doesNotMatch(portal, /Inserisci il modulo nel sito|Codice da inserire nella pagina|In Divi puoi anche/);
+	assert.match(script, /copyButton\.dataset\.miCopySuccessLabel[\s\S]*copyButton\.textContent/);
+});
+
+test('il dettaglio evento si apre a fisarmonica dopo la riga selezionata', async () => {
+	const portal = await read('includes/class-mi-portal.php');
+	const script = await read('assets/portal.js');
+	const css = await read('assets/portal.css');
+	assert.match(portal, /mi-event-card-shell' \. \( \$is_selected \? ' is-selected'/);
+	assert.match(portal, /aria-expanded="true" aria-controls="mi-event-inline-panel-/);
+	assert.match(portal, /class="mi-event-inline-panel" data-mi-event-inline-panel/);
+	assert.match(script, /inlineEventPanel\.remove\(\)/);
+	assert.match(script, /Math\.abs\(card\.offsetTop - selectedTop\) < 2/);
+	assert.match(script, /rowCards\[rowCards\.length - 1\][\s\S]*\.after\(inlineEventPanel\)/);
+	assert.match(css, /\.mi-event-inline-panel\{grid-column:1\/-1/);
+	assert.match(css, /\.mi-event-card-shell\.is-selected \.mi-event-card/);
+	assert.match(css, /prefers-reduced-motion:reduce/);
 });
 
 test('il portale gestisce i gruppi in una scheda dedicata e il wizard vi rimanda', async () => {
@@ -1434,12 +1464,13 @@ test('presentazione e operatori usano testi sintetici e informazioni concrete', 
   const shortcode = await read('includes/class-mi-shortcode.php');
   const script = await read('assets/portal.js');
   assert.match(portal, /data-mi-max-lines="6"/);
+  assert.doesNotMatch(portal, /Gli a capo saranno mantenuti nel modulo/);
   assert.match(portal, /self::limit_text_lines/);
   assert.match(shortcode, /nl2br\( esc_html\( \$event\['description'\] \) \)/);
   assert.match(script, /textarea\[data-mi-max-lines\]/);
   assert.match(portal, /\$selected_names/);
   assert.match(portal, /'gestisce ' : 'consulta '/);
-  assert.match(portal, /si apre in una nuova scheda/);
+  assert.doesNotMatch(portal, /si apre in una nuova scheda/);
 });
 
 test('la pubblicazione inizializza rapidamente il foglio e recupera un 404 transitorio', async () => {
@@ -1595,10 +1626,21 @@ test('il wizard distingue anteprima e pubblicazione e crea il foglio pubblicando
   const portal = await read('includes/class-mi-portal.php');
   const shortcode = await read('includes/class-mi-shortcode.php');
   const activator = await read('includes/class-mi-activator.php');
+  const script = await read('assets/portal.js');
+  const css = await read('assets/portal.css');
   assert.match(portal, /Salva la bozza e vai ad Attiva l’evento/);
   assert.match(portal, /Crea la bozza e vai ad Attiva l’evento/);
 	assert.match(portal, /Visualizza anteprima/);
 	assert.match(portal, /Apri l’anteprima del modulo di iscrizione/);
+	assert.match(portal, /class="mi-preview-action">[\s\S]*<\/a><\/span>/);
+	assert.match(css, /\.mi-preview-action\{display:flex/);
+	assert.match(portal, /Vuoi personalizzare l’email di conferma dell’iscrizione\?/);
+	assert.match(portal, /name="confirmation_email_subject"/);
+	assert.match(portal, /name="confirmation_email_text"/);
+	assert.match(portal, /MI_Modello_Email::salva_testo_portale/);
+	assert.match(script, /renderConfirmationPreview/);
+	assert.match(script, /data-mi-confirmation-text/);
+	assert.match(css, /\.mi-confirmation-email\{/);
   assert.match(portal, /mi_portal_outputs/);
   assert.match(portal, /draft_configuration_complete/);
   assert.match(portal, /draft_initial_step/);
@@ -1614,7 +1656,7 @@ test('il wizard distingue anteprima e pubblicazione e crea il foglio pubblicando
 	assert.match(portal, /Link per le iscrizioni/);
 	assert.match(portal, /Collegamento per il pulsante Saldo/);
 	assert.match(portal, /Apri il foglio Google/);
-	assert.match(portal, /Codice e indicazioni per WordPress e Divi/);
+	assert.doesNotMatch(portal, /Codice e indicazioni per WordPress e Divi/);
   assert.match(portal, /_mi_registration_url/);
   assert.match(portal, /_mi_balance_url/);
   assert.match(portal, /'url_iscrizione' => \$url_iscrizione/);
