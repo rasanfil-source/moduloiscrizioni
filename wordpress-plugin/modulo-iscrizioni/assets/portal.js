@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	  const textPreview = form.querySelector('[data-mi-confirmation-text]');
 	  if (!subjectInput || !textInput || !subjectPreview || !textPreview) return;
 	  const replacements = {
-		'{{referente.nome_completo}}': 'Nome del referente',
+		'{{sottoscrittore.nome_completo}}': 'Nome di chi sottoscrive l’iscrizione',
 		'{{evento.titolo}}': form.querySelector('[name="title"]')?.value || 'Titolo dell’evento',
 		'{{evento.data}}': form.querySelector('[name="starts_at"]')?.value || 'Data da definire',
 		'{{evento.luogo}}': form.querySelector('[name="location"]')?.value || 'Luogo da definire',
@@ -141,6 +141,24 @@ document.addEventListener('DOMContentLoaded', () => {
 	  service.addEventListener('change', updateService);
 	  updateService();
 	});
+	const busRoutes = form.querySelector('[data-mi-bus-routes]');
+	const busRoutesList = form.querySelector('[data-mi-bus-routes-list]');
+	const busRouteTemplate = form.querySelector('[data-mi-bus-route-template]');
+	const updateBusRoutes = () => {
+	  const active = pricing?.value === 'NONE';
+	  if (busRoutes) busRoutes.hidden = !active;
+	  busRoutes?.querySelectorAll('input').forEach((input) => { input.disabled = !active; });
+	};
+	form.querySelector('[data-mi-add-bus-route]')?.addEventListener('click', () => {
+	  if (!busRouteTemplate || !busRoutesList) return;
+	  const row = busRouteTemplate.content.firstElementChild.cloneNode(true);
+	  busRoutesList.append(row);
+	  row.querySelector('input[name="bus_route_code[]"]')?.focus();
+	});
+	busRoutesList?.addEventListener('click', (event) => {
+	  const remove = event.target.closest('[data-mi-remove-bus-route]');
+	  if (remove) remove.closest('.mi-bus-route')?.remove();
+	});
     form.querySelectorAll('[data-mi-required]').forEach((required) => required.addEventListener('change', () => {
       const enabled = form.querySelector(`[data-mi-field="${required.dataset.miRequired}"]`);
       if (required.checked && enabled) enabled.checked = true;
@@ -153,7 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const pricingLabel = pricing?.closest('label');
     const serviceFees = [...form.querySelectorAll('.mi-service-fee')];
     const serviceIntroduction = serviceFees.length ? [serviceFees[0].previousElementSibling, serviceFees[0].previousElementSibling?.previousElementSibling] : [];
-    const servicePricingNodes = [overnight?.closest('label'), rooms, ...serviceIntroduction, ...serviceFees].filter(Boolean);
+	const servicePricingNodes = [overnight?.closest('label'), rooms, ...serviceIntroduction, ...serviceFees, busRoutes].filter(Boolean);
     if (pricingLabel && overnight?.closest('label')) {
 	  pricingLabel.firstChild.textContent = 'Come sarà l’evento?';
 	  overnight.closest('.mi-wizard-step')?.insertBefore(pricingLabel, overnight.closest('label'));
@@ -205,6 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	  servicePricingNodes.forEach((node) => { node.hidden = pricing.value !== 'NONE'; });
 	  updateOvernight();
 	  serviceUpdaters.forEach((updateService) => updateService());
+	  updateBusRoutes();
 	  updateEconomic();
 	};
     pricing?.addEventListener('change', updatePricing);

@@ -41,7 +41,7 @@ final class MI_Spedizione_Email {
 		$sheet_url = esc_url_raw( (string) $sheet_url, array( 'https' ) );
 		$event_url = MI_Shortcode::url_iscrizione( $event_id );
 		if ( ! $event_id || ! is_email( $recipient ) || 0 !== strpos( $sheet_url, 'https://docs.google.com/spreadsheets/' ) ) return new WP_Error( 'mi_notifica_gestore_non_valida', 'Dati della comunicazione al gestore non validi.' );
-		$values = array( '{{evento.titolo}}' => get_the_title( $event_id ), '{{ordine.codice}}' => '', '{{referente.nome_completo}}' => $nome_destinatario );
+		$values = array( '{{evento.titolo}}' => get_the_title( $event_id ), '{{ordine.codice}}' => '', '{{sottoscrittore.nome_completo}}' => $nome_destinatario );
 		$snapshot = MI_Modello_Email::crea_istantanea( $event_id, $values );
 		$snapshot['attivo'] = true;
 		$snapshot['oggetto'] = 'Evento pronto — ' . sanitize_text_field( get_the_title( $event_id ) );

@@ -19,7 +19,6 @@ final class MI_Field_Schema {
 				'type'         => 'tel',
 				'max_length'   => 32,
 				'autocomplete' => 'tel',
-				'help'         => 'Inserire il prefisso internazionale, per esempio +39.',
 			),
 			'birth_date' => array(
 				'key'          => 'birth_date',
