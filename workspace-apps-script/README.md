@@ -4,6 +4,9 @@ Progetto Google Apps Script associato a uno spreadsheet dedicato. Il repository 
 
 ## Funzioni disponibili
 
+La revisione incrementale dei fogli e dei pagamenti, i limiti ancora aperti e il
+collaudo necessario sono descritti in [Revisione architettura eventi](../docs/REVISIONE_ARCHITETTURA_EVENTI.md).
+
 - `configuraCartellaDiLavoro()` crea o aggiorna in modo idempotente le schede tecniche con etichette italiane;
 - `convalidaPagamentiSelezionati()` convalida le righe selezionate in `Inserimento pagamenti`;
 - `convalidaPagamentiInAttesa()` elabora tutte le righe nuove;
