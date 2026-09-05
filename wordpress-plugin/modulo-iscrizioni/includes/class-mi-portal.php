@@ -243,6 +243,8 @@ final class MI_Portal {
 		update_post_meta( $event_id, '_mi_deposit_fixed_cents', 'FIXED' === $deposit_mode && ! is_wp_error( $deposit_fixed ) ? max( 0, $deposit_fixed ) : 0 );
 		$payment_methods = array_values( array_intersect( array( 'BANK_TRANSFER', 'CARD', 'CASH' ), array_map( 'strtoupper', array_map( 'sanitize_key', (array) wp_unslash( $_POST['payment_methods'] ?? array() ) ) ) ) );
 		update_post_meta( $event_id, '_mi_payment_methods', in_array( $economic_mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ? $payment_methods : array() );
+		$email_result = MI_Modello_Email::salva_testo_portale( $event_id, $_POST['confirmation_email_subject'] ?? '', $_POST['confirmation_email_text'] ?? '' );
+		if ( is_wp_error( $email_result ) ) return self::redirect_result( 'I dati dell’evento sono stati salvati, ma il testo dell’email richiede una correzione: ' . $email_result->get_error_message(), true, $event_id );
 		$upload_warning = self::save_cover_upload( $event_id );
 		$is_published_edit = $existing_event && 'publish' === $existing_event->post_status;
 		$success_message = $is_published_edit ? 'Evento aggiornato correttamente.' : ( $existing_event ? 'Bozza aggiornata correttamente.' : 'Bozza creata correttamente.' );
@@ -628,10 +630,17 @@ final class MI_Portal {
 		if ( (int) $file['size'] > 2 * MB_IN_BYTES ) return 'file superiore a 2 MB';
 		$checked = wp_check_filetype_and_ext( $file['tmp_name'], sanitize_file_name( $file['name'] ) );
 		if ( ! in_array( $checked['type'] ?? '', array( 'image/jpeg', 'image/png', 'image/webp' ), true ) ) return 'formato non ammesso';
+		$dimensions = wp_getimagesize( $file['tmp_name'] );
+		if ( ! is_array( $dimensions ) || empty( $dimensions[0] ) || empty( $dimensions[1] ) ) return 'immagine non leggibile';
+		if ( $dimensions[0] > 4096 || $dimensions[1] > 4096 || ( $dimensions[0] * $dimensions[1] ) > 20000000 ) return 'immagine troppo grande: riducila a non più di 4096 pixel per lato';
 		require_once ABSPATH . 'wp-admin/includes/file.php';
 		require_once ABSPATH . 'wp-admin/includes/image.php';
 		require_once ABSPATH . 'wp-admin/includes/media.php';
-		$attachment_id = media_handle_upload( 'cover_image', $event_id, array(), array( 'test_form' => false ) );
+		try {
+			$attachment_id = media_handle_upload( 'cover_image', $event_id, array(), array( 'test_form' => false ) );
+		} catch ( Throwable $error ) {
+			return 'WordPress non ha potuto elaborare l’immagine';
+		}
 		if ( is_wp_error( $attachment_id ) ) return 'WordPress non ha potuto salvare il file';
 		set_post_thumbnail( $event_id, $attachment_id );
 		return '';
@@ -878,20 +887,29 @@ final class MI_Portal {
 		$selectable_events = array_values( array_filter( $events, static function ( $event ) {
 			return ! get_post_meta( $event->ID, '_mi_event_cancelled_at', true );
 		} ) );
-		$selectable_event_ids = array_map( 'absint', wp_list_pluck( $selectable_events, 'ID' ) );
+		$period = sanitize_key( wp_unslash( $_GET['mi_portal_period'] ?? 'current' ) );
+		if ( ! in_array( $period, array( 'current', 'past' ), true ) ) $period = 'current';
+		$period_events = array_values( array_filter( $selectable_events, static function ( $event ) use ( $period ) {
+			$starts_at = (string) get_post_meta( $event->ID, '_mi_event_starts_at', true );
+			$closes_at = (string) get_post_meta( $event->ID, '_mi_registration_closes_at', true );
+			$is_past = (bool) get_post_meta( $event->ID, '_mi_event_archived_at', true ) || self::is_past_event( $closes_at ?: $starts_at );
+			return 'past' === $period ? $is_past : ! $is_past;
+		} ) );
+		$period_event_ids = array_map( 'absint', wp_list_pluck( $period_events, 'ID' ) );
 		$selected = absint( $_GET['mi_portal_event'] ?? 0 );
 		if ( $selected && ! in_array( $selected, $event_ids, true ) ) wp_die( 'Evento non accessibile.', 403 );
-		if ( $selected && ! in_array( $selected, $selectable_event_ids, true ) ) $selected = 0;
+		if ( $selected && ! in_array( $selected, $period_event_ids, true ) ) $selected = 0;
 		$query = sanitize_text_field( wp_unslash( $_GET['mi_portal_query'] ?? '' ) );
 		$status = strtoupper( sanitize_text_field( wp_unslash( $_GET['mi_portal_status'] ?? '' ) ) );
 		$statuses = array( 'CONFIRMED' => 'Confermate', 'PENDING_PAYMENT' => 'In attesa di pagamento', 'WAITLISTED' => 'Lista d’attesa', 'CANCELLED' => 'Annullate', 'EXPIRED' => 'Scadute' );
 		if ( ! isset( $statuses[ $status ] ) ) $status = '';
-		echo '<section class="mi-registrations"><div class="mi-registrations__heading"><div><span class="mi-portal-eyebrow">Archivio operativo</span><h2>Iscrizioni</h2></div><p class="mi-portal-muted">Cerca una prenotazione e apri la scheda completa senza lasciare la pagina.</p></div><form class="mi-registrations-toolbar" method="get"><input type="hidden" name="mi_portal" value="1"><input type="hidden" name="mi_portal_view" value="registrations"><div class="mi-registration-search"><label class="screen-reader-text" for="mi-portal-query">Cerca nelle iscrizioni</label><input id="mi-portal-query" type="search" name="mi_portal_query" value="' . esc_attr( $query ) . '" placeholder="Nome, email, cellulare o codice prenotazione"><button class="mi-primary" type="submit">Cerca</button></div><div class="mi-registration-chips"><label>Evento<select name="mi_portal_event" data-mi-auto-submit><option value="">Tutti gli eventi</option>';
-		foreach ( $selectable_events as $event ) echo '<option value="' . esc_attr( $event->ID ) . '" ' . selected( $selected, $event->ID, false ) . '>' . esc_html( $event->post_title ) . '</option>';
+		echo '<section class="mi-registrations"><div class="mi-registrations__heading"><div><span class="mi-portal-eyebrow">Archivio operativo</span><h2>Iscrizioni</h2></div><p class="mi-portal-muted">Cerca una prenotazione e apri la scheda completa senza lasciare la pagina.</p></div><form class="mi-registrations-toolbar" method="get"><input type="hidden" name="mi_portal" value="1"><input type="hidden" name="mi_portal_view" value="registrations"><div class="mi-registration-search"><label class="screen-reader-text" for="mi-portal-query">Cerca nelle iscrizioni</label><input id="mi-portal-query" type="search" name="mi_portal_query" value="' . esc_attr( $query ) . '" placeholder="Nome, email, cellulare o codice prenotazione"><button class="mi-primary" type="submit">Cerca</button></div><div class="mi-registration-chips"><label>Periodo<select name="mi_portal_period" data-mi-auto-submit><option value="current" ' . selected( $period, 'current', false ) . '>Eventi in corso</option><option value="past" ' . selected( $period, 'past', false ) . '>Eventi passati</option></select></label><label>Eventi<select name="mi_portal_event" data-mi-auto-submit><option value="">Tutti gli eventi</option>';
+		foreach ( $period_events as $event ) echo '<option value="' . esc_attr( $event->ID ) . '" ' . selected( $selected, $event->ID, false ) . '>' . esc_html( $event->post_title ) . '</option>';
 		echo '</select></label><label>Stato<select name="mi_portal_status" data-mi-auto-submit><option value="">Tutti gli stati</option>';
 		foreach ( $statuses as $value => $label ) echo '<option value="' . esc_attr( $value ) . '" ' . selected( $status, $value, false ) . '>' . esc_html( $label ) . '</option>';
 		echo '</select></label><button class="mi-secondary" type="submit">Applica filtri</button></div></form></section>';
-		self::registrations_view( $selected, $event_ids );
+		$listed_event_ids = $selected ? array() : $period_event_ids;
+		self::registrations_view( $selected, $listed_event_ids, $period );
 	}
 
 	private static function communications_view() {
@@ -1021,9 +1039,12 @@ final class MI_Portal {
 			}
 		}
 		$base_url = self::base_url();
+		$selected = absint( $_GET['mi_portal_event'] ?? 0 );
+		if ( ! in_array( $selected, $ids, true ) ) $selected = 0;
 		echo '<section id="mi-elenco-eventi"><h2>' . ( $show_past ? 'Eventi passati' : 'Eventi' ) . '</h2>';
 		if ( $events ) echo '<div class="mi-event-grid">';
 		foreach ( $events as $event ) {
+			$is_selected = $selected === (int) $event->ID;
 			$count = (int) ( $counts[ $event->ID ] ?? 0 );
 			$is_cancelled = ! empty( $cancelled_events[ $event->ID ] );
 			$published = (array) ( $published_summaries[ $event->ID ] ?? array() );
@@ -1043,12 +1064,14 @@ final class MI_Portal {
 				// Una bozza è sempre un processo di creazione interrotto: riapriamo
 				// l'intero percorso, anche quando i soli elementi mancanti sono operativi.
 				$url_args = array( 'mi_portal_view' => 'create', 'mi_portal_draft' => $event->ID );
+			} elseif ( $is_selected ) {
+				$url_args = array( 'mi_portal_view' => 'manage' );
 			} else {
 				$url_args = array( 'mi_portal_view' => 'manage', 'mi_portal_event' => $event->ID );
 			}
 			if ( $show_past ) $url_args['mi_portal_history'] = '1';
 			$url = add_query_arg( $url_args, $base_url );
-			echo '<article class="mi-event-card-shell"><a class="mi-event-card' . ( $is_cancelled ? ' is-cancelled' : ( $is_expired ? ' is-expired' : '' ) ) . '" href="' . esc_url( $url ) . '"><span class="mi-event-card__date"><small>' . esc_html( $date_badge['month'] ) . '</small><strong>' . esc_html( $date_badge['day'] ) . '</strong></span><span class="mi-event-card__content"><span class="mi-event-card__image">';
+			echo '<article class="mi-event-card-shell' . ( $is_selected ? ' is-selected' : '' ) . '"><a class="mi-event-card' . ( $is_cancelled ? ' is-cancelled' : ( $is_expired ? ' is-expired' : '' ) ) . '" href="' . esc_url( $url ) . '"' . ( $is_selected ? ' aria-expanded="true" aria-controls="mi-event-inline-panel-' . esc_attr( $event->ID ) . '"' : '' ) . '><span class="mi-event-card__date"><small>' . esc_html( $date_badge['month'] ) . '</small><strong>' . esc_html( $date_badge['day'] ) . '</strong></span><span class="mi-event-card__content"><span class="mi-event-card__image">';
 			if ( $cover_image ) echo '<img src="' . esc_url( $cover_image ) . '" alt="" loading="lazy" decoding="async" fetchpriority="low">';
 			echo '</span><span class="mi-event-card__identity"><strong>' . esc_html( $event_title ) . '</strong>';
 			if ( $activity_name ) echo '<small>' . esc_html( $activity_name ) . '</small>';
@@ -1079,19 +1102,18 @@ final class MI_Portal {
 				echo '</div></details>';
 			}
 			echo '</article>';
-		}
-		if ( $events ) echo '</div>'; else echo '<p class="mi-portal-muted">' . ( $show_past ? 'Non ci sono eventi passati.' : 'Non ci sono eventi in corso, futuri o in bozza.' ) . '</p>';
-		echo '</section>';
-		if ( $ids ) {
-			$selected = absint( $_GET['mi_portal_event'] ?? 0 );
-			if ( $selected && in_array( $selected, $ids, true ) ) {
+			if ( $is_selected ) {
+				echo '<div id="mi-event-inline-panel-' . esc_attr( $event->ID ) . '" class="mi-event-inline-panel" data-mi-event-inline-panel data-mi-event-id="' . esc_attr( $event->ID ) . '">';
 				self::event_management_card( $selected );
 				if ( ! empty( $_GET['mi_portal_outputs'] ) ) {
 					self::event_outputs_panel( $selected );
 					self::notice();
 				}
+				echo '</div>';
 			}
 		}
+		if ( $events ) echo '</div>'; else echo '<p class="mi-portal-muted">' . ( $show_past ? 'Non ci sono eventi passati.' : 'Non ci sono eventi in corso, futuri o in bozza.' ) . '</p>';
+		echo '</section>';
 		$history_url = $show_past
 			? add_query_arg( 'mi_portal_view', 'manage', $base_url )
 			: add_query_arg( array( 'mi_portal_view' => 'manage', 'mi_portal_history' => '1' ), $base_url );
@@ -1136,9 +1158,9 @@ final class MI_Portal {
 		echo '</section>';
 	}
 
-	private static function registrations_view( $event_id = 0, $event_ids = array() ) {
+	private static function registrations_view( $event_id = 0, $event_ids = array(), $period = 'current' ) {
 		global $wpdb;
-		if ( $event_id ) { $conditions = array( $wpdb->prepare( 'r.event_id=%d', $event_id ) ); } else { $safe = array_values( array_filter( array_map( 'absint', $event_ids ) ) ); $conditions = array( 'r.event_id IN (' . implode( ',', $safe ) . ')' ); }
+		if ( $event_id ) { $conditions = array( $wpdb->prepare( 'r.event_id=%d', $event_id ) ); } else { $safe = array_values( array_filter( array_map( 'absint', $event_ids ) ) ); $conditions = array( $safe ? 'r.event_id IN (' . implode( ',', $safe ) . ')' : '1=0' ); }
 		$query = sanitize_text_field( wp_unslash( $_GET['mi_portal_query'] ?? '' ) );
 		$status = strtoupper( sanitize_text_field( wp_unslash( $_GET['mi_portal_status'] ?? '' ) ) );
 		$allowed_statuses = array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'CANCELLED', 'EXPIRED' );
@@ -1150,6 +1172,7 @@ final class MI_Portal {
 		$where = implode( ' AND ', $conditions );
 		$rows = $wpdb->get_results( "SELECT r.id registration_id,r.event_id,r.order_code,r.status,r.created_at,r.buyer_first_name,r.buyer_last_name,r.buyer_email,r.buyer_phone,r.total_qty,r.total_cents,r.balance_cents,events.post_title event_title FROM {$wpdb->prefix}mi_registrations r JOIN {$wpdb->posts} events ON events.ID=r.event_id WHERE {$where} ORDER BY r.created_at DESC,r.id DESC LIMIT 30", ARRAY_A );
 		$base_url = self::base_url();
+		$base_url = add_query_arg( 'mi_portal_period', $period, $base_url );
 		if ( $event_id ) $base_url = add_query_arg( 'mi_portal_event', $event_id, $base_url );
 		if ( '' !== $query ) $base_url = add_query_arg( 'mi_portal_query', $query, $base_url );
 		if ( in_array( $status, $allowed_statuses, true ) ) $base_url = add_query_arg( 'mi_portal_status', $status, $base_url );
@@ -1259,6 +1282,7 @@ final class MI_Portal {
 		$common_fields = array_intersect_key( $catalog, array_flip( array( 'email', 'phone', 'birth_date' ) ) );
 		$additional_fields = array_diff_key( $catalog, $common_fields );
 		$today_start = current_time( 'Y-m-d\TH:i' );
+		$email_settings = MI_Modello_Email::impostazioni( $existing_event_id );
 		$draft_registration_count = 0;
 		$draft_initial_step = 0;
 		if ( $is_draft ) {
@@ -1268,13 +1292,13 @@ final class MI_Portal {
 		}
 		?><?php if ( $is_editing ) : ?><div class="mi-draft-resume"><div class="mi-portal-notice mi-portal-success"><strong><?php echo $is_draft ? 'Riprendi la creazione di' : 'Modifica'; ?> “<?php echo esc_html( $event->post_title ); ?>”</strong><p><?php echo $is_draft ? 'Completa o correggi i passaggi e salva nuovamente la stessa bozza.' : 'Stai aggiornando lo stesso evento. Il modulo e il foglio già collegati non saranno duplicati.'; ?></p></div><?php if ( $is_draft && 0 === $draft_registration_count ) : ?><form class="mi-draft-resume__delete" method="post" onsubmit="return confirm('Eliminare questa bozza? Sarà spostata nel cestino di WordPress.');"><input type="hidden" name="mi_portal_action" value="trash_event"><input type="hidden" name="event_id" value="<?php echo esc_attr( $existing_event_id ); ?>"><?php wp_nonce_field( 'mi_portal_manage_event_' . $existing_event_id, 'mi_portal_nonce' ); ?><button class="mi-danger" type="submit">Elimina questa bozza</button></form><?php endif; ?></div><?php endif; ?><form class="mi-event-wizard" method="post" enctype="multipart/form-data" data-mi-initial-step="<?php echo esc_attr( $draft_initial_step ); ?>" data-mi-operational-profile="<?php echo esc_attr( $value( '_mi_operational_profile', 'AUTOMATICO' ) ); ?>" data-mi-deposit-mode="<?php echo esc_attr( $deposit_mode_selected ); ?>" data-mi-deposit-fixed="<?php echo esc_attr( number_format( absint( $value( '_mi_deposit_fixed_cents', 0 ) ) / 100, 2, ',', '' ) ); ?>"><input type="hidden" name="mi_portal_action" value="create_event"><input type="hidden" name="event_id" value="<?php echo esc_attr( $is_editing ? $existing_event_id : 0 ); ?>"><?php wp_nonce_field( 'mi_portal_create_event', 'mi_portal_nonce' ); ?>
 		<section class="mi-wizard-step is-active"><span class="mi-portal-eyebrow">1 di 8</span><h2>Come si chiama?</h2><label>Titolo dell’evento<input name="title" required maxlength="180" value="<?php echo esc_attr( $is_editing ? $event->post_title : '' ); ?>" placeholder="Es. Pellegrinaggio ad Assisi"></label><label>Gruppo organizzatore<select name="activity_id"><option value="">Scegli un gruppo</option><?php foreach ( $activities as $activity ) : ?><option value="<?php echo esc_attr( $activity->ID ); ?>" <?php selected( $activity_id, $activity->ID ); ?>><?php echo esc_html( $activity->post_title ); ?></option><?php endforeach; ?></select></label><?php if ( self::can_manage_groups() ) : ?><p class="mi-portal-muted mi-wizard-group-link">Crea o modifica gruppo in: <a href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'groups', self::base_url() ) ); ?>" target="_blank" rel="noopener">Gruppi</a></p><?php endif; ?><?php if ( ! $is_editing ) : ?><label>Vuoi partire dalla configurazione di un evento precedente?<select name="copy_event_id"><option value="">No, configuro liberamente il nuovo evento</option><?php foreach ( $models as $model ) : ?><option value="<?php echo esc_attr( $model->ID ); ?>"><?php echo esc_html( $model->post_title ); ?></option><?php endforeach; ?></select></label><p class="mi-portal-muted">Vengono copiate solo impostazioni e domande, mai iscrizioni o dati personali.</p><?php endif; ?></section>
-		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">2 di 8</span><h2>Cosa devono sapere le persone?</h2><label>Luogo<input name="location" maxlength="180" value="<?php echo esc_attr( $value( '_mi_event_location' ) ); ?>" placeholder="Es. Basilica di Sant’Eugenio"></label><label>Presentazione e informazioni<textarea name="description" rows="6" maxlength="1200" data-mi-max-lines="6" placeholder="Descrivi programma, orari, cosa portare e ogni informazione utile."><?php echo esc_textarea( $is_editing ? $event->post_content : '' ); ?></textarea><small>Massimo 6 righe. Gli a capo saranno mantenuti nel modulo.</small></label></section>
-		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">3 di 8</span><h2>Immagine</h2><?php $current_cover = $is_editing ? get_the_post_thumbnail_url( $existing_event_id, 'medium_large' ) : ''; if ( $current_cover ) : ?><figure class="mi-wizard-current-cover"><img src="<?php echo esc_url( $current_cover ); ?>" alt=""><figcaption>Immagine attuale</figcaption></figure><?php endif; ?><label><?php echo $current_cover ? 'Sostituisci l’immagine in evidenza' : 'Immagine in evidenza'; ?> <small>(facoltativa)</small><input type="file" name="cover_image" accept="image/jpeg,image/png,image/webp" data-mi-max-bytes="2097152"></label><p class="mi-portal-muted">JPG, PNG o WebP, massimo 2 MB. Comparirà nella scheda e nella pagina dell’evento.</p></section>
+		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">2 di 8</span><h2>Cosa devono sapere le persone?</h2><label>Luogo<input name="location" maxlength="180" value="<?php echo esc_attr( $value( '_mi_event_location' ) ); ?>" placeholder="Es. Basilica di Sant’Eugenio"></label><label>Presentazione e informazioni<textarea name="description" rows="6" maxlength="1200" data-mi-max-lines="6" placeholder="Descrivi programma, orari, cosa portare e ogni informazione utile."><?php echo esc_textarea( $is_editing ? $event->post_content : '' ); ?></textarea><small>Massimo 6 righe.</small></label></section>
+		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">3 di 8</span><h2>Immagine</h2><?php $current_cover = $is_editing ? get_the_post_thumbnail_url( $existing_event_id, 'medium_large' ) : ''; if ( $current_cover ) : ?><figure class="mi-wizard-current-cover"><img src="<?php echo esc_url( $current_cover ); ?>" alt=""><figcaption>Immagine attuale</figcaption></figure><?php endif; ?><label><?php echo $current_cover ? 'Sostituisci l’immagine in evidenza' : 'Immagine in evidenza'; ?> <small>(facoltativa)</small><input type="file" name="cover_image" accept="image/jpeg,image/png,image/webp" data-mi-max-bytes="2097152"></label><p class="mi-portal-muted">JPG, PNG o WebP, massimo 2 MB. Le fotografie grandi vengono ridotte automaticamente.</p><p class="mi-image-preparation" data-mi-image-status role="status" aria-live="polite"></p></section>
 		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">4 di 8</span><h2>Date e posti</h2><div class="mi-wizard-grid"><label>Apertura iscrizioni<input type="text" inputmode="numeric" maxlength="16" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}" name="opens_at" value="<?php echo esc_attr( self::portal_date_input_value( $value( '_mi_registration_opens_at' ) ) ); ?>" placeholder="gg/mm/aaaa hh:mm" data-mi-opens></label><label>Chiusura iscrizioni<input type="text" inputmode="numeric" maxlength="16" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}" name="closes_at" value="<?php echo esc_attr( self::portal_date_input_value( $value( '_mi_registration_closes_at' ) ) ); ?>" placeholder="gg/mm/aaaa hh:mm" data-mi-closes required></label><label>Data e ora di inizio<input type="text" inputmode="numeric" maxlength="16" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}" name="starts_at" value="<?php echo esc_attr( self::portal_date_input_value( $value( '_mi_event_starts_at' ) ) ); ?>" placeholder="gg/mm/aaaa hh:mm" data-mi-starts required></label><label>Posti disponibili<input type="number" min="1" max="10000" name="capacity" value="<?php echo esc_attr( max( 1, absint( $value( '_mi_capacity', 30 ) ) ) ); ?>" required></label></div><p class="mi-portal-muted">Formato richiesto: gg/mm/aaaa hh:mm. Ordine: apertura iscrizioni, chiusura iscrizioni, inizio evento. La chiusura e l’inizio non possono essere nel passato.</p><label class="mi-check"><input type="checkbox" name="waitlist_enabled" value="1" <?php checked( '1', $value( '_mi_waitlist_enabled' ) ); ?>> Attiva automaticamente la lista d’attesa a esaurimento posti</label></section>
 		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">5 di 8</span><h2>Quali dati chiediamo?</h2><p>Nome e cognome sono sempre obbligatori per ogni partecipante.</p><fieldset><legend>Dati aggiuntivi da compilare</legend><label class="mi-check"><input type="radio" name="participant_extra_scope" value="ONE" <?php checked( 'ONE', $value( '_mi_participant_extra_scope', 'ONE' ) ); ?>> Solo per uno degli iscritti (il primo, modificabile)</label><label class="mi-check"><input type="radio" name="participant_extra_scope" value="ALL" <?php checked( 'ALL', $value( '_mi_participant_extra_scope', 'ONE' ) ); ?>> Per tutti gli iscritti</label></fieldset><div class="mi-field-choice-list"><?php self::render_field_choices( $common_fields, $participant_fields, $participant_required ); ?></div><details class="mi-additional-fields"><summary>Ulteriori dati per alcuni eventi</summary><div class="mi-field-choice-list"><?php self::render_field_choices( $additional_fields, $participant_fields, $participant_required ); ?></div></details></section>
 		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">6 di 8</span><h2>Domande particolari</h2><p class="mi-portal-muted">Aggiungi solo ciò che serve davvero. Puoi lasciare tutto vuoto.</p><div class="mi-custom-questions"><?php for ( $i = 0; $i < 4; $i++ ) : $question = (array) ( $custom_questions[ $i ] ?? array() ); $question_type = sanitize_key( $question['type'] ?? 'text' ); ?><div class="mi-custom-question"><label>Domanda <?php echo esc_html( $i + 1 ); ?><input name="custom_question_label[]" maxlength="120" value="<?php echo esc_attr( $question['label'] ?? '' ); ?>" placeholder="Es. Allergie da segnalare"></label><label>Risposta<select name="custom_question_type[]"><option value="text" <?php selected( $question_type, 'text' ); ?>>Breve</option><option value="yesno" <?php selected( $question_type, 'yesno' ); ?>>Sì / No</option><option value="textarea" <?php selected( $question_type, 'textarea' ); ?>>Testo libero</option><option value="date" <?php selected( $question_type, 'date' ); ?>>Data</option><option value="email" <?php selected( $question_type, 'email' ); ?>>Email</option><option value="tel" <?php selected( $question_type, 'tel' ); ?>>Telefono</option></select></label><label class="mi-check"><input type="checkbox" name="custom_question_required[<?php echo esc_attr( $i ); ?>]" value="1" <?php checked( ! empty( $question['required'] ) ); ?>> Obbligatoria</label></div><?php endfor; ?></div><label class="mi-check"><input type="checkbox" name="special_requests_enabled" value="1" <?php checked( '1', $value( '_mi_special_requests_enabled' ) ); ?>> Mostra uno spazio facoltativo per richieste particolari</label><label class="mi-check"><input type="checkbox" name="marketing_enabled" value="1" <?php checked( '1', $value( '_mi_marketing_enabled' ) ); ?>> Mostra “Comunicazioni su future iniziative”</label></section>
 		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">7 di 8</span><h2>Servizi e quote (se presenti)</h2><label class="mi-check"><input type="checkbox" name="overnight" value="1" data-mi-overnight <?php checked( '1', $value( '_mi_overnight_enabled' ) ); ?>> È previsto il pernottamento</label><div data-mi-accommodations hidden><h3>Tipi di alloggio</h3><?php foreach ( array( 'SINGOLA' => 'Singola', 'DOPPIA_SEPARATI' => 'Doppia con letti separati', 'DOPPIA_MATRIMONIALE' => 'Doppia matrimoniale', 'TRIPLA' => 'Tripla', 'MULTIPLA' => 'Multipla' ) as $code => $label ) : ?><div class="mi-accommodation-fee"><label class="mi-check"><input type="checkbox" name="accommodations[]" value="<?php echo esc_attr( $code ); ?>" data-mi-accommodation <?php checked( in_array( $code, $accommodations_selected, true ) ); ?>> <?php echo esc_html( $label ); ?></label><?php $accommodation_option = (array) ( $options[ 'alloggio-' . strtolower( str_replace( '_', '-', $code ) ) ] ?? array() ); ?><label>Quota (€)<input name="accommodation_price[<?php echo esc_attr( $code ); ?>]" value="<?php echo esc_attr( ! empty( $accommodation_option ) ? number_format( absint( $accommodation_option['price_cents'] ?? 0 ) / 100, 2, ',', '' ) : '' ); ?>" inputmode="decimal" placeholder="Es. 80,00" <?php disabled( ! in_array( $code, $accommodations_selected, true ) ); ?>></label></div><?php endforeach; ?></div><h3>Quote accessorie per partecipante</h3><p class="mi-portal-muted">Sono indipendenti dal pernottamento. Lascia una voce non selezionata se non è prevista.</p><?php foreach ( array( 'pullman' => 'Pullman', 'pranzo' => 'Pranzo', 'rimborso-spese' => 'Rimborso spese generico' ) as $service_code => $service_label ) : $service = (array) ( $options[ $service_code ] ?? array() ); ?><div class="mi-service-fee"><label class="mi-check"><input type="checkbox" name="service_enabled[<?php echo esc_attr( $service_code ); ?>]" value="1" data-mi-service-fee <?php checked( ! empty( $service ) ); ?>> <?php echo esc_html( $service_label ); ?></label><label>Quota (€)<input name="service_price[<?php echo esc_attr( $service_code ); ?>]" value="<?php echo esc_attr( ! empty( $service ) ? number_format( absint( $service['price_cents'] ?? 0 ) / 100, 2, ',', '' ) : '' ); ?>" inputmode="decimal" placeholder="Es. 25,00" <?php disabled( empty( $service ) ); ?>></label></div><?php endforeach; ?><label>Come sarà l’evento?<select name="pricing_mode" data-mi-pricing><option value="ZERO" <?php selected( $pricing_mode_selected, 'ZERO' ); ?>>Evento totalmente gratuito</option><option value="FIXED" <?php selected( $pricing_mode_selected, 'FIXED' ); ?>>Quota uguale per tutti</option><option value="NONE" <?php selected( $pricing_mode_selected, 'NONE' ); ?>>In base ai servizi scelti</option></select></label><label data-mi-fixed-price hidden>Quota base per partecipante (€)<input name="fixed_price" value="<?php echo esc_attr( number_format( absint( $value( '_mi_fixed_price_cents', 0 ) ) / 100, 2, ',', '' ) ); ?>" inputmode="decimal" placeholder="Es. 120,00"></label><label>Modalità di pagamento richiesta<select name="economic_mode" data-mi-economic><option value="FULL_PAYMENT" <?php selected( $economic_mode_selected, 'FULL_PAYMENT' ); ?>>Unica soluzione</option><option value="DEPOSIT_BALANCE" <?php selected( $economic_mode_selected, 'DEPOSIT_BALANCE' ); ?>>Caparra e saldo</option></select></label><div data-mi-payment hidden><label data-mi-deposit hidden>Percentuale caparra<input type="number" name="deposit_percentage" min="1" max="99" value="<?php echo esc_attr( min( 99, max( 1, absint( $value( '_mi_deposit_percentage', 30 ) ) ) ) ); ?>"></label><fieldset><legend>Metodi accettati</legend><label class="mi-check"><input type="checkbox" name="payment_methods[]" value="BANK_TRANSFER" <?php checked( in_array( 'BANK_TRANSFER', $payment_methods_selected, true ) ); ?>> Bonifico</label><label class="mi-check"><input type="checkbox" name="payment_methods[]" value="CARD" <?php checked( in_array( 'CARD', $payment_methods_selected, true ) ); ?>> Carta</label><label class="mi-check"><input type="checkbox" name="payment_methods[]" value="CASH" <?php checked( in_array( 'CASH', $payment_methods_selected, true ) ); ?>> Contanti</label></fieldset></div></section>
-		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">8 di 8</span><h2><?php echo $is_draft ? 'Controlla e aggiorna la bozza' : ( $is_editing ? 'Controlla le modifiche' : 'Controlla e crea la bozza' ); ?></h2><div class="mi-wizard-review" data-mi-review></div><?php if ( $is_editing && ! $is_draft ) : ?><p>L’evento resterà attivo. Saranno aggiornati i suoi dati senza duplicare il modulo o il foglio Google e non partirà alcuna email.</p><button class="mi-primary" type="submit">Salva le modifiche</button><?php else : ?><p>Nulla sarà pubblicato automaticamente e non partirà alcuna email. Dopo il salvataggio passerai alla schermata “Attiva l’evento”.</p><button class="mi-primary" type="submit"><?php echo $is_draft ? 'Salva la bozza e vai ad Attiva l’evento' : 'Crea la bozza e vai ad Attiva l’evento'; ?></button><?php endif; ?></section>
+		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">8 di 8</span><h2><?php echo $is_draft ? 'Controlla e aggiorna la bozza' : ( $is_editing ? 'Controlla le modifiche' : 'Controlla e crea la bozza' ); ?></h2><details class="mi-confirmation-email"><summary>Vuoi personalizzare l’email di conferma dell’iscrizione?</summary><div><p>Puoi modificare il messaggio che sarà preparato per chi si iscrive. In modalità ANTEPRIMA non viene inviata alcuna email.</p><label>Oggetto<input name="confirmation_email_subject" maxlength="180" value="<?php echo esc_attr( $email_settings['subject'] ); ?>" required></label><label>Testo dell’email<textarea name="confirmation_email_text" rows="12" maxlength="5000" required><?php echo esc_textarea( $email_settings['text'] ); ?></textarea></label><p class="mi-portal-muted">Puoi usare: <code>{{referente.nome_completo}}</code>, <code>{{evento.titolo}}</code>, <code>{{evento.data}}</code>, <code>{{evento.luogo}}</code>, <code>{{ordine.codice}}</code>, <code>{{ordine.riepilogo}}</code> e <code>{{ordine.riepilogo_economico}}</code>.</p><div class="mi-confirmation-email__preview"><strong data-mi-confirmation-subject></strong><pre data-mi-confirmation-text></pre></div></div></details><div class="mi-wizard-review" data-mi-review></div><?php if ( $is_editing && ! $is_draft ) : ?><p>L’evento resterà attivo. Saranno aggiornati i suoi dati senza duplicare il modulo o il foglio Google e non partirà alcuna email.</p><button class="mi-primary" type="submit">Salva le modifiche</button><?php else : ?><p>Nulla sarà pubblicato automaticamente e non partirà alcuna email. Dopo il salvataggio passerai alla schermata “Attiva l’evento”.</p><button class="mi-primary" type="submit"><?php echo $is_draft ? 'Salva la bozza e vai ad Attiva l’evento' : 'Crea la bozza e vai ad Attiva l’evento'; ?></button><?php endif; ?></section>
 		<div class="mi-wizard-actions"><button type="button" class="mi-secondary" data-mi-back disabled>Indietro</button><button type="button" class="mi-primary" data-mi-next>Continua</button></div></form><?php
 	}
 
@@ -1366,7 +1390,7 @@ final class MI_Portal {
 		echo '<header class="mi-event-outputs__header"><div class="mi-event-outputs__brand">' . ( $group_logo ? '<img src="' . esc_url( $group_logo ) . '" alt="">' : '<span aria-hidden="true">' . esc_html( strtoupper( $group_initials ?: 'SE' ) ) . '</span>' ) . '<div><small>Gruppo organizzatore</small><strong>' . esc_html( $group_title ) . '</strong></div></div><div class="mi-event-outputs__event"><span class="mi-portal-eyebrow">Passaggio conclusivo</span><h2>' . esc_html( $event_title ) . '</h2></div></header>';
 		if ( ! $is_published ) {
 			echo '<h3>Controlla e pubblica</h3>';
-			echo '<p>Controlla il modulo senza renderlo pubblico. Quando confermi, WordPress pubblica l’evento e crea automaticamente il relativo foglio Google.</p><ol><li><strong>Visualizza anteprima</strong><a href="' . esc_url( $preview_url ) . '" target="_blank" rel="noopener noreferrer">Apri l’anteprima del modulo di iscrizione <span aria-hidden="true">↗</span><span class="screen-reader-text"> (si apre in una nuova scheda)</span></a></li><li><strong>Pubblica evento</strong><span>Crea il foglio Google e attiva il modulo di iscrizione.</span></li></ol>';
+			echo '<p>Controlla il modulo senza renderlo pubblico. Quando confermi, WordPress pubblica l’evento e crea automaticamente il relativo foglio Google.</p><ol><li><strong>Visualizza anteprima</strong><span class="mi-preview-action"><a href="' . esc_url( $preview_url ) . '" target="_blank" rel="noopener noreferrer">Apri l’anteprima del modulo di iscrizione <span aria-hidden="true">↗</span></a></span></li><li><strong>Pubblica evento</strong><span>Crea il foglio Google e attiva il modulo di iscrizione.</span></li></ol>';
 		}
 		if ( ! $is_published && ( current_user_can( 'mi_publish_events' ) || current_user_can( 'manage_options' ) ) ) {
 			echo '<form method="post"><input type="hidden" name="mi_portal_action" value="publish_event_portal"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
@@ -1374,9 +1398,8 @@ final class MI_Portal {
 			echo '<button class="mi-primary" type="submit">Pubblica evento</button><span class="mi-action-progress" role="status" aria-live="polite" hidden></span></form>';
 		} elseif ( $is_published ) {
 			echo '<div class="mi-event-outputs__success"><span aria-hidden="true">✓</span><div><strong>L’evento è pubblicato</strong><p>Il modulo di iscrizione è pronto. Puoi condividerlo con le persone interessate.</p></div></div>';
-			echo '<div class="mi-event-outputs__grid"><article class="mi-output-card mi-output-card--public"><span class="mi-output-card__audience">Per i partecipanti</span><h3>Condividi il modulo</h3><label>Link per le iscrizioni<div class="mi-output-copy"><input type="url" readonly value="' . esc_attr( $registration_url ) . '"><button type="button" class="mi-primary" data-mi-copy="' . esc_attr( $registration_url ) . '">Copia link</button></div></label><a class="mi-secondary mi-output-link" href="' . $registration_url . '" target="_blank" rel="noopener noreferrer">Apri il modulo <span aria-hidden="true">↗</span><span class="screen-reader-text"> (si apre in una nuova scheda)</span></a></article>';
-			echo '<article class="mi-output-card mi-output-card--internal"><span class="mi-output-card__audience">Per gli operatori</span><h3>Gestisci le iscrizioni</h3><p>Consulta e aggiorna i dati nel foglio Google dell’evento.</p><div class="mi-output-document"><span aria-hidden="true">▦</span><div><strong>Foglio iscrizioni</strong><small>' . esc_html( $event_title ) . '</small></div></div>' . ( $sheet_missing ? '<p class="mi-portal-notice mi-portal-error"><strong>Foglio non disponibile.</strong> Usa il comando qui sotto per ricrearlo dai dati conservati.</p>' : ( $sheet_url ? '<a class="mi-secondary mi-output-link" href="' . $sheet_url . '" target="_blank" rel="noopener noreferrer">Apri il foglio Google <span aria-hidden="true">↗</span><span class="screen-reader-text"> (si apre in una nuova scheda)</span></a><details class="mi-output-disclosure"><summary>Mostra il collegamento al foglio</summary><label>Link del foglio Google<div class="mi-output-copy"><input type="url" readonly value="' . esc_attr( $sheet_url ) . '"><button type="button" class="mi-secondary" data-mi-copy="' . esc_attr( $sheet_url ) . '">Copia</button></div></label></details>' : '<p class="mi-portal-muted">Collegamento al foglio non ancora disponibile.</p>' ) ) . '</article></div>';
-			echo '<details class="mi-output-integration"><summary><span><strong>Inserisci il modulo nel sito</strong><small>Codice e indicazioni per WordPress e Divi</small></span><em>Facoltativo</em></summary><div><label>Codice da inserire nella pagina<div class="mi-output-copy"><input type="text" readonly value="' . esc_attr( '[modulo_iscrizioni event="' . $event_id . '"]' ) . '"><button type="button" class="mi-secondary" data-mi-copy="' . esc_attr( '[modulo_iscrizioni event="' . $event_id . '"]' ) . '">Copia codice</button></div></label><p>In Divi puoi anche aggiungere il modulo <strong>“Modulo iscrizioni”</strong> e selezionare <strong>' . esc_html( $event_title ) . '</strong>.</p></div></details>';
+			echo '<div class="mi-event-outputs__grid"><article class="mi-output-card mi-output-card--public"><span class="mi-output-card__audience">Per i partecipanti</span><h3>Condividi il modulo di iscrizione</h3><label>Link per le iscrizioni<div class="mi-output-copy"><input type="url" readonly value="' . esc_attr( $registration_url ) . '"><button type="button" class="mi-primary" data-mi-copy="' . esc_attr( $registration_url ) . '">Copia link</button></div></label><a class="mi-secondary mi-output-link" href="' . $registration_url . '" target="_blank" rel="noopener noreferrer">Apri il modulo <span aria-hidden="true">↗</span></a></article>';
+			echo '<article class="mi-output-card mi-output-card--internal"><span class="mi-output-card__audience">Per gli operatori</span><h3>Gestisci le iscrizioni</h3><p>Consulta e aggiorna i dati nel foglio Google dell’evento.</p><div class="mi-output-document"><span aria-hidden="true">▦</span><div><strong>Foglio iscrizioni</strong><small>' . esc_html( $event_title ) . '</small></div></div>' . ( $sheet_missing ? '<p class="mi-portal-notice mi-portal-error"><strong>Foglio non disponibile.</strong> Usa il comando qui sotto per ricrearlo dai dati conservati.</p>' : ( $sheet_url ? '<a class="mi-secondary mi-output-link" href="' . $sheet_url . '" target="_blank" rel="noopener noreferrer">Apri il foglio Google <span aria-hidden="true">↗</span></a><div class="mi-output-copy-action"><button type="button" class="mi-secondary mi-output-link" data-mi-copy="' . esc_attr( $sheet_url ) . '" data-mi-copy-success-label="Copiato">Copia il collegamento al foglio</button></div>' : '<p class="mi-portal-muted">Collegamento al foglio non ancora disponibile.</p>' ) ) . '</article></div>';
 			echo '<form method="post" class="mi-output-sheet-check"><input type="hidden" name="mi_portal_action" value="repair_event_sheet"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
 			wp_nonce_field( 'mi_portal_repair_event_sheet_' . $event_id, 'mi_portal_nonce' );
 			echo '<button type="submit" class="mi-secondary">Verifica o ricrea il foglio Google</button></form>';
@@ -1394,12 +1417,20 @@ final class MI_Portal {
 		if ( ! $error && $event_id && ! empty( $_GET['mi_portal_outputs'] ) && 'publish' === get_post_status( $event_id ) ) return;
 		echo '<div class="mi-portal-notice ' . ( $error ? 'mi-portal-error' : 'mi-portal-success' ) . '"><strong>' . esc_html( sanitize_text_field( wp_unslash( $_GET['mi_portal_message'] ) ) ) . '</strong>';
 		if ( ! $error && $event_id && MI_Access::can_access_event( $event_id ) ) {
-			$edit_url = get_edit_post_link( $event_id, 'raw' );
+			// La bozza appartiene al percorso guidato della Segreteria: riprendiamo
+			// lo stesso evento senza passare dall'editor interno di WordPress.
+			$edit_url = add_query_arg(
+				array(
+					'mi_portal_view'  => 'create',
+					'mi_portal_draft' => $event_id,
+				),
+				self::base_url()
+			);
 			$preview_url = wp_nonce_url( admin_url( 'admin-post.php?action=mi_anteprima_evento&event=' . $event_id ), 'mi_anteprima_evento_' . $event_id );
 			$is_published = 'publish' === get_post_status( $event_id );
-			echo '<p>' . ( $is_published ? 'L’evento #' . esc_html( $event_id ) . ' è pubblicato.' : 'La bozza #' . esc_html( $event_id ) . ' è stata salvata e resta non pubblicata.' ) . '</p><div class="mi-portal-notice__actions">';
+			echo '<p>' . ( $is_published ? 'L’evento è pubblicato.' : 'La bozza è stata salvata e resta non pubblicata.' ) . '</p><div class="mi-portal-notice__actions">';
 			if ( ! $is_published && $edit_url ) echo '<a class="mi-primary" href="' . esc_url( $edit_url ) . '">Completa la bozza</a>';
-			echo '<a class="mi-secondary" href="' . esc_url( $preview_url ) . '">Apri anteprima</a></div>';
+			echo '<a class="mi-secondary" href="' . esc_url( $preview_url ) . '" target="_blank" rel="noopener noreferrer">Apri anteprima</a></div>';
 		}
 		echo '</div>';
 	}

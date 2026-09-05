@@ -377,6 +377,20 @@ final class MI_Modello_Email {
 		update_post_meta( $post_id, '_mi_email_template', $settings );
 	}
 
+	/** Salva dal wizard soltanto oggetto e testo, conservando le altre impostazioni email. */
+	public static function salva_testo_portale( $event_id, $subject, $text ) {
+		$settings = self::impostazioni( $event_id );
+		$settings['enabled'] = '1';
+		$settings['subject'] = self::pulisci_riga( $subject, 180 );
+		$settings['text'] = mb_substr( sanitize_textarea_field( wp_unslash( $text ) ), 0, 5000 );
+		$settings['html'] = self::sanitizza_html_email( wpautop( esc_html( $settings['text'] ) ) );
+		if ( ! $settings['subject'] || ! $settings['text'] ) return new WP_Error( 'mi_email_vuota', 'Oggetto e testo dell’email non possono essere vuoti.' );
+		$unknown = self::trova_segnaposto_non_ammessi( $settings );
+		if ( $unknown ) return new WP_Error( 'mi_email_segnaposto', 'Elimina i segnaposto non riconosciuti: ' . implode( ', ', $unknown ) . '.' );
+		update_post_meta( $event_id, '_mi_email_template', $settings );
+		return true;
+	}
+
 	public static function mostra_avviso() {
 		$identity_key = 'mi_email_identity_error_' . get_current_user_id();
 		if ( get_transient( $identity_key ) ) {

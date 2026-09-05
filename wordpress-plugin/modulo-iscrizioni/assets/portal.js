@@ -5,15 +5,70 @@ document.addEventListener('DOMContentLoaded', () => {
     const back = form.querySelector('[data-mi-back]');
     const next = form.querySelector('[data-mi-next]');
 	const coverImage = form.querySelector('[name="cover_image"][data-mi-max-bytes]');
+	const coverImageStatus = form.querySelector('[data-mi-image-status]');
+	let coverImagePreparing = false;
 	const validateCoverImage = () => {
 	  if (!coverImage) return true;
 	  const file = coverImage.files?.[0];
 	  const maximum = Number.parseInt(coverImage.dataset.miMaxBytes || '0', 10);
-	  coverImage.setCustomValidity(file && maximum && file.size > maximum ? 'L’immagine in evidenza non può superare 2 MB.' : '');
+	  coverImage.setCustomValidity(coverImagePreparing ? 'Attendi il completamento della preparazione dell’immagine.' : (file && maximum && file.size > maximum ? 'L’immagine in evidenza non può superare 2 MB.' : ''));
 	  return coverImage.reportValidity();
 	};
-	coverImage?.addEventListener('change', validateCoverImage);
+	const resizeCoverImage = async () => {
+	  const file = coverImage?.files?.[0];
+	  if (!file || !file.type.startsWith('image/')) return validateCoverImage();
+	  const maximum = Number.parseInt(coverImage.dataset.miMaxBytes || '0', 10);
+	  coverImagePreparing = true;
+	  if (coverImageStatus) coverImageStatus.textContent = 'Preparazione dell’immagine…';
+	  try {
+		const bitmap = await createImageBitmap(file);
+		if (file.size <= maximum && bitmap.width <= 2400 && bitmap.height <= 2400) {
+		  bitmap.close();
+		  if (coverImageStatus) coverImageStatus.textContent = 'Immagine pronta.';
+		  return true;
+		}
+		const scale = Math.min(1, 2400 / bitmap.width, 2400 / bitmap.height);
+		const canvas = document.createElement('canvas');
+		canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+		canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+		canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+		bitmap.close();
+		const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', .84));
+		if (!blob) throw new Error('conversione-non-riuscita');
+		const files = new DataTransfer();
+		files.items.add(new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg', lastModified: Date.now() }));
+		coverImage.files = files.files;
+		if (coverImageStatus) coverImageStatus.textContent = 'Immagine ottimizzata e pronta.';
+		return true;
+	  } catch (error) {
+		coverImage.setCustomValidity('Non è stato possibile preparare l’immagine. Scegline una più piccola.');
+		if (coverImageStatus) coverImageStatus.textContent = 'Non è stato possibile preparare l’immagine.';
+		return false;
+	  } finally {
+		coverImagePreparing = false;
+	  }
+	};
+	coverImage?.addEventListener('change', resizeCoverImage);
     let index = Math.min(steps.length - 1, Math.max(0, Number.parseInt(form.dataset.miInitialStep || '0', 10) || 0));
+	const renderConfirmationPreview = () => {
+	  const subjectInput = form.querySelector('[name="confirmation_email_subject"]');
+	  const textInput = form.querySelector('[name="confirmation_email_text"]');
+	  const subjectPreview = form.querySelector('[data-mi-confirmation-subject]');
+	  const textPreview = form.querySelector('[data-mi-confirmation-text]');
+	  if (!subjectInput || !textInput || !subjectPreview || !textPreview) return;
+	  const replacements = {
+		'{{referente.nome_completo}}': 'Nome del referente',
+		'{{evento.titolo}}': form.querySelector('[name="title"]')?.value || 'Titolo dell’evento',
+		'{{evento.data}}': form.querySelector('[name="starts_at"]')?.value || 'Data da definire',
+		'{{evento.luogo}}': form.querySelector('[name="location"]')?.value || 'Luogo da definire',
+		'{{ordine.codice}}': 'Codice assegnato all’iscrizione',
+		'{{ordine.riepilogo}}': 'Riepilogo dei partecipanti e delle scelte',
+		'{{ordine.riepilogo_economico}}': 'Riepilogo delle quote',
+	  };
+	  const fill = (value) => Object.entries(replacements).reduce((result, [placeholder, replacement]) => result.split(placeholder).join(replacement), value);
+	  subjectPreview.textContent = fill(subjectInput.value);
+	  textPreview.textContent = fill(textInput.value);
+	};
     const show = () => {
       steps.forEach((step, stepIndex) => step.classList.toggle('is-active', stepIndex === index));
       back.disabled = index === 0;
@@ -22,8 +77,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const value = (name) => form.querySelector(`[name="${name}"]`)?.value || 'Da definire';
         const review = form.querySelector('[data-mi-review]');
         if (review) review.innerHTML = `<strong>${value('title')}</strong><span>Inizio: ${value('starts_at')}</span><span>Chiusura iscrizioni: ${value('closes_at')}</span><span>Posti: ${value('capacity')}</span>`;
+		renderConfirmationPreview();
       }
     };
+	form.querySelectorAll('[name="confirmation_email_subject"], [name="confirmation_email_text"]').forEach((field) => field.addEventListener('input', renderConfirmationPreview));
     const advance = () => {
       const fields = [...steps[index].querySelectorAll('[required]')];
       if (fields.some((field) => !field.reportValidity())) return;
@@ -218,6 +275,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const selectedEvent = document.querySelector('[data-mi-selected-event]');
   const eventOutputs = document.querySelector('[data-mi-event-outputs]');
+	const inlineEventPanel = document.querySelector('[data-mi-event-inline-panel]');
+	if (inlineEventPanel) {
+	  const grid = inlineEventPanel.closest('.mi-event-grid');
+	  const eventId = inlineEventPanel.dataset.miEventId;
+	  const selectedCard = grid?.querySelector(`.mi-event-card[href*="mi_portal_event=${eventId}"]`)?.closest('.mi-event-card-shell');
+	  if (grid && selectedCard) {
+		inlineEventPanel.remove();
+		const selectedTop = selectedCard.offsetTop;
+		const rowCards = [...grid.querySelectorAll('.mi-event-card-shell')].filter((card) => Math.abs(card.offsetTop - selectedTop) < 2);
+		(rowCards[rowCards.length - 1] || selectedCard).after(inlineEventPanel);
+	  }
+	}
 
   const outputStatus = (control) => {
 	let status = control?.nextElementSibling;
@@ -234,7 +303,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('[data-mi-copy]').forEach((copyButton) => {
 	copyButton.addEventListener('click', async () => {
 	  if (copyButton.getAttribute('aria-busy') === 'true') return;
-	  const copyControl = copyButton.closest('.mi-output-copy');
+	  const copyControl = copyButton.closest('.mi-output-copy') || copyButton.closest('.mi-output-copy-action');
 	  const copyInput = copyControl?.querySelector('input');
 	  const value = copyButton.dataset.miCopy || copyInput?.value || '';
 	  const status = outputStatus(copyControl);
@@ -244,7 +313,12 @@ document.addEventListener('DOMContentLoaded', () => {
 		if (!navigator.clipboard?.writeText) throw new Error('clipboard-unavailable');
 		await navigator.clipboard.writeText(value);
 		status.classList.remove('is-error');
-		status.textContent = 'Copiato negli appunti.';
+		if (copyButton.dataset.miCopySuccessLabel) {
+		  copyButton.textContent = copyButton.dataset.miCopySuccessLabel;
+		  status.textContent = '';
+		} else {
+		  status.textContent = 'Copiato negli appunti.';
+		}
 	  } catch (error) {
 		if (copyInput) { copyInput.focus(); copyInput.select(); }
 		status.classList.add('is-error');
