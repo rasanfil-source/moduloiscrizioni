@@ -189,10 +189,11 @@ test('WordPress può preparare il foglio dell evento senza duplicarlo', () => {
 	assert.match(sources['FogliOperativi.gs'], /Evento ' \+ idEvento \+ ' - '/);
 	assert.match(sources['FogliOperativi.gs'], /function spostaFoglioAccantoAlDatabase_/);
 	assert.match(sources['FogliOperativi.gs'], /function ottieniCartelleEventi_/);
+	assert.match(sources['FogliOperativi.gs'], /DriveApp\.getRootFolder\(\)/);
 	assert.match(sources['FogliOperativi.gs'], /createFolder\('EVENTI'\)/);
 	assert.match(sources['FogliOperativi.gs'], /createFolder\('EVENTI PASSATI'\)/);
 	assert.match(sources['FogliOperativi.gs'], /function organizzaFogliEventoDaWordPress_/);
-	assert.match(sources['FogliOperativi.gs'], /DriveApp\.getFileById\(database\.getId\(\)\)/);
+	assert.match(sources['FogliOperativi.gs'], /DriveApp\.getRootFolder\(\)/);
 	assert.match(sources['FogliOperativi.gs'], /moveTo\(cartella\)/);
 	assert.match(sources['FogliOperativi.gs'], /function aggiornaCollegamentiProduzioneEvento_/);
 	assert.match(sources['FogliOperativi.gs'], /url_iscrizione/);

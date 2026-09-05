@@ -189,12 +189,9 @@ function eliminaFoglioEventoDaWordPress_(payload) {
 	return { ok: true, id_evento: idEvento, eliminato: true };
 }
 
-/** Crea o riusa la struttura EVENTI accanto a DB_MODULI. */
+/** Crea o riusa la struttura EVENTI nella radice di Google Drive. */
 function ottieniCartelleEventi_() {
-	const database = ottieniFoglioDiLavoroAssociato_();
-	const cartelle = DriveApp.getFileById(database.getId()).getParents();
-	if (!cartelle.hasNext()) throw new Error('DB_MODULI non si trova in una cartella Drive utilizzabile.');
-	const principale = cartelle.next();
+	const principale = DriveApp.getRootFolder();
 	const esistenti = principale.getFoldersByName('EVENTI');
 	const eventi = esistenti.hasNext() ? esistenti.next() : principale.createFolder('EVENTI');
 	const archivi = eventi.getFoldersByName('EVENTI PASSATI');
@@ -202,7 +199,7 @@ function ottieniCartelleEventi_() {
 	return { eventi: eventi, passati: passati };
 }
 
-/** Sposta il nuovo foglio nella cartella EVENTI accanto a DB_MODULI. */
+/** Sposta il nuovo foglio nella cartella EVENTI della radice Drive. */
 function spostaFoglioAccantoAlDatabase_(idFoglio) {
 	const cartella = ottieniCartelleEventi_().eventi;
 	DriveApp.getFileById(String(idFoglio)).moveTo(cartella);

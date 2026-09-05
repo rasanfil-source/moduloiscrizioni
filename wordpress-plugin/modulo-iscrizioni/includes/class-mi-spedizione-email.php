@@ -47,7 +47,7 @@ final class MI_Spedizione_Email {
 		$snapshot['oggetto'] = 'Evento pronto — ' . sanitize_text_field( get_the_title( $event_id ) );
 		$snapshot['preheader'] = 'Il modulo e il foglio operativo sono pronti.';
 		$snapshot['evento']['url'] = esc_url_raw( $event_url, array( 'https' ) );
-		$snapshot['html'] = '<p>Gentile ' . esc_html( $nome_destinatario ) . ',</p><p>l’evento <strong>' . esc_html( get_the_title( $event_id ) ) . '</strong> è stato pubblicato.</p><p>Il riferimento per la gestione è <strong>' . esc_html( $recipient ) . '</strong>. Per aprire il foglio devi essere autenticato in Google con questo indirizzo e avere i permessi sul documento.</p><p><strong>Foglio operativo:</strong><br><a href="' . esc_url( $sheet_url ) . '">' . esc_html( $sheet_url ) . '</a><br><span aria-hidden="true">⧉</span> Seleziona e copia il collegamento quando ti serve.</p>';
+		$snapshot['html'] = '<p>Gentile ' . esc_html( $nome_destinatario ) . ',</p><p>l’evento <strong>' . esc_html( get_the_title( $event_id ) ) . '</strong> è stato pubblicato.</p><p>Il riferimento per la gestione è <strong>' . esc_html( $recipient ) . '</strong>. Per aprire il foglio devi essere autenticato in Google con questo indirizzo e avere i permessi sul documento.</p><p><strong>Foglio operativo dell’evento</strong></p><p><a href="' . esc_url( $sheet_url ) . '">Apri il foglio Google dell’evento</a></p>';
 		$snapshot['testo'] = "Gentile " . sanitize_text_field( $nome_destinatario ) . ",\n\nl’evento “" . sanitize_text_field( get_the_title( $event_id ) ) . "” è stato pubblicato.\n\nAccedi a Google con {$recipient} per aprire il foglio operativo:\n{$sheet_url}\n\nPagina dell’evento:\n{$event_url}";
 		$snapshot['identificativo'] = array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' );
 		$payload_json = wp_json_encode( array( 'event_id' => $event_id, 'template_type' => 'EVENT_MANAGER_READY', 'email_preview' => $snapshot ) );
@@ -59,6 +59,23 @@ final class MI_Spedizione_Email {
 		if ( false === $inserted ) return new WP_Error( 'mi_notifica_gestore_archivio', 'Comunicazione al gestore non salvata.' );
 		if ( 'PENDING' === $status && $inserted ) self::pianifica_spedizione();
 		return array( 'ok' => true, 'count' => $inserted ? 1 : 0, 'mode' => 'PENDING' === $status ? 'OPERATIVO' : 'ANTEPRIMA' );
+	}
+
+	/** Prepara la conferma di attivazione per la parrocchia e, se assegnato, per il gestore dell’evento. */
+	public static function accoda_notifiche_attivazione_evento( $event_id, ?WP_User $gestore, $sheet_url, $email_segreteria ) {
+		$email_segreteria = sanitize_email( $email_segreteria );
+		if ( ! is_email( $email_segreteria ) ) return new WP_Error( 'mi_notifica_segreteria_non_valida', 'L’indirizzo email della parrocchia non è valido.' );
+		$destinatari = array( array( 'utente' => null, 'email' => $email_segreteria ) );
+		if ( $gestore instanceof WP_User && is_email( $gestore->user_email ) && strtolower( $gestore->user_email ) !== strtolower( $email_segreteria ) ) $destinatari[] = array( 'utente' => $gestore, 'email' => $gestore->user_email );
+		$conteggio = 0;
+		$modalita = 'ANTEPRIMA';
+		foreach ( $destinatari as $destinatario ) {
+			$result = self::accoda_notifica_gestore_evento( $event_id, $destinatario['utente'], $sheet_url, $destinatario['email'] );
+			if ( is_wp_error( $result ) ) return $result;
+			$conteggio += absint( $result['count'] ?? 0 );
+			$modalita = (string) ( $result['mode'] ?? $modalita );
+		}
+		return array( 'ok' => true, 'count' => $conteggio, 'mode' => $modalita );
 	}
 
 	public static function accoda_comunicazione_operativa( array $payload ) {

@@ -103,6 +103,10 @@ document.addEventListener('DOMContentLoaded', () => {
       invalid.reportValidity();
     });
     const pricing = form.querySelector('[data-mi-pricing]');
+    form.addEventListener('submit', () => {
+      const status = form.querySelector('[data-mi-saving-status]');
+      if (status) status.hidden = false;
+    });
     const overnight = form.querySelector('[data-mi-overnight]');
     const rooms = form.querySelector('[data-mi-accommodations]');
     const updateOvernight = () => {

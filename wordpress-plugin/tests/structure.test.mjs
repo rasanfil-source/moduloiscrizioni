@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.23\.2/);
+	assert.match(source, /Version:\s+3\.23\.5/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -88,22 +88,24 @@ test('la pubblicazione mostra attesa ed esito vicino al comando senza duplicare 
   assert.match(shortcode, /<small>Gratuita<\/small>/);
 });
 
-test('la pubblicazione assegna un solo gestore, condivide il foglio e prepara la sua email', async () => {
+test('la pubblicazione notifica sempre la parrocchia e, se assegnato, anche il gestore', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const email = await read('includes/class-mi-spedizione-email.php');
   assert.match(portal, /function risolvi_gestore_evento/);
   assert.match(portal, /'email_gestore' => \$gestore \? \$gestore->user_email : ''/);
   assert.doesNotMatch(portal, /risolvi_gestore_evento\( \$event_id, true \)/);
-  assert.match(portal, /if \( ! \$gestore \) \{/);
-  assert.match(portal, /get_option\( 'mi_email_segreteria_eventi', '' \)/);
-  assert.match(portal, /accoda_notifica_gestore_evento\( \$event_id, null,/);
+  assert.match(portal, /mi_email_segreteria_eventi/);
+  assert.match(portal, /get_option\( 'admin_email', '' \)/);
+  assert.match(portal, /accoda_notifiche_attivazione_evento/);
   assert.match(email, /\$gestore \? \$gestore->user_email : \$email_segreteria/);
   assert.match(email, /\?WP_User \$gestore/);
   assert.match(portal, /_mi_manager_user_id/);
-  assert.match(portal, /accoda_notifica_gestore_evento/);
+  assert.match(email, /function accoda_notifiche_attivazione_evento/);
+  assert.match(portal, /alla parrocchia e al gestore/);
   assert.match(email, /function accoda_notifica_gestore_evento/);
   assert.match(email, /EVENT_MANAGER_READY/);
   assert.match(email, /autenticato in Google con questo indirizzo/);
+  assert.match(email, /Apri il foglio Google dell’evento/);
   assert.match(email, /'PENDING' === \$status/);
 });
 
@@ -1304,8 +1306,8 @@ test('una bozza vuota può essere cestinata e la scheda torna sempre all’elenc
   assert.match(portal, /SELECT COUNT\(\*\) FROM \{\$wpdb->prefix\}mi_registrations WHERE event_id=%d/);
   assert.match(portal, /wp_trash_post\( \$event_id \)/);
   assert.match(portal, /Bozza spostata nel cestino/);
-  assert.match(portal, /Chiudi la scheda/);
-  assert.match(portal, /aria-label="Chiudi la scheda dell’evento"/);
+  assert.match(portal, /Comprimi la scheda/);
+  assert.match(portal, /aria-label="Comprimi la scheda dell’evento"/);
   assert.match(portal, /#mi-elenco-eventi/);
   assert.match(portal, /mi-event-management__back/);
   assert.match(css, /\.mi-event-management__back/);
