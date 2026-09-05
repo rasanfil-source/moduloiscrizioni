@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.23\.5/);
+	assert.match(source, /Version:\s+3\.23\.8/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -85,7 +85,8 @@ test('la pubblicazione mostra attesa ed esito vicino al comando senza duplicare 
   assert.match(portalJs, /Attendere, prego: sto creando il foglio Google e pubblicando l.evento/);
   assert.match(portal, /event_outputs_panel\( \$selected \);\s*self::notice\(\);/);
   assert.doesNotMatch(portal, /self::event_outputs_panel\( \$event_id \);\s*\}\s*echo '<\/div>'/);
-  assert.match(shortcode, /<small>Gratuita<\/small>/);
+  assert.match(shortcode, /Iscrizioni<\/h2>/);
+  assert.match(shortcode, /<strong>Seleziona la quantità<\/strong>/);
 });
 
 test('la pubblicazione notifica sempre la parrocchia e, se assegnato, anche il gestore', async () => {
@@ -251,15 +252,15 @@ test('il percorso pubblico è progressivo e dispone di un modello concentrato', 
   assert.match(shortcode, /data-mi-step="3"/);
   assert.match(shortcode, /theme_page_templates/);
   assert.match(script, /showStep/);
-  assert.match(script, /prefillBuyerFromFirstParticipant/);
-  assert.match(script, /buyerEdited\.firstName/);
-  assert.match(script, /buyerEdited\.lastName/);
-	assert.match(script, /Qualche dato aggiuntivo/);
-	assert.match(script, /Aggiungi, se vuoi, anche i dati degli altri partecipanti/);
+	assert.match(script, /prefillFirstBookingFromContact/);
+	assert.doesNotMatch(script, /buyerEdited\.firstName/);
+	assert.doesNotMatch(script, /Qualche dato aggiuntivo/);
 	assert.doesNotMatch(script, /data-mi-required-when-open/);
-	assert.match(script, /input\.required = true/);
-	assert.match(script, /participant_extra_scope === 'ALL'/);
-	assert.match(script, /identityDetailField/);
+  assert.match(script, /input\.required = true/);
+  assert.match(script, /participant_extra_scope === 'ALL'/);
+	assert.doesNotMatch(script, /identityDetailField/);
+	assert.match(script, /data-mi-participant-field="email"/);
+	assert.match(script, /data-mi-participant-field="phone"/);
   assert.match(template, /wp_head/);
   assert.doesNotMatch(template, /get_header|get_sidebar/);
 });
@@ -272,10 +273,10 @@ test('nome e cognome sono obbligatori per tutti; i dati aggiuntivi seguono l’a
 	assert.match(script, /input\.required = required && Boolean\(field\.required\)/);
 });
 
-test('la barra mobile è compatta e indica esplicitamente gli eventi gratuiti', async () => {
-	const script = await read('assets/public.js');
+test('la barra mobile è compatta e non sovraccarica il riepilogo', async () => {
+	const shortcode = await read('includes/class-mi-shortcode.php');
 	const style = await read('assets/public.css');
-	assert.match(script, /evento gratuito/);
+	assert.doesNotMatch(shortcode, /data-mi-economic-summary/);
 	assert.match(style, /align-items: baseline/);
 	assert.match(style, /min-height: 44px/);
 });
@@ -737,7 +738,7 @@ test('la gratuità è visibile e compatibile soltanto con la sola iscrizione', a
   const shortcode = await read('includes/class-mi-shortcode.php');
   const admin = await read('includes/class-mi-admin.php');
   const script = await read('assets/admin.js');
-  assert.match(shortcode, /'ZERO'.+<small>Gratuita<\/small>/);
+  assert.match(shortcode, /data-mi-step="2"[\s\S]*Informazioni di contatto/);
   assert.match(admin, /registration_only_price/);
   assert.match(admin, /array\(\s*'NONE',\s*'ZERO'\s*\)/);
 	assert.match(admin, /“Gratuito” richiede “Nessun pagamento previsto”/);
@@ -753,7 +754,8 @@ test('il prezzo supporta una quota di partecipazione uguale per tutti', async ()
 	assert.match(eventType, /value="FIXED"[\s\S]*Quota di partecipazione uguale per tutti/);
 	assert.match(eventType, /_mi_fixed_price_cents/);
 	assert.match(service, /'FIXED' === \$event\['pricing_mode'\]/);
-	assert.match(shortcode, /Quota di partecipazione:/);
+	assert.match(shortcode, /name="buyerEmail" type="email"[^>]*autocomplete="email">/);
+	assert.match(shortcode, /<h3>Prenotazione<\/h3>/);
 	assert.match(adminScript, /\['FIXED', 'CALCULATED'\]/);
 	assert.match(publicScript, /fixed_price_cents/);
 });
@@ -1043,10 +1045,11 @@ test('il pannello e il CSV espongono gli importi economici', async () => {
   assert.match(admin, /etichetta_modalita_economica/);
 });
 
-test('il modulo mostra totale, caparra e saldo senza pagamenti online', async () => {
+test('il modulo conserva i calcoli economici senza mostrarli nel primo passaggio', async () => {
   const shortcode = await read('includes/class-mi-shortcode.php');
   const script = await read('assets/public.js');
-  assert.match(shortcode, /data-mi-economic-summary/);
+  assert.doesNotMatch(shortcode, /data-mi-economic-summary/);
+  assert.doesNotMatch(shortcode, /Fonti ammesse/);
   assert.match(script, /renderEconomicSummary/);
   assert.match(script, /deposit_percentage/);
   assert.match(script, /deposit_mode === 'FIXED'/);
@@ -1094,10 +1097,8 @@ test('il nome storico della tipologia resta una stringa', async () => {
   assert.match(service, /ticket_type_name' => \$item\['name'\][\s\S]{0,180}array\( '%d', '%s', '%s', '%d', '%d' \)/);
 });
 
-test('il modulo presenta in italiano le fonti registrate manualmente', async () => {
-  const shortcode = await read('includes/class-mi-shortcode.php');
+test('il calcolo interno conserva le fonti registrate manualmente', async () => {
   const script = await read('assets/public.js');
-  assert.match(shortcode, /Fonti ammesse/);
   assert.match(script, /BANK_TRANSFER:\s*'Bonifico'/);
   assert.match(script, /CARD:\s*'Carta'/);
   assert.match(script, /CASH:\s*'Contante'/);
@@ -1402,6 +1403,7 @@ test('la scheda rapida apre il wizard completo per modificare lo stesso evento a
   assert.match(portal, /Link per le iscrizioni/);
   assert.match(portal, /data-mi-share=/);
   assert.match(portal, /aria-label="Condividi il link per le iscrizioni"/);
+  assert.match(portal, /mi-output-link.*target="_blank"/);
   const script = await read('assets/portal.js');
 	const css = await read('assets/portal.css');
   assert.match(script, /navigator\.share/);
@@ -1409,6 +1411,7 @@ test('la scheda rapida apre il wizard completo per modificare lo stesso evento a
 	assert.match(css, /\.mi-event-registration-link\{[^}]*grid-template-columns:minmax\(0,1fr\) auto 44px/);
 	assert.match(css, /\.mi-event-registration-link input\{[^}]*text-overflow:ellipsis/);
 	assert.doesNotMatch(css, /\.mi-event-registration-link input\{grid-column:1\/-1\}/);
+	assert.match(css, /\.mi-event-registration-link\{display:flex!important;flex-wrap:nowrap!important/);
 });
 
 test('ogni tessera bozza riapre tutti i campi del percorso di creazione', async () => {
@@ -1577,10 +1580,15 @@ test('la ricerca iscrizioni mantiene campo e pulsante affiancati in proporzione 
 });
 
 test('le quote accessorie usano righe compatte senza grandi spazi vuoti', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
   const css = await read('assets/portal.css');
   assert.match(css, /\.mi-service-fee,\.mi-accommodation-fee\{[^}]*grid-template-columns:minmax\(210px,360px\) minmax\(120px,180px\)[^}]*padding:\.38rem 0/);
   assert.match(css, /\.mi-event-wizard \.mi-service-fee>label,\.mi-event-wizard \.mi-accommodation-fee>label\{margin:0\}/);
   assert.match(css, /\.mi-service-fee input:not\(\[type=checkbox\]\),\.mi-event-wizard \.mi-accommodation-fee input:not\(\[type=checkbox\]\)\{[^}]*min-height:40px/);
+  assert.match(portal, /bus_route_code\[\]/);
+  assert.match(portal, /data-mi-add-bus-route/);
+  assert.match(script, /data-mi-bus-routes/);
 });
 
 test('la scelta della quota usa tre opzioni chiare nell ordine richiesto', async () => {

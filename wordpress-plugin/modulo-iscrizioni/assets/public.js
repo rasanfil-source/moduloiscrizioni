@@ -20,6 +20,8 @@
     const economicSummary = root.querySelector('[data-mi-economic-summary]');
 	const buyerFirstName = form.elements.namedItem('buyerFirstName');
 	const buyerLastName = form.elements.namedItem('buyerLastName');
+	const buyerEmail = form.elements.namedItem('buyerEmail');
+	const buyerPhone = form.elements.namedItem('buyerPhone');
 	const steps = Array.from(root.querySelectorAll('[data-mi-step]'));
 	const nextButton = root.querySelector('[data-mi-next]');
 	const backButton = root.querySelector('[data-mi-back]');
@@ -27,10 +29,6 @@
 	const marketingInput = form.elements.namedItem('marketingAccepted');
 	const marketingText = marketingInput?.closest('label')?.querySelector('span');
 	if (marketingText) marketingText.textContent = 'Vuoi essere avvisato delle future iniziative? Il consenso è facoltativo e può essere revocato.';
-	const participantDetailsRoot = document.createElement('div');
-	participantDetailsRoot.className = 'mi-registration__participant-details';
-	participantDetailsRoot.dataset.miParticipantDetails = '';
-	steps[2]?.querySelector('.mi-registration__grid')?.before(participantDetailsRoot);
 	if (config.event.special_requests_enabled) {
 	  const specialRequestsLabel = document.createElement('label');
 	  specialRequestsLabel.className = 'mi-registration__special-requests';
@@ -41,27 +39,27 @@
 	  specialRequestsInput.maxLength = 2000;
 	  specialRequestsInput.placeholder = 'Segnala esigenze organizzative, alimentari o di accessibilità che ritieni utile comunicare.';
 	  specialRequestsLabel.append(specialRequestsInput);
-	  steps[2]?.querySelector('.mi-registration__grid')?.before(specialRequestsLabel);
+	  steps[2]?.querySelector('h2')?.after(specialRequestsLabel);
 	}
 	let currentStep = 1;
     let requestKey = makeRequestKey();
     let participantValues = [];
-	const buyerEdited = { firstName: false, lastName: false };
-	buyerFirstName?.addEventListener('input', () => { buyerEdited.firstName = true; });
-	buyerLastName?.addEventListener('input', () => { buyerEdited.lastName = true; });
-
-	function prefillBuyerFromFirstParticipant() {
+	function prefillFirstBookingFromContact() {
 	  const firstParticipant = participantsRoot.querySelector('.mi-registration__participant');
 	  if (!firstParticipant) return;
-	  if (!buyerEdited.firstName && buyerFirstName) buyerFirstName.value = firstParticipant.querySelector('[data-mi-first-name]')?.value.trim() || '';
-	  if (!buyerEdited.lastName && buyerLastName) buyerLastName.value = firstParticipant.querySelector('[data-mi-last-name]')?.value.trim() || '';
+	  const firstName = firstParticipant.querySelector('[data-mi-first-name]');
+	  const lastName = firstParticipant.querySelector('[data-mi-last-name]');
+	  if (firstName && buyerFirstName) firstName.value = buyerFirstName.value.trim();
+	  if (lastName && buyerLastName) lastName.value = buyerLastName.value.trim();
+	  const email = firstParticipant.querySelector('[data-mi-participant-field="email"]');
+	  const phone = firstParticipant.querySelector('[data-mi-participant-field="phone"]');
+	  if (email && buyerEmail && !email.value) email.value = buyerEmail.value.trim();
+	  if (phone && buyerPhone && !phone.value) phone.value = buyerPhone.value.trim();
 	}
-
-	function updateBuyerStepHeading() {
-	  const heading = steps[2]?.querySelector('h2');
-	  if (!heading) return;
-	  heading.textContent = 'Qualche dato aggiuntivo';
-	}
+	buyerFirstName?.addEventListener('input', prefillFirstBookingFromContact);
+	buyerLastName?.addEventListener('input', prefillFirstBookingFromContact);
+	buyerEmail?.addEventListener('input', prefillFirstBookingFromContact);
+	buyerPhone?.addEventListener('input', prefillFirstBookingFromContact);
 
     function makeRequestKey() {
       if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
@@ -116,7 +114,7 @@
       const optionPrices = Object.fromEntries((config.event.options || []).map((option) => [option.code, Number(option.price_cents) || 0]));
       const ticketTotal = Object.entries(ticketSelection()).reduce((total, [code, quantity]) => total + (prices[code] || 0) * quantity, 0);
       const orderTotal = Object.entries(orderOptionSelection()).reduce((total, [code, quantity]) => total + (optionPrices[code] || 0) * quantity, 0);
-      const participantTotal = Array.from(participantsRoot.querySelectorAll('[data-mi-participant-option]')).reduce((total, input) => total + (optionPrices[input.dataset.miParticipantOption] || 0) * (Number.parseInt(input.value, 10) || 0), 0);
+      const participantTotal = Array.from(participantsRoot.querySelectorAll('[data-mi-participant-option]')).reduce((total, input) => total + (optionPrices[input.dataset.miParticipantOption] || 0) * participantOptionQuantity(input), 0);
       return ticketTotal + orderTotal + participantTotal;
     }
 
@@ -144,7 +142,7 @@
         economicSummary.querySelector('[data-mi-economic-note]').textContent = 'Il modulo registra l’iscrizione; il versamento sarà registrato manualmente dall’organizzazione.';
       } else if (mode === 'DEPOSIT_BALANCE') {
 		const fixedDeposit = config.event.deposit_mode === 'FIXED';
-		const initial = fixedDeposit ? Math.min(total, Number(config.event.deposit_fixed_cents || 0)) : Math.round(total * Number(config.event.deposit_percentage || 30) / 100);
+		const initial = fixedDeposit ? Math.min(total, Number(config.event.deposit_fixed_cents || 0) * totalQuantity()) : Math.round(total * Number(config.event.deposit_percentage || 30) / 100);
 		economicSummary.querySelector('[data-mi-initial-label]').textContent = fixedDeposit ? 'Caparra fissa:' : `Caparra (${config.event.deposit_percentage}%):`;
         economicSummary.querySelector('[data-mi-initial]').textContent = formatCurrency(initial);
         economicSummary.querySelector('[data-mi-balance]').textContent = formatCurrency(total - initial);
@@ -158,8 +156,8 @@
 	  const quantity = totalQuantity();
 	  if (!stickySummary) return;
 	  const quantityLabel = quantity === 1 ? '1 iscrizione' : `${quantity} iscrizioni`;
-	  const priceLabel = ['FIXED', 'CALCULATED'].includes(config.event.pricing_mode) ? formatCurrency(totalCents()) : (config.event.pricing_mode === 'ZERO' ? 'evento gratuito' : '');
-	  stickySummary.textContent = quantity ? `${quantityLabel}${priceLabel ? ` · ${priceLabel}` : ''}` : 'Nessuna iscrizione';
+	  const total = totalCents();
+	  stickySummary.textContent = quantity ? `${quantityLabel}${currentStep >= 2 && total > 0 ? ` · ${formatCurrency(total)}` : ''}` : 'Nessuna iscrizione';
 	  root.querySelectorAll('[data-mi-ticket]').forEach((input) => {
 		input.closest('.mi-registration__ticket')?.classList.toggle('is-selected', Number(input.value) > 0);
 	  });
@@ -167,6 +165,7 @@
 
 	function showStep(step, focusHeading = true) {
 	  currentStep = Math.min(3, Math.max(1, step));
+	  if (currentStep === 3) renderConfirmationSummary();
 	  steps.forEach((section) => { section.hidden = Number(section.dataset.miStep) !== currentStep; });
 	  root.querySelectorAll('[data-mi-progress]').forEach((item) => {
 		const itemStep = Number(item.dataset.miProgress);
@@ -178,8 +177,71 @@
 	  nextButton.hidden = currentStep === 3;
 	  submitButton.hidden = currentStep !== 3;
 	  nextButton.textContent = currentStep === 2 ? 'Vai alla conferma' : 'Continua';
+	  updateStickySummary();
 	  if (focusHeading) steps[currentStep - 1]?.querySelector('h2')?.focus();
 	}
+
+    function renderConfirmationSummary() {
+      captureParticipants();
+      let summary = steps[2].querySelector('[data-mi-confirmation-summary]');
+      if (!summary) {
+        summary = document.createElement('div');
+        summary.dataset.miConfirmationSummary = '';
+        summary.className = 'mi-registration__confirmation-summary';
+        steps[2].querySelector('h2').after(summary);
+      }
+      summary.replaceChildren();
+      const line = (parent, title, value) => {
+        const row = document.createElement('p');
+        const label = document.createElement('strong');
+        label.textContent = title;
+        const detail = document.createElement('span');
+        detail.textContent = value;
+        row.append(label, detail);
+        parent.append(row);
+      };
+      line(summary, 'Contatto', [buyerFirstName.value, buyerLastName.value, buyerEmail.value, buyerPhone.value].filter(Boolean).join(' · '));
+      const options = config.event.options || [];
+      participantValues.forEach((participant, index) => {
+        const section = document.createElement('section');
+        const heading = document.createElement('h3');
+        heading.textContent = `Prenotazione ${index + 1} · ${participant.firstName} ${participant.lastName}`;
+        section.append(heading);
+        const ticket = (config.event.ticket_types || []).find((item) => item.code === participant.key.split(':')[0]);
+        const base = config.event.pricing_mode === 'FIXED' ? Number(config.event.fixed_price_cents) || 0 : Number(ticket?.price_cents) || 0;
+        let subtotal = base;
+        if (base > 0) line(section, 'Quota di partecipazione', formatCurrency(base));
+        (config.event.participant_fields || []).forEach((field) => {
+          const value = participant.fields?.[field.key];
+          if (value) line(section, field.label, value);
+        });
+        options.filter((option) => option.scope === 'TICKET').forEach((option) => {
+          const quantity = Number(participant.options?.[option.code]) || 0;
+          if (!quantity) return;
+          const cost = quantity * (Number(option.price_cents) || 0);
+          subtotal += cost;
+          line(section, `${option.name}${quantity > 1 ? ` × ${quantity}` : ''}`, formatCurrency(cost));
+        });
+        line(section, 'Totale partecipante', subtotal > 0 ? formatCurrency(subtotal) : 'Gratuito');
+        summary.append(section);
+      });
+      const orderSelection = orderOptionSelection();
+      options.filter((option) => option.scope === 'ORDER').forEach((option) => {
+        const quantity = Number(orderSelection[option.code]) || 0;
+        if (quantity) line(summary, `${option.name} × ${quantity}`, formatCurrency(quantity * (Number(option.price_cents) || 0)));
+      });
+      const requests = form.elements.namedItem('specialRequests')?.value.trim();
+      if (requests) line(summary, 'Richieste particolari', requests);
+      const total = totalCents();
+      line(summary, 'Totale prenotazione', total > 0 ? formatCurrency(total) : 'Gratuito');
+      if (total > 0 && config.event.economic_mode === 'DEPOSIT_BALANCE') {
+        const deposit = config.event.deposit_mode === 'FIXED'
+          ? Math.min(total, (Number(config.event.deposit_fixed_cents) || 0) * totalQuantity())
+          : Math.round(total * Number(config.event.deposit_percentage || 30) / 100);
+        line(summary, 'Caparra', formatCurrency(deposit));
+        line(summary, 'Saldo successivo', formatCurrency(total - deposit));
+      }
+    }
 
 	function currentStepIsValid() {
 	  errorBox.hidden = true;
@@ -202,8 +264,8 @@
         key,
         firstName: row.querySelector('[data-mi-first-name]')?.value || '',
         lastName: row.querySelector('[data-mi-last-name]')?.value || '',
-		fields: previous.fields || {},
-		options: previous.options || {}
+		fields: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-field]')).map((input) => [input.dataset.miParticipantField, input.value.trim()])),
+		options: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-option]')).map((input) => [input.dataset.miParticipantOption, String(participantOptionQuantity(input))]))
 		};
 	  });
     }
@@ -234,23 +296,27 @@
         row.dataset.miTicketType = ticket.code;
         row.dataset.miTicketIndex = String(ticket.position);
         const legend = document.createElement('legend');
-        legend.textContent = `Partecipante ${index + 1} · ${ticket.name}`;
+		legend.textContent = `Prenotazione${index ? ` ${index + 1}` : ''}`;
         const grid = document.createElement('div');
         grid.className = 'mi-registration__grid';
         grid.append(
           participantField('Nome', 'given-name', 'firstName', previous.firstName || '', index),
           participantField('Cognome', 'family-name', 'lastName', previous.lastName || '', index)
         );
+		const allRequired = config.event.participant_extra_scope === 'ALL';
+		(config.event.participant_fields || []).forEach((field) => grid.append(configuredParticipantField(field, previous.fields?.[field.key] || '', index, allRequired || index === 0)));
+		(config.event.options || []).filter((option) => option.scope === 'TICKET').forEach((option) => grid.append(configuredParticipantOption(option, previous.options?.[option.code] || '0', index)));
         row.append(legend, grid);
 		participantsRoot.append(row);
       });
+	  prefillFirstBookingFromContact();
       renderEconomicSummary();
       updateStickySummary();
     }
 
     function participantField(labelText, autocomplete, key, value, index) {
       const label = document.createElement('label');
-      label.textContent = labelText;
+      label.textContent = `${labelText} *`;
       const input = document.createElement('input');
       input.name = `participant-${index}-${key}`;
       input.maxLength = 80;
@@ -261,63 +327,6 @@
       label.append(input);
       return label;
     }
-
-	function renderParticipantDetails() {
-	  captureParticipants();
-	  participantDetailsRoot.replaceChildren();
-	  const fields = config.event.participant_fields || [];
-	  const options = (config.event.options || []).filter((option) => option.scope === 'TICKET');
-	  if (!fields.length && !options.length) return;
-	  const allRequired = config.event.participant_extra_scope === 'ALL';
-	  const optionalRows = document.createElement('div');
-	  optionalRows.className = 'mi-registration__additional-participants';
-	  optionalRows.hidden = !allRequired;
-	  participantValues.forEach((participant, index) => {
-		const row = document.createElement('fieldset');
-		row.className = 'mi-registration__participant-detail';
-		row.dataset.miParticipantKey = participant.key;
-		const legend = document.createElement('legend');
-		legend.textContent = `Partecipante ${index + 1}: ${participant.firstName} ${participant.lastName}`.trim();
-		const grid = document.createElement('div');
-		grid.className = 'mi-registration__grid';
-		grid.append(identityDetailField('Nome', 'firstName', participant, index, allRequired || index === 0), identityDetailField('Cognome', 'lastName', participant, index, allRequired || index === 0));
-		fields.forEach((field) => grid.append(configuredParticipantField(field, participant.fields?.[field.key] || '', index, allRequired || index === 0)));
-		options.forEach((option) => grid.append(configuredParticipantOption(option, participant.options?.[option.code] || '0', index)));
-		row.append(legend, grid);
-		if (index === 0 || allRequired) participantDetailsRoot.append(row);
-		else optionalRows.append(row);
-	  });
-	  if (!allRequired && participantValues.length > 1) {
-		const toggle = document.createElement('button');
-		toggle.type = 'button';
-		toggle.className = 'mi-registration__secondary-button';
-		toggle.textContent = 'Aggiungi, se vuoi, anche i dati degli altri partecipanti';
-		toggle.addEventListener('click', () => { optionalRows.hidden = false; toggle.hidden = true; optionalRows.querySelector('input, select, textarea')?.focus(); });
-		participantDetailsRoot.append(toggle, optionalRows);
-	  } else participantDetailsRoot.append(optionalRows);
-	}
-
-	function identityDetailField(labelText, property, participant, index, required) {
-	  const label = document.createElement('label');
-	  label.textContent = labelText;
-	  const input = document.createElement('input');
-	  input.required = required;
-	  input.maxLength = 80;
-	  input.value = participant[property] || '';
-	  input.dataset.miDetailIdentity = property;
-	  input.autocomplete = `section-participant-details-${index + 1} ${property === 'firstName' ? 'given-name' : 'family-name'}`;
-	  input.addEventListener('input', () => {
-		participant[property] = input.value;
-		const sourceRow = Array.from(participantsRoot.querySelectorAll('.mi-registration__participant'))[index];
-		const selector = property === 'firstName' ? '[data-mi-first-name]' : '[data-mi-last-name]';
-		const sourceInput = sourceRow?.querySelector(selector);
-		if (sourceInput) sourceInput.value = input.value;
-		const legend = input.closest('fieldset')?.querySelector('legend');
-		if (legend) legend.textContent = `Partecipante ${index + 1}: ${participant.firstName} ${participant.lastName}`.trim();
-	  });
-	  label.append(input);
-	  return label;
-	}
 
     function configuredParticipantField(field, value, index, required = false) {
       const label = document.createElement('label');
@@ -358,31 +367,36 @@
       return label;
     }
 
+    function participantOptionQuantity(input) {
+      return input.type === 'radio' ? (input.checked ? 1 : 0) : (Number.parseInt(input.value, 10) || 0);
+    }
+
     function configuredParticipantOption(option, value, index) {
       const label = document.createElement('label');
-      label.textContent = `${option.name}${Number(option.price_cents) > 0 ? ` · ${formatCurrency(option.price_cents)}` : ''}`;
+      const isAccommodation = String(option.code || '').startsWith('alloggio-');
+      label.className = isAccommodation ? 'mi-registration__option-choice' : '';
       const input = document.createElement('input');
-      input.type = 'number';
-      input.min = '0';
-      input.max = String(option.max_quantity || 1);
-      input.value = value;
-      input.name = `participant-${index}-option-${option.code}`;
+      input.type = isAccommodation ? 'radio' : 'number';
+      if (isAccommodation) {
+        input.name = `participant-${index}-accommodation`;
+        input.value = '1';
+        input.checked = String(value) === '1';
+      } else {
+        input.min = '0';
+        input.max = String(option.max_quantity || 1);
+        input.value = value;
+        input.name = `participant-${index}-option-${option.code}`;
+      }
       input.dataset.miParticipantOption = option.code;
-      input.addEventListener('input', () => { renderEconomicSummary(); updateStickySummary(); });
-      label.append(input);
+      input.addEventListener(isAccommodation ? 'change' : 'input', () => { renderEconomicSummary(); updateStickySummary(); });
+      const text = document.createElement('span');
+      text.textContent = `${option.name}${Number(option.price_cents) > 0 ? ` · ${formatCurrency(option.price_cents)}` : ''}`;
+      label.append(input, text);
       return label;
     }
 
     function participantPayload() {
 	  captureParticipants();
-	  participantDetailsRoot.querySelectorAll('.mi-registration__participant-detail').forEach((row) => {
-		const participant = participantValues.find((value) => value.key === row.dataset.miParticipantKey);
-		if (!participant) return;
-		const identityInputs = row.querySelectorAll('[data-mi-detail-identity]');
-		identityInputs.forEach((input) => { participant[input.dataset.miDetailIdentity] = input.value.trim(); });
-		participant.fields = Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-field]')).map((input) => [input.dataset.miParticipantField, input.value.trim()]));
-		participant.options = Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-option]')).map((input) => [input.dataset.miParticipantOption, core.clampQuantity(input.value, input.max)]));
-	  });
 	  return participantValues.map((participant) => {
 		const [ticketTypeCode, ticketIndex] = participant.key.split(':');
 		return {
@@ -450,12 +464,6 @@
 	nextButton.addEventListener('click', () => {
 	  if (!currentStepIsValid()) return;
 	  if (currentStep === 1) renderParticipants();
-	  if (currentStep === 2) {
-		captureParticipants();
-		renderParticipantDetails();
-		prefillBuyerFromFirstParticipant();
-		updateBuyerStepHeading();
-	  }
 	  showStep(currentStep + 1);
 	});
 	backButton.addEventListener('click', () => showStep(currentStep - 1));

@@ -21,7 +21,7 @@ final class MI_Modello_Email {
 			'{{ordine.riepilogo}}',
 			'{{ordine.riepilogo_economico}}',
 			'{{ordine.totale}}',
-			'{{referente.nome_completo}}',
+			'{{sottoscrittore.nome_completo}}',
 			'{{pagamento.importo_dovuto}}',
 			'{{pagamento.saldo}}',
 			'{{pagamento.metodi}}',
@@ -44,8 +44,8 @@ final class MI_Modello_Email {
 			'internal_recipients' => array(),
 			'subject'   => 'Iscrizione confermata — {{evento.titolo}}',
 			'preheader' => 'La tua iscrizione è stata registrata. Qui trovi il riepilogo e le prossime indicazioni.',
-			'html'      => '<p>Ciao {{referente.nome_completo}},</p><p>la tua iscrizione a <strong>{{evento.titolo}}</strong> è stata registrata.</p><p><strong>Quando:</strong> {{evento.data}}<br><strong>Dove:</strong> {{evento.luogo}}</p><p><strong>Codice iscrizione:</strong> {{ordine.codice}}<br><strong>Stato:</strong> {{ordine.stato}}<br><strong>Partecipazione:</strong> {{ordine.riepilogo}}</p><p><strong>Situazione economica:</strong><br>{{ordine.riepilogo_economico}}</p><p><strong>Indicazioni per il pagamento:</strong><br>{{pagamento.istruzioni}}<br><strong>Scadenza:</strong> {{pagamento.scadenza}}<br><strong>Causale:</strong> {{pagamento.causale}}</p><p>Conserva questa email: contiene i riferimenti utili per la tua iscrizione.</p>',
-			'text'      => "Ciao {{referente.nome_completo}},\n\nla tua iscrizione a {{evento.titolo}} è stata registrata.\n\nQuando: {{evento.data}}\nDove: {{evento.luogo}}\nCodice iscrizione: {{ordine.codice}}\nStato: {{ordine.stato}}\nPartecipazione: {{ordine.riepilogo}}\n\nSituazione economica: {{ordine.riepilogo_economico}}\nIndicazioni per il pagamento: {{pagamento.istruzioni}}\nScadenza: {{pagamento.scadenza}}\nCausale: {{pagamento.causale}}\n\nConserva questa email: contiene i riferimenti utili per la tua iscrizione.",
+			'html'      => '<p>Ciao {{sottoscrittore.nome_completo}},</p><p>la tua iscrizione a <strong>{{evento.titolo}}</strong> è stata registrata.</p><p><strong>Quando:</strong> {{evento.data}}<br><strong>Dove:</strong> {{evento.luogo}}</p><p><strong>Codice iscrizione:</strong> {{ordine.codice}}<br><strong>Stato:</strong> {{ordine.stato}}<br><strong>Partecipazione:</strong> {{ordine.riepilogo}}</p><p><strong>Situazione economica:</strong><br>{{ordine.riepilogo_economico}}</p><p><strong>Indicazioni per il pagamento:</strong><br>{{pagamento.istruzioni}}<br><strong>Scadenza:</strong> {{pagamento.scadenza}}<br><strong>Causale:</strong> {{pagamento.causale}}</p><p>Conserva questa email: contiene i riferimenti utili per la tua iscrizione.</p>',
+			'text'      => "Ciao {{sottoscrittore.nome_completo}},\n\nla tua iscrizione a {{evento.titolo}} è stata registrata.\n\nQuando: {{evento.data}}\nDove: {{evento.luogo}}\nCodice iscrizione: {{ordine.codice}}\nStato: {{ordine.stato}}\nPartecipazione: {{ordine.riepilogo}}\n\nSituazione economica: {{ordine.riepilogo_economico}}\nIndicazioni per il pagamento: {{pagamento.istruzioni}}\nScadenza: {{pagamento.scadenza}}\nCausale: {{pagamento.causale}}\n\nConserva questa email: contiene i riferimenti utili per la tua iscrizione.",
 			'footer'    => 'A presto!',
 		);
 		$saved = get_post_meta( $event_id, '_mi_email_template', true );
@@ -66,7 +66,7 @@ final class MI_Modello_Email {
 			'{{ordine.riepilogo}}'        => '2 × Quota ordinaria',
 			'{{ordine.riepilogo_economico}}' => 'Totale: 40,00 € · Importo da versare: 20,00 € · Saldo: 20,00 €',
 			'{{ordine.totale}}'           => '40,00 €',
-			'{{referente.nome_completo}}' => 'Persona Esempio',
+			'{{sottoscrittore.nome_completo}}' => 'Persona Esempio',
 			'{{pagamento.importo_dovuto}}' => '20,00 €',
 			'{{pagamento.saldo}}'         => '20,00 €',
 			'{{pagamento.metodi}}'        => 'Bonifico',
@@ -122,6 +122,7 @@ final class MI_Modello_Email {
 		$snapshot['evento'] = array(
 			'titolo' => sanitize_text_field( (string) ( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) ) ),
 			'url'     => self::url_pubblica_evento( $event_id ),
+			'cover_url' => esc_url_raw( (string) get_the_post_thumbnail_url( $event_id, 'large' ) ),
 		);
 		$snapshot['identita_email'] = array(
 			'nome_mittente'        => $settings['sender_name'],
@@ -149,7 +150,7 @@ final class MI_Modello_Email {
 		$snapshot['gestione_partecipanti'] = array();
 		$snapshot['status_url'] = esc_url_raw( (string) $status_url );
 		$event_title = sanitize_text_field( (string) ( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) ) );
-		$buyer_name = sanitize_text_field( (string) ( $values['{{referente.nome_completo}}'] ?? '' ) );
+		$buyer_name = sanitize_text_field( (string) ( $values['{{sottoscrittore.nome_completo}}'] ?? '' ) );
 		if ( 'EVENT_CANCELLATION' === $template_type ) {
 			$clean_message = sanitize_textarea_field( (string) $message );
 			$snapshot['oggetto'] = 'Evento annullato — ' . $event_title;
@@ -219,7 +220,7 @@ final class MI_Modello_Email {
 			'{{ordine.riepilogo}}'           => implode( ' · ', $summary_lines ),
 			'{{ordine.riepilogo_economico}}' => 'Totale: ' . $total_label . ' · Importo da versare: ' . $due_label . ' · Saldo: ' . $balance_label,
 			'{{ordine.totale}}'              => $total_label,
-			'{{referente.nome_completo}}'    => sanitize_text_field( (string) $buyer_name ),
+			'{{sottoscrittore.nome_completo}}' => sanitize_text_field( (string) $buyer_name ),
 			'{{pagamento.importo_dovuto}}'   => $due_label,
 			'{{pagamento.saldo}}'            => $balance_label,
 			'{{pagamento.metodi}}'           => implode( ', ', $methods ),
@@ -248,17 +249,18 @@ final class MI_Modello_Email {
 		$secondary = sanitize_hex_color( $identity['secondary_color'] ?? '' ) ?: '#337ab7';
 		$primary_text = in_array( $identity['primary_text_color'] ?? '', array( '#ffffff', '#000000' ), true ) ? $identity['primary_text_color'] : self::colore_testo_contrasto( $primary );
 		$secondary_text = in_array( $identity['secondary_text_color'] ?? '', array( '#ffffff', '#000000' ), true ) ? $identity['secondary_text_color'] : self::colore_testo_contrasto( $secondary );
+		$title = sanitize_text_field( (string) ( $event['titolo'] ?? '' ) );
 		$preheader = ! empty( $istantanea['preheader'] ) ? '<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">' . esc_html( $istantanea['preheader'] ) . '</div>' : '';
 		$logo = '';
 		if ( ! empty( $identity['logo_url'] ) ) {
 			$logo = '<tr><td align="center" style="padding:18px 20px;background:#ffffff;"><img src="' . esc_url( $identity['logo_url'] ) . '" alt="' . esc_attr( $identity['logo_alt'] ?: ( $identity['nome_attivita'] ?? '' ) ) . '" width="160" style="display:block;width:auto;max-width:160px;max-height:88px;height:auto;border:0;"></td></tr>';
 		}
+		$event_banner = ! empty( $event['cover_url'] ) ? '<tr><td><img src="' . esc_url( $event['cover_url'] ) . '" alt="' . esc_attr( $title ?: 'Immagine dell’evento' ) . '" width="600" style="display:block;width:100%;max-width:600px;height:auto;border:0;"></td></tr>' : '';
 		$event_url = ! empty( $event['url'] ) ? esc_url( $event['url'] ) : '';
 		$cta = $event_url ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;margin-bottom:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . $event_url . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">Consulta la pagina dell’evento</a></td></tr></table>' : '';
 		$reply_to = ! empty( $email_identity['indirizzo_risposte'] ) && is_email( $email_identity['indirizzo_risposte'] ) ? sanitize_email( $email_identity['indirizzo_risposte'] ) : '';
 		$assistance = $reply_to ? 'Per domande o variazioni scrivi a <a href="mailto:' . esc_attr( $reply_to ) . '" style="color:' . esc_attr( $primary ) . ';text-decoration:none;font-weight:700;">' . esc_html( $reply_to ) . '</a>.' : 'Per domande o variazioni, rispondi direttamente a questa email.';
 		$activity_name = sanitize_text_field( (string) ( $identity['nome_attivita'] ?? '' ) );
-		$title = sanitize_text_field( (string) ( $event['titolo'] ?? '' ) );
 		$body = self::sanitizza_html_email( $istantanea['html'] ?? '' );
 		$management_html = '';
 		if ( ! empty( $istantanea['gestione_partecipanti'] ) && is_array( $istantanea['gestione_partecipanti'] ) ) {
@@ -273,10 +275,10 @@ final class MI_Modello_Email {
 		return '<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' . esc_html( $title ?: 'Comunicazione iscrizione' ) . '</title></head><body style="margin:0;padding:0;background:#f6f8fc;">' . $preheader
 			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#f6f8fc" style="width:100%;background:#f6f8fc;"><tr><td align="center" style="padding:24px 12px;">'
 			. '<table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" bgcolor="#ffffff" style="width:100%;max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e4e8ef;">'
-			. $logo . '<tr><td bgcolor="' . esc_attr( $primary ) . '" style="background:' . esc_attr( $primary ) . ';padding:18px 20px;color:' . esc_attr( $primary_text ) . ';font-family:Arial,Helvetica,sans-serif;">'
-			. '<div style="font-size:18px;font-weight:700;line-height:1.3;">' . esc_html( $title ?: 'Comunicazione iscrizione' ) . '</div>'
+			. $logo . $event_banner . '<tr><td bgcolor="' . esc_attr( $primary ) . '" style="background:' . esc_attr( $primary ) . ';padding:20px;color:' . esc_attr( $primary_text ) . ';font-family:Arial,Helvetica,sans-serif;">'
+			. '<div style="font-size:22px;font-weight:700;line-height:1.3;">' . esc_html( $title ?: 'Comunicazione iscrizione' ) . '</div>'
 			. ( $activity_name ? '<div style="font-size:13px;line-height:1.4;margin-top:5px;opacity:0.9;">' . esc_html( $activity_name ) . '</div>' : '' )
-			. '</td></tr><tr><td style="padding:24px 20px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:16px;line-height:1.6;">'
+			. '</td></tr><tr><td style="padding:26px 22px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:18px;line-height:1.65;">'
 			. $body . $code . $cta . $status_html . $management_html
 			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#eef2ff" style="width:100%;margin-top:20px;background:#eef2ff;border-radius:14px;"><tr><td style="padding:16px 20px;font-family:Arial,Helvetica,sans-serif;color:#333333;"><div style="font-size:15px;font-weight:700;margin-bottom:8px;">Assistenza</div><div style="font-size:14px;line-height:1.7;">' . $assistance . '</div></td></tr></table>'
 			. '<div style="font-family:Arial,Helvetica,sans-serif;color:' . esc_attr( $secondary ) . ';font-size:14px;font-style:italic;font-weight:700;margin-top:18px;text-align:right;">' . $footer . '</div>'

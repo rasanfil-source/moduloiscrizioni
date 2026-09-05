@@ -269,7 +269,7 @@ final class MI_Registration_Service {
 		}
 		$marketing_accepted = ! empty( $event['marketing_enabled'] ) && true === ( $payload['marketing_accepted'] ?? false );
 		if ( ! $allow_unpublished ) {
-			$rate_limit = self::consume_registration_rate_limit( $event_id, $buyer['email'] );
+			$rate_limit = self::consume_registration_rate_limit( $event_id, $buyer['email'] ?: $buyer['phone'] );
 			if ( is_wp_error( $rate_limit ) ) return $rate_limit;
 		}
 
@@ -322,7 +322,7 @@ final class MI_Registration_Service {
 				$wpdb->query( 'ROLLBACK' );
 				return new WP_Error( 'mi_sold_out', 'Posti esauriti.', array( 'status' => 409 ) );
 			}
-			$economic_summary = self::riepilogo_economico( $event, $selection['total_cents'] + $options_total, $status );
+			$economic_summary = self::riepilogo_economico( $event, $selection['total_cents'] + $options_total, $status, count( $participants ) );
 			$expires_at = self::registration_expiry( $event, $status, $now );
 			$revision = (array) ( $event['revision'] ?? array() );
 			$accepted_at = current_time( 'mysql', true );
@@ -406,10 +406,12 @@ final class MI_Registration_Service {
 			$email_values['_participant_management'] = $participant_management;
 			$email_snapshot = MI_Modello_Email::crea_istantanea( $event_id, $email_values );
 			$email_snapshot['status_url'] = MI_Portal::status_url( $registration_id, $order_code, $buyer['email'] );
-			$email_status = MI_Spedizione_Email::stato_nuova_email( $email_snapshot );
-			$payload_json = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $order_code, 'status' => $status, 'quantity' => $selection['quantity'], 'total_cents' => $economic_summary['total_cents'], 'economic_summary' => $economic_summary, 'email_preview' => $email_snapshot ) );
-			if ( false === $wpdb->insert( $outbox_table, array( 'registration_id' => $registration_id, 'recipient' => $buyer['email'], 'template_type' => 'REGISTRATION_CONFIRMATION', 'payload_json' => $payload_json, 'status' => $email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) {
-				throw new RuntimeException( 'Outbox non salvata.' );
+			if ( $buyer['email'] ) {
+				$email_status = MI_Spedizione_Email::stato_nuova_email( $email_snapshot );
+				$payload_json = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $order_code, 'status' => $status, 'quantity' => $selection['quantity'], 'total_cents' => $economic_summary['total_cents'], 'economic_summary' => $economic_summary, 'email_preview' => $email_snapshot ) );
+				if ( false === $wpdb->insert( $outbox_table, array( 'registration_id' => $registration_id, 'recipient' => $buyer['email'], 'template_type' => 'REGISTRATION_CONFIRMATION', 'payload_json' => $payload_json, 'status' => $email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) {
+					throw new RuntimeException( 'Outbox non salvata.' );
+				}
 			}
 			$wpdb->query( 'COMMIT' );
 			if ( 'PENDING' === $email_status ) {
@@ -452,7 +454,7 @@ final class MI_Registration_Service {
 		return true;
 	}
 
-	public static function riepilogo_economico( $event, $total_cents, $status ) {
+	public static function riepilogo_economico( $event, $total_cents, $status, $participant_count = 1 ) {
 		$total_cents = max( 0, (int) $total_cents );
 		$mode = in_array( $event['economic_mode'] ?? '', array( 'REGISTRATION_ONLY', 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ? $event['economic_mode'] : 'REGISTRATION_ONLY';
 		$initial_due = 0;
@@ -461,7 +463,7 @@ final class MI_Registration_Service {
 			$initial_due = $total_cents;
 		} elseif ( in_array( $status, array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) && 'DEPOSIT_BALANCE' === $mode ) {
 			if ( 'FIXED' === strtoupper( (string) ( $event['deposit_mode'] ?? '' ) ) ) {
-				$initial_due = min( $total_cents, max( 0, (int) ( $event['deposit_fixed_cents'] ?? 0 ) ) );
+				$initial_due = min( $total_cents, max( 0, (int) ( $event['deposit_fixed_cents'] ?? 0 ) ) * max( 0, (int) $participant_count ) );
 			} else {
 				$percentage = min( 99, max( 1, absint( $event['deposit_percentage'] ?? 30 ) ) );
 				$initial_due = (int) round( $total_cents * $percentage / 100 );
@@ -878,7 +880,7 @@ final class MI_Registration_Service {
 			}
 			if ( ! $fits ) continue;
 			$promoted_status = in_array( $event['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) && (int) $candidate['total_cents'] > 0 ? 'PENDING_PAYMENT' : 'CONFIRMED';
-			$economic = self::riepilogo_economico( $event, (int) $candidate['total_cents'], $promoted_status );
+			$economic = self::riepilogo_economico( $event, (int) $candidate['total_cents'], $promoted_status, $active_qty );
 			$deadline = self::registration_expiry( $event, $promoted_status, $now );
 			$wpdb->update( $registrations, array( 'status' => $promoted_status, 'initial_due_cents' => $economic['initial_due_cents'], 'balance_cents' => $economic['balance_cents'], 'expires_at' => $deadline, 'payment_deadline_at' => $deadline, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'waitlist_promoted' ), array( 'id' => $candidate['id'] ), array( '%s', '%d', '%d', '%s', '%s', '%s', '%s' ), array( '%d' ) );
 			$wpdb->query( $wpdb->prepare( "UPDATE {$counters} SET waitlisted_count = GREATEST(0, waitlisted_count - %d), confirmed_count = confirmed_count + %d, updated_at = %s WHERE event_id = %d", $active_qty, $active_qty, $now, $event_id ) );
@@ -1030,6 +1032,12 @@ final class MI_Registration_Service {
 			if ( is_wp_error( $options ) ) {
 				return $options;
 			}
+			$accommodation_count = count( array_filter( $options, static function ( $option ) {
+				return 0 === strpos( (string) ( $option['code'] ?? '' ), 'alloggio-' ) && ! empty( $option['quantity'] );
+			} ) );
+			if ( $accommodation_count > 1 ) {
+				return new WP_Error( 'mi_accommodation_multiple', 'Scegli un solo tipo di alloggio per partecipante.', array( 'status' => 400 ) );
+			}
 			$participants[] = array( 'ticket_type_code' => $ticket_type_code, 'ticket_index' => $ticket_index, 'first_name' => $first_name, 'last_name' => $last_name, 'fields' => $answers, 'options' => $options );
 		}
 		if ( array_sum( $remaining ) !== 0 ) {
@@ -1152,8 +1160,8 @@ final class MI_Registration_Service {
 			'email'      => sanitize_email( $raw['email'] ?? '' ),
 			'phone'      => preg_replace( '/[^0-9+().\s-]/', '', (string) ( $raw['phone'] ?? '' ) ),
 		);
-		if ( ! $buyer['first_name'] || ! $buyer['last_name'] || ! is_email( $buyer['email'] ) || ! preg_match( '/^\+[1-9][0-9().\s-]{6,30}$/', $buyer['phone'] ) ) {
-			return new WP_Error( 'mi_buyer_invalid', 'Controlla i dati del referente.', array( 'status' => 400 ) );
+		if ( ! $buyer['first_name'] || ! $buyer['last_name'] || ( $buyer['email'] && ! is_email( $buyer['email'] ) ) || ! preg_match( '/^\+[1-9][0-9().\s-]{6,30}$/', $buyer['phone'] ) ) {
+			return new WP_Error( 'mi_buyer_invalid', 'Controlla le informazioni di contatto.', array( 'status' => 400 ) );
 		}
 		return $buyer;
 	}

@@ -173,12 +173,13 @@ $email_html = MI_Modello_Email::componi_html( array(
 	'footer' => 'Un saluto',
 	'identita' => array( 'nome_attivita' => 'Attività Demo', 'primary_color' => '#151b38', 'secondary_color' => '#337ab7', 'primary_text_color' => '#ffffff', 'secondary_text_color' => '#ffffff' ),
 	'identita_email' => array( 'indirizzo_risposte' => 'assistenza@example.invalid' ),
-	'evento' => array( 'titolo' => 'Evento Demo', 'url' => 'https://example.invalid/evento' ),
+	'evento' => array( 'titolo' => 'Evento Demo', 'url' => 'https://example.invalid/evento', 'cover_url' => 'https://example.invalid/copertina.jpg' ),
 ) );
 expect( false !== strpos( $email_html, 'max-width:600px' ), 'card email da 600px assente' );
 expect( false !== strpos( $email_html, 'opacity:0;color:transparent' ), 'preheader nascosto incompleto' );
 expect( false !== strpos( $email_html, '<meta name="viewport"' ) && false !== strpos( $email_html, 'border:1px solid #e4e8ef' ), 'struttura responsive del modello email assente' );
 expect( false !== strpos( $email_html, 'role="presentation"' ) && false !== strpos( $email_html, 'cellpadding="0"' ) && false !== strpos( $email_html, 'bgcolor="#151b38"' ), 'markup email-safe incompleto' );
 expect( false !== strpos( $email_html, 'Assistenza' ) && false !== strpos( $email_html, 'border-radius:12px' ) && false !== strpos( $email_html, 'font-style:italic' ), 'componenti del restyling email assenti' );
+expect( false !== strpos( $email_html, 'https://example.invalid/copertina.jpg' ) && false !== strpos( $email_html, 'font-size:18px' ), 'banner evento o testo leggibile assenti nell email' );
 
 fwrite( STDOUT, "PHP behavior tests: OK\n" );
