@@ -878,20 +878,31 @@ final class MI_Portal {
 		$selectable_events = array_values( array_filter( $events, static function ( $event ) {
 			return ! get_post_meta( $event->ID, '_mi_event_cancelled_at', true );
 		} ) );
-		$selectable_event_ids = array_map( 'absint', wp_list_pluck( $selectable_events, 'ID' ) );
+		$period = sanitize_key( wp_unslash( $_GET['mi_portal_period'] ?? 'current' ) );
+		if ( ! in_array( $period, array( 'current', 'past' ), true ) ) $period = 'current';
+		$event_mode = sanitize_key( wp_unslash( $_GET['mi_portal_event_mode'] ?? 'all' ) );
+		if ( ! in_array( $event_mode, array( 'all', 'single' ), true ) ) $event_mode = 'all';
+		$period_events = array_values( array_filter( $selectable_events, static function ( $event ) use ( $period ) {
+			$starts_at = (string) get_post_meta( $event->ID, '_mi_event_starts_at', true );
+			$closes_at = (string) get_post_meta( $event->ID, '_mi_registration_closes_at', true );
+			$is_past = (bool) get_post_meta( $event->ID, '_mi_event_archived_at', true ) || self::is_past_event( $closes_at ?: $starts_at );
+			return 'past' === $period ? $is_past : ! $is_past;
+		} ) );
+		$period_event_ids = array_map( 'absint', wp_list_pluck( $period_events, 'ID' ) );
 		$selected = absint( $_GET['mi_portal_event'] ?? 0 );
 		if ( $selected && ! in_array( $selected, $event_ids, true ) ) wp_die( 'Evento non accessibile.', 403 );
-		if ( $selected && ! in_array( $selected, $selectable_event_ids, true ) ) $selected = 0;
+		if ( 'single' !== $event_mode || ! in_array( $selected, $period_event_ids, true ) ) $selected = 0;
 		$query = sanitize_text_field( wp_unslash( $_GET['mi_portal_query'] ?? '' ) );
 		$status = strtoupper( sanitize_text_field( wp_unslash( $_GET['mi_portal_status'] ?? '' ) ) );
 		$statuses = array( 'CONFIRMED' => 'Confermate', 'PENDING_PAYMENT' => 'In attesa di pagamento', 'WAITLISTED' => 'Lista d’attesa', 'CANCELLED' => 'Annullate', 'EXPIRED' => 'Scadute' );
 		if ( ! isset( $statuses[ $status ] ) ) $status = '';
-		echo '<section class="mi-registrations"><div class="mi-registrations__heading"><div><span class="mi-portal-eyebrow">Archivio operativo</span><h2>Iscrizioni</h2></div><p class="mi-portal-muted">Cerca una prenotazione e apri la scheda completa senza lasciare la pagina.</p></div><form class="mi-registrations-toolbar" method="get"><input type="hidden" name="mi_portal" value="1"><input type="hidden" name="mi_portal_view" value="registrations"><div class="mi-registration-search"><label class="screen-reader-text" for="mi-portal-query">Cerca nelle iscrizioni</label><input id="mi-portal-query" type="search" name="mi_portal_query" value="' . esc_attr( $query ) . '" placeholder="Nome, email, cellulare o codice prenotazione"><button class="mi-primary" type="submit">Cerca</button></div><div class="mi-registration-chips"><label>Evento<select name="mi_portal_event" data-mi-auto-submit><option value="">Tutti gli eventi</option>';
-		foreach ( $selectable_events as $event ) echo '<option value="' . esc_attr( $event->ID ) . '" ' . selected( $selected, $event->ID, false ) . '>' . esc_html( $event->post_title ) . '</option>';
+		echo '<section class="mi-registrations"><div class="mi-registrations__heading"><div><span class="mi-portal-eyebrow">Archivio operativo</span><h2>Iscrizioni</h2></div><p class="mi-portal-muted">Cerca una prenotazione e apri la scheda completa senza lasciare la pagina.</p></div><form class="mi-registrations-toolbar" method="get"><input type="hidden" name="mi_portal" value="1"><input type="hidden" name="mi_portal_view" value="registrations"><div class="mi-registration-search"><label class="screen-reader-text" for="mi-portal-query">Cerca nelle iscrizioni</label><input id="mi-portal-query" type="search" name="mi_portal_query" value="' . esc_attr( $query ) . '" placeholder="Nome, email, cellulare o codice prenotazione"><button class="mi-primary" type="submit">Cerca</button></div><div class="mi-registration-chips"><label>Periodo<select name="mi_portal_period" data-mi-auto-submit><option value="current" ' . selected( $period, 'current', false ) . '>Eventi in corso</option><option value="past" ' . selected( $period, 'past', false ) . '>Eventi passati</option></select></label><label>Eventi<select name="mi_portal_event_mode" data-mi-event-mode data-mi-auto-submit><option value="all" ' . selected( $event_mode, 'all', false ) . '>Tutti gli eventi</option><option value="single" ' . selected( $event_mode, 'single', false ) . '>Evento singolo</option></select></label><label data-mi-single-event ' . ( 'single' === $event_mode ? '' : 'hidden' ) . '>Evento<select name="mi_portal_event" data-mi-auto-submit><option value="">Scegli un evento</option>';
+		foreach ( $period_events as $event ) echo '<option value="' . esc_attr( $event->ID ) . '" ' . selected( $selected, $event->ID, false ) . '>' . esc_html( $event->post_title ) . '</option>';
 		echo '</select></label><label>Stato<select name="mi_portal_status" data-mi-auto-submit><option value="">Tutti gli stati</option>';
 		foreach ( $statuses as $value => $label ) echo '<option value="' . esc_attr( $value ) . '" ' . selected( $status, $value, false ) . '>' . esc_html( $label ) . '</option>';
 		echo '</select></label><button class="mi-secondary" type="submit">Applica filtri</button></div></form></section>';
-		self::registrations_view( $selected, $event_ids );
+		$listed_event_ids = 'single' === $event_mode ? array() : $period_event_ids;
+		self::registrations_view( $selected, $listed_event_ids, $period, $event_mode );
 	}
 
 	private static function communications_view() {
@@ -1136,9 +1147,9 @@ final class MI_Portal {
 		echo '</section>';
 	}
 
-	private static function registrations_view( $event_id = 0, $event_ids = array() ) {
+	private static function registrations_view( $event_id = 0, $event_ids = array(), $period = 'current', $event_mode = 'all' ) {
 		global $wpdb;
-		if ( $event_id ) { $conditions = array( $wpdb->prepare( 'r.event_id=%d', $event_id ) ); } else { $safe = array_values( array_filter( array_map( 'absint', $event_ids ) ) ); $conditions = array( 'r.event_id IN (' . implode( ',', $safe ) . ')' ); }
+		if ( $event_id ) { $conditions = array( $wpdb->prepare( 'r.event_id=%d', $event_id ) ); } else { $safe = array_values( array_filter( array_map( 'absint', $event_ids ) ) ); $conditions = array( $safe ? 'r.event_id IN (' . implode( ',', $safe ) . ')' : '1=0' ); }
 		$query = sanitize_text_field( wp_unslash( $_GET['mi_portal_query'] ?? '' ) );
 		$status = strtoupper( sanitize_text_field( wp_unslash( $_GET['mi_portal_status'] ?? '' ) ) );
 		$allowed_statuses = array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'CANCELLED', 'EXPIRED' );
@@ -1150,6 +1161,7 @@ final class MI_Portal {
 		$where = implode( ' AND ', $conditions );
 		$rows = $wpdb->get_results( "SELECT r.id registration_id,r.event_id,r.order_code,r.status,r.created_at,r.buyer_first_name,r.buyer_last_name,r.buyer_email,r.buyer_phone,r.total_qty,r.total_cents,r.balance_cents,events.post_title event_title FROM {$wpdb->prefix}mi_registrations r JOIN {$wpdb->posts} events ON events.ID=r.event_id WHERE {$where} ORDER BY r.created_at DESC,r.id DESC LIMIT 30", ARRAY_A );
 		$base_url = self::base_url();
+		$base_url = add_query_arg( array( 'mi_portal_period' => $period, 'mi_portal_event_mode' => $event_mode ), $base_url );
 		if ( $event_id ) $base_url = add_query_arg( 'mi_portal_event', $event_id, $base_url );
 		if ( '' !== $query ) $base_url = add_query_arg( 'mi_portal_query', $query, $base_url );
 		if ( in_array( $status, $allowed_statuses, true ) ) $base_url = add_query_arg( 'mi_portal_status', $status, $base_url );

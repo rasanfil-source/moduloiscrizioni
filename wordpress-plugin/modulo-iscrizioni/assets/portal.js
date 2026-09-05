@@ -352,6 +352,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  document.querySelectorAll('.mi-registrations-toolbar').forEach((toolbar) => {
+	const mode = toolbar.querySelector('[data-mi-event-mode]');
+	const singleEvent = toolbar.querySelector('[data-mi-single-event]');
+	if (!mode || !singleEvent) return;
+	const updateEventVisibility = () => {
+	  singleEvent.hidden = mode.value !== 'single';
+	};
+	mode.addEventListener('change', updateEventVisibility);
+	updateEventVisibility();
+  });
+
   document.querySelectorAll('.mi-event-card-menu').forEach((menu) => {
 	menu.addEventListener('toggle', () => {
 	  if (!menu.open) return;

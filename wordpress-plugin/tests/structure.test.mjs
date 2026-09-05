@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.22\.2/);
+	assert.match(source, /Version:\s+3\.23\.2/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1248,11 +1248,21 @@ test('la ricerca iscrizioni privilegia il campo e mantiene Cerca affiancato', as
 test('i menu delle iscrizioni applicano subito i filtri mantenendo il comando manuale', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const script = await read('assets/portal.js');
+	const css = await read('assets/portal.css');
   assert.match(portal, /name="mi_portal_event" data-mi-auto-submit/);
+	assert.match(portal, /name="mi_portal_period" data-mi-auto-submit/);
+	assert.match(portal, />Eventi in corso<\/option>/);
+	assert.match(portal, />Eventi passati<\/option>/);
+	assert.match(portal, /name="mi_portal_event_mode" data-mi-event-mode data-mi-auto-submit/);
+	assert.match(portal, />Evento singolo<\/option>/);
+	assert.match(portal, /data-mi-single-event/);
+	assert.match(portal, /\$listed_event_ids = 'single' === \$event_mode \? array\(\) : \$period_event_ids/);
   assert.match(portal, /name="mi_portal_status" data-mi-auto-submit/);
   assert.match(portal, />Applica filtri<\/button>/);
   assert.match(script, /select\[data-mi-auto-submit\]/);
   assert.match(script, /toolbar\.requestSubmit\(\)/);
+	assert.match(script, /singleEvent\.hidden = mode\.value !== 'single'/);
+	assert.match(css, /\.mi-registrations-toolbar \[hidden\]\{display:none!important\}/);
   assert.match(portal, /if \( \$selected && ! in_array\( \$selected, \$event_ids, true \) \) wp_die\( 'Evento non accessibile\.', 403 \)/);
 });
 
@@ -1387,8 +1397,12 @@ test('la scheda rapida apre il wizard completo per modificare lo stesso evento a
   assert.match(portal, /data-mi-share=/);
   assert.match(portal, /aria-label="Condividi il link per le iscrizioni"/);
   const script = await read('assets/portal.js');
+	const css = await read('assets/portal.css');
   assert.match(script, /navigator\.share/);
   assert.match(script, /Le modalità di condivisione non sono disponibili/);
+	assert.match(css, /\.mi-event-registration-link\{[^}]*grid-template-columns:minmax\(0,1fr\) auto 44px/);
+	assert.match(css, /\.mi-event-registration-link input\{[^}]*text-overflow:ellipsis/);
+	assert.doesNotMatch(css, /\.mi-event-registration-link input\{grid-column:1\/-1\}/);
 });
 
 test('ogni tessera bozza riapre tutti i campi del percorso di creazione', async () => {
@@ -1517,8 +1531,9 @@ test('gli esiti della gestione tornano sempre alla Segreteria eventi', async () 
 test('gli eventi annullati spariscono automaticamente dal filtro delle iscrizioni', async () => {
   const portal = await read('includes/class-mi-portal.php');
   assert.match(portal, /\$selectable_events = array_values\( array_filter\( \$events[\s\S]*?_mi_event_cancelled_at/);
-  assert.match(portal, /\$selected && ! in_array\( \$selected, \$selectable_event_ids, true \) \) \$selected = 0/);
-  assert.match(portal, /foreach \( \$selectable_events as \$event \)/);
+	assert.match(portal, /\$selected && ! in_array\( \$selected, \$event_ids, true \) \) wp_die\( 'Evento non accessibile\.', 403 \)/);
+	assert.match(portal, /! in_array\( \$selected, \$period_event_ids, true \) \) \$selected = 0/);
+	assert.match(portal, /foreach \( \$period_events as \$event \)/);
 });
 
 test('la ricerca iscrizioni mantiene campo e pulsante affiancati in proporzione tre a uno', async () => {
