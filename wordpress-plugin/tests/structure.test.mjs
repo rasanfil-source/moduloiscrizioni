@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.23\.4/);
+	assert.match(source, /Version:\s+3\.23\.5/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -95,7 +95,7 @@ test('la pubblicazione notifica sempre la parrocchia e, se assegnato, anche il g
   assert.match(portal, /'email_gestore' => \$gestore \? \$gestore->user_email : ''/);
   assert.doesNotMatch(portal, /risolvi_gestore_evento\( \$event_id, true \)/);
   assert.match(portal, /mi_email_segreteria_eventi/);
-  assert.match(portal, /info@parrocchiasanteugenio\.it/);
+  assert.match(portal, /get_option\( 'admin_email', '' \)/);
   assert.match(portal, /accoda_notifiche_attivazione_evento/);
   assert.match(email, /\$gestore \? \$gestore->user_email : \$email_segreteria/);
   assert.match(email, /\?WP_User \$gestore/);

@@ -379,7 +379,7 @@ final class MI_Portal {
 		$workspace = self::prepara_produzioni_workspace( $event_id, 'PUBBLICATO' );
 		if ( is_wp_error( $workspace ) ) return self::redirect_result( 'Evento pubblicato; Workspace non ha ancora registrato lo stato aggiornato: ' . $workspace->get_error_message(), true, $event_id, true );
 		$gestore = self::risolvi_gestore_evento( $event_id, false );
-		$email_segreteria = sanitize_email( get_option( 'mi_email_segreteria_eventi', '' ) ) ?: 'info@parrocchiasanteugenio.it';
+		$email_segreteria = sanitize_email( get_option( 'mi_email_segreteria_eventi', '' ) ) ?: sanitize_email( get_option( 'admin_email', '' ) );
 		$notifica = MI_Spedizione_Email::accoda_notifiche_attivazione_evento( $event_id, $gestore, (string) ( $workspace['url_foglio'] ?? '' ), $email_segreteria );
 		if ( is_wp_error( $notifica ) ) return self::redirect_result( 'Evento pubblicato e foglio Google collegato; non è stato possibile preparare la comunicazione di attivazione: ' . $notifica->get_error_message(), true, $event_id, true );
 		$destinatari = $gestore ? 'alla parrocchia e al gestore' : 'alla parrocchia';
