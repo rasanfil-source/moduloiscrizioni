@@ -49,7 +49,14 @@ final class MI_Modello_Email {
 			'footer'    => 'A presto!',
 		);
 		$saved = get_post_meta( $event_id, '_mi_email_template', true );
-		return array_merge( $defaults, is_array( $saved ) ? $saved : array() );
+		return self::aggiorna_segnaposto( array_merge( $defaults, is_array( $saved ) ? $saved : array() ) );
+	}
+
+	private static function aggiorna_segnaposto( $settings ) {
+		foreach ( $settings as $key => $value ) {
+			if ( is_string( $value ) ) $settings[ $key ] = str_replace( array( '{{referente.nome_completo}}', '{{iscrivente.nome_completo}}' ), '{{sottoscrittore.nome_completo}}', $value );
+		}
+		return $settings;
 	}
 
 	public static function mostra_riquadro( $post ) {
@@ -371,6 +378,7 @@ final class MI_Modello_Email {
 			'text'      => sanitize_textarea_field( wp_unslash( $_POST['mi_email_text'] ?? '' ) ),
 			'footer'    => sanitize_textarea_field( wp_unslash( $_POST['mi_email_footer'] ?? '' ) ),
 		);
+		$settings = self::aggiorna_segnaposto( $settings );
 		$unknown = self::trova_segnaposto_non_ammessi( $settings );
 		if ( $unknown ) {
 			set_transient( 'mi_email_placeholder_error_' . get_current_user_id(), implode( ', ', $unknown ), MINUTE_IN_SECONDS );
@@ -387,6 +395,7 @@ final class MI_Modello_Email {
 		$settings['text'] = mb_substr( sanitize_textarea_field( wp_unslash( $text ) ), 0, 5000 );
 		$settings['html'] = self::sanitizza_html_email( wpautop( esc_html( $settings['text'] ) ) );
 		if ( ! $settings['subject'] || ! $settings['text'] ) return new WP_Error( 'mi_email_vuota', 'Oggetto e testo dell’email non possono essere vuoti.' );
+		$settings = self::aggiorna_segnaposto( $settings );
 		$unknown = self::trova_segnaposto_non_ammessi( $settings );
 		if ( $unknown ) return new WP_Error( 'mi_email_segnaposto', 'Elimina i segnaposto non riconosciuti: ' . implode( ', ', $unknown ) . '.' );
 		update_post_meta( $event_id, '_mi_email_template', $settings );
