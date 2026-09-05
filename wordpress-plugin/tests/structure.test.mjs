@@ -48,7 +48,7 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.23\.8/);
+	assert.match(source, /Version:\s+3\.23\.9/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1389,7 +1389,7 @@ test('selezionare una bozza riprende il percorso guidato e conduce ad Attiva lâ€
 
 test('la scheda rapida apre il wizard completo per modificare lo stesso evento attivo', async () => {
   const portal = await read('includes/class-mi-portal.php');
-  assert.match(portal, /Modifica tutti i dettagli/);
+  assert.match(portal, /Tutti i dettagli/);
   assert.match(portal, /'mi_portal_edit' => \$event_id/);
   assert.match(portal, /array\( 'draft', 'publish', 'private' \)/);
   assert.match(portal, /Stai aggiornando lo stesso evento/);
