@@ -10,6 +10,7 @@ function doPost(event) {
     if (!verified.ok) return creaRispostaJson_({ ok: false, error: verified.error });
     if (envelope.action === 'PING') return creaRispostaJson_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, mode: 'PREVIEW' });
 	if (envelope.action === 'STATO_SCHEMA') return creaRispostaJson_({ ok: true, schema_version: MI_SCHEMA_VERSION, registration_headers: MI_HEADERS[MI_SHEETS.REGISTRATIONS], accommodation_headers: MI_HEADERS[MI_SHEETS.ACCOMMODATIONS], group_headers: MI_HEADERS[MI_SHEETS.GROUPS], report_template_headers: MI_HEADERS[MI_SHEETS.REPORT_TEMPLATES], event_headers: MI_HEADERS[MI_SHEETS.EVENTS], mode: 'PREVIEW' });
+	if (envelope.action === 'STATO_REPLICA_ISCRIZIONE') return creaRispostaJson_(statoReplicaIscrizione_(envelope.payload));
 	if (envelope.action === 'PREPARA_PRODUZIONI_EVENTO') return creaRispostaJson_(preparaProduzioniEventoDaWordPress_(envelope.payload));
 	if (envelope.action === 'VERIFICA_FOGLIO_EVENTO') return creaRispostaJson_(verificaFoglioEventoDaWordPress_(envelope.payload));
 	if (envelope.action === 'VERIFICA_FOGLI_EVENTO') return creaRispostaJson_(verificaFogliEventoDaWordPress_(envelope.payload));
@@ -36,6 +37,41 @@ function elencaPagamenti_(payload) {
     return { id_pagamento: normalizzaTesto_(row.id_pagamento, 64), codice_ordine: normalizzaTesto_(row.codice_ordine, 64), tipo_movimento: normalizzaTesto_(row.tipo_movimento, 24), tipo_rata: normalizzaTesto_(row.tipo_rata, 24), data_effettiva: row.data_effettiva instanceof Date ? row.data_effettiva.toISOString() : normalizzaTesto_(row.data_effettiva, 40), importo_centesimi: Math.max(0, Math.round(Number(row.importo_centesimi) || 0)), fonte_pagamento: normalizzaTesto_(row.fonte_pagamento, 24), riferimento_esterno: normalizzaTesto_(row.riferimento_esterno, 120), etichetta_operatore: normalizzaTesto_(row.etichetta_operatore, 100), nota_amministrativa: normalizzaTesto_(row.nota_amministrativa, 500) };
   });
   return { ok: true, payments: payments };
+}
+
+function statoReplicaIscrizione_(payload) {
+  payload = payload || {};
+  const orderCode = normalizzaTesto_(payload.order_code, 64);
+  const idempotencyKey = normalizzaTesto_(payload.idempotency_key, 64);
+  if (!/^[A-Za-z0-9_-]{3,64}$/.test(orderCode) || !/^[A-Za-z0-9_-]{16,64}$/.test(idempotencyKey)) return { ok: false, complete: false, error: 'INVALID_REGISTRATION_REFERENCE' };
+  const registration = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).find(function (item) {
+    return String(item.codice_ordine) === orderCode && String(item.chiave_idempotenza) === idempotencyKey;
+  });
+  if (!registration) return { ok: true, complete: false, central_complete: false, event_sheet_complete: false, order_code: orderCode };
+  const expected = Math.max(0, Number(registration.numero_partecipanti) || 0);
+  const participantCount = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).filter(function (item) {
+    return String(item.codice_ordine) === orderCode;
+  }).length;
+  const centralComplete = expected > 0 && participantCount === expected;
+  let eventSheetComplete = false;
+  if (centralComplete) {
+    try {
+      const link = trovaCollegamentoFoglioOperativo_(String(registration.id_evento));
+      const spreadsheet = SpreadsheetApp.openById(String(link.id_foglio));
+      const sheet = spreadsheet.getSheetByName('Dati operativi') || spreadsheet.getSheets()[0];
+      const map = mappaColonneEvento_(sheet);
+      const values = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues() : [];
+      const found = {};
+      values.forEach(function (row) {
+        const id = identitaRigaEvento_(String(registration.id_evento), row[map._ordine - 1], row[map._numero - 1]);
+        if (id && String(row[map._ordine - 1]) === orderCode) found[id] = true;
+      });
+      eventSheetComplete = Object.keys(found).length === expected;
+    } catch (error) {
+      eventSheetComplete = false;
+    }
+  }
+  return { ok: true, complete: centralComplete && eventSheetComplete, central_complete: centralComplete, event_sheet_complete: eventSheetComplete, order_code: orderCode };
 }
 
 function verificaBusta_(envelope) {

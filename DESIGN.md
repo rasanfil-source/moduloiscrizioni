@@ -64,6 +64,8 @@ Nella scheda Iscrizioni i filtri seguono il ragionamento operativo da sinistra a
 
 In Gestisci eventi la scheda di dettaglio si apre nella griglia, subito dopo la riga della tessera selezionata. L’elenco rimane visibile sopra e sotto come contesto; la tessera attiva riceve un’evidenziazione sobria e il movimento di apertura rispetta la preferenza di riduzione delle animazioni.
 
+Il foglio interno «Registra movimento» segue quattro passaggi visibili e numerati: Prenotazione, Movimento, Tracciabilità, Verifica e registra. Il codice ordine viene scelto dall’elenco delle iscrizioni; stato, evento, referente, totale, versato e residuo vengono riletti dal registro prima della conferma. Le tendine native di Google Sheets sono il controllo canonico per tipo, rata e metodo. Il blu notte identifica la struttura, il verde compare soltanto dopo una registrazione convalidata e l’operatore deve spuntare una conferma esplicita per evitare inserimenti accidentali. La chiave idempotente resta nascosta e viene rinnovata soltanto dopo il successo.
+
 ### Email del sistema
 
 Tutte le email — conferma, promemoria saldo, annullamento, informazioni operative e prove — usano lo stesso involucro compatibile con i principali programmi di posta: fondo `#f6f8fc`, tessera bianca larga al massimo 600 px, testata nel colore principale del gruppo, azione primaria nel colore secondario, riquadro finale per l’assistenza e collegamento testuale di riserva. Logo, colori, nome del gruppo e contatto per le risposte sono ereditati da gruppo ed evento; il contenuto centrale cambia secondo il messaggio. Tabelle e stili in linea sono intenzionali per la compatibilità email. Il testo semplice conserva lo stesso ordine informativo dell’HTML.

@@ -84,6 +84,26 @@ test('i pagamenti ammettono solo bonifico carta e contanti senza dati carta', ()
 	assert.match(sources['Payments.gs'], /EXCESS_REFUND/);
 });
 
+test('l’inserimento guidato ordina il controllo prima della registrazione e riusa la convalida centrale', () => {
+  const form = sources['InterfacciaMovimenti.gs'];
+  assert.match(sources['Config.gs'], /PAYMENT_FORM:\s*'Registra movimento'/);
+  assert.match(sources['Setup.gs'], /Apri inserimento guidato/);
+  assert.match(form, /1 · Prenotazione[\s\S]*2 · Movimento[\s\S]*3 · Tracciabilità[\s\S]*4 · Verifica e registra/);
+  assert.match(form, /requireValueInRange/);
+  assert.match(form, /requireValueInList\(MI_PAYMENT_ENUMS\.transactionKinds/);
+  assert.match(form, /getValue\(\) !== true/);
+  assert.match(form, /registraPagamentoValidato_/);
+  assert.match(form, /creaIdentificativoOpaco_\('pui'\)/);
+  assert.match(form, /aggiornaProiezionePagamentiEvento_/);
+});
+
+test('il retry WordPress verifica prima una replica già completata', () => {
+  assert.match(sources['WebApp.gs'], /STATO_REPLICA_ISCRIZIONE/);
+  assert.match(sources['WebApp.gs'], /function statoReplicaIscrizione_/);
+  assert.match(sources['WebApp.gs'], /central_complete/);
+  assert.match(sources['WebApp.gs'], /event_sheet_complete/);
+});
+
 test('le funzioni Apps Script applicative hanno nomi italiani', () => {
   const allowedPlatformFunctions = new Set(['onOpen', 'doGet', 'doPost']);
   const forbiddenNames = new Set(['setupWorkbook', 'validateSelectedPayments', 'validatePendingPayments', 'normalizeEnum_', 'normalizeText_', 'neutralizeFormula_', 'euroToCents_', 'containsCardNumberLike_', 'stableStringify_', 'makeOpaqueId_', 'jsonResponse_', 'appendAudit_', 'headerIndex_', 'rowsAsObjects_', 'getBoundSpreadsheet_', 'getRequiredSheet_', 'getScriptSecret_', 'initializeSheet_', 'initializeConfig_', 'initializePaymentValidation_', 'applySoftProtections_', 'verifyEnvelope_', 'constantTimeEquals_', 'appendRegistration_']);

@@ -9,6 +9,9 @@ function onOpen() {
     .addItem('Allinea gruppi con WordPress', 'sincronizzaGruppiConWordPress')
     .addItem('Configura collegamento WordPress', 'configuraEndpointWordPress')
     .addSeparator()
+    .addItem('Apri inserimento guidato', 'apriInserimentoMovimentoGuidato')
+    .addItem('Aggiorna riepilogo movimento', 'aggiornaRiepilogoMovimentoGuidato')
+    .addItem('Registra movimento guidato', 'registraMovimentoGuidato')
     .addItem('Convalida pagamenti selezionati', 'convalidaPagamentiSelezionati')
     .addItem('Convalida tutti i pagamenti in attesa', 'convalidaPagamentiInAttesa')
     .addItem('Sincronizza fogli e pagamenti degli eventi', 'sincronizzaFogliEventi')
@@ -40,6 +43,7 @@ function configuraCartellaDiLavoro() {
     inizializzaConfigurazione_();
 		inizializzaGruppi_();
     inizializzaConvalidaPagamenti_();
+		inizializzaInterfacciaMovimenti_();
 		inizializzaModelliReport_();
     applicaProtezioniConAvviso_();
     aggiungiControllo_('SETUP_WORKBOOK', 'WORKBOOK', 'BOUND', 'SUCCESS', Session.getActiveUser().getEmail(), MI_SCHEMA_VERSION, 'WORKSPACE_UI');
