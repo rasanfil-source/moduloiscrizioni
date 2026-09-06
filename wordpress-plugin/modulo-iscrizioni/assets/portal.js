@@ -1,9 +1,69 @@
+// Cache volatile: nessun dato delle schede viene salvato nello storage del browser.
+function miPanelCache(load, { ttl = 30000, limit = 12 } = {}) {
+  const values = new Map();
+  const requests = new Map();
+  let generation = 0;
+  const peek = (key) => {
+    const entry = values.get(key);
+    if (!entry) return null;
+    if (Date.now() - entry.time >= ttl) { values.delete(key); return null; }
+    values.delete(key);
+    values.set(key, entry);
+    return entry.value;
+  };
+  const get = (key, prefetch = false) => {
+    const cached = peek(key);
+    if (cached) return Promise.resolve(cached);
+    if (requests.has(key)) return requests.get(key).promise;
+    // Il passaggio del mouse non deve riempire la coda PHP del server.
+    if (prefetch && requests.size) return Promise.resolve(null);
+    if (!prefetch) {
+      for (const [otherKey, other] of requests) {
+        if (otherKey !== key) { other.controller.abort(); requests.delete(otherKey); }
+      }
+    }
+    const controller = new AbortController();
+    const requestGeneration = generation;
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const entry = { controller, promise: null };
+    entry.promise = Promise.resolve().then(() => load(key, controller.signal)).then((value) => {
+      if (controller.signal.aborted) throw new DOMException('Richiesta annullata', 'AbortError');
+      if (requestGeneration === generation) values.set(key, { value, time: Date.now() });
+      while (values.size > limit) values.delete(values.keys().next().value);
+      return value;
+    }).finally(() => {
+      clearTimeout(timeout);
+      if (requests.get(key) === entry) requests.delete(key);
+    });
+    requests.set(key, entry);
+    return entry.promise;
+  };
+  return { get, peek, clear: () => { generation++; values.clear(); } };
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  const bindPanelIntent = (link, preload) => {
+    let timer;
+    const cancel = () => clearTimeout(timer);
+    const schedule = () => {
+      cancel();
+      const connection = navigator.connection;
+      if (document.hidden || connection?.saveData || /(^|-)2g$/.test(connection?.effectiveType || '')) return;
+      timer = setTimeout(() => preload().catch(() => {}), 120);
+    };
+    link.addEventListener('pointerenter', schedule, { passive: true });
+    link.addEventListener('focus', schedule);
+    link.addEventListener('pointerleave', cancel, { passive: true });
+    link.addEventListener('blur', cancel);
+    link.addEventListener('click', cancel);
+  };
   const form = document.querySelector('.mi-event-wizard');
   if (form) {
     const steps = [...form.querySelectorAll('.mi-wizard-step')];
     const back = form.querySelector('[data-mi-back]');
     const next = form.querySelector('[data-mi-next]');
+    const save = form.querySelector('button[type="submit"]');
+    if (save) next.parentElement.append(save);
 	const backUrl = form.dataset.miBackUrl || '';
 	const coverImage = form.querySelector('[name="cover_image"][data-mi-max-bytes]');
 	const coverImageStatus = form.querySelector('[data-mi-image-status]');
@@ -74,6 +134,7 @@ document.addEventListener('DOMContentLoaded', () => {
       steps.forEach((step, stepIndex) => step.classList.toggle('is-active', stepIndex === index));
 	  back.disabled = index === 0 && !backUrl;
       next.hidden = index === steps.length - 1;
+      if (save) save.hidden = index !== steps.length - 1;
       if (index === steps.length - 1) {
         const value = (name) => form.querySelector(`[name="${name}"]`)?.value || 'Da definire';
         const review = form.querySelector('[data-mi-review]');
@@ -311,8 +372,11 @@ document.addEventListener('DOMContentLoaded', () => {
 	  document.querySelector('[data-mi-event-inline-panel]')?.remove();
 	  panel.remove();
 	  const selectedTop = selectedCard.offsetTop;
-	  const rowCards = [...grid.querySelectorAll('.mi-event-card-shell')].filter((card) => Math.abs(card.offsetTop - selectedTop) < 2);
-	  (rowCards[rowCards.length - 1] || selectedCard).after(panel);
+	  let lastCard = selectedCard;
+	  while (lastCard.nextElementSibling?.classList.contains('mi-event-card-shell') && Math.abs(lastCard.nextElementSibling.offsetTop - selectedTop) < 2) {
+		lastCard = lastCard.nextElementSibling;
+	  }
+	  lastCard.after(panel);
 	};
 	const inlineEventPanel = document.querySelector('[data-mi-event-inline-panel]');
 	if (inlineEventPanel) {
@@ -511,33 +575,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
 	const eventLinks = [...document.querySelectorAll('[data-mi-event-open]')];
 	if (eventLinks.length) {
-	  const eventPanelCache = new Map();
-	  const eventPanelRequests = new Map();
+	  const eventPanelCache = miPanelCache(async (href, signal) => {
+		const response = await fetch(href, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' }, signal });
+		if (!response.ok) throw new Error('event_panel_unavailable');
+		const panel = new DOMParser().parseFromString(await response.text(), 'text/html').querySelector('[data-mi-event-inline-panel]');
+		if (!panel) throw new Error('event_panel_missing');
+		return panel;
+	  });
+	  document.addEventListener('visibilitychange', () => { if (document.hidden) eventPanelCache.clear(); });
 	  const listUrl = new URL(window.location.href);
 	  listUrl.searchParams.delete('mi_portal_event');
 	  listUrl.searchParams.delete('mi_portal_event_panel');
 	  let eventNavigationId = 0;
-	  const fetchEventPanel = (link) => {
+	  const fetchEventPanel = (link, prefetch = false) => {
 		const eventId = link.dataset.miEventId;
-		if (eventPanelCache.has(eventId)) return Promise.resolve(eventPanelCache.get(eventId));
-		if (eventPanelRequests.has(eventId)) return eventPanelRequests.get(eventId);
 		const endpoint = new URL(link.href);
 		endpoint.searchParams.set('mi_portal_event', eventId);
 		endpoint.searchParams.set('mi_portal_event_panel', '1');
-		const request = fetch(endpoint, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-		  .then((response) => {
-			if (!response.ok) throw new Error('event_panel_unavailable');
-			return response.text();
-		  })
-		  .then((html) => {
-			const panel = new DOMParser().parseFromString(html, 'text/html').querySelector('[data-mi-event-inline-panel]');
-			if (!panel) throw new Error('event_panel_missing');
-			eventPanelCache.set(eventId, panel.outerHTML);
-			return panel.outerHTML;
-		  })
-		  .finally(() => eventPanelRequests.delete(eventId));
-		eventPanelRequests.set(eventId, request);
-		return request;
+		return eventPanelCache.get(endpoint.href, prefetch);
 	  };
 	  const clearEventSelection = () => {
 		document.querySelector('[data-mi-event-inline-panel]')?.remove();
@@ -553,6 +608,8 @@ document.addEventListener('DOMContentLoaded', () => {
 		const eventId = link.dataset.miEventId;
 		const currentPanel = document.querySelector(`[data-mi-event-inline-panel][data-mi-event-id="${eventId}"]`);
 		if (currentPanel && shell?.classList.contains('is-selected')) {
+		  if ('none' === historyMode) return;
+		  eventNavigationId++;
 		  clearEventSelection();
 		  if ('none' !== historyMode) window.history.pushState({}, '', listUrl);
 		  link.focus();
@@ -572,18 +629,19 @@ document.addEventListener('DOMContentLoaded', () => {
 		loading.innerHTML = '<span aria-hidden="true"></span><strong>Apro la scheda dell’evento…</strong>';
 		placeEventPanel(loading, shell);
 		try {
-		  const html = await fetchEventPanel(link);
+		  const cachedPanel = await fetchEventPanel(link);
 		  if (navigationId !== eventNavigationId) return;
-		  const panel = new DOMParser().parseFromString(html, 'text/html').querySelector('[data-mi-event-inline-panel]');
-		  if (!panel) throw new Error('event_panel_missing');
+		  const panel = cachedPanel.cloneNode(true);
 		  bindQuickEventForms(panel);
 		  placeEventPanel(panel, shell);
 		  bindCopyButtons(panel);
 		  bindShareButtons(panel);
 		  bindProgressForms(panel);
 		  link.removeAttribute('aria-busy');
-		  if ('push' === historyMode) window.history.pushState({}, '', link.href);
-		  if ('replace' === historyMode) window.history.replaceState({}, '', link.href);
+		  const selectedUrl = new URL(link.href);
+		  selectedUrl.searchParams.set('mi_portal_event', eventId);
+		  if ('push' === historyMode) window.history.pushState({}, '', selectedUrl);
+		  if ('replace' === historyMode) window.history.replaceState({}, '', selectedUrl);
 		  panel.querySelector('[data-mi-selected-event]')?.focus({ preventScroll: true });
 		  panel.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' });
 		} catch (error) {
@@ -592,8 +650,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		}
 	  };
 	  eventLinks.forEach((link) => {
-		link.addEventListener('pointerenter', () => { fetchEventPanel(link).catch(() => {}); }, { once: true, passive: true });
-		link.addEventListener('focus', () => { fetchEventPanel(link).catch(() => {}); }, { once: true });
+		bindPanelIntent(link, () => fetchEventPanel(link, true));
 		link.addEventListener('click', (event) => {
 		  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 		  event.preventDefault();
@@ -635,9 +692,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const previousButton = modal.querySelector('[data-mi-portal-booking-previous]');
   const nextButton = modal.querySelector('[data-mi-portal-booking-next]');
   let previousFocus = null;
-  let activeRequest = null;
+  let bookingNavigationId = 0;
   let activeBookingIndex = -1;
-  const detailCache = new Map();
+  const detailCache = miPanelCache(async (href, signal) => {
+    const response = await fetch(href, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' }, signal });
+    if (!response.ok) throw new Error('detail_unavailable');
+    const detail = parseDetail(await response.text());
+    if (!detail) throw new Error('detail_missing');
+    return detail;
+  });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) detailCache.clear(); });
 
   const parseDetail = (html) => new DOMParser().parseFromString(html, 'text/html').getElementById('mi-portal-booking-detail');
 
@@ -656,8 +720,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   const closeBooking = (replaceHistory = true) => {
     if (modal.hidden) return;
-    activeRequest?.abort();
-    activeRequest = null;
+    bookingNavigationId++;
     modal.hidden = true;
     content.replaceChildren();
     document.body.classList.remove('mi-portal-modal-open');
@@ -665,45 +728,37 @@ document.addEventListener('DOMContentLoaded', () => {
     previousFocus?.focus();
   };
   const openBooking = async (link, historyMode = 'push') => {
-	activeRequest?.abort();
+	const navigationId = ++bookingNavigationId;
 	previousFocus = link;
 	activeBookingIndex = bookingLinks.indexOf(link);
 	updateNavigation();
-	const cachedDetail = detailCache.get(link.href);
+	const cachedDetail = detailCache.peek(link.href);
 	if (cachedDetail) {
-	  const detail = parseDetail(cachedDetail);
-	  if (detail) {
-		showBooking(detail, link.href, historyMode);
-		return;
-	  }
-	  detailCache.delete(link.href);
+	  showBooking(cachedDetail.cloneNode(true), link.href, historyMode);
+	  return;
 	}
-	const request = new AbortController();
-	activeRequest = request;
 	modal.hidden = false;
     document.body.classList.add('mi-portal-modal-open');
     content.innerHTML = '<p class="mi-portal-modal__loading">Apertura della prenotazione…</p>';
     closeButton.focus();
     try {
-      const response = await fetch(link.href, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' }, signal: request.signal });
-      if (!response.ok) throw new Error('detail_unavailable');
-	  const detail = parseDetail(await response.text());
-	  if (!detail) throw new Error('detail_missing');
-	  detailCache.set(link.href, detail.outerHTML);
-	  showBooking(detail, link.href, historyMode);
+      const detail = await detailCache.get(link.href);
+      if (navigationId !== bookingNavigationId) return;
+	  showBooking(detail.cloneNode(true), link.href, historyMode);
     } catch (error) {
-      if ('AbortError' === error.name) return;
+      if (navigationId !== bookingNavigationId) return;
       window.location.assign(link.href);
-    } finally {
-      if (activeRequest === request) activeRequest = null;
     }
   };
 
-  bookingLinks.forEach((link) => link.addEventListener('click', (event) => {
+  bookingLinks.forEach((link) => {
+    bindPanelIntent(link, () => detailCache.get(link.href, true));
+    link.addEventListener('click', (event) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     openBooking(link);
-  }));
+    });
+  });
   const moveBooking = (offset) => {
     const targetIndex = activeBookingIndex + offset;
     if (targetIndex < 0 || targetIndex >= bookingLinks.length) return;

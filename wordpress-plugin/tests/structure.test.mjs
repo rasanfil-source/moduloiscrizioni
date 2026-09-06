@@ -48,8 +48,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.23\.16\b/);
-  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.16'\s*\)/);
+  assert.match(source, /Version:\s+3\.23\.17\b/);
+  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.17'\s*\)/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1195,7 +1195,7 @@ test('anche il portale apre la scheda prenotazione in sovrimpressione', async ()
   assert.match(portal, /data-mi-portal-booking-open/);
   assert.match(portal, /id="mi-portal-booking-detail"/);
   assert.match(script, /role="dialog" aria-modal="true"/);
-  assert.match(script, /fetch\(link\.href/);
+  assert.match(script, /fetch\(href/);
   assert.match(script, /DOMParser/);
   assert.match(script, /AbortController/);
   assert.match(script, /'Escape'/);
@@ -1320,8 +1320,8 @@ test('il portale apre rapidamente le schede e riduce il lavoro fuori schermo', a
   assert.match(portal, /HTTP_X_REQUESTED_WITH/);
   assert.match(portal, /\$is_detail_request/);
   assert.match(portal, /self::booking_detail\( absint\( \$_GET\['mi_portal_booking'\] \) \)/);
-  assert.match(script, /const detailCache = new Map\(\)/);
-  assert.match(script, /detailCache\.set\(link\.href, detail\.outerHTML\)/);
+  assert.match(script, /const detailCache = miPanelCache\(/);
+  assert.match(script, /detail\.cloneNode\(true\)/);
   assert.match(css, /content-visibility:auto/);
   assert.match(css, /contain-intrinsic-size:78px/);
   assert.match(css, /overscroll-behavior-inline:contain/);
@@ -1472,8 +1472,8 @@ test('il dettaglio evento si apre a fisarmonica dopo la riga selezionata', async
 	assert.match(portal, /aria-expanded="true" aria-controls="mi-event-inline-panel-/);
 	assert.match(portal, /class="mi-event-inline-panel" data-mi-event-inline-panel/);
 	assert.match(script, /placeEventPanel\(inlineEventPanel, selectedCard\)/);
-	assert.match(script, /Math\.abs\(card\.offsetTop - selectedTop\) < 2/);
-	assert.match(script, /rowCards\[rowCards\.length - 1\][\s\S]*\.after\(panel\)/);
+	assert.match(script, /Math\.abs\(lastCard\.nextElementSibling\.offsetTop - selectedTop\) < 2/);
+	assert.match(script, /lastCard\.after\(panel\)/);
 	assert.match(css, /\.mi-event-inline-panel\{grid-column:1\/-1/);
 	assert.match(css, /\.mi-event-card-shell\.is-selected \.mi-event-card/);
 	assert.match(css, /prefers-reduced-motion:reduce/);

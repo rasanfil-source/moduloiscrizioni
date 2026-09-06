@@ -87,3 +87,7 @@
 .mi-portal{box-sizing:border-box}.mi-text-danger{min-height:44px}
 .mi-event-card__toggle{position:absolute;z-index:2;top:8px;left:8px;display:grid;width:34px;height:34px;place-items:center;border:1px solid #ffffff80;border-radius:50%;background:#17224acc;color:#fff;box-shadow:0 2px 8px #17203326;pointer-events:none;transition:transform .18s ease,background .18s ease}.mi-event-card-shell.is-selected .mi-event-card__toggle{transform:rotate(180deg);background:#fff;color:var(--navy);border-color:#d7dce5}.mi-event-management__form>[data-mi-event-quick-submit],.mi-event-wizard .mi-wizard-step:last-of-type>.mi-primary{display:flex;margin-left:auto}.mi-event-management__form>[data-mi-event-quick-submit][hidden]{display:none}
 @media(prefers-reduced-motion:reduce){.mi-event-card__toggle{transition:none}}
+
+/* Stessa barra azioni anche nel passaggio conclusivo. */
+.mi-wizard-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.mi-wizard-actions button[hidden]{display:none}

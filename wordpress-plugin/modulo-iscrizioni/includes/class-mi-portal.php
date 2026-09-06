@@ -12,10 +12,20 @@ final class MI_Portal {
 		// plugin frontend eseguano i propri callback su template_redirect.
 		add_action( 'template_redirect', array( __CLASS__, 'handle_actions' ), -100 );
 		add_action( 'template_redirect', array( __CLASS__, 'render_virtual_page' ), -90 );
+		add_filter( 'posts_pre_query', array( __CLASS__, 'skip_unused_main_query' ), 10, 2 );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ) );
 		add_action( 'send_headers', array( __CLASS__, 'secure_cancellation_headers' ) );
 		add_action( 'mi_pulisci_bozze_cestinate', array( __CLASS__, 'purge_trashed_drafts' ) );
 		add_action( 'mi_pulisci_bozze_cestinate', array( __CLASS__, 'archive_completed_event_sheets' ), 20 );
+	}
+
+	/** Il portale autonomo non usa gli articoli della home; le query delle schede restano normali. */
+	public static function skip_unused_main_query( $posts, $query ) {
+		if ( null !== $posts || is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) return $posts;
+		if ( empty( $_GET['mi_portal'] ) || ! $query->is_main_query() ) return $posts;
+		$query->found_posts = 0;
+		$query->max_num_pages = 0;
+		return array();
 	}
 
 	/** Elimina definitivamente soltanto le bozze-evento nel cestino da oltre 30 giorni e prive di iscrizioni. */
@@ -1096,7 +1106,8 @@ final class MI_Portal {
 			$activity_name = sanitize_text_field( (string) ( $published['activity'] ?? '' ) );
 			$activity_id = absint( get_post_meta( $event->ID, '_mi_activity_id', true ) );
 			if ( ! $activity_name && $activity_id ) $activity_name = get_the_title( $activity_id );
-			$cover_image = esc_url( (string) ( $published['cover_image'] ?? get_the_post_thumbnail_url( $event->ID, 'thumbnail' ) ) );
+			// Le tessere non richiedono la copertina grande conservata nello snapshot.
+			$cover_image = esc_url( (string) ( get_the_post_thumbnail_url( $event->ID, 'medium' ) ?: ( $published['cover_image'] ?? '' ) ) );
 			if ( ! $cover_image ) $cover_image = self::group_cover_url( $activity_id, 'thumbnail' );
 			$date_badge = self::date_badge( $starts_at );
 			$occupancy_percentage = min( 100, max( 0, (int) round( ( $count / $capacity ) * 100 ) ) );
