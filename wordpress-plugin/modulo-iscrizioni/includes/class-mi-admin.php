@@ -87,6 +87,7 @@ final class MI_Admin {
 		if ( ! get_privacy_policy_url() ) wp_die( esc_html__( 'Configura prima la pagina dell’informativa privacy nelle impostazioni di WordPress.', 'modulo-iscrizioni' ) );
 		if ( ! get_post_meta( $event_id, '_mi_privacy_policy_version', true ) ) update_post_meta( $event_id, '_mi_privacy_policy_version', wp_date( 'Y-m' ) );
 		if ( ! get_post_meta( $event_id, '_mi_privacy_consent_id', true ) ) update_post_meta( $event_id, '_mi_privacy_consent_id', 'privacy-' . $event_id );
+		if ( ! get_post_meta( $event_id, '_mi_marketing_consent_id', true ) ) update_post_meta( $event_id, '_mi_marketing_consent_id', 'marketing-' . $event_id );
 		$event = MI_Registration_Service::public_event( $event_id, true );
 		if ( is_wp_error( $event ) ) wp_die( esc_html( $event->get_error_message() ) );
 		$names = array( array( 'Totuccio', 'Mangiafichi' ), array( 'Fiomena', 'Rossi' ), array( 'Gelsomina', 'Bianchi' ), array( 'Pasqualino', 'Verdi' ), array( 'Concetta', 'Blu' ), array( 'Arcibaldo', 'Girasole' ) );

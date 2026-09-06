@@ -268,7 +268,7 @@ final class MI_Registration_Service {
 			return new WP_Error( 'mi_privacy_misconfigured', 'L’informativa privacy dell’evento non è configurata.', array( 'status' => 409 ) );
 		}
 		if ( ! empty( $event['marketing_enabled'] ) && empty( $event['marketing_consent_id'] ) ) {
-			return new WP_Error( 'mi_marketing_misconfigured', 'Il consenso marketing dell’evento non è configurato.', array( 'status' => 409 ) );
+			return new WP_Error( 'mi_marketing_misconfigured', 'Le comunicazioni su future iniziative non sono configurate correttamente. Salva nuovamente l’evento oppure disattiva questa opzione.', array( 'status' => 409 ) );
 		}
 		$marketing_accepted = ! empty( $event['marketing_enabled'] ) && true === ( $payload['marketing_accepted'] ?? false );
 		if ( ! $allow_unpublished && ! $trusted_operator ) {

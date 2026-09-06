@@ -169,10 +169,6 @@ document.addEventListener('DOMContentLoaded', () => {
       invalid.reportValidity();
     });
     const pricing = form.querySelector('[data-mi-pricing]');
-    form.addEventListener('submit', () => {
-      const status = form.querySelector('[data-mi-saving-status]');
-      if (status) status.hidden = false;
-    });
     const overnight = form.querySelector('[data-mi-overnight]');
     const rooms = form.querySelector('[data-mi-accommodations]');
     const updateOvernight = () => {
@@ -483,7 +479,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	  const button = event.submitter || actionForm.querySelector('button[type="submit"]');
 	  if (button) {
 		button.disabled = true;
-		button.textContent = 'Attendere, prego…';
+		if (action !== 'create_event') button.textContent = 'Attendere, prego…';
 	  }
 	  actionForm.setAttribute('aria-busy', 'true');
 	  let progress = actionForm.querySelector('.mi-action-progress');
@@ -495,9 +491,11 @@ document.addEventListener('DOMContentLoaded', () => {
 		actionForm.append(progress);
 	  }
 	  progress.hidden = false;
-	  progress.textContent = action === 'publish_event_portal'
-		? 'Attendere, prego: sto creando il foglio Google e pubblicando l’evento.'
-		: 'Attendere, prego: sto salvando i dati dell’evento.';
+	  if (!progress.textContent.trim()) {
+		progress.textContent = action === 'publish_event_portal'
+		  ? 'Attendere, prego: sto creando il foglio Google e pubblicando l’evento.'
+		  : 'Salvataggio in corso…';
+	  }
 	});
 	});
 	bindProgressForms();

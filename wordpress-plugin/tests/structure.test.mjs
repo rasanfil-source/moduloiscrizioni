@@ -48,8 +48,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.23\.17\b/);
-  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.17'\s*\)/);
+  assert.match(source, /Version:\s+3\.23\.18\b/);
+  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.18'\s*\)/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -408,11 +408,13 @@ test('i dati dimostrativi sono riservati a bozze, amministratori ed email in ant
 	assert.match(admin, /get_privacy_policy_url\(\)/);
 	assert.match(admin, /_mi_privacy_policy_version'[\s\S]*wp_date\( 'Y-m' \)/);
 	assert.match(admin, /_mi_privacy_consent_id'[\s\S]*'privacy-' \. \$event_id/);
+	assert.match(admin, /_mi_marketing_consent_id'[\s\S]*'marketing-' \. \$event_id/);
   assert.match(admin, /'ADMIN_DEMO'/);
   assert.match(registration, /\$allow_unpublished\s*=\s*false/);
   assert.match(registration, /!\s*\$allow_unpublished\s*&&\s*'OPEN'\s*!==\s*self::registration_state/);
   assert.match(registration, /!\s*\$allow_unpublished\s*&&\s*'OPEN'\s*!==\s*self::registration_time_state/);
 	assert.match(registration, /mi_privacy_misconfigured/);
+	assert.match(registration, /Salva nuovamente l’evento oppure disattiva questa opzione/);
 });
 
 test('il wizard guidato crea solo bozze e rende gli alloggi condizionali', async () => {
@@ -782,7 +784,11 @@ test('il prezzo supporta una quota di partecipazione uguale per tutti', async ()
 	assert.match(eventType, /_mi_fixed_price_cents/);
 	assert.match(service, /'FIXED' === \$event\['pricing_mode'\]/);
 	assert.match(shortcode, /name="buyerEmail" type="email"[^>]*autocomplete="email">/);
-	assert.match(shortcode, /<h3>Prenotazione<\/h3>/);
+	assert.match(shortcode, /<h3 data-mi-participants-heading>Prenotazione<\/h3>/);
+	assert.match(shortcode, /mi-registration__availability[^>]*role="status"><span>/);
+	assert.match(await read('assets/public.css'), /\.mi-registration__availability \{ display:flex;[^}]*flex-direction:column;gap:\.3rem/);
+	assert.match(publicScript, /quantity > 1 \? 'Prenotazioni' : 'Prenotazione'/);
+	assert.match(publicScript, /quantity > 1 \? `Prenotazione \$\{index \+ 1\}` : 'Prenotazione'/);
 	assert.match(adminScript, /\['FIXED', 'CALCULATED'\]/);
 	assert.match(publicScript, /fixed_price_cents/);
 });
@@ -1495,6 +1501,9 @@ test('le tessere e i moduli di modifica comunicano chiaramente apertura e salvat
 	assert.match(css, /data-mi-event-quick-submit\][^{]*\{display:flex;margin-left:auto\}/);
 	assert.match(css, /mi-wizard-step:last-of-type>\.mi-primary\{display:flex;margin-left:auto\}/);
 	assert.match(portal, /Salvataggio in corso\. Al termine sarai riportato alla pagina Gestisci eventi\./);
+	assert.doesNotMatch(portal, /data-mi-saving-status/);
+	assert.match(script, /if \(action !== 'create_event'\) button\.textContent = 'Attendere, prego…'/);
+	assert.match(script, /if \(!progress\.textContent\.trim\(\)\)/);
 	assert.match(portal, /\$success_message = \$is_published_edit \? 'Modifiche salvate\.'/);
 });
 
@@ -1766,6 +1775,8 @@ test('le tessere evento espongono azioni coerenti nel menu a tre puntini', async
   assert.match(portal, /_mi_event_archived_at/);
   assert.match(script, /mi-event-card-menu\[open\]/);
   assert.match(css, /\.mi-event-card-menu/);
+	assert.match(portal, /<span aria-hidden="true">⋮<\/span>/);
+	assert.match(css, /\.mi-event-card-menu>summary\{display:flex;width:30px;height:30px/);
 });
 
 test('il portale apre le schede evento in modo progressivo e senza query duplicate', async () => {
