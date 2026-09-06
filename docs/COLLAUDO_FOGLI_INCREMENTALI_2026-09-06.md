@@ -19,6 +19,12 @@ Anche i 50 test locali Apps Script passano. Il doppio di test rifiuta ora i meta
 
 Nessun deployment, timer, invio email o accesso a DB_MODULI. I flussi centrali, l'acquisizione effettiva dei pagamenti e l'integrazione WordPress non sono coperti da questo collaudo e restano da verificare. Il superamento non autorizza la messa in produzione.
 
+### Chiusura del collaudo centrale
+
+Il deployment Web App esistente è stato aggiornato prima alla versione 45 per la riconciliazione e infine alla versione 46 per la proiezione ottimizzata, mantenendo ID, URL, esecuzione come proprietario e accesso invariati. WordPress 3.23.11 ha riconciliato la prenotazione dimostrativa `MI-260827-FNB4T2WP` tramite la verifica firmata dello stato: in `DB_MODULI` restano una sola iscrizione e un solo partecipante, senza reinvio del payload completo.
+
+La proiezione dei movimenti nel foglio evento si interrompeva dopo la prima riga perché leggeva le circa mille righe predisposte una alla volta. La lettura è stata resa unica e il nuovo comando **Riallinea movimenti della prenotazione** limita l'operazione al codice selezionato. Sul codice dimostrativo il riallineamento ha completato incassi e rimborsi in circa sette secondi; una seconda esecuzione ha lasciato invariato il numero delle righe. Nessuna email è stata inviata e nessun timer Apps Script è stato attivato.
+
 ## Verifiche successive: flussi centrali e WordPress
 
 - Suite locale completa: 196/196 test Apps Script e WordPress superati. Comprende i test di incassi/rimborsi, limiti economici, retry senza duplicati e riconciliazione di APPEND_REGISTRATION dopo una consegna parziale. Questi test usano simulazioni locali; non certificano un flusso reale completo.

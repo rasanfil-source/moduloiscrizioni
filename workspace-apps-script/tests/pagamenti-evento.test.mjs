@@ -92,3 +92,25 @@ test('sovraversamenti e rimborsi eccessivi sono rifiutati; rimborso dopo annulla
   env.row({ tipo: 'Rimborso', importo: 20 }); env.run();
   assert.equal(env.payments.length, 2);
 });
+
+test('il riallineamento mirato proietta una sola prenotazione e lascia intatte le altre', () => {
+  const env = environment();
+  env.payments.push({
+    id_pagamento: 'pay-demo', codice_ordine: 'ORD-DEMO', tipo_movimento: 'INCASSO', tipo_rata: 'CAPARRA',
+    data_effettiva: new Date('2026-09-01T12:00:00Z'), importo_centesimi: 2000, fonte_pagamento: 'CONTANTE',
+    riferimento_esterno: 'DEMO', etichetta_operatore: 'Operatore demo', id_inserimento_origine: 'source-demo', nota_amministrativa: ''
+  });
+  env.payments.push({
+    id_pagamento: 'pay-altro', codice_ordine: 'ORD-ALTRO', tipo_movimento: 'INCASSO', tipo_rata: 'CAPARRA',
+    data_effettiva: new Date('2026-09-01T12:00:00Z'), importo_centesimi: 3000, fonte_pagamento: 'CONTANTE',
+    riferimento_esterno: 'ALTRO', etichetta_operatore: 'Altro', id_inserimento_origine: 'source-altro', nota_amministrativa: ''
+  });
+  env.row({ _movimento: 'pay-altro', _registrato: 'pay-altro', ordine: 'ORD-ALTRO', convalida: false, esito: 'Da non modificare' });
+
+  env.context.proiettaPagamentiEvento_(env.sheet, env.map, [env.orders[0]], ['ORD-DEMO']);
+
+  assert.equal(env.sheet.rows.length, 3);
+  assert.equal(env.sheet.rows[1][env.map.esito - 1], 'Da non modificare');
+  assert.equal(env.sheet.rows[2][env.map.ordine - 1], 'ORD-DEMO');
+  assert.equal(env.sheet.rows[2][env.map._registrato - 1], 'pay-demo');
+});

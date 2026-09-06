@@ -213,3 +213,14 @@ function registraMovimentoGuidato() {
   SpreadsheetApp.getActive().toast('Movimento registrato e controllato.', 'Modulo iscrizioni', 5);
   return result;
 }
+
+function aggiornaProiezioneMovimentoGuidato() {
+  const sheet = inizializzaInterfacciaMovimenti_();
+  const orderCode = normalizzaTesto_(sheet.getRange(MI_MOVEMENT_FORM.ORDER).getValue(), 64);
+  const summary = riepilogoMovimentoGuidato_(orderCode);
+  const link = trovaCollegamentoFoglioOperativo_(String(summary.registration.id_evento));
+  aggiornaProiezionePagamentiPrenotazioneEvento_(SpreadsheetApp.openById(String(link.id_foglio)), String(summary.registration.id_evento), orderCode);
+  sheet.getRange(MI_MOVEMENT_FORM.STATUS).setBackground('#eaf5ef').setFontColor('#25745e').setValue('Movimenti della prenotazione riallineati nel foglio evento.');
+  SpreadsheetApp.getActive().toast('Proiezione della prenotazione aggiornata.', 'Modulo iscrizioni', 5);
+  return { ok: true, order_code: orderCode };
+}
