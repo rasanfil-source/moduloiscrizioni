@@ -48,8 +48,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.23\.15\b/);
-  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.15'\s*\)/);
+  assert.match(source, /Version:\s+3\.23\.16\b/);
+  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.16'\s*\)/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -405,10 +405,14 @@ test('i dati dimostrativi sono riservati a bozze, amministratori ed email in ant
   assert.match(admin, /current_user_can\(\s*'manage_options'\s*\)/);
   assert.match(admin, /'ANTEPRIMA'\s*!==\s*MI_Spedizione_Email::modalita/);
   assert.match(admin, /array\(\s*'draft',\s*'private'\s*\)/);
+	assert.match(admin, /get_privacy_policy_url\(\)/);
+	assert.match(admin, /_mi_privacy_policy_version'[\s\S]*wp_date\( 'Y-m' \)/);
+	assert.match(admin, /_mi_privacy_consent_id'[\s\S]*'privacy-' \. \$event_id/);
   assert.match(admin, /'ADMIN_DEMO'/);
   assert.match(registration, /\$allow_unpublished\s*=\s*false/);
   assert.match(registration, /!\s*\$allow_unpublished\s*&&\s*'OPEN'\s*!==\s*self::registration_state/);
   assert.match(registration, /!\s*\$allow_unpublished\s*&&\s*'OPEN'\s*!==\s*self::registration_time_state/);
+	assert.match(registration, /mi_privacy_misconfigured/);
 });
 
 test('il wizard guidato crea solo bozze e rende gli alloggi condizionali', async () => {

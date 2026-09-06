@@ -261,8 +261,11 @@ final class MI_Registration_Service {
 		}
 		$special_requests = ! empty( $event['special_requests_enabled'] ) ? sanitize_textarea_field( $payload['special_requests'] ?? '' ) : '';
 		if ( strlen( $special_requests ) > 2000 ) return new WP_Error( 'mi_special_requests_invalid', 'Le richieste particolari sono troppo lunghe.', array( 'status' => 400 ) );
-		if ( true !== ( $payload['privacy_accepted'] ?? false ) || empty( $event['privacy_url'] ) || empty( $event['privacy_policy_version'] ) || empty( $event['privacy_consent_id'] ) ) {
+		if ( true !== ( $payload['privacy_accepted'] ?? false ) ) {
 			return new WP_Error( 'mi_privacy_required', 'È necessario accettare l’informativa privacy.', array( 'status' => 400 ) );
+		}
+		if ( empty( $event['privacy_url'] ) || empty( $event['privacy_policy_version'] ) || empty( $event['privacy_consent_id'] ) ) {
+			return new WP_Error( 'mi_privacy_misconfigured', 'L’informativa privacy dell’evento non è configurata.', array( 'status' => 409 ) );
 		}
 		if ( ! empty( $event['marketing_enabled'] ) && empty( $event['marketing_consent_id'] ) ) {
 			return new WP_Error( 'mi_marketing_misconfigured', 'Il consenso marketing dell’evento non è configurato.', array( 'status' => 409 ) );
