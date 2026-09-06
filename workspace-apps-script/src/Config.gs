@@ -7,6 +7,7 @@ const MI_SHEETS = Object.freeze({
   PARTICIPANTS: 'Partecipanti',
   PAYMENT_INTAKE: 'Inserimento pagamenti',
   PAYMENT_FORM: 'Registra movimento',
+  REGISTRATION_FORM: 'Registra iscrizione',
   PAYMENTS: 'Pagamenti',
   EMAIL_OUTBOX: 'Coda email',
   SECRETARY_OPERATIONS: 'Operazioni segreteria',

@@ -213,7 +213,7 @@ final class MI_Registration_Service {
 		return array( 'capacity' => $capacity, 'confirmed' => $confirmed, 'waitlisted' => $waitlisted, 'remaining' => $remaining, 'full' => 0 === $remaining || ( ! empty( $event['ticket_types'] ) && ! $any_ticket_available ), 'ticket_types' => $ticket_availability );
 	}
 
-	public static function create( $event_id, $payload, $idempotency_key, $allow_unpublished = false, $audit_actor = 'PUBLIC_FORM' ) {
+	public static function create( $event_id, $payload, $idempotency_key, $allow_unpublished = false, $audit_actor = 'PUBLIC_FORM', $trusted_operator = false ) {
 		global $wpdb;
 		$event_id = absint( $event_id );
 		$idempotency_key = preg_replace( '/[^a-zA-Z0-9_-]/', '', (string) $idempotency_key );
@@ -235,11 +235,11 @@ final class MI_Registration_Service {
 			return new WP_Error( 'mi_registration_closed', 'Le iscrizioni non sono aperte.', array( 'status' => 409 ) );
 		}
 
-		if ( ! empty( $payload['website'] ) ) {
+		if ( ! $trusted_operator && ! empty( $payload['website'] ) ) {
 			return new WP_Error( 'mi_spam', 'Richiesta non valida.', array( 'status' => 400 ) );
 		}
 		$started_at = isset( $payload['started_at'] ) ? absint( $payload['started_at'] ) : 0;
-		if ( ! $started_at || time() - $started_at < 2 || time() - $started_at > DAY_IN_SECONDS ) {
+		if ( ! $trusted_operator && ( ! $started_at || time() - $started_at < 2 || time() - $started_at > DAY_IN_SECONDS ) ) {
 			return new WP_Error( 'mi_form_timing', 'Aggiorna la pagina e riprova.', array( 'status' => 400 ) );
 		}
 
@@ -268,7 +268,7 @@ final class MI_Registration_Service {
 			return new WP_Error( 'mi_marketing_misconfigured', 'Il consenso marketing dell’evento non è configurato.', array( 'status' => 409 ) );
 		}
 		$marketing_accepted = ! empty( $event['marketing_enabled'] ) && true === ( $payload['marketing_accepted'] ?? false );
-		if ( ! $allow_unpublished ) {
+		if ( ! $allow_unpublished && ! $trusted_operator ) {
 			$rate_limit = self::consume_registration_rate_limit( $event_id, $buyer['email'] ?: $buyer['phone'] );
 			if ( is_wp_error( $rate_limit ) ) return $rate_limit;
 		}

@@ -1,8 +1,9 @@
-# Revisione dei fogli evento — primi due incrementi
+# Revisione architetturale dei fogli evento — chiusura v1
 
 Il file dell'evento è l'ambiente operativo della segreteria. DB_MODULI conserva
 il registro centrale e lo storico; WordPress resta responsabile della disponibilità
-pubblica dei posti. Questa revisione non realizza ancora l'intero percorso concordato.
+pubblica dei posti. La v1 del percorso concordato è completata; i limiti residui sono
+scelte esplicite di ambito e non percorsi applicativi lasciati a metà.
 
 ## Implementato
 
@@ -38,30 +39,30 @@ pubblica dei posti. Questa revisione non realizza ancora l'intero percorso conco
 - Menu di DB_MODULI per sincronizzare fogli e pagamenti. L'attivazione separata
   del timer avvia il controllo ogni cinque minuti e aggiorna i riepiloghi dopo
   la convalida dei movimenti. Non invia email.
+- Domande personalizzate e tratte di pullman conservano un identificativo opaco
+  quando cambiano etichetta o posizione.
+- La scheda **Registra iscrizione** carica da WordPress tipologie, campi e opzioni,
+  raccoglie fino a venti partecipanti e invia una richiesta HMAC. WordPress applica
+  gli stessi lock, contatori, prezzi, idempotenza e storico del modulo pubblico.
+- L'anteprima e la conferma delle modifiche sono disponibili dal foglio e dalla
+  segreteria web. Camere e pullman operativi usano comandi dedicati e auditabili;
+  le modifiche alla configurazione pubblica passano da una revisione WordPress.
 
 I riepiloghi economici attuali sono per **prenotazione** e compaiono sulle righe
 dei relativi partecipanti: non vanno sommati fra partecipanti della stessa
 prenotazione. La ripartizione individuale non è ancora implementata.
 
-## Limiti e incrementi ancora necessari
+## Limiti dichiarati della v1
 
-1. Collegare esplicitamente lo schema del wizard alle colonne del foglio. Le nuove
-   colonne sono gestite dal motore, ma la creazione automatica per ogni servizio,
-   tratta e domanda non è ancora completa. I codici delle domande basati sull'indice
-   e delle tratte derivati dalla descrizione vanno resi stabili anche in WordPress.
-2. Aggiungere il percorso di validazione delle nuove iscrizioni manuali, con
-   prenotazione dei posti su WordPress prima della conferma centrale.
-3. Completare i comandi coordinati per servizi, tratte e sistemazioni, con gestione
-   dei conflitti e recupero degli errori fra WordPress e DB_MODULI. Nel frattempo
-   la sincronizzazione dal foglio blocca queste modifiche; consente soltanto
-   i dati personali esplicitamente ammessi.
-4. Completare l'interfaccia di risoluzione dei conflitti e l'accesso alternativo
-   della segreteria web alle stesse operazioni. Le funzioni di anteprima/conferma
-   Apps Script esistono, ma questo incremento non aggiunge una nuova interfaccia web.
-5. Collaudare su Google reale spostamenti, ordinamenti, formati, quote di esecuzione
-   e modifiche umane durante la scrittura. Il lock serializza gli script, ma non
-   può bloccare la digitazione simultanea di un operatore nell'intervallo fra
-   rilettura e scrittura di una cella.
+1. I riepiloghi economici sono per prenotazione. Una futura ripartizione individuale
+   potrà generare più movimenti dopo aver verificato la somma complessiva.
+2. Un `ScriptLock` serializza gli script, ma Google Sheets non può impedire a una
+   persona di digitare durante la breve rilettura di una cella. La conferma ricalcola
+   firma e differenze e si arresta se il foglio è cambiato.
+3. La garanzia di carico fino a 300 persone richiede il collaudo prestazionale
+   previsto prima della produzione.
+4. Riscossione diretta, API bancarie, cancellazione automatica per retention e
+   infrastruttura distribuita restano fuori dallo scope della v1.
 
 ## Verifica e distribuzione
 
@@ -73,12 +74,12 @@ La pubblicazione GitHub non aggiorna Apps Script. Prima della distribuzione:
 
 1. Conservare la versione precedente del progetto e identificare il deployment
    effettivamente collegato a WordPress, senza cambiarne URL o autorizzazioni pubbliche.
-2. Aggiornare i sorgenti e il manifest. Il timer richiede il nuovo ambito
-   `script.scriptapp`; la concessione va verificata separatamente dal proprietario.
+2. Aggiornare i sorgenti e il manifest. Il timer è facoltativo e resta disattivato
+   finché il proprietario non lo richiede esplicitamente.
 3. Eseguire il controllo firmato e un collaudo su un evento con identità fittizie,
    senza spedire email. Verificare anche una migrazione con modifica manuale preesistente.
-4. Solo dopo il collaudo, attivare il timer dal menu di DB_MODULI. Il comando riusa
-   l'attivatore dello stesso utente quando già presente.
+4. L'operatività manuale non richiede timer. L'eventuale sincronizzazione periodica
+   può essere attivata in seguito con una decisione separata.
 
 Nessuna cartella viene creata o spostata durante i test locali. Le funzioni Drive
 esistenti riusano `EVENTI` nella radice e `EVENTI PASSATI` al suo interno.

@@ -87,3 +87,9 @@ La scheda segue l'ordine Prenotazione → Movimento → Tracciabilità → Verif
 Collaudato il solo riepilogo della prenotazione dimostrativa autorizzata: evento Cammino di Santiago 2027, stato PENDING_PAYMENT, totale 500 EUR, versato netto 0 EUR e residuo 500 EUR. Il messaggio finale invita a controllare i dati e spuntare la conferma. Non è stato premuto «Registra movimento guidato» e non è stato creato alcun ulteriore incasso o rimborso.
 
 Il sorgente locale aggiunge anche `STATO_REPLICA_ISCRIZIONE`, controllo firmato che consente al retry WordPress di riconoscere una replica già completa dopo un timeout. Suite aggiornata: 199/199 test e sanificazione superati. La nuova azione non è ancora nel deployment 44 e WordPress 3.23.11 non è ancora installato: servono autorizzazioni esplicite separate prima di aggiornare il deployment e sostituire il plugin attivo. Nessuna email inviata e nessun timer attivato.
+
+## Chiusura della revisione architetturale
+
+La versione 3.23.12 chiude i due percorsi applicativi rimasti aperti: domande e tratte mantengono chiavi stabili indipendenti da etichetta e posizione; la nuova scheda «Registra iscrizione» carica lo schema dell'evento da WordPress e registra fino a venti partecipanti attraverso la richiesta HMAC `CREATE_MANUAL_REGISTRATION`. Disponibilità, capienza, lista d'attesa, prezzi, idempotenza e storico restano applicati dal servizio transazionale WordPress prima della replica a Workspace.
+
+Le modifiche operative a camere e pullman restano nei comandi auditabili esistenti; le modifiche che cambiano configurazione pubblica o prezzi richiedono una nuova revisione dell'evento in WordPress. Suite locale: 203/203 test superati; sanificazione superata.

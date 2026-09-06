@@ -23,6 +23,17 @@ test('il setup dichiara tutte le schede operative', () => {
   assert.match(sources['Setup.gs'], /requireValueInList/);
 });
 
+test('il foglio iscrizione manuale usa WordPress per disponibilità e capienza', () => {
+	const source = sources['InterfacciaIscrizioni.gs'];
+	assert.match(sources['Config.gs'], /REGISTRATION_FORM:\s*'Registra iscrizione'/);
+	assert.match(sources['Setup.gs'], /Apri iscrizione manuale/);
+	assert.match(source, /GET_MANUAL_REGISTRATION_SCHEMA/);
+	assert.match(source, /CREATE_MANUAL_REGISTRATION/);
+	assert.match(source, /registration_state\) !== 'OPEN'/);
+	assert.match(source, /privacy_accepted:true/);
+	assert.match(source, /ticket_index:counts\[ticket\]/);
+});
+
 test('i modelli report personalizzati sono validati e non sovrascrivono quelli standard', () => {
   assert.match(sources['Config.gs'], /REPORT_TEMPLATES:\s*'Modelli report'/);
   assert.match(sources['Report.gs'], /function elencaModelliReport/);
