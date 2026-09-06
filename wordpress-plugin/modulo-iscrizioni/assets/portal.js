@@ -438,6 +438,22 @@ document.addEventListener('DOMContentLoaded', () => {
 	});
 	bindProgressForms();
 
+	const quickEventFormSnapshot = (form) => new URLSearchParams(new FormData(form)).toString();
+	const bindQuickEventForms = (root = document) => root.querySelectorAll('[data-mi-event-quick-form]').forEach((quickForm) => {
+		if (quickForm.dataset.miQuickFormBound === '1') return;
+		const submit = quickForm.querySelector('[data-mi-event-quick-submit]');
+		if (!submit) return;
+		quickForm.dataset.miQuickFormBound = '1';
+		const initialSnapshot = quickEventFormSnapshot(quickForm);
+		const updateSubmitVisibility = () => {
+			submit.hidden = quickEventFormSnapshot(quickForm) === initialSnapshot;
+		};
+		quickForm.addEventListener('input', updateSubmitVisibility);
+		quickForm.addEventListener('change', updateSubmitVisibility);
+		updateSubmitVisibility();
+	});
+	bindQuickEventForms();
+
   document.querySelectorAll('textarea[data-mi-max-lines]').forEach((field) => {
 	const maximum = Math.max(1, Number(field.dataset.miMaxLines) || 6);
 	field.addEventListener('input', () => {
@@ -560,6 +576,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		  if (navigationId !== eventNavigationId) return;
 		  const panel = new DOMParser().parseFromString(html, 'text/html').querySelector('[data-mi-event-inline-panel]');
 		  if (!panel) throw new Error('event_panel_missing');
+		  bindQuickEventForms(panel);
 		  placeEventPanel(panel, shell);
 		  bindCopyButtons(panel);
 		  bindShareButtons(panel);
