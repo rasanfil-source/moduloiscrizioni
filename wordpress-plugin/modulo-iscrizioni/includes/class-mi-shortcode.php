@@ -56,8 +56,12 @@ final class MI_Shortcode {
 		nocache_headers();
 		header( 'X-Robots-Tag: noindex, nofollow, noarchive', true );
 		show_admin_bar( false );
-		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width, initial-scale=1"><?php wp_head(); ?></head><body class="mi-focused-page"><main class="mi-focused-page__main"><?php echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- HTML protetto dal renderer. ?></main><?php wp_footer(); ?></body></html><?php
+		self::render_focused_document( $content );
 		exit;
+	}
+
+	private static function render_focused_document( $content ) {
+		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width, initial-scale=1"><?php wp_print_styles( 'mi-public' ); ?></head><body class="mi-focused-page"><main class="mi-focused-page__main"><?php echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- HTML protetto dal renderer. ?></main><?php wp_print_scripts( array( 'mi-core', 'mi-public' ) ); ?></body></html><?php
 	}
 
 	public static function maybe_disable_page_cache() {
@@ -148,7 +152,7 @@ final class MI_Shortcode {
 		show_admin_bar( false );
 		$content = self::render( array( 'event' => $event_id, 'anteprima' => 1 ) );
 		nocache_headers();
-		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width, initial-scale=1"><?php wp_head(); ?></head><body class="mi-focused-page"><main class="mi-focused-page__main"><?php echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- HTML già protetto dal renderer. ?></main><?php wp_footer(); ?></body></html><?php
+		self::render_focused_document( $content );
 		exit;
 	}
 

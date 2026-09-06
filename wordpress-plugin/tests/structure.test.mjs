@@ -48,8 +48,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.23\.19\b/);
-  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.19'\s*\)/);
+  assert.match(source, /Version:\s+3\.23\.20\b/);
+  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.20'\s*\)/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -262,6 +262,11 @@ test('la pagina concentrata elimina gli asset Divi senza toccare le altre pagine
 	assert.match(shortcode, /themes\/Divi\/\|plugins\/divi-/);
 	assert.match(shortcode, /style_loader_tag/);
 	assert.match(shortcode, /script_loader_tag/);
+	assert.match(shortcode, /render_focused_document/);
+	assert.match(shortcode, /wp_print_styles\( 'mi-public' \)/);
+	assert.match(shortcode, /wp_print_scripts\( array\( 'mi-core', 'mi-public' \) \)/);
+	assert.doesNotMatch(shortcode, /<\?php wp_head\(\); \?>/);
+	assert.doesNotMatch(shortcode, /<\?php wp_footer\(\); \?>/);
 });
 
 test('il controllo temporale misura la sessione browser e il QR viene caricato solo quando serve', async () => {
@@ -796,7 +801,7 @@ test('il prezzo supporta una quota di partecipazione uguale per tutti', async ()
 	assert.match(shortcode, /name="buyerEmail" type="email"[^>]*autocomplete="email">/);
 	assert.match(shortcode, /<h3 data-mi-participants-heading>Prenotazione<\/h3>/);
 	assert.match(shortcode, /mi-registration__availability[^>]*role="status"><span>/);
-	assert.match(await read('assets/public.css'), /\.mi-registration p\.mi-registration__availability \{ display:flex;[^}]*padding:\.9rem 1rem;[^}]*flex-direction:column;gap:\.3rem/);
+	assert.match(await read('assets/public.css'), /\.mi-focused-page \.mi-registration p\.mi-registration__availability \{ display:flex;[^}]*padding:\.9rem 1rem;[^}]*flex-direction:column;gap:\.3rem/);
 	assert.match(publicScript, /quantity > 1 \? 'Prenotazioni' : 'Prenotazione'/);
 	assert.match(publicScript, /quantity > 1 \? `Prenotazione \$\{index \+ 1\}` : 'Prenotazione'/);
 	assert.match(publicScript, /field\.help && field\.key !== 'birth_date'/);
