@@ -22,7 +22,7 @@ class Range {
   }
   getFormula() { return this.sheet.formulas[`${this.row}:${this.col}`] || ''; }
   getFormulas() { return Array.from({ length: this.rows }, (_, y) => Array.from({ length: this.cols }, (_, x) => this.sheet.formulas[`${this.row + y}:${this.col + x}`] || '')); }
-  addDeveloperMetadata(key, value) { this.sheet.meta.push(new Metadata(this.sheet, key, value, this.col)); return this; }
+  addDeveloperMetadata(key, value) { assert.ok(this.entireColumn, 'Metadati consentiti solo su colonne non delimitate'); this.sheet.meta.push(new Metadata(this.sheet, key, value, this.col)); return this; }
   setFontWeight() { return this; }
   setBackground() { return this; }
   setFontColor() { return this; }
@@ -38,7 +38,15 @@ class Metadata {
 }
 class Sheet {
   constructor() { this.data = []; this.meta = []; this.formulas = {}; this.groups = new Set(); this.maxRows = 10; this.maxCols = 10; }
-  getRange(...args) { return new Range(this, ...args); }
+  getRange(...args) {
+    if (typeof args[0] === 'string') {
+      const match = /^([A-Z]+):\1$/.exec(args[0]);
+      assert.ok(match, 'Attesa notazione A1 di colonna intera');
+      const col = [...match[1]].reduce((n, c) => n * 26 + c.charCodeAt(0) - 64, 0);
+      return Object.assign(new Range(this, 1, col, this.maxRows, 1), { entireColumn: true });
+    }
+    return new Range(this, ...args);
+  }
   getDeveloperMetadata() { return this.meta.filter(item => !item.col); }
   addDeveloperMetadata(key, value) { this.meta.push(new Metadata(this, key, value)); }
   createDeveloperMetadataFinder() { return { withKey: key => ({ find: () => this.meta.filter(item => item.key === key) }) }; }

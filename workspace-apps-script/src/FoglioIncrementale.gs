@@ -15,7 +15,16 @@ function mappaColonneEvento_(scheda) {
 }
 
 function identificaColonnaEvento_(scheda, colonna, key) {
-  scheda.getRange(1, colonna, scheda.getMaxRows(), 1).addDeveloperMetadata('MI_CAMPO', key);
+  intervalloColonnaEvento_(scheda, colonna).addDeveloperMetadata('MI_CAMPO', key);
+}
+
+/** I metadati richiedono una colonna non delimitata, anche se il range copre tutte le righe. */
+function intervalloColonnaEvento_(scheda, colonna) {
+  let lettere = '';
+  for (let n = colonna; n > 0; n = Math.floor((n - 1) / 26)) {
+    lettere = String.fromCharCode(65 + (n - 1) % 26) + lettere;
+  }
+  return scheda.getRange(lettere + ':' + lettere);
 }
 
 function testoCellaEvento_(valore) {
@@ -72,7 +81,7 @@ function preparaStrutturaIncrementale_(scheda, vista) {
     if (col <= scheda.getLastColumn()) scheda.insertColumnBefore(col);
     else if (col > scheda.getMaxColumns()) scheda.insertColumnsAfter(scheda.getMaxColumns(), col - scheda.getMaxColumns());
     identificaColonnaEvento_(scheda, col, campo.key);
-    scheda.getRange(1, col, scheda.getMaxRows(), 1).addDeveloperMetadata('MI_BASE_VUOTA', '1');
+    intervalloColonnaEvento_(scheda, col).addDeveloperMetadata('MI_BASE_VUOTA', '1');
     scheda.getRange(1, col).setValue(campo.label).setFontWeight('bold').setBackground('#172554').setFontColor('#ffffff');
     mappa = mappaColonneEvento_(scheda);
     if (campo.key.charAt(0) === '_') scheda.hideColumns(col);
