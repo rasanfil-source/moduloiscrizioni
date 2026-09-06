@@ -14,7 +14,7 @@ function preparaProduzioniEventoDaWordPress_(payload) {
     Math.max(1, Math.round(Number(payload.capienza) || 1)),
     normalizzaTesto_(payload.apertura_iscrizioni, 40),
     normalizzaTesto_(payload.chiusura_iscrizioni, 40),
-    normalizzaTesto_(payload.modalita_prezzo, 40),
+    payload.evento_gratuito === true ? 'ZERO' : normalizzaTesto_(payload.modalita_prezzo, 40),
     new Date()
   ];
   if (esistente) eventi.getRange(esistente._row, 1, 1, valori.length).setValues([valori]);
@@ -83,7 +83,7 @@ function apriFoglioOperativoConLock_(form) {
   const scheda = foglio.getSheets()[0];
   scheda.setName('Dati operativi');
   aggiornaDatiIncrementaliEvento_(scheda, vista);
-  preparaPagamentiEvento_(foglio, idEvento);
+  configuraSchedeEconomicheEvento_(foglio, idEvento);
   const valori = [idEvento, neutralizzaFormula_(vista.evento.titolo, 200), foglio.getId(), foglio.getUrl(), '', '', new Date()];
 	if (esistente) registro.getRange(esistente._row, 1, 1, valori.length).setValues([valori]);
 	else registro.appendRow(valori);
@@ -241,7 +241,8 @@ function aggiornaFoglioOperativoEvento(form) {
   const scheda = foglio.getSheetByName('Dati operativi') || foglio.getSheets()[0];
   const vista = generaVistaOperativaEvento_(idEvento);
   const esito = scriviFoglioOperativoEvento_(scheda, vista);
-  aggiornaProiezionePagamentiEvento_(foglio, idEvento);
+  configuraSchedeEconomicheEvento_(foglio, idEvento);
+  if (eventoPrevedeMovimenti_(idEvento)) aggiornaProiezionePagamentiEvento_(foglio, idEvento);
   aggiungiControllo_('FOGLIO_OPERATIVO', 'REFRESH', idEvento, 'SUCCESS', normalizzaTesto_(Session.getActiveUser().getEmail() || 'SEGRETERIA', 120), 'DATABASE_TO_EVENT_SHEET', 'SEGRETERIA');
   return { ok: true, url_foglio: foglio.getUrl(), righe: vista.righe.length, esito: esito, message: 'Aggiornamento completato: ' + esito.aggiunte + ' partecipanti aggiunti, ' + esito.manuali + ' modifiche manuali conservate, ' + esito.conflitti + ' celle da verificare.' };
 }

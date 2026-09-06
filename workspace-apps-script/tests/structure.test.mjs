@@ -115,6 +115,24 @@ test('l’inserimento guidato ordina il controllo prima della registrazione e ri
   assert.match(form, /aggiornaProiezionePagamentiEvento_/);
 });
 
+test('i fogli evento mostrano il modulo movimento soltanto quando non sono totalmente gratuiti', () => {
+  const form = sources['InterfacciaMovimentiEvento.gs'];
+  assert.match(form, /eventoPrevedeMovimenti_/);
+  assert.match(form, /\['ZERO', 'REGISTRATION_ONLY'\]/);
+  assert.match(form, /Registra un movimento/);
+  assert.match(form, /REGISTRA MOVIMENTO/);
+  assert.match(form, /gestisciModificaInterfacciaMovimentoEvento/);
+  assert.match(form, /forSpreadsheet\(foglio\)\.onEdit\(\)\.create\(\)/);
+  assert.match(form, /ScriptApp\.deleteTrigger\(trigger\)/);
+  assert.match(form, /modalita_economica === 'DEPOSIT_BALANCE'|modalita === 'DEPOSIT_BALANCE'/);
+  assert.match(form, /fonti_pagamento_json/);
+  const rotazione = form.indexOf("setValue(creaIdentificativoOpaco_('pevui'))", form.indexOf('function registraMovimentoInterfacciaEvento_'));
+  const pulizia = form.indexOf('getRangeList([MI_EVENT_MOVEMENT_FORM.AMOUNT', rotazione);
+  assert.ok(rotazione >= 0 && pulizia > rotazione);
+  assert.match(sources['FogliOperativi.gs'], /configuraSchedeEconomicheEvento_\(foglio, idEvento\)/);
+  assert.match(sources['Setup.gs'], /Prepara moduli movimento nei fogli evento/);
+});
+
 test('il retry WordPress verifica prima una replica già completata', () => {
   assert.match(sources['WebApp.gs'], /STATO_REPLICA_ISCRIZIONE/);
   assert.match(sources['WebApp.gs'], /function statoReplicaIscrizione_/);

@@ -35,6 +35,8 @@ test('il modello operativo dell evento è scelto in WordPress e consegnato a Wor
   assert.match(registration, /operational_profile/);
   assert.doesNotMatch(portalJs, /name="operational_profile"|Vista iniziale della segreteria/);
   assert.match(portal, /\$_POST\['operational_profile'\] \?\? 'AUTOMATICO'/);
+  assert.match(portal, /'modalita_prezzo'\s*=>\s*\(string\) get_post_meta\( \$event_id, '_mi_pricing_mode'/);
+  assert.match(portal, /'evento_gratuito'\s*=>\s*'ZERO' === strtoupper/);
 });
 
 test('Workspace prevede modelli report standard senza sovrascrivere dati', async () => {
@@ -48,8 +50,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.23\.21\b/);
-  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.21'\s*\)/);
+  assert.match(source, /Version:\s+3\.23\.22\b/);
+  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.22'\s*\)/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
