@@ -48,8 +48,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.23\.14\b/);
-  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.14'\s*\)/);
+  assert.match(source, /Version:\s+3\.23\.15\b/);
+  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.15'\s*\)/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1421,7 +1421,7 @@ test('la scheda rapida apre il wizard completo per modificare lo stesso evento a
   assert.match(portal, /Il modulo e il foglio già collegati non saranno duplicati/);
   assert.match(portal, /Immagine attuale/);
   assert.match(portal, /Salva le modifiche/);
-  assert.match(portal, /Evento aggiornato correttamente/);
+  assert.match(portal, /Modifiche salvate\./);
   assert.match(portal, /ensure_published_revision\( \$event_id, true \)/);
   assert.match(portal, /prepara_produzioni_workspace\( \$event_id, 'PUBBLICATO' \)/);
   assert.match(portal, /<summary>Dettagli principali<\/summary>/);
@@ -1473,6 +1473,25 @@ test('il dettaglio evento si apre a fisarmonica dopo la riga selezionata', async
 	assert.match(css, /\.mi-event-inline-panel\{grid-column:1\/-1/);
 	assert.match(css, /\.mi-event-card-shell\.is-selected \.mi-event-card/);
 	assert.match(css, /prefers-reduced-motion:reduce/);
+});
+
+test('le tessere e i moduli di modifica comunicano chiaramente apertura e salvataggio', async () => {
+	const portal = await read('includes/class-mi-portal.php');
+	const script = await read('assets/portal.js');
+	const css = await read('assets/portal.css');
+	assert.match(portal, /class="mi-event-card__toggle" aria-hidden="true"/);
+	assert.match(css, /\.mi-event-card__toggle\{position:absolute;[^}]*top:8px;left:8px/);
+	assert.match(css, /\.mi-event-card-shell\.is-selected \.mi-event-card__toggle\{transform:rotate\(180deg\)/);
+	assert.match(portal, /data-mi-event-quick-form/);
+	assert.match(portal, /data-mi-event-quick-submit/);
+	assert.match(script, /quickEventFormSnapshot/);
+	assert.match(script, /addEventListener\('input', updateSubmitVisibility\)/);
+	assert.match(script, /addEventListener\('change', updateSubmitVisibility\)/);
+	assert.match(script, /submit\.hidden = quickEventFormSnapshot\(quickForm\) === initialSnapshot/);
+	assert.match(css, /data-mi-event-quick-submit\][^{]*\{display:flex;margin-left:auto\}/);
+	assert.match(css, /mi-wizard-step:last-of-type>\.mi-primary\{display:flex;margin-left:auto\}/);
+	assert.match(portal, /Salvataggio in corso\. Al termine sarai riportato alla pagina Gestisci eventi\./);
+	assert.match(portal, /\$success_message = \$is_published_edit \? 'Modifiche salvate\.'/);
 });
 
 test('il portale gestisce i gruppi in una scheda dedicata e il wizard vi rimanda', async () => {

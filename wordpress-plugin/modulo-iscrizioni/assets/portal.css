@@ -82,3 +82,8 @@
 .mi-group-card,.mi-operator-card{content-visibility:auto;contain-intrinsic-size:76px}.mi-portal :where(section,article,details,form,fieldset,label,div,span){min-width:0}.mi-portal :where(input,select,textarea,button){max-width:100%}.mi-portal :where(h1,h2,h3,p,strong,small,label,summary){overflow-wrap:anywhere}
 @media(max-width:600px){.mi-portal{width:100%;margin:0 auto;padding:12px}.mi-portal-header{align-items:flex-start}.mi-portal-switcher{top:0;margin:16px -4px;padding:6px 4px;border-radius:0;box-shadow:0 5px 16px #17203312}.mi-event-inline-panel--loading{min-height:120px}.mi-event-management details>summary,.mi-group-card>summary,.mi-operator-card>summary{min-height:48px}}
 @media(prefers-reduced-motion:reduce){.mi-event-inline-panel--loading>span{animation-duration:1.4s}}
+
+/* Rifiniture responsive e azioni di modifica. */
+.mi-portal{box-sizing:border-box}.mi-text-danger{min-height:44px}
+.mi-event-card__toggle{position:absolute;z-index:2;top:8px;left:8px;display:grid;width:34px;height:34px;place-items:center;border:1px solid #ffffff80;border-radius:50%;background:#17224acc;color:#fff;box-shadow:0 2px 8px #17203326;pointer-events:none;transition:transform .18s ease,background .18s ease}.mi-event-card-shell.is-selected .mi-event-card__toggle{transform:rotate(180deg);background:#fff;color:var(--navy);border-color:#d7dce5}.mi-event-management__form>[data-mi-event-quick-submit],.mi-event-wizard .mi-wizard-step:last-of-type>.mi-primary{display:flex;margin-left:auto}.mi-event-management__form>[data-mi-event-quick-submit][hidden]{display:none}
+@media(prefers-reduced-motion:reduce){.mi-event-card__toggle{transition:none}}
