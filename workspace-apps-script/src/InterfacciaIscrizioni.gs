@@ -61,11 +61,16 @@ function aggiornaSchemaIscrizioneManuale() {
   if (String(schema.registration_state) !== 'OPEN') throw new Error('Le iscrizioni dell’evento non sono aperte: ' + String(schema.registration_state || 'stato non disponibile') + '.');
   sheet.getRange(13, 2, 22, 49).clearContent().clearDataValidations();
   sheet.getRange('B14').setValue('Nome'); sheet.getRange('C14').setValue('Cognome'); sheet.getRange('D14').setValue('Tipologia');
-  const tickets = (schema.ticket_types || []).map(function(item){ return { code:String(item.code), name:String(item.name || item.code) }; });
+  const tickets = (schema.ticket_types || []).map(function(item){
+    const code = String(item.code); const name = String(item.name || code);
+    return { code:code, name:name, choice:code + ' — ' + name };
+  });
   if (!tickets.length) throw new Error('L’evento non contiene tipologie utilizzabili.');
-  sheet.getRange(MI_MANUAL_REGISTRATION_FORM.FIRST_ROW, 4, 20, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(tickets.map(function(item){return item.name;}), true).setAllowInvalid(false).build());
+  sheet.getRange(MI_MANUAL_REGISTRATION_FORM.FIRST_ROW, 4, 20, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(tickets.map(function(item){return item.choice;}), true).setAllowInvalid(false).build());
+  const fieldTypes = {};
   let column = 5;
   (schema.participant_fields || []).slice(0, 20).forEach(function(field){
+    fieldTypes[String(field.key)] = String(field.type || 'text');
     sheet.getRange(MI_MANUAL_REGISTRATION_FORM.KEY_ROW, column).setValue('field:' + String(field.key));
     sheet.getRange(MI_MANUAL_REGISTRATION_FORM.HEADER_ROW, column).setValue(String(field.label || field.key) + (field.required ? ' *' : ''));
     const range = sheet.getRange(MI_MANUAL_REGISTRATION_FORM.FIRST_ROW, column, 20, 1);
@@ -81,8 +86,14 @@ function aggiornaSchemaIscrizioneManuale() {
   const width = Math.max(3, column - 2); sheet.getRange(14, 2, 21, width).setBorder(true,true,true,true,true,true,'#d7dde6',SpreadsheetApp.BorderStyle.SOLID);
   sheet.getRange(14, 2, 1, width).setBackground('#17224a').setFontColor('#ffffff').setFontWeight('bold').setWrap(true);
   sheet.setColumnWidths(2, width, 135); sheet.getRange(MI_MANUAL_REGISTRATION_FORM.STATUS).setValue('Campi aggiornati. Compila una riga per ogni partecipante.');
-  PropertiesService.getDocumentProperties().setProperty('MI_MANUAL_REGISTRATION_SCHEMA', JSON.stringify({ event_id:String(event.id_evento), tickets:tickets, columns:sheet.getRange(13, 2, 1, width).getValues()[0] }));
+  PropertiesService.getDocumentProperties().setProperty('MI_MANUAL_REGISTRATION_SCHEMA', JSON.stringify({ event_id:String(event.id_evento), tickets:tickets, field_types:fieldTypes, columns:sheet.getRange(13, 2, 1, width).getValues()[0] }));
   sheet.activate(); return { ok:true, event_id:String(event.id_evento), columns:width };
+}
+
+function normalizzaValoreCampoIscrizioneManuale_(value, type) {
+  if (value instanceof Date && !isNaN(value.getTime())) return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  if (String(type || '').toLowerCase() === 'date') return normalizzaTesto_(value, 10);
+  return value;
 }
 
 function registraIscrizioneManuale() {
@@ -92,16 +103,19 @@ function registraIscrizioneManuale() {
   const event = eventoIscrizioneManuale_(normalizzaTesto_(sheet.getRange(MI_MANUAL_REGISTRATION_FORM.EVENT).getValue(), 180));
   if (String(cache.event_id || '') !== String(event.id_evento)) throw new Error('Aggiorna i campi dopo aver scelto l’evento.');
   const columns = cache.columns || [];
-  const ticketByName = (cache.tickets || []).reduce(function(result,item){ result[String(item.name)] = String(item.code); return result; }, {});
+  const ticketByChoice = (cache.tickets || []).reduce(function(result,item){ result[String(item.choice || item.code)] = String(item.code); return result; }, {});
   const values = sheet.getRange(MI_MANUAL_REGISTRATION_FORM.FIRST_ROW, 2, 20, columns.length).getValues();
   const counts = {}; const participants = [];
   values.forEach(function(row){
     const first = normalizzaTesto_(row[0],80), last = normalizzaTesto_(row[1],80); if (!first && !last) return;
     if (!first || !last) throw new Error('Ogni partecipante deve avere nome e cognome.');
-    const ticket = ticketByName[String(row[2] || '')]; if (!ticket) throw new Error('Scegli la tipologia per ogni partecipante.');
+    const ticket = ticketByChoice[String(row[2] || '')]; if (!ticket) throw new Error('Scegli la tipologia per ogni partecipante.');
     counts[ticket] = (counts[ticket] || 0) + 1; const fields = {}, options = {};
     columns.forEach(function(key,index){
-      if (String(key).indexOf('field:') === 0 && row[index] !== '') fields[String(key).slice(6)] = row[index];
+      if (String(key).indexOf('field:') === 0 && row[index] !== '') {
+        const fieldKey = String(key).slice(6);
+        fields[fieldKey] = normalizzaValoreCampoIscrizioneManuale_(row[index], (cache.field_types || {})[fieldKey]);
+      }
       if (String(key).indexOf('option:') === 0 && row[index] === true) options[String(key).slice(7)] = 1;
     });
     participants.push({ ticket_type_code:ticket, ticket_index:counts[ticket], first_name:first, last_name:last, fields:fields, options:options });
@@ -111,6 +125,8 @@ function registraIscrizioneManuale() {
   const buyer = { first_name:normalizzaTesto_(sheet.getRange(MI_MANUAL_REGISTRATION_FORM.BUYER_FIRST).getValue(),80), last_name:normalizzaTesto_(sheet.getRange(MI_MANUAL_REGISTRATION_FORM.BUYER_LAST).getValue(),80), email:normalizzaTesto_(sheet.getRange(MI_MANUAL_REGISTRATION_FORM.BUYER_EMAIL).getValue(),254), phone:normalizzaTesto_(sheet.getRange(MI_MANUAL_REGISTRATION_FORM.BUYER_PHONE).getValue(),40) };
   const result = inviaComandoWordPress_('CREATE_MANUAL_REGISTRATION', { event_id:String(event.id_evento), idempotency_key:normalizzaTesto_(sheet.getRange(MI_MANUAL_REGISTRATION_FORM.REQUEST_ID).getValue(),64), operator_label:normalizzaTesto_(Session.getActiveUser().getEmail() || 'SEGRETERIA',120), registration:{ tickets:tickets, participants:participants, buyer:buyer, order_options:{}, privacy_accepted:true, marketing_accepted:false } });
   sheet.getRange(MI_MANUAL_REGISTRATION_FORM.STATUS).setValue('Iscrizione ' + String(result.order_code) + ' registrata in WordPress. Replica Workspace: ' + String(result.workspace_status || 'PENDING') + '.');
+  sheet.getRangeList(['B10:C10','D10:E10','F10:G10','H10:I10']).clearContent();
+  sheet.getRange(MI_MANUAL_REGISTRATION_FORM.FIRST_ROW, 2, 20, columns.length).clearContent();
   sheet.getRange(MI_MANUAL_REGISTRATION_FORM.CONFIRM).setValue(false); sheet.getRange(MI_MANUAL_REGISTRATION_FORM.PRIVACY).setValue(false); sheet.getRange(MI_MANUAL_REGISTRATION_FORM.REQUEST_ID).setValue(creaIdentificativoOpaco_('regui'));
   SpreadsheetApp.getActive().toast('Iscrizione registrata con controllo dei posti.', 'Modulo iscrizioni', 6); return result;
 }
