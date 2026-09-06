@@ -35,9 +35,10 @@ test('il foglio iscrizione manuale usa WordPress per disponibilità e capienza',
 	assert.match(source, /choice:code \+ ' — ' \+ name/);
 	assert.match(source, /ticketByChoice/);
 	assert.match(source, /field_types:fieldTypes/);
-	assert.match(source, /Utilities\.formatDate\(value, Session\.getScriptTimeZone\(\), 'yyyy-MM-dd'\)/);
+	assert.match(source, /sheet\.getParent\(\)\.getSpreadsheetTimeZone\(\)/);
+	assert.match(source, /Utilities\.formatDate\(value, timeZone, 'yyyy-MM-dd'\)/);
 	const successTail = source.slice(source.indexOf("const result = inviaComandoWordPress_('CREATE_MANUAL_REGISTRATION'"));
-	assert.ok(successTail.indexOf('.clearContent()') < successTail.indexOf("creaIdentificativoOpaco_('regui')"));
+	assert.match(successTail, /preparaNuovaIscrizioneManuale_\(sheet, columns\)/);
 });
 
 test('i modelli report personalizzati sono validati e non sovrascrivono quelli standard', () => {
