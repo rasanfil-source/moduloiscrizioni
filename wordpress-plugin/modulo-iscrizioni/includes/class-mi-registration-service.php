@@ -76,6 +76,17 @@ final class MI_Registration_Service {
 		if ( ! is_array( $ticket_types ) || empty( $ticket_types ) ) {
 			return new WP_Error( 'mi_event_invalid', 'Configurazione evento incompleta.', array( 'status' => 409 ) );
 		}
+		$privacy_url = self::privacy_policy_url();
+		$privacy_policy_version = (string) get_post_meta( $event_id, '_mi_privacy_policy_version', true );
+		$privacy_consent_id = (string) get_post_meta( $event_id, '_mi_privacy_consent_id', true );
+		if ( '' === $privacy_policy_version ) {
+			$privacy_policy_version = wp_date( 'Y-m' );
+			update_post_meta( $event_id, '_mi_privacy_policy_version', $privacy_policy_version );
+		}
+		if ( '' === $privacy_consent_id ) {
+			$privacy_consent_id = 'privacy-' . absint( $event_id );
+			update_post_meta( $event_id, '_mi_privacy_consent_id', $privacy_consent_id );
+		}
 
 		$activity_id = absint( get_post_meta( $event_id, '_mi_activity_id', true ) );
 		$activity = get_post( $activity_id );
@@ -128,9 +139,9 @@ final class MI_Registration_Service {
 			'special_requests_enabled' => '1' === get_post_meta( $event_id, '_mi_special_requests_enabled', true ),
 			'payment_deadline_at'=> (string) get_post_meta( $event_id, '_mi_payment_deadline_at', true ),
 			'reservation_minutes'=> min( 10080, absint( get_post_meta( $event_id, '_mi_reservation_minutes', true ) ) ),
-			'privacy_url'      => get_privacy_policy_url(),
-			'privacy_policy_version' => (string) get_post_meta( $event_id, '_mi_privacy_policy_version', true ),
-			'privacy_consent_id' => (string) get_post_meta( $event_id, '_mi_privacy_consent_id', true ),
+			'privacy_url'      => $privacy_url,
+			'privacy_policy_version' => $privacy_policy_version,
+			'privacy_consent_id' => $privacy_consent_id,
 			'marketing_enabled' => '1' === get_post_meta( $event_id, '_mi_marketing_enabled', true ),
 			'marketing_consent_id' => (string) get_post_meta( $event_id, '_mi_marketing_consent_id', true ),
 		);
@@ -143,6 +154,10 @@ final class MI_Registration_Service {
 				return new WP_Error( 'mi_event_revision_unavailable', 'La revisione pubblicata non è disponibile. Riprova più tardi.', array( 'status' => 503 ) );
 			}
 			$revision_config = $revision ? json_decode( (string) $revision['config_json'], true ) : null;
+			if ( is_array( $revision_config ) && ( empty( $revision_config['privacy_url'] ) || empty( $revision_config['privacy_policy_version'] ) || empty( $revision_config['privacy_consent_id'] ) ) ) {
+				$revision = self::ensure_published_revision( $event_id, true );
+				$revision_config = $revision ? json_decode( (string) $revision['config_json'], true ) : null;
+			}
 			if ( is_array( $revision_config ) ) {
 				$public_event = $revision_config;
 				$public_event['revision'] = array( 'id' => (int) $revision['id'], 'number' => (int) $revision['revision_number'], 'hash' => (string) $revision['config_hash'] );
@@ -150,6 +165,13 @@ final class MI_Registration_Service {
 		}
 		$public_event['availability'] = self::availability( $public_event );
 		return $public_event;
+	}
+
+	public static function privacy_policy_url() {
+		$url = get_privacy_policy_url();
+		if ( $url ) return $url;
+		$page = get_page_by_path( 'privacy-policy' );
+		return $page instanceof WP_Post && 'publish' === $page->post_status ? (string) get_permalink( $page ) : '';
 	}
 
 	public static function registration_state( $event ) {

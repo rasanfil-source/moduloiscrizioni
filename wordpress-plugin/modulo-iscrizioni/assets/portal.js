@@ -516,6 +516,17 @@ document.addEventListener('DOMContentLoaded', () => {
 	});
 	bindQuickEventForms();
 
+	document.addEventListener('click', (event) => {
+	  const opener = event.target.closest('[data-mi-cancel-dialog-open]');
+	  if (opener) {
+		const dialog = document.getElementById(opener.dataset.miCancelDialogOpen);
+		if (dialog?.showModal) dialog.showModal();
+		return;
+	  }
+	  const closer = event.target.closest('[data-mi-cancel-dialog-close]');
+	  if (closer) closer.closest('dialog')?.close();
+	});
+
   document.querySelectorAll('textarea[data-mi-max-lines]').forEach((field) => {
 	const maximum = Math.max(1, Number(field.dataset.miMaxLines) || 6);
 	field.addEventListener('input', () => {

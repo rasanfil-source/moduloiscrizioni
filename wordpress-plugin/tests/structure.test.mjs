@@ -48,8 +48,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.23\.18\b/);
-  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.18'\s*\)/);
+  assert.match(source, /Version:\s+3\.23\.19\b/);
+  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.19'\s*\)/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -255,6 +255,15 @@ test('gli asset pubblici sono caricati soltanto in presenza dello shortcode', as
   assert.match(source, /DONOTCACHEPAGE/);
 });
 
+test('la pagina concentrata elimina gli asset Divi senza toccare le altre pagine', async () => {
+	const shortcode = await read('includes/class-mi-shortcode.php');
+	assert.match(shortcode, /dequeue_focused_divi_assets/);
+	assert.match(shortcode, /absint\( \$_GET\['mi_iscrizione'\] \?\? 0 \)/);
+	assert.match(shortcode, /themes\/Divi\/\|plugins\/divi-/);
+	assert.match(shortcode, /style_loader_tag/);
+	assert.match(shortcode, /script_loader_tag/);
+});
+
 test('il controllo temporale misura la sessione browser e il QR viene caricato solo quando serve', async () => {
   const script = await read('assets/public.js');
   const shortcode = await read('includes/class-mi-shortcode.php');
@@ -405,7 +414,7 @@ test('i dati dimostrativi sono riservati a bozze, amministratori ed email in ant
   assert.match(admin, /current_user_can\(\s*'manage_options'\s*\)/);
   assert.match(admin, /'ANTEPRIMA'\s*!==\s*MI_Spedizione_Email::modalita/);
   assert.match(admin, /array\(\s*'draft',\s*'private'\s*\)/);
-	assert.match(admin, /get_privacy_policy_url\(\)/);
+	assert.match(admin, /MI_Registration_Service::privacy_policy_url\(\)/);
 	assert.match(admin, /_mi_privacy_policy_version'[\s\S]*wp_date\( 'Y-m' \)/);
 	assert.match(admin, /_mi_privacy_consent_id'[\s\S]*'privacy-' \. \$event_id/);
 	assert.match(admin, /_mi_marketing_consent_id'[\s\S]*'marketing-' \. \$event_id/);
@@ -780,26 +789,35 @@ test('il prezzo supporta una quota di partecipazione uguale per tutti', async ()
 	const shortcode = await read('includes/class-mi-shortcode.php');
 	const adminScript = await read('assets/admin.js');
 	const publicScript = await read('assets/public.js');
+	const portal = await read('includes/class-mi-portal.php');
 	assert.match(eventType, /value="FIXED"[\s\S]*Quota di partecipazione uguale per tutti/);
 	assert.match(eventType, /_mi_fixed_price_cents/);
 	assert.match(service, /'FIXED' === \$event\['pricing_mode'\]/);
 	assert.match(shortcode, /name="buyerEmail" type="email"[^>]*autocomplete="email">/);
 	assert.match(shortcode, /<h3 data-mi-participants-heading>Prenotazione<\/h3>/);
 	assert.match(shortcode, /mi-registration__availability[^>]*role="status"><span>/);
-	assert.match(await read('assets/public.css'), /\.mi-registration__availability \{ display:flex;[^}]*flex-direction:column;gap:\.3rem/);
+	assert.match(await read('assets/public.css'), /\.mi-registration p\.mi-registration__availability \{ display:flex;[^}]*padding:\.9rem 1rem;[^}]*flex-direction:column;gap:\.3rem/);
 	assert.match(publicScript, /quantity > 1 \? 'Prenotazioni' : 'Prenotazione'/);
 	assert.match(publicScript, /quantity > 1 \? `Prenotazione \$\{index \+ 1\}` : 'Prenotazione'/);
+	assert.match(publicScript, /field\.help && field\.key !== 'birth_date'/);
+	assert.match(publicScript, /revealInvalidField\(invalid\)/);
+	assert.match(publicScript, /scrollIntoView\(\{ behavior:[^}]*block: 'center'/);
+	assert.match(portal, /'_mi_privacy_policy_version'.*wp_date\( 'Y-m' \)/);
+	assert.match(portal, /'_mi_privacy_consent_id'.*'privacy-' \. \$event_id/);
 	assert.match(adminScript, /\['FIXED', 'CALCULATED'\]/);
 	assert.match(publicScript, /fixed_price_cents/);
 });
 
 test('i metadati tecnici dei consensi non compaiono nel pannello evento', async () => {
 	const eventType = await read('includes/class-mi-event-post-type.php');
+	const service = await read('includes/class-mi-registration-service.php');
 	assert.doesNotMatch(eventType, /<strong>Versione informativa privacy<\/strong>/);
 	assert.doesNotMatch(eventType, /<strong>ID consenso privacy<\/strong>/);
 	assert.doesNotMatch(eventType, /<strong>ID del consenso alle comunicazioni<\/strong>/);
 	assert.match(eventType, /'privacy-' \. \$post_id/);
 	assert.match(eventType, /'marketing-' \. \$post_id/);
+	assert.match(service, /get_page_by_path\( 'privacy-policy' \)/);
+	assert.match(service, /empty\( \$revision_config\['privacy_url'\] \)[\s\S]*ensure_published_revision\( \$event_id, true \)/);
 });
 
 test('email e cellulare dei partecipanti sono campi configurabili e validati', async () => {
@@ -1494,6 +1512,12 @@ test('le tessere e i moduli di modifica comunicano chiaramente apertura e salvat
 	assert.match(css, /\.mi-event-card-shell\.is-selected \.mi-event-card__toggle\{transform:rotate\(180deg\)/);
 	assert.match(portal, /data-mi-event-quick-form/);
 	assert.match(portal, /data-mi-event-quick-submit/);
+	assert.match(portal, /data-mi-cancel-dialog-open/);
+	assert.match(portal, /class="mi-event-cancel-dialog"/);
+	assert.match(portal, /rows="6"/);
+	assert.match(script, /dialog\?\.showModal/);
+	assert.match(script, /closest\('dialog'\)\?\.close/);
+	assert.match(css, /\.mi-event-cancel-dialog\{width:min\(580px/);
 	assert.match(script, /quickEventFormSnapshot/);
 	assert.match(script, /addEventListener\('input', updateSubmitVisibility\)/);
 	assert.match(script, /addEventListener\('change', updateSubmitVisibility\)/);
