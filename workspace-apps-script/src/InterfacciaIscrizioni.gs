@@ -90,10 +90,29 @@ function aggiornaSchemaIscrizioneManuale() {
   sheet.activate(); return { ok:true, event_id:String(event.id_evento), columns:width };
 }
 
-function normalizzaValoreCampoIscrizioneManuale_(value, type) {
-  if (value instanceof Date && !isNaN(value.getTime())) return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+function normalizzaValoreCampoIscrizioneManuale_(value, type, timeZone) {
+  if (value instanceof Date && !isNaN(value.getTime())) return Utilities.formatDate(value, timeZone, 'yyyy-MM-dd');
   if (String(type || '').toLowerCase() === 'date') return normalizzaTesto_(value, 10);
   return value;
+}
+
+function mappaTipologieIscrizioneManuale_(tickets) {
+  return (tickets || []).reduce(function(result, item) {
+    const code = String(item.code || '');
+    if (!code) return result;
+    [item.choice, item.name, code].forEach(function(value) { if (value) result[String(value)] = code; });
+    return result;
+  }, {});
+}
+
+function preparaNuovaIscrizioneManuale_(sheet, columns) {
+  // La registrazione remota è già conclusa: la chiave nuova deve essere persistita
+  // prima di ogni pulizia, così un errore parziale non può riusare la richiesta.
+  sheet.getRange(MI_MANUAL_REGISTRATION_FORM.REQUEST_ID).setValue(creaIdentificativoOpaco_('regui'));
+  sheet.getRangeList(['B10:C10','D10:E10','F10:G10','H10:I10']).clearContent();
+  sheet.getRange(MI_MANUAL_REGISTRATION_FORM.FIRST_ROW, 2, 20, columns.length).clearContent();
+  sheet.getRange(MI_MANUAL_REGISTRATION_FORM.CONFIRM).setValue(false);
+  sheet.getRange(MI_MANUAL_REGISTRATION_FORM.PRIVACY).setValue(false);
 }
 
 function registraIscrizioneManuale() {
@@ -103,7 +122,8 @@ function registraIscrizioneManuale() {
   const event = eventoIscrizioneManuale_(normalizzaTesto_(sheet.getRange(MI_MANUAL_REGISTRATION_FORM.EVENT).getValue(), 180));
   if (String(cache.event_id || '') !== String(event.id_evento)) throw new Error('Aggiorna i campi dopo aver scelto l’evento.');
   const columns = cache.columns || [];
-  const ticketByChoice = (cache.tickets || []).reduce(function(result,item){ result[String(item.choice || item.code)] = String(item.code); return result; }, {});
+  const ticketByChoice = mappaTipologieIscrizioneManuale_(cache.tickets);
+  const spreadsheetTimeZone = sheet.getParent().getSpreadsheetTimeZone();
   const values = sheet.getRange(MI_MANUAL_REGISTRATION_FORM.FIRST_ROW, 2, 20, columns.length).getValues();
   const counts = {}; const participants = [];
   values.forEach(function(row){
@@ -114,7 +134,7 @@ function registraIscrizioneManuale() {
     columns.forEach(function(key,index){
       if (String(key).indexOf('field:') === 0 && row[index] !== '') {
         const fieldKey = String(key).slice(6);
-        fields[fieldKey] = normalizzaValoreCampoIscrizioneManuale_(row[index], (cache.field_types || {})[fieldKey]);
+        fields[fieldKey] = normalizzaValoreCampoIscrizioneManuale_(row[index], (cache.field_types || {})[fieldKey], spreadsheetTimeZone);
       }
       if (String(key).indexOf('option:') === 0 && row[index] === true) options[String(key).slice(7)] = 1;
     });
@@ -125,8 +145,6 @@ function registraIscrizioneManuale() {
   const buyer = { first_name:normalizzaTesto_(sheet.getRange(MI_MANUAL_REGISTRATION_FORM.BUYER_FIRST).getValue(),80), last_name:normalizzaTesto_(sheet.getRange(MI_MANUAL_REGISTRATION_FORM.BUYER_LAST).getValue(),80), email:normalizzaTesto_(sheet.getRange(MI_MANUAL_REGISTRATION_FORM.BUYER_EMAIL).getValue(),254), phone:normalizzaTesto_(sheet.getRange(MI_MANUAL_REGISTRATION_FORM.BUYER_PHONE).getValue(),40) };
   const result = inviaComandoWordPress_('CREATE_MANUAL_REGISTRATION', { event_id:String(event.id_evento), idempotency_key:normalizzaTesto_(sheet.getRange(MI_MANUAL_REGISTRATION_FORM.REQUEST_ID).getValue(),64), operator_label:normalizzaTesto_(Session.getActiveUser().getEmail() || 'SEGRETERIA',120), registration:{ tickets:tickets, participants:participants, buyer:buyer, order_options:{}, privacy_accepted:true, marketing_accepted:false } });
   sheet.getRange(MI_MANUAL_REGISTRATION_FORM.STATUS).setValue('Iscrizione ' + String(result.order_code) + ' registrata in WordPress. Replica Workspace: ' + String(result.workspace_status || 'PENDING') + '.');
-  sheet.getRangeList(['B10:C10','D10:E10','F10:G10','H10:I10']).clearContent();
-  sheet.getRange(MI_MANUAL_REGISTRATION_FORM.FIRST_ROW, 2, 20, columns.length).clearContent();
-  sheet.getRange(MI_MANUAL_REGISTRATION_FORM.CONFIRM).setValue(false); sheet.getRange(MI_MANUAL_REGISTRATION_FORM.PRIVACY).setValue(false); sheet.getRange(MI_MANUAL_REGISTRATION_FORM.REQUEST_ID).setValue(creaIdentificativoOpaco_('regui'));
+  preparaNuovaIscrizioneManuale_(sheet, columns);
   SpreadsheetApp.getActive().toast('Iscrizione registrata con controllo dei posti.', 'Modulo iscrizioni', 6); return result;
 }
