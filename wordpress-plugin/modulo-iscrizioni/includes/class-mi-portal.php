@@ -167,6 +167,9 @@ final class MI_Portal {
 			if ( is_wp_error( $event_id ) ) return self::redirect_result( 'Non è stato possibile creare la bozza.', true );
 			if ( $copy_id ) self::copy_configuration( $copy_id, $event_id );
 		}
+		if ( ! get_post_meta( $event_id, '_mi_privacy_policy_version', true ) ) update_post_meta( $event_id, '_mi_privacy_policy_version', wp_date( 'Y-m' ) );
+		if ( ! get_post_meta( $event_id, '_mi_privacy_consent_id', true ) ) update_post_meta( $event_id, '_mi_privacy_consent_id', 'privacy-' . $event_id );
+		if ( ! get_post_meta( $event_id, '_mi_marketing_consent_id', true ) ) update_post_meta( $event_id, '_mi_marketing_consent_id', 'marketing-' . $event_id );
 		$activity_id = absint( $_POST['activity_id'] ?? 0 );
 		if ( $activity_id && MI_Access::can_access_activity( $activity_id ) ) update_post_meta( $event_id, '_mi_activity_id', $activity_id );
 		$gestore = self::risolvi_gestore_evento( $event_id, false );
@@ -1144,13 +1147,17 @@ final class MI_Portal {
 					wp_nonce_field( 'mi_portal_manage_event_' . $event->ID, 'mi_portal_nonce' );
 					echo '<button type="submit">Archivia</button></form>';
 				} elseif ( $can_cancel ) {
-					echo '<form method="post" onsubmit="return confirm(\'Confermi definitivamente l’annullamento di questo evento?\')"><input type="hidden" name="mi_portal_action" value="cancel_event"><input type="hidden" name="event_id" value="' . esc_attr( $event->ID ) . '">';
-					wp_nonce_field( 'mi_portal_manage_event_' . $event->ID, 'mi_portal_nonce' );
-					if ( $active_count > 0 ) echo '<p><strong>Attenzione:</strong> saranno annullate ' . esc_html( $active_count ) . ' prenotazioni. I dati resteranno nello storico.</p><label>Motivo <small>(facoltativo)</small><textarea name="cancellation_reason" rows="3" maxlength="2000"></textarea></label><label class="mi-check"><input type="checkbox" name="confirm_cancellation" value="1" required> Ho compreso che le iscrizioni saranno annullate</label>';
-					else echo '<p>L’evento non ha prenotazioni attive.</p><input type="hidden" name="confirm_cancellation" value="1">';
-					echo '<button class="mi-text-danger" type="submit">Annulla evento</button></form>';
+					echo '<button class="mi-text-danger" type="button" data-mi-cancel-dialog-open="mi-cancel-event-' . esc_attr( $event->ID ) . '">Annulla evento</button>';
 				}
 				echo '</div></details>';
+				if ( $can_cancel ) {
+					echo '<dialog class="mi-event-cancel-dialog" id="mi-cancel-event-' . esc_attr( $event->ID ) . '" aria-labelledby="mi-cancel-event-title-' . esc_attr( $event->ID ) . '"><form method="post" onsubmit="return confirm(\'Confermi definitivamente l’annullamento di questo evento?\')"><input type="hidden" name="mi_portal_action" value="cancel_event"><input type="hidden" name="event_id" value="' . esc_attr( $event->ID ) . '">';
+					wp_nonce_field( 'mi_portal_manage_event_' . $event->ID, 'mi_portal_nonce' );
+					echo '<div class="mi-event-cancel-dialog__heading"><div><span class="mi-portal-eyebrow">Azione evento</span><h2 id="mi-cancel-event-title-' . esc_attr( $event->ID ) . '">Annulla “' . esc_html( $event_title ) . '”</h2></div><button type="button" class="mi-event-cancel-dialog__close" data-mi-cancel-dialog-close aria-label="Chiudi">×</button></div>';
+					if ( $active_count > 0 ) echo '<p><strong>Attenzione:</strong> saranno annullate ' . esc_html( $active_count ) . ' prenotazioni. I dati resteranno nello storico.</p><label>Motivo <small>(facoltativo)</small><textarea name="cancellation_reason" rows="6" maxlength="2000" placeholder="Spiega brevemente perché l’evento viene annullato."></textarea></label><label class="mi-check"><input type="checkbox" name="confirm_cancellation" value="1" required> Ho compreso che le iscrizioni saranno annullate</label>';
+					else echo '<p>L’evento non ha prenotazioni attive.</p><input type="hidden" name="confirm_cancellation" value="1">';
+					echo '<div class="mi-event-cancel-dialog__actions"><button type="button" class="mi-secondary" data-mi-cancel-dialog-close>Indietro</button><button class="mi-danger" type="submit">Annulla definitivamente l’evento</button></div></form></dialog>';
+				}
 			}
 			echo '</article>';
 			if ( $is_selected ) {

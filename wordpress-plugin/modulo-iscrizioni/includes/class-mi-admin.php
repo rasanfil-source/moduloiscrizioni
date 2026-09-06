@@ -84,7 +84,7 @@ final class MI_Admin {
 		$count = min( 6, max( 1, absint( $_POST['count'] ?? 3 ) ) );
 		$event_post = get_post( $event_id );
 		if ( ! $event_post || MI_Event_Post_Type::EVENT_TYPE !== $event_post->post_type || ! in_array( $event_post->post_status, array( 'draft', 'private' ), true ) ) wp_die( esc_html__( 'Seleziona un evento in bozza.', 'modulo-iscrizioni' ) );
-		if ( ! get_privacy_policy_url() ) wp_die( esc_html__( 'Configura prima la pagina dell’informativa privacy nelle impostazioni di WordPress.', 'modulo-iscrizioni' ) );
+		if ( ! MI_Registration_Service::privacy_policy_url() ) wp_die( esc_html__( 'Configura prima una pagina pubblica per l’informativa privacy.', 'modulo-iscrizioni' ) );
 		if ( ! get_post_meta( $event_id, '_mi_privacy_policy_version', true ) ) update_post_meta( $event_id, '_mi_privacy_policy_version', wp_date( 'Y-m' ) );
 		if ( ! get_post_meta( $event_id, '_mi_privacy_consent_id', true ) ) update_post_meta( $event_id, '_mi_privacy_consent_id', 'privacy-' . $event_id );
 		if ( ! get_post_meta( $event_id, '_mi_marketing_consent_id', true ) ) update_post_meta( $event_id, '_mi_marketing_consent_id', 'marketing-' . $event_id );
@@ -725,7 +725,7 @@ final class MI_Admin {
 		$payment_methods = isset( $_POST['mi_payment_methods'] ) ? (array) wp_unslash( $_POST['mi_payment_methods'] ) : array();
 		$privacy_version = (string) ( get_post_meta( $post_id, '_mi_privacy_policy_version', true ) ?: wp_date( 'Y-m' ) );
 		$privacy_consent_id = (string) ( get_post_meta( $post_id, '_mi_privacy_consent_id', true ) ?: 'privacy-' . $post_id );
-		$privacy_valid = '' !== $privacy_version && '' !== $privacy_consent_id && (bool) get_privacy_policy_url();
+		$privacy_valid = '' !== $privacy_version && '' !== $privacy_consent_id && (bool) MI_Registration_Service::privacy_policy_url();
 		$marketing_valid = ! isset( $_POST['mi_marketing_enabled'] ) || '' !== (string) ( get_post_meta( $post_id, '_mi_marketing_consent_id', true ) ?: 'marketing-' . $post_id );
 		$uses_price = in_array( $economic_mode, array( 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 		$collects_payment = in_array( $economic_mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );

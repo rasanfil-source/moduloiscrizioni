@@ -13,6 +13,29 @@ final class MI_Shortcode {
 		add_filter( 'theme_page_templates', array( __CLASS__, 'register_focused_template' ) );
 		add_filter( 'template_include', array( __CLASS__, 'use_focused_template' ) );
 		add_action( 'admin_post_mi_anteprima_evento', array( __CLASS__, 'mostra_anteprima_riservata' ) );
+		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'dequeue_focused_divi_assets' ), PHP_INT_MAX );
+		add_action( 'wp_print_styles', array( __CLASS__, 'dequeue_focused_divi_assets' ), PHP_INT_MAX );
+		add_filter( 'style_loader_tag', array( __CLASS__, 'filter_focused_divi_asset' ), PHP_INT_MAX, 4 );
+		add_filter( 'script_loader_tag', array( __CLASS__, 'filter_focused_divi_asset' ), PHP_INT_MAX, 3 );
+	}
+
+	public static function dequeue_focused_divi_assets() {
+		if ( ! absint( $_GET['mi_iscrizione'] ?? 0 ) ) return;
+		foreach ( array( wp_styles(), wp_scripts() ) as $registry ) {
+			foreach ( (array) $registry->queue as $handle ) {
+				$source = isset( $registry->registered[ $handle ] ) ? (string) $registry->registered[ $handle ]->src : '';
+				if ( self::is_divi_asset_url( $source ) ) $registry->dequeue( $handle );
+			}
+		}
+	}
+
+	public static function filter_focused_divi_asset( $html, $handle = '', $source = '' ) {
+		if ( ! absint( $_GET['mi_iscrizione'] ?? 0 ) ) return $html;
+		return self::is_divi_asset_url( $source ?: $html ) ? '' : $html;
+	}
+
+	private static function is_divi_asset_url( $source ) {
+		return (bool) preg_match( '#/(?:themes/Divi/|plugins/divi-[^/]+/|et-cache/)#i', (string) $source );
 	}
 
 	public static function url_iscrizione( $event_id ) {

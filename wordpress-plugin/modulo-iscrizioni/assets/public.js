@@ -251,8 +251,14 @@
 	  }
 	  const fields = Array.from(steps[currentStep - 1].querySelectorAll('input, select, textarea'));
 	  const invalid = fields.find((field) => !field.checkValidity());
-	  if (invalid) { invalid.reportValidity(); return false; }
+	  if (invalid) { revealInvalidField(invalid); return false; }
 	  return true;
+	}
+
+	function revealInvalidField(field) {
+	  field.focus({ preventScroll: true });
+	  field.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+	  field.reportValidity();
 	}
 
     function captureParticipants() {
@@ -360,7 +366,7 @@
       if (field.max_length) input.maxLength = field.max_length;
       if (field.autocomplete) input.autocomplete = `section-participant-${index + 1} ${field.autocomplete}`;
       label.append(input);
-      if (field.help) {
+	  if (field.help && field.key !== 'birth_date') {
         const help = document.createElement('small');
         help.className = 'mi-registration__field-help';
         help.textContent = field.help;
