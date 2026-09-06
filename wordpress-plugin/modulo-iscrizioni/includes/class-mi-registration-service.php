@@ -492,6 +492,20 @@ final class MI_Registration_Service {
 		if ( 'SYNCED' === $registration['workspace_status'] ) {
 			return 'SYNCED';
 		}
+		if ( (int) $registration['workspace_attempts'] > 0 ) {
+			$status_result = MI_Workspace_Client::request(
+				'STATO_REPLICA_ISCRIZIONE',
+				array(
+					'order_code'      => $registration['order_code'],
+					'idempotency_key' => $registration['idempotency_key'],
+				)
+			);
+			if ( ! is_wp_error( $status_result ) && ! empty( $status_result['complete'] ) ) {
+				$wpdb->query( $wpdb->prepare( "UPDATE {$registrations_table} SET workspace_status = 'SYNCED', workspace_attempts = workspace_attempts + 1, workspace_last_error = NULL, workspace_synced_at = %s WHERE id = %d", current_time( 'mysql', true ), $registration_id ) );
+				self::scrub_relay_only_fields( $registration_id, (int) $registration['event_id'] );
+				return 'SYNCED';
+			}
+		}
 		$items = $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code, ticket_type_name, quantity, unit_price_cents, options_json FROM {$items_table} WHERE registration_id = %d ORDER BY id", $registration_id ), ARRAY_A );
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code, ticket_index, first_name, last_name, extra_json, options_json, status, cancelled_at FROM {$participants_table} WHERE registration_id = %d ORDER BY id", $registration_id ), ARRAY_A );
 		$payments = $wpdb->get_results( $wpdb->prepare( "SELECT transaction_kind, installment_kind, effective_at, amount_cents, payment_source, external_reference, operator_label, administrative_note FROM {$payments_table} WHERE registration_id = %d ORDER BY effective_at, id", $registration_id ), ARRAY_A );

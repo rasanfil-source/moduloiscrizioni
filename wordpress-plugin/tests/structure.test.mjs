@@ -48,7 +48,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.23\.9/);
+	assert.match(source, /Version:\s+3\.23\.11\b/);
+	assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.11'\s*\)/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -917,6 +918,8 @@ test('il pannello espone e riaccoda in sicurezza una replica Workspace', async (
   assert.match(admin, /Ultimo errore Workspace/);
   assert.match(admin, /Sincronizzata il/);
   assert.match(admin, /Riaccoda replica Workspace/);
+  assert.match(admin, /Sincronizza ora questa prenotazione/);
+  assert.match(admin, /\$immediata\s*\? MI_Registration_Service::sincronizza_iscrizione_workspace\( \$registration_id \)\s*: MI_Registration_Service::accoda_iscrizione_workspace/);
   assert.match(service, /accoda_iscrizione_workspace/);
   assert.match(service, /wp_schedule_single_event/);
 });
@@ -1488,6 +1491,14 @@ test('la pubblicazione inizializza rapidamente il foglio e recupera un 404 trans
   assert.match(fogli, /generaVistaOperativaIniziale_/);
   assert.match(fogli, /campiElencoOperativo_\(false\)/);
   assert.match(segreteria, /if \(includiDinamici === false\) return fields/);
+});
+
+test('un retry controlla una replica già completata prima di reinviare tutti i dati', async () => {
+  const service = await read('includes/class-mi-registration-service.php');
+  assert.match(service, /workspace_attempts'\] > 0/);
+  assert.match(service, /STATO_REPLICA_ISCRIZIONE/);
+  assert.match(service, /! empty\( \$status_result\['complete'\] \)/);
+  assert.match(service, /scrub_relay_only_fields/);
 });
 
 test('Workspace può creare gruppi WordPress e risolverli per slug', async () => {
