@@ -341,7 +341,7 @@ final class MI_Admin {
 		<ul class="subsubsub" aria-label="Riepilogo repliche Workspace"><li><strong><?php echo esc_html( 'Sincronizzate: ' . $workspace_counts['SYNCED'] ); ?></strong> | </li><li><strong><?php echo esc_html( 'In attesa: ' . $workspace_counts['PENDING'] ); ?></strong></li></ul><div class="clear"></div>
 		<?php if ( isset( $_GET['mi_workspace_retry'] ) ) : ?>
 		<?php $retry_result = sanitize_key( wp_unslash( $_GET['mi_workspace_retry'] ) ); ?>
-		<div class="notice notice-success"><p><?php echo esc_html( 'synced' === $retry_result ? 'La replica era già sincronizzata.' : 'Replica Workspace riaccodata. Il registro locale resta autorevole durante il nuovo tentativo.' ); ?></p></div>
+		<div class="notice <?php echo 'pending' === $retry_result ? 'notice-warning' : 'notice-success'; ?>"><p><?php echo esc_html( 'synced' === $retry_result ? 'Replica Workspace sincronizzata.' : ( 'pending' === $retry_result ? 'Il tentativo immediato non ha completato la replica. Consulta i dettagli tecnici della prenotazione.' : 'Replica Workspace riaccodata. Il registro locale resta autorevole durante il nuovo tentativo.' ) ); ?></p></div>
 		<?php endif; ?>
 		<form method="get" style="margin:16px 0">
 		<input type="hidden" name="post_type" value="<?php echo esc_attr( MI_Event_Post_Type::EVENT_TYPE ); ?>">
@@ -420,6 +420,7 @@ final class MI_Admin {
 		<input type="hidden" name="registration_id" value="<?php echo esc_attr( $detail_id ); ?>">
 		<?php wp_nonce_field( 'mi_retry_workspace_' . $detail_id ); ?>
 		<button class="button button-secondary">Riaccoda replica Workspace</button>
+		<button class="button button-secondary" name="sync_now" value="1">Sincronizza ora questa prenotazione</button>
 		</form>
 		<?php endif; ?>
 		<h3>Storico stato</h3>
@@ -458,13 +459,16 @@ final class MI_Admin {
 		if ( ! $registration || ! MI_Access::can_access_event( (int) $registration['event_id'] ) ) {
 			wp_die( esc_html__( 'Iscrizione non accessibile.', 'modulo-iscrizioni' ) );
 		}
-		$result = MI_Registration_Service::accoda_iscrizione_workspace( $registration_id );
+		$immediata = isset( $_POST['sync_now'] ) && '1' === (string) wp_unslash( $_POST['sync_now'] );
+		$result = $immediata
+			? MI_Registration_Service::sincronizza_iscrizione_workspace( $registration_id )
+			: MI_Registration_Service::accoda_iscrizione_workspace( $registration_id );
 		$url = add_query_arg(
 			array(
 				'post_type'          => MI_Event_Post_Type::EVENT_TYPE,
 				'page'               => 'mi-registrations',
 				'registration_id'    => $registration_id,
-				'mi_workspace_retry' => 'SYNCED' === $result ? 'synced' : 'queued',
+				'mi_workspace_retry' => 'SYNCED' === $result ? 'synced' : ( $immediata ? 'pending' : 'queued' ),
 			),
 			admin_url( 'edit.php' )
 		);

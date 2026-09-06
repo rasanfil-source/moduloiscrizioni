@@ -917,6 +917,8 @@ test('il pannello espone e riaccoda in sicurezza una replica Workspace', async (
   assert.match(admin, /Ultimo errore Workspace/);
   assert.match(admin, /Sincronizzata il/);
   assert.match(admin, /Riaccoda replica Workspace/);
+  assert.match(admin, /Sincronizza ora questa prenotazione/);
+  assert.match(admin, /\$immediata\s*\? MI_Registration_Service::sincronizza_iscrizione_workspace\( \$registration_id \)\s*: MI_Registration_Service::accoda_iscrizione_workspace/);
   assert.match(service, /accoda_iscrizione_workspace/);
   assert.match(service, /wp_schedule_single_event/);
 });
