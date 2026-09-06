@@ -48,8 +48,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.23\.20\b/);
-  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.20'\s*\)/);
+  assert.match(source, /Version:\s+3\.23\.21\b/);
+  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.21'\s*\)/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -263,6 +263,8 @@ test('la pagina concentrata elimina gli asset Divi senza toccare le altre pagine
 	assert.match(shortcode, /style_loader_tag/);
 	assert.match(shortcode, /script_loader_tag/);
 	assert.match(shortcode, /render_focused_document/);
+	assert.match(shortcode, /<title><\?php echo esc_html\( \$page_title \); \?><\/title>/);
+	assert.match(shortcode, /<meta name="robots" content="noindex,nofollow,noarchive">/);
 	assert.match(shortcode, /wp_print_styles\( 'mi-public' \)/);
 	assert.match(shortcode, /wp_print_scripts\( array\( 'mi-core', 'mi-public' \) \)/);
 	assert.doesNotMatch(shortcode, /<\?php wp_head\(\); \?>/);
