@@ -161,7 +161,8 @@ function sincronizzaFogliEventi() {
     proprieta.setProperty('MI_EVENT_SYNC_CURSOR', String((indice + 1) % collegamenti.length));
     try {
       const foglio = SpreadsheetApp.openById(String(riga.id_foglio));
-      acquisisciPagamentiEvento_(foglio, String(riga.id_evento));
+      configuraSchedeEconomicheEvento_(foglio, String(riga.id_evento));
+      if (eventoPrevedeMovimenti_(String(riga.id_evento))) acquisisciPagamentiEvento_(foglio, String(riga.id_evento));
       const risultato = aggiornaFoglioOperativoEvento({ id_evento: String(riga.id_evento) });
       risultati.push({ id_evento: String(riga.id_evento), ok: true, esito: risultato.esito });
     } catch (errore) {

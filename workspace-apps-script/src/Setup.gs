@@ -18,6 +18,7 @@ function onOpen() {
     .addItem('Registra movimento guidato', 'registraMovimentoGuidato')
     .addItem('Convalida pagamenti selezionati', 'convalidaPagamentiSelezionati')
     .addItem('Convalida tutti i pagamenti in attesa', 'convalidaPagamentiInAttesa')
+    .addItem('Prepara moduli movimento nei fogli evento', 'preparaInterfacceMovimentiFogliEventi')
     .addItem('Sincronizza fogli e pagamenti degli eventi', 'sincronizzaFogliEventi')
     .addItem('Attiva sincronizzazione automatica eventi', 'attivaSincronizzazioneFogliEventi')
     .addSeparator()
