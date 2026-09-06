@@ -1,5 +1,5 @@
 const MI_MOVEMENT_FORM = Object.freeze({
-  VERSION: '1',
+  VERSION: '2',
   SHEET: 'Registra movimento',
   ORDER: 'B7',
   ORDER_STATUS: 'F7',
@@ -14,8 +14,8 @@ const MI_MOVEMENT_FORM = Object.freeze({
   AMOUNT: 'B15',
   SOURCE: 'D15',
   REFERENCE: 'F15',
-  OPERATOR: 'B18',
-  NOTE: 'B20',
+  OPERATOR: 'B19',
+  NOTE: 'B21',
   CONFIRM: 'B25',
   STATUS: 'B28',
   REQUEST_ID: 'Z1',
@@ -78,22 +78,22 @@ function costruisciInterfacciaMovimenti_(sheet) {
   sheet.getRange('B15:C15').merge().setNumberFormat('#,##0.00 [$€-it-IT]');
   sheet.getRange('D15:E15').merge().setValue('BONIFICO');
   sheet.getRange('F15:H15').merge();
-  sheet.getRange('B16:H16').merge().setValue('Operatore');
-  sheet.getRange('B18:H18').merge().setValue(normalizzaTesto_(Session.getActiveUser().getEmail(), 120));
-  sheet.getRange('B19:H19').merge().setValue('Nota amministrativa');
-  sheet.getRange('B20:H22').merge().setWrap(true).setVerticalAlignment('top');
+  sheet.getRange('B18:H18').merge().setValue('Operatore');
+  sheet.getRange('B19:H19').merge().setValue(normalizzaTesto_(Session.getActiveUser().getEmail(), 120));
+  sheet.getRange('B20:H20').merge().setValue('Nota amministrativa');
+  sheet.getRange('B21:H22').merge().setWrap(true).setVerticalAlignment('top');
   sheet.getRange('B25').insertCheckboxes().setValue(false);
   sheet.getRange('C25:H25').merge().setValue('Ho verificato prenotazione, tipo, importo e data.');
   sheet.getRange('B27:H27').merge().setValue('Esito');
   sheet.getRange('B28:H29').merge().setValue('Compila i dati e aggiorna il riepilogo prima di registrare.').setWrap(true);
-  sheet.getRangeList(['B6:H6', 'B8:H8', 'B12:H12', 'B14:H14', 'B16:H16', 'B19:H19', 'B27:H27'])
+  sheet.getRangeList(['B6:H6', 'B8:H8', 'B12:H12', 'B14:H14', 'B18:H18', 'B20:H20', 'B27:H27'])
     .setFontColor('#657084').setFontWeight('bold').setFontSize(10);
-  const surfaces = sheet.getRangeList(['B7:H7', 'B9:H10', 'B13:H15', 'B18:H18', 'B20:H22', 'B25:H25', 'B28:H29']);
+  const surfaces = sheet.getRangeList(['B7:H7', 'B9:H10', 'B13:H15', 'B19:H19', 'B21:H22', 'B25:H25', 'B28:H29']);
   surfaces.setBackground('#ffffff').setFontColor('#172033');
   surfaces.getRanges().forEach(function (range) {
     range.setBorder(true, true, true, true, false, false, '#d7dde6', SpreadsheetApp.BorderStyle.SOLID);
   });
-  sheet.getRangeList(['B7:E7', 'B13:C13', 'D13:E13', 'F13:H13', 'B15:C15', 'D15:E15', 'F15:H15', 'B18:H18', 'B20:H22'])
+  sheet.getRangeList(['B7:E7', 'B13:C13', 'D13:E13', 'F13:H13', 'B15:C15', 'D15:E15', 'F15:H15', 'B19:H19', 'B21:H22'])
     .setBackground('#f8fafc');
   sheet.getRange('B28:H29').setBackground('#eaf5ef').setFontColor('#25745e');
   sheet.getRange(MI_MOVEMENT_FORM.REQUEST_ID).setValue(creaIdentificativoOpaco_('pui'));

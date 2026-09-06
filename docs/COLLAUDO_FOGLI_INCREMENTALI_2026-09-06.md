@@ -71,3 +71,13 @@ Il percorso centrale → WordPress dei due movimenti e la ripetizione senza dupl
 ## Correzione del controllo CI dopo il cambio versione
 
 Il workflow «Sanitization check» sul commit d3d8f3a aveva il job sanitization superato e il job tests fallito (195/196): il test bootstrap richiedeva ancora 3.23.9. Il precedente risultato 196/196 non copriva quindi il successivo cambio versione. Aggiornata l'attesa a 3.23.10 e verificata anche la costante MI_VERSION; nuova esecuzione locale della suite completa: 196/196 superati. Nessuna regola di sanificazione modificata o esclusa.
+
+## Interfaccia guidata dei movimenti
+
+Preparata la versione 3.23.11 e aggiunto nel progetto Apps Script il file InterfacciaMovimenti.gs. Eseguita soltanto `apriInserimentoMovimentoGuidato`: nel DB_MODULI è stata creata la scheda «Registra movimento», senza registrare nuovi movimenti.
+
+La scheda segue l'ordine Prenotazione → Movimento → Tracciabilità → Verifica e registra. Usa tendine native per codice ordine, tipo, rata e metodo; mostra stato, evento, referente, totale, versato e residuo prima della conferma; richiede una casella di controllo e conserva una chiave idempotente nascosta. Il menu «Modulo iscrizioni» espone apertura, aggiornamento riepilogo e registrazione guidata.
+
+Collaudato il solo riepilogo della prenotazione dimostrativa autorizzata: evento Cammino di Santiago 2027, stato PENDING_PAYMENT, totale 500 EUR, versato netto 0 EUR e residuo 500 EUR. Il messaggio finale invita a controllare i dati e spuntare la conferma. Non è stato premuto «Registra movimento guidato» e non è stato creato alcun ulteriore incasso o rimborso.
+
+Il sorgente locale aggiunge anche `STATO_REPLICA_ISCRIZIONE`, controllo firmato che consente al retry WordPress di riconoscere una replica già completa dopo un timeout. Suite aggiornata: 199/199 test e sanificazione superati. La nuova azione non è ancora nel deployment 44 e WordPress 3.23.11 non è ancora installato: servono autorizzazioni esplicite separate prima di aggiornare il deployment e sostituire il plugin attivo. Nessuna email inviata e nessun timer attivato.
