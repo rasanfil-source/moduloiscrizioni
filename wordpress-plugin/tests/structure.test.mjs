@@ -48,7 +48,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.23\.9/);
+	assert.match(source, /Version:\s+3\.23\.10\b/);
+	assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.10'\s*\)/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 

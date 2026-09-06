@@ -67,3 +67,7 @@ Entrambi risultano CONVALIDATO. La seconda convalida restituisce «Movimento gi�
 La consultazione pubblica «Controlla stato e saldo», con codice ed email dimostrativi, ha riconciliato soltanto questo ordine tramite ELENCA_PAGAMENTI. Il dettaglio amministrativo WordPress mostra i due riferimenti COLLAUDO-INCASSO e COLLAUDO-RIMBORSO. Ripetuta la consultazione, il dettaglio mostra ancora due movimenti da 10 EUR: versato netto 0 EUR, residuo 500 EUR, prenotazione in attesa di pagamento, caparra ancora da versare.
 
 Il percorso centrale → WordPress dei due movimenti e la ripetizione senza duplicati sono verificati sul sistema reale. Restano aperti il completamento riconosciuto della replica iscrizione WordPress → Workspace e la verifica della proiezione aggiornata dei pagamenti nel foglio evento. Il collaudo complessivo non è dichiarato superato. Nessuna email inviata e nessun timer Apps Script attivato; nessun nuovo deployment in questa fase.
+
+## Correzione del controllo CI dopo il cambio versione
+
+Il workflow «Sanitization check» sul commit d3d8f3a aveva il job sanitization superato e il job tests fallito (195/196): il test bootstrap richiedeva ancora 3.23.9. Il precedente risultato 196/196 non copriva quindi il successivo cambio versione. Aggiornata l'attesa a 3.23.10 e verificata anche la costante MI_VERSION; nuova esecuzione locale della suite completa: 196/196 superati. Nessuna regola di sanificazione modificata o esclusa.
