@@ -48,8 +48,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.23\.11\b/);
-	assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.11'\s*\)/);
+	assert.match(source, /Version:\s+3\.23\.12\b/);
+	assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.12'\s*\)/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -77,6 +77,28 @@ test('le domande aggiuntive possono richiedere una risposta sì o no', async () 
   assert.match(schema, /array\( 'select', 'yesno' \)/);
   assert.match(publicScript, /field\.type === 'select' \|\| field\.type === 'yesno'/);
   assert.match(publicScript, /Scegli la risposta appropriata/);
+});
+
+test('domande e tratte conservano identificativi stabili quando cambia il testo', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(portal, /name="custom_question_key\[\]"/);
+  assert.match(portal, /\$question_keys/);
+  assert.match(portal, /custom_domanda_.*wp_generate_uuid4/s);
+  assert.match(portal, /name="bus_route_id\[\]"/);
+  assert.match(portal, /\$bus_route_ids/);
+  assert.match(portal, /\$service_options\[\] = array\( 'code' => \$route_code/);
+  assert.doesNotMatch(portal, /'pullman-' \. \$route_slug/);
+});
+
+test('Workspace crea iscrizioni manuali attraverso i controlli autorevoli WordPress', async () => {
+  const rest = await read('includes/class-mi-rest-controller.php');
+  const service = await read('includes/class-mi-registration-service.php');
+  assert.match(rest, /GET_MANUAL_REGISTRATION_SCHEMA/);
+  assert.match(rest, /CREATE_MANUAL_REGISTRATION/);
+  assert.match(rest, /MI_Registration_Service::create\( \$event_id, \$registration, \$key, false, 'WORKSPACE_UI', true \)/);
+  assert.match(service, /\$trusted_operator = false/);
+  assert.match(service, /! \$allow_unpublished && ! \$trusted_operator/);
+  assert.match(service, /FOR UPDATE[\s\S]+\$counter_field/);
 });
 
 test('la pubblicazione mostra attesa ed esito vicino al comando senza duplicare il pannello', async () => {

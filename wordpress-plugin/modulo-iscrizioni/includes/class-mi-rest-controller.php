@@ -50,9 +50,40 @@ final class MI_REST_Controller {
 		$payload = (array) ( $envelope['payload'] ?? array() );
 		if ( 'CREATE_EVENT_DRAFT' === $action ) return self::create_event_draft_from_workspace( $payload );
 		if ( 'CREATE_GROUP' === $action ) return self::create_group_from_workspace( $payload );
+		if ( 'GET_MANUAL_REGISTRATION_SCHEMA' === $action ) return self::manual_registration_schema( $payload );
+		if ( 'CREATE_MANUAL_REGISTRATION' === $action ) return self::create_manual_registration( $payload );
 		if ( 'GET_EMAIL_MODE' === $action ) return array( 'ok' => true, 'mode' => MI_Spedizione_Email::modalita() );
 		if ( 'QUEUE_OPERATIONAL_EMAILS' === $action ) return MI_Spedizione_Email::accoda_comunicazione_operativa( $payload );
 		return new WP_Error( 'mi_workspace_action_not_allowed', 'Azione Workspace non consentita.', array( 'status' => 403 ) );
+	}
+
+	private static function manual_registration_schema( array $payload ) {
+		$event = MI_Registration_Service::public_event( absint( $payload['event_id'] ?? 0 ) );
+		if ( is_wp_error( $event ) ) return $event;
+		return array(
+			'ok'                 => true,
+			'event_id'           => (int) $event['id'],
+			'event_title'        => sanitize_text_field( $event['title'] ),
+			'registration_state' => MI_Registration_Service::registration_state( $event ),
+			'ticket_types'       => array_values( (array) $event['ticket_types'] ),
+			'participant_fields' => array_values( (array) $event['participant_fields'] ),
+			'options'            => array_values( (array) $event['options'] ),
+		);
+	}
+
+	private static function create_manual_registration( array $payload ) {
+		$event_id = absint( $payload['event_id'] ?? 0 );
+		$registration = is_array( $payload['registration'] ?? null ) ? $payload['registration'] : array();
+		$key = preg_replace( '/[^A-Za-z0-9_-]/', '', (string) ( $payload['idempotency_key'] ?? '' ) );
+		if ( ! $event_id || empty( $payload['operator_label'] ) ) {
+			return new WP_Error( 'mi_manual_registration_invalid', 'Dati dell’iscrizione manuale incompleti.', array( 'status' => 400 ) );
+		}
+		$registration['website'] = '';
+		$registration['started_at'] = time() - 5;
+		$result = MI_Registration_Service::create( $event_id, $registration, $key, false, 'WORKSPACE_UI', true );
+		if ( is_wp_error( $result ) ) return $result;
+		$result['ok'] = true;
+		return $result;
 	}
 
 	private static function create_group_from_workspace( array $payload ) {

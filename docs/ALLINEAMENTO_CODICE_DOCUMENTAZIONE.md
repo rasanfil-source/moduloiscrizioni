@@ -1,6 +1,6 @@
 # Allineamento tra documentazione e codice
 
-Verifica sistematica aggiornata per WordPress 3.8.0 e Workspace 1.8.0. Questo documento prevale sulle descrizioni progettuali quando occorre distinguere ciò che è già disponibile dalla sola architettura prevista.
+Verifica sistematica aggiornata per WordPress 3.23.12 e Workspace 1.8.0. Questo documento prevale sulle descrizioni progettuali quando occorre distinguere ciò che è già disponibile dalla sola architettura prevista.
 
 ## Implementato e verificato
 
@@ -28,6 +28,8 @@ Verifica sistematica aggiornata per WordPress 3.8.0 e Workspace 1.8.0. Questo do
 | Gruppi con logo e immagine ereditabili | Implementato | catalogo condiviso WordPress/Workspace, valori iniziali e creazione controllata da entrambe le interfacce |
 | Report standard e personalizzati riutilizzabili | Implementato | modelli protetti, scelta colonne, ordinamento, generazione per evento e salvataggio configurazione |
 | Assegnazioni collettive di camere e pullman | Implementato | vista per evento, modifica multipla auditabile e controllo della capienza finale |
+| Identità stabile di domande e tratte | Implementato | chiavi opache persistenti nel wizard; etichette e ordine possono cambiare senza cambiare il collegamento |
+| Iscrizione manuale da Sheets | Implementato | schema caricato da WordPress, richiesta HMAC e commit tramite lo stesso servizio transazionale del modulo pubblico |
 
 ## Implementato in forma più semplice nella v1
 

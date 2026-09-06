@@ -9,6 +9,9 @@ function onOpen() {
     .addItem('Allinea gruppi con WordPress', 'sincronizzaGruppiConWordPress')
     .addItem('Configura collegamento WordPress', 'configuraEndpointWordPress')
     .addSeparator()
+    .addItem('Apri iscrizione manuale', 'apriIscrizioneManuale')
+    .addItem('Aggiorna campi iscrizione manuale', 'aggiornaSchemaIscrizioneManuale')
+    .addSeparator()
     .addItem('Apri inserimento guidato', 'apriInserimentoMovimentoGuidato')
     .addItem('Aggiorna riepilogo movimento', 'aggiornaRiepilogoMovimentoGuidato')
     .addItem('Riallinea movimenti della prenotazione', 'aggiornaProiezioneMovimentoGuidato')
@@ -45,6 +48,7 @@ function configuraCartellaDiLavoro() {
 		inizializzaGruppi_();
     inizializzaConvalidaPagamenti_();
 		inizializzaInterfacciaMovimenti_();
+		inizializzaInterfacciaIscrizioni_();
 		inizializzaModelliReport_();
     applicaProtezioniConAvviso_();
     aggiungiControllo_('SETUP_WORKBOOK', 'WORKBOOK', 'BOUND', 'SUCCESS', Session.getActiveUser().getEmail(), MI_SCHEMA_VERSION, 'WORKSPACE_UI');
