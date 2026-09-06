@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const steps = [...form.querySelectorAll('.mi-wizard-step')];
     const back = form.querySelector('[data-mi-back]');
     const next = form.querySelector('[data-mi-next]');
+	const backUrl = form.dataset.miBackUrl || '';
 	const coverImage = form.querySelector('[name="cover_image"][data-mi-max-bytes]');
 	const coverImageStatus = form.querySelector('[data-mi-image-status]');
 	let coverImagePreparing = false;
@@ -71,7 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	};
     const show = () => {
       steps.forEach((step, stepIndex) => step.classList.toggle('is-active', stepIndex === index));
-      back.disabled = index === 0;
+	  back.disabled = index === 0 && !backUrl;
       next.hidden = index === steps.length - 1;
       if (index === steps.length - 1) {
         const value = (name) => form.querySelector(`[name="${name}"]`)?.value || 'Da definire';
@@ -90,6 +91,10 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     next.addEventListener('click', advance);
     back.addEventListener('click', () => {
+	  if (index === 0 && backUrl) {
+		window.location.assign(backUrl);
+		return;
+	  }
       index = Math.max(0, index - 1);
       show();
     });

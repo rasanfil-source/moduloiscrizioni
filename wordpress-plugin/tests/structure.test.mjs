@@ -48,8 +48,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-	assert.match(source, /Version:\s+3\.23\.12\b/);
-	assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.12'\s*\)/);
+  assert.match(source, /Version:\s+3\.23\.13\b/);
+  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.13'\s*\)/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1431,6 +1431,11 @@ test('la scheda rapida apre il wizard completo per modificare lo stesso evento a
   assert.match(portal, /mi-output-link.*target="_blank"/);
   const script = await read('assets/portal.js');
 	const css = await read('assets/portal.css');
+	assert.match(portal, /data-mi-back-url="<\?php echo esc_url\( \$wizard_back_url \); \?>"/);
+	assert.match(portal, /'mi_portal_view' => 'manage', 'mi_portal_event' => \$existing_event_id/);
+	assert.match(portal, /\$full_edit_args\['mi_portal_history'\] = '1'/);
+	assert.match(script, /back\.disabled = index === 0 && !backUrl/);
+	assert.match(script, /index === 0 && backUrl[\s\S]*window\.location\.assign\(backUrl\)/);
   assert.match(script, /navigator\.share/);
   assert.match(script, /Le modalità di condivisione non sono disponibili/);
 	assert.match(css, /\.mi-event-registration-link\{[^}]*grid-template-columns:minmax\(0,1fr\) auto 44px/);
