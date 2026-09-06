@@ -50,3 +50,20 @@ Dopo la richiesta dell'utente di proseguire autonomamente, riaccodata soltanto l
 Preparata la versione WordPress 3.23.10 con il comando «Sincronizza ora questa prenotazione». Il comando riusa la replica firmata di una singola iscrizione e i controlli esistenti di capacità, nonce e accesso all'evento; non pianifica un nuovo timer. In caso di mancata consegna mostra un avviso e rimanda alla diagnostica, senza dichiarare successo. Il comando di riaccodamento esistente resta disponibile. Suite locale 196/196 superata.
 
 Il pacchetto è stato caricato in WordPress, che mostra correttamente versione attuale 3.23.9 e caricata 3.23.10. La sostituzione è stata respinta dalla revisione automatica perché modifica il plugin attivo e richiede autorizzazione esplicita all'installazione e backup confermato. La 3.23.10 NON è installata. È disponibile localmente il precedente pacchetto 3.23.9 per ripristinare il codice; questo non equivale a un backup completo del sito e del database.
+
+## Installazione e collaudo centrale autorizzati
+
+Dopo successiva autorizzazione esplicita alla sostituzione e conferma della disponibilità del backup sito/database, installato e mantenuto attivo il plugin 3.23.10.
+
+Il collaudo centrale è limitato alla prenotazione dimostrativa `MI-260827-FNB4T2WP` (evento 7342). Verificata la presenza della replica nel registro centrale e nel foglio dell'evento. Il tentativo immediato WordPress resta però PENDING: osservato `mi_workspace_unreachable`, mentre una precedente esecuzione Google doPost è durata 218,508 secondi a fronte del timeout ordinario WordPress di 15 secondi. La conclusione dell'esecuzione Google, da sola, non certifica il successo della risposta applicativa. Anche il successivo tentativo immediato non completa la replica dal punto di vista WordPress.
+
+Registrati tramite «Convalida pagamenti selezionati», sulle sole righe 2–3 di Inserimento pagamenti:
+
+- Incasso fittizio 10 EUR, idempotency key `collaudo-20260906-incasso`, ID centrale `pay_bad387deda9e45e78de26e74`.
+- Rimborso fittizio compensativo 10 EUR, idempotency key `collaudo-20260906-rimborso`, ID centrale `pay_61a2a19209544b86a642e758`.
+
+Entrambi risultano CONVALIDATO. La seconda convalida restituisce «Movimento già acquisito» per entrambe le righe; la ricerca del solo codice autorizzato nel registro Pagamenti trova ancora esattamente due occorrenze (B4 e B5). Effetto economico netto zero.
+
+La consultazione pubblica «Controlla stato e saldo», con codice ed email dimostrativi, ha riconciliato soltanto questo ordine tramite ELENCA_PAGAMENTI. Il dettaglio amministrativo WordPress mostra i due riferimenti COLLAUDO-INCASSO e COLLAUDO-RIMBORSO. Ripetuta la consultazione, il dettaglio mostra ancora due movimenti da 10 EUR: versato netto 0 EUR, residuo 500 EUR, prenotazione in attesa di pagamento, caparra ancora da versare.
+
+Il percorso centrale → WordPress dei due movimenti e la ripetizione senza duplicati sono verificati sul sistema reale. Restano aperti il completamento riconosciuto della replica iscrizione WordPress → Workspace e la verifica della proiezione aggiornata dei pagamenti nel foglio evento. Il collaudo complessivo non è dichiarato superato. Nessuna email inviata e nessun timer Apps Script attivato; nessun nuovo deployment in questa fase.
