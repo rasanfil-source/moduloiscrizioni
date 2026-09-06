@@ -273,6 +273,8 @@
     function renderParticipants() {
       captureParticipants();
       const quantity = totalQuantity();
+	  const participantsHeading = form.querySelector('[data-mi-participants-heading]');
+	  if (participantsHeading) participantsHeading.textContent = quantity > 1 ? 'Prenotazioni' : 'Prenotazione';
       renderEconomicSummary();
 	  updateStickySummary();
       participantsRoot.replaceChildren();
@@ -296,7 +298,7 @@
         row.dataset.miTicketType = ticket.code;
         row.dataset.miTicketIndex = String(ticket.position);
         const legend = document.createElement('legend');
-		legend.textContent = `Prenotazione${index ? ` ${index + 1}` : ''}`;
+		legend.textContent = quantity > 1 ? `Prenotazione ${index + 1}` : 'Prenotazione';
         const grid = document.createElement('div');
         grid.className = 'mi-registration__grid';
         grid.append(
