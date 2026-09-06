@@ -21,7 +21,7 @@ Nessun deployment, timer, invio email o accesso a DB_MODULI. I flussi centrali, 
 
 ### Chiusura del collaudo centrale
 
-Il deployment Web App esistente è stato aggiornato alla versione 45 mantenendo ID, URL, esecuzione come proprietario e accesso invariati. WordPress 3.23.11 ha riconciliato la prenotazione dimostrativa `MI-260827-FNB4T2WP` tramite la verifica firmata dello stato: in `DB_MODULI` restano una sola iscrizione e un solo partecipante, senza reinvio del payload completo.
+Il deployment Web App esistente è stato aggiornato prima alla versione 45 per la riconciliazione e infine alla versione 46 per la proiezione ottimizzata, mantenendo ID, URL, esecuzione come proprietario e accesso invariati. WordPress 3.23.11 ha riconciliato la prenotazione dimostrativa `MI-260827-FNB4T2WP` tramite la verifica firmata dello stato: in `DB_MODULI` restano una sola iscrizione e un solo partecipante, senza reinvio del payload completo.
 
 La proiezione dei movimenti nel foglio evento si interrompeva dopo la prima riga perché leggeva le circa mille righe predisposte una alla volta. La lettura è stata resa unica e il nuovo comando **Riallinea movimenti della prenotazione** limita l'operazione al codice selezionato. Sul codice dimostrativo il riallineamento ha completato incassi e rimborsi in circa sette secondi; una seconda esecuzione ha lasciato invariato il numero delle righe. Nessuna email è stata inviata e nessun timer Apps Script è stato attivato.
 
