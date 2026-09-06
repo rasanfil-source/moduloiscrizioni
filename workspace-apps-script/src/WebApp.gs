@@ -96,6 +96,20 @@ function confrontaInTempoCostante_(left, right) {
 }
 
 function aggiungiIscrizione_(payload) {
+  const risultato = registraIscrizioneCentrale_(payload);
+  if (!risultato.complete) return risultato;
+  // La consegna al foglio avviene dopo il rilascio del lock del registro centrale.
+  try {
+    aggiornaFoglioOperativoEvento({ id_evento: String(payload.event_id) });
+    risultato.event_sheet_complete = true;
+    return risultato;
+  } catch (errore) {
+    aggiungiControllo_('APPEND_REGISTRATION', 'EVENT_SHEET', String(payload.order_code), 'ERROR', 'WORDPRESS', normalizzaTesto_(errore.message, 300), 'WORDPRESS_PROXY');
+    return { ok: false, complete: false, central_complete: true, event_sheet_complete: false, order_code: risultato.order_code, error: 'EVENT_SHEET_PENDING' };
+  }
+}
+
+function registraIscrizioneCentrale_(payload) {
   const orderCode = normalizzaTesto_(payload.order_code, 64);
   const eventId = normalizzaTesto_(payload.event_id, 64);
   const idempotencyKey = normalizzaTesto_(payload.idempotency_key, 64);
@@ -138,7 +152,7 @@ function aggiungiIscrizione_(payload) {
 		return !firstName || !lastName || fieldsJson.length > 5000 || optionsJson.length > 5000;
 	})) return { ok: false, error: 'INVALID_PARTICIPANTS' };
 
-  const lock = LockService.getDocumentLock();
+  const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
     const registrations = ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS);

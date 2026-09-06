@@ -42,12 +42,13 @@ function environment() {
   const context = {
     console, Date, JSON, Math, Number, String, Array, Object, RegExp, Boolean,
     SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet },
-    LockService: { getDocumentLock: () => ({ waitLock() {}, releaseLock() {} }) },
+    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     Utilities: { getUuid: () => `00000000-0000-4000-8000-${String(++uuid).padStart(12, '0')}` },
     ContentService: { MimeType: { JSON: 'JSON' }, createTextOutput: () => ({ setMimeType() { return this; } }) }
   };
   vm.createContext(context);
   vm.runInContext(source, context);
+  context.aggiornaFoglioOperativoEvento = () => ({ ok: true });
   return { context, sheets };
 }
 
@@ -109,4 +110,19 @@ test('APPEND_REGISTRATION richiede nome e cognome per ogni partecipante', () => 
   const optional = payload();
   optional.participants[1] = { ticket_type_code: 'standard', ticket_index: 2, first_name: '', last_name: '', fields: {}, options: [] };
   assert.equal(context.aggiungiIscrizione_(optional).error, 'INVALID_PARTICIPANTS');
+});
+
+test('la consegna è incompleta se il foglio evento fallisce, il retry conserva una sola iscrizione', () => {
+  const { context, sheets } = environment();
+  context.aggiornaFoglioOperativoEvento = () => { throw new Error('Sheet temporaneamente indisponibile'); };
+  const failed = context.aggiungiIscrizione_(payload());
+  assert.equal(failed.complete, false);
+  assert.equal(failed.central_complete, true);
+  assert.equal(failed.error, 'EVENT_SHEET_PENDING');
+  context.aggiornaFoglioOperativoEvento = () => ({ ok: true });
+  const retry = context.aggiungiIscrizione_(payload());
+  assert.equal(retry.complete, true);
+  assert.equal(retry.event_sheet_complete, true);
+  assert.equal(sheets.Iscrizioni.rows.length, 2);
+  assert.equal(sheets.Partecipanti.rows.length, 3);
 });

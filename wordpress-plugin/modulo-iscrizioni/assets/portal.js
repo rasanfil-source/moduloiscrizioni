@@ -151,8 +151,10 @@ document.addEventListener('DOMContentLoaded', () => {
 	};
 	form.querySelector('[data-mi-add-bus-route]')?.addEventListener('click', () => {
 	  if (!busRouteTemplate || !busRoutesList) return;
+	  if (busRoutesList.children.length >= 12) return;
 	  const row = busRouteTemplate.content.firstElementChild.cloneNode(true);
 	  busRoutesList.append(row);
+	  row.querySelector('input[name="bus_route_price[]"]')?.setAttribute('required', '');
 	  row.querySelector('input[name="bus_route_code[]"]')?.focus();
 	});
 	busRoutesList?.addEventListener('click', (event) => {

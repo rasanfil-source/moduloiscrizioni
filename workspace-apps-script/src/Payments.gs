@@ -66,6 +66,27 @@ function registraVersamentoSegreteria(form) {
 }
 
 function registraPagamentoValidato_(payload) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(5000);
+  try { return registraPagamentoConLock_(payload); }
+  finally { lock.releaseLock(); }
+}
+
+function pagamentoCorrisponde_(pagamento, payload) {
+  const data = payload.effective_at instanceof Date ? payload.effective_at : new Date(payload.effective_at);
+  const registrata = pagamento.data_effettiva instanceof Date ? pagamento.data_effettiva : new Date(pagamento.data_effettiva);
+  return String(pagamento.codice_ordine) === String(payload.order_code)
+    && String(pagamento.tipo_movimento) === String(payload.transaction_kind)
+    && String(pagamento.tipo_rata) === String(payload.installment_kind)
+    && Number(pagamento.importo_centesimi) === convertiEuroInCentesimi_(payload.amount)
+    && String(pagamento.fonte_pagamento) === String(payload.payment_source)
+    && registrata.getTime() === data.getTime()
+    && String(pagamento.riferimento_esterno || '') === neutralizzaFormula_(payload.external_reference, 120)
+    && String(pagamento.nota_amministrativa || '') === neutralizzaFormula_(payload.administrative_note, 500)
+    && String(pagamento.etichetta_operatore || '') === neutralizzaFormula_(payload.operator_label, 100);
+}
+
+function registraPagamentoConLock_(payload) {
   payload = payload || {};
   const channel = ['MANUAL_SHEET', 'WORKSPACE_UI'].indexOf(String(payload.recording_channel)) >= 0 ? String(payload.recording_channel) : 'MANUAL_SHEET';
   const intakeId = normalizzaTesto_(payload.intake_id, 64) || creaIdentificativoOpaco_(channel === 'WORKSPACE_UI' ? 'pui' : 'pin');
@@ -94,15 +115,15 @@ function registraPagamentoValidato_(payload) {
 
   const registration = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).find(function (item) { return String(item.codice_ordine) === orderCode; });
   if (!registration) return reject('ORDER_NOT_FOUND', 'Ordine non trovato.');
-  if (['ANNULLATO', 'SCADUTO', 'CANCELLED', 'EXPIRED'].indexOf(String(registration.stato).toUpperCase()) >= 0) return reject('ORDER_REVIEW', 'Ordine da verificare manualmente.', 'DA_VERIFICARE');
+  if (transactionKind === 'INCASSO' && ['ANNULLATO', 'SCADUTO', 'CANCELLED', 'EXPIRED'].indexOf(String(registration.stato).toUpperCase()) >= 0) return reject('ORDER_REVIEW', 'Ordine da verificare manualmente.', 'DA_VERIFICARE');
 
-  const lock = LockService.getDocumentLock();
-  lock.waitLock(5000);
-  try {
     const paymentSheet = ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS);
     const payments = convertiRigheInOggetti_(paymentSheet);
     const duplicate = payments.find(function (item) { return String(item.id_inserimento_origine) === intakeId; });
-    if (duplicate) return { intakeId: intakeId, paymentId: String(duplicate.id_pagamento || ''), status: 'CONVALIDATO', message: 'Movimento già acquisito.' };
+    if (duplicate) {
+      if (!pagamentoCorrisponde_(duplicate, Object.assign({}, payload, { order_code: orderCode, transaction_kind: transactionKind, installment_kind: installmentKind, payment_source: paymentSource }))) return reject('PAYMENT_ID_CONFLICT', 'Movimento già acquisito con dati diversi: registrare uno storno o un rimborso su una nuova riga.', 'DA_VERIFICARE');
+      return { intakeId: intakeId, paymentId: String(duplicate.id_pagamento || ''), status: 'CONVALIDATO', message: 'Movimento già acquisito.' };
+    }
     const currentPaid = payments.filter(function (item) { return String(item.codice_ordine) === orderCode; }).reduce(function (total, item) {
       const amount = Math.max(0, Number(item.importo_centesimi) || 0);
       return total + (['RIMBORSO', 'STORNO'].indexOf(String(item.tipo_movimento).toUpperCase()) >= 0 ? -amount : amount);
@@ -131,7 +152,4 @@ function registraPagamentoValidato_(payload) {
     ]);
     aggiungiControllo_('VALIDATE_PAYMENT', 'PAYMENT', paymentId, 'SUCCESS', operatorLabel, 'PAYMENT_RECORDED', channel);
     return { intakeId: intakeId, paymentId: paymentId, status: 'CONVALIDATO', message: 'Versamento registrato e controllato.' };
-  } finally {
-    lock.releaseLock();
-  }
 }

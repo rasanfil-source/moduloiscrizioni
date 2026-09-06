@@ -11,6 +11,8 @@ function onOpen() {
     .addSeparator()
     .addItem('Convalida pagamenti selezionati', 'convalidaPagamentiSelezionati')
     .addItem('Convalida tutti i pagamenti in attesa', 'convalidaPagamentiInAttesa')
+    .addItem('Sincronizza fogli e pagamenti degli eventi', 'sincronizzaFogliEventi')
+    .addItem('Attiva sincronizzazione automatica eventi', 'attivaSincronizzazioneFogliEventi')
     .addSeparator()
     .addItem('Configura destinatario email di test', 'configuraDestinatarioTestEmail')
     .addItem('Invia coda al solo destinatario di test', 'inviaCodaEmailDiTest')
