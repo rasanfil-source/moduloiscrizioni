@@ -83,13 +83,24 @@ function acquisisciPagamentiEvento_(foglio, idEvento) {
   return { ok: true };
 }
 
-function proiettaPagamentiEvento_(scheda, mappa, ordini) {
-  const pagamenti = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS)).filter(function (movimento) { return ordini.some(function (ordine) { return String(ordine.codice_ordine) === String(movimento.codice_ordine); }); });
+function proiettaPagamentiEvento_(scheda, mappa, ordini, codiciOrdine) {
+  const filtroOrdini = Array.isArray(codiciOrdine) && codiciOrdine.length ? codiciOrdine.reduce(function (indice, codice) {
+    indice[String(codice)] = true;
+    return indice;
+  }, {}) : null;
+  const pagamenti = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS)).filter(function (movimento) {
+    const codice = String(movimento.codice_ordine);
+    return (!filtroOrdini || filtroOrdini[codice]) && ordini.some(function (ordine) { return String(ordine.codice_ordine) === codice; });
+  });
   const fonti = { CONTANTE: 'Contanti', BONIFICO: 'Bonifico', CARTA: 'Carta/PayPal' };
   const causali = { INTERO: 'Intero', CAPARRA: 'Caparra', INTERMEDIO: 'Intermedio', SALDO: 'Saldo', NON_ASSEGNATO: 'Non assegnato' };
   const locali = {};
-  for (let numero = 2; numero <= scheda.getLastRow(); numero += 1) {
-    const riga = scheda.getRange(numero, 1, 1, scheda.getLastColumn()).getValues()[0];
+  const ultimaRiga = scheda.getLastRow();
+  const righeEsistenti = ultimaRiga > 1 ? scheda.getRange(2, 1, ultimaRiga - 1, scheda.getLastColumn()).getValues() : [];
+  for (let indiceRiga = 0; indiceRiga < righeEsistenti.length; indiceRiga += 1) {
+    const numero = indiceRiga + 2;
+    const riga = righeEsistenti[indiceRiga];
+    if (filtroOrdini && !filtroOrdini[String(riga[mappa.ordine - 1] || '')]) continue;
     const origine = pagamenti.find(function (movimento) { return String(movimento.id_inserimento_origine) === String(riga[mappa._movimento - 1] || '') && !!riga[mappa._movimento - 1]; });
     const id = String(riga[mappa._registrato - 1] || (origine && origine.id_pagamento) || '');
     if (!id) continue;
@@ -110,6 +121,19 @@ function proiettaPagamentiEvento_(scheda, mappa, ordini) {
     scheda.getRange(numero, 1, 1, riga.length).setValues([riga]);
     locali[String(movimento.id_pagamento)] = numero;
   });
+}
+
+function aggiornaProiezionePagamentiPrenotazioneEvento_(foglio, idEvento, codiceOrdine) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const scheda = preparaPagamentiEvento_(foglio, idEvento);
+    const ordini = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(function (riga) {
+      return String(riga.id_evento) === String(idEvento) && String(riga.codice_ordine) === String(codiceOrdine);
+    });
+    if (ordini.length !== 1) throw new Error('Prenotazione non trovata oppure non appartenente a questo evento.');
+    proiettaPagamentiEvento_(scheda, mappaColonneEvento_(scheda), ordini, [String(codiceOrdine)]);
+  } finally { lock.releaseLock(); }
 }
 
 function aggiornaProiezionePagamentiEvento_(foglio, idEvento) {

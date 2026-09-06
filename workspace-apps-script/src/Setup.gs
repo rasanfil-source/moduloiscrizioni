@@ -11,6 +11,7 @@ function onOpen() {
     .addSeparator()
     .addItem('Apri inserimento guidato', 'apriInserimentoMovimentoGuidato')
     .addItem('Aggiorna riepilogo movimento', 'aggiornaRiepilogoMovimentoGuidato')
+    .addItem('Riallinea movimenti della prenotazione', 'aggiornaProiezioneMovimentoGuidato')
     .addItem('Registra movimento guidato', 'registraMovimentoGuidato')
     .addItem('Convalida pagamenti selezionati', 'convalidaPagamentiSelezionati')
     .addItem('Convalida tutti i pagamenti in attesa', 'convalidaPagamentiInAttesa')
