@@ -48,8 +48,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.23\.13\b/);
-  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.13'\s*\)/);
+  assert.match(source, /Version:\s+3\.23\.14\b/);
+  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.14'\s*\)/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1467,9 +1467,9 @@ test('il dettaglio evento si apre a fisarmonica dopo la riga selezionata', async
 	assert.match(portal, /mi-event-card-shell' \. \( \$is_selected \? ' is-selected'/);
 	assert.match(portal, /aria-expanded="true" aria-controls="mi-event-inline-panel-/);
 	assert.match(portal, /class="mi-event-inline-panel" data-mi-event-inline-panel/);
-	assert.match(script, /inlineEventPanel\.remove\(\)/);
+	assert.match(script, /placeEventPanel\(inlineEventPanel, selectedCard\)/);
 	assert.match(script, /Math\.abs\(card\.offsetTop - selectedTop\) < 2/);
-	assert.match(script, /rowCards\[rowCards\.length - 1\][\s\S]*\.after\(inlineEventPanel\)/);
+	assert.match(script, /rowCards\[rowCards\.length - 1\][\s\S]*\.after\(panel\)/);
 	assert.match(css, /\.mi-event-inline-panel\{grid-column:1\/-1/);
 	assert.match(css, /\.mi-event-card-shell\.is-selected \.mi-event-card/);
 	assert.match(css, /prefers-reduced-motion:reduce/);
@@ -1743,6 +1743,29 @@ test('le tessere evento espongono azioni coerenti nel menu a tre puntini', async
   assert.match(portal, /_mi_event_archived_at/);
   assert.match(script, /mi-event-card-menu\[open\]/);
   assert.match(css, /\.mi-event-card-menu/);
+});
+
+test('il portale apre le schede evento in modo progressivo e senza query duplicate', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /mi_portal_event_panel/);
+  assert.match(portal, /data-mi-event-open/);
+  assert.match(portal, /event_management_card\( \$selected, \$active_count, \$registration_count \)/);
+  assert.match(portal, /SELECT COUNT\(\*\) AS total_count,SUM\(CASE WHEN status IN/);
+  assert.match(script, /fetchEventPanel/);
+  assert.match(script, /eventPanelCache/);
+  assert.match(script, /pointerenter/);
+  assert.match(script, /Apro la scheda dell’evento/);
+  assert.match(css, /\.mi-event-inline-panel--loading/);
+});
+
+test('la vista gruppi calcola i conteggi eventi con una sola query aggregata', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const groupsView = portal.slice(portal.indexOf('private static function groups_view'), portal.indexOf('private static function operators_view'));
+  assert.match(groupsView, /COUNT\(DISTINCT p\.ID\) AS event_count/);
+  assert.match(groupsView, /GROUP BY CAST\(pm\.meta_value AS UNSIGNED\)/);
+  assert.doesNotMatch(groupsView, /\$event_count = count\( get_posts/);
 });
 
 test('i gruppi degli operatori compaiono soltanto per i ruoli limitati', async () => {

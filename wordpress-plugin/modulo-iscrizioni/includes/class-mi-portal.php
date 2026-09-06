@@ -599,6 +599,17 @@ final class MI_Portal {
 		if ( empty( $_GET['mi_portal'] ) && empty( $_GET['mi_status'] ) ) return;
 		status_header( 200 );
 		nocache_headers();
+		$is_event_panel_request = ! empty( $_GET['mi_portal_event_panel'] ) && 'xmlhttprequest' === strtolower( sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_REQUESTED_WITH'] ?? '' ) ) );
+		if ( $is_event_panel_request ) {
+			if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_portal_access' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
+			$event_id = absint( $_GET['mi_portal_event'] ?? 0 );
+			if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Evento non accessibile.', 403 );
+			header( 'Content-Type: text/html; charset=' . get_option( 'blog_charset' ) );
+			echo '<div id="mi-event-inline-panel-' . esc_attr( $event_id ) . '" class="mi-event-inline-panel" data-mi-event-inline-panel data-mi-event-id="' . esc_attr( $event_id ) . '">';
+			self::event_management_card( $event_id );
+			echo '</div>';
+			exit;
+		}
 		$is_detail_request = ! empty( $_GET['mi_portal_booking'] ) && 'xmlhttprequest' === strtolower( sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_REQUESTED_WITH'] ?? '' ) ) );
 		if ( $is_detail_request ) {
 			if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_portal_access' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
@@ -960,11 +971,23 @@ final class MI_Portal {
 	private static function groups_view() {
 		if ( ! self::can_manage_groups() ) { wp_die( 'Solo un amministratore o un segretario può gestire i gruppi.', 403 ); }
 		$groups = get_posts( array( 'post_type' => MI_Event_Post_Type::GROUP_TYPE, 'post_status' => array( 'publish', 'draft' ), 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) );
+		$event_counts = array();
+		$group_ids = array_map( 'absint', wp_list_pluck( $groups, 'ID' ) );
+		if ( $group_ids ) {
+			global $wpdb;
+			$safe_group_ids = implode( ',', $group_ids );
+			$sql = $wpdb->prepare(
+				"SELECT CAST(pm.meta_value AS UNSIGNED) AS group_id, COUNT(DISTINCT p.ID) AS event_count FROM {$wpdb->posts} p INNER JOIN {$wpdb->postmeta} pm ON pm.post_id=p.ID AND pm.meta_key=%s WHERE p.post_type=%s AND p.post_status IN ('publish','draft','private','mi_archived') AND CAST(pm.meta_value AS UNSIGNED) IN ({$safe_group_ids}) GROUP BY CAST(pm.meta_value AS UNSIGNED)",
+				'_mi_activity_id',
+				MI_Event_Post_Type::EVENT_TYPE
+			);
+			foreach ( $wpdb->get_results( $sql, ARRAY_A ) as $row ) $event_counts[ (int) $row['group_id'] ] = (int) $row['event_count'];
+		}
 		?>
 		<section class="mi-groups"><div class="mi-groups__heading"><div><span class="mi-portal-eyebrow">Configurazione</span><h2>Gruppi</h2></div><p class="mi-portal-muted">Definisci una sola volta nome, logo, copertina e colori. I nuovi eventi del gruppo li erediteranno automaticamente.</p></div>
 		<details class="mi-group-create" <?php echo $groups ? '' : 'open'; ?>><summary>Aggiungi un nuovo gruppo</summary><form method="post" enctype="multipart/form-data"><input type="hidden" name="mi_portal_action" value="create_group"><?php wp_nonce_field( 'mi_portal_manage_groups', 'mi_portal_nonce' ); ?>
 		<div class="mi-group-form-grid"><label>Nome del gruppo<input name="group_title" maxlength="120" required placeholder="Es. Giovani"></label><label>Logo <small>(facoltativo)</small><input type="file" name="group_logo" accept="image/jpeg,image/png,image/webp" data-mi-max-bytes="2097152"><small>JPG, PNG o WebP, massimo 2 MB.</small></label><label>Immagine in evidenza <small>(facoltativa)</small><input type="file" name="group_cover" accept="image/jpeg,image/png,image/webp" data-mi-max-bytes="2097152"><small>Viene proposta agli eventi privi di una propria immagine.</small></label><label>Colore principale<input type="color" name="group_primary_color" value="#151b38"></label><label>Colore pulsanti<input type="color" name="group_secondary_color" value="#337ab7"></label></div><button class="mi-primary" type="submit">Crea gruppo</button></form></details>
-		<div class="mi-group-list"><?php if ( ! $groups ) : ?><p class="mi-portal-empty">Non sono ancora presenti gruppi.</p><?php endif; ?><?php foreach ( $groups as $group ) : $logo = get_the_post_thumbnail_url( $group->ID, 'thumbnail' ); $cover_id = absint( get_post_meta( $group->ID, '_mi_group_cover_image_id', true ) ); $cover = $cover_id ? wp_get_attachment_image_url( $cover_id, 'medium' ) : ''; $primary = sanitize_hex_color( get_post_meta( $group->ID, '_mi_primary_color', true ) ) ?: '#151b38'; $secondary = sanitize_hex_color( get_post_meta( $group->ID, '_mi_secondary_color', true ) ) ?: '#337ab7'; $event_count = count( get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private', 'mi_archived' ), 'numberposts' => -1, 'fields' => 'ids', 'meta_key' => '_mi_activity_id', 'meta_value' => $group->ID ) ) ); ?>
+		<div class="mi-group-list"><?php if ( ! $groups ) : ?><p class="mi-portal-empty">Non sono ancora presenti gruppi.</p><?php endif; ?><?php foreach ( $groups as $group ) : $logo = get_the_post_thumbnail_url( $group->ID, 'thumbnail' ); $cover_id = absint( get_post_meta( $group->ID, '_mi_group_cover_image_id', true ) ); $cover = $cover_id ? wp_get_attachment_image_url( $cover_id, 'medium' ) : ''; $primary = sanitize_hex_color( get_post_meta( $group->ID, '_mi_primary_color', true ) ) ?: '#151b38'; $secondary = sanitize_hex_color( get_post_meta( $group->ID, '_mi_secondary_color', true ) ) ?: '#337ab7'; $event_count = (int) ( $event_counts[ $group->ID ] ?? 0 ); ?>
 		<details class="mi-group-card" <?php echo absint( $_GET['mi_portal_group'] ?? 0 ) === $group->ID ? 'open' : ''; ?>><summary><span class="mi-group-card__identity"><?php if ( $logo ) : ?><img src="<?php echo esc_url( $logo ); ?>" alt=""><?php else : ?><em aria-hidden="true"><?php echo esc_html( mb_strtoupper( mb_substr( $group->post_title, 0, 1 ) ) ); ?></em><?php endif; ?><span><strong><?php echo esc_html( $group->post_title ); ?></strong><small><?php echo esc_html( $event_count . ( 1 === $event_count ? ' evento collegato' : ' eventi collegati' ) ); ?></small></span></span><span>Configura</span></summary><form method="post" enctype="multipart/form-data"><input type="hidden" name="mi_portal_action" value="update_group"><input type="hidden" name="group_id" value="<?php echo esc_attr( $group->ID ); ?>"><?php wp_nonce_field( 'mi_portal_manage_groups', 'mi_portal_nonce' ); ?>
 		<div class="mi-group-form-grid"><label>Nome del gruppo<input name="group_title" maxlength="120" value="<?php echo esc_attr( $group->post_title ); ?>" required></label><div class="mi-group-image-field"><strong>Logo</strong><?php if ( $logo ) : ?><img src="<?php echo esc_url( $logo ); ?>" alt=""><label class="mi-check"><input type="checkbox" name="remove_group_logo" value="1"> Rimuovi il logo</label><?php endif; ?><label>Sostituisci<input type="file" name="group_logo" accept="image/jpeg,image/png,image/webp" data-mi-max-bytes="2097152"></label></div><div class="mi-group-image-field"><strong>Immagine in evidenza</strong><?php if ( $cover ) : ?><img src="<?php echo esc_url( $cover ); ?>" alt=""><label class="mi-check"><input type="checkbox" name="remove_group_cover" value="1"> Rimuovi l’immagine</label><?php endif; ?><label>Sostituisci<input type="file" name="group_cover" accept="image/jpeg,image/png,image/webp" data-mi-max-bytes="2097152"></label></div><label>Colore principale<input type="color" name="group_primary_color" value="<?php echo esc_attr( $primary ); ?>"></label><label>Colore pulsanti<input type="color" name="group_secondary_color" value="<?php echo esc_attr( $secondary ); ?>"></label></div><div class="mi-group-card__actions"><button class="mi-primary" type="submit">Salva gruppo</button></div></form><?php if ( 0 === $event_count ) : ?><form method="post" class="mi-group-delete" onsubmit="return confirm('Eliminare questo gruppo? Sarà spostato nel cestino.');"><input type="hidden" name="mi_portal_action" value="delete_group"><input type="hidden" name="group_id" value="<?php echo esc_attr( $group->ID ); ?>"><?php wp_nonce_field( 'mi_portal_manage_groups', 'mi_portal_nonce' ); ?><button class="mi-danger" type="submit">Elimina gruppo</button></form><?php else : ?><p class="mi-portal-muted">Per eliminare il gruppo, assegna prima i suoi eventi a un altro gruppo.</p><?php endif; ?></details>
 		<?php endforeach; ?></div></section>
@@ -1088,7 +1111,7 @@ final class MI_Portal {
 			}
 			if ( $show_past ) $url_args['mi_portal_history'] = '1';
 			$url = add_query_arg( $url_args, $base_url );
-			echo '<article class="mi-event-card-shell' . ( $is_selected ? ' is-selected' : '' ) . '"><a class="mi-event-card' . ( $is_cancelled ? ' is-cancelled' : ( $is_expired ? ' is-expired' : '' ) ) . '" href="' . esc_url( $url ) . '"' . ( $is_selected ? ' aria-expanded="true" aria-controls="mi-event-inline-panel-' . esc_attr( $event->ID ) . '"' : '' ) . '><span class="mi-event-card__date"><small>' . esc_html( $date_badge['month'] ) . '</small><strong>' . esc_html( $date_badge['day'] ) . '</strong></span><span class="mi-event-card__content"><span class="mi-event-card__image">';
+			echo '<article class="mi-event-card-shell' . ( $is_selected ? ' is-selected' : '' ) . '"><a class="mi-event-card' . ( $is_cancelled ? ' is-cancelled' : ( $is_expired ? ' is-expired' : '' ) ) . '" href="' . esc_url( $url ) . '"' . ( 'draft' !== $event->post_status ? ' data-mi-event-open data-mi-event-id="' . esc_attr( $event->ID ) . '"' : '' ) . ( $is_selected ? ' aria-expanded="true" aria-controls="mi-event-inline-panel-' . esc_attr( $event->ID ) . '"' : ' aria-expanded="false"' ) . '><span class="mi-event-card__date"><small>' . esc_html( $date_badge['month'] ) . '</small><strong>' . esc_html( $date_badge['day'] ) . '</strong></span><span class="mi-event-card__content"><span class="mi-event-card__image">';
 			if ( $cover_image ) echo '<img src="' . esc_url( $cover_image ) . '" alt="" loading="lazy" decoding="async" fetchpriority="low">';
 			echo '</span><span class="mi-event-card__identity"><strong>' . esc_html( $event_title ) . '</strong>';
 			if ( $activity_name ) echo '<small>' . esc_html( $activity_name ) . '</small>';
@@ -1121,7 +1144,7 @@ final class MI_Portal {
 			echo '</article>';
 			if ( $is_selected ) {
 				echo '<div id="mi-event-inline-panel-' . esc_attr( $event->ID ) . '" class="mi-event-inline-panel" data-mi-event-inline-panel data-mi-event-id="' . esc_attr( $event->ID ) . '">';
-				self::event_management_card( $selected );
+				self::event_management_card( $selected, $active_count, $registration_count );
 				if ( ! empty( $_GET['mi_portal_outputs'] ) ) {
 					self::event_outputs_panel( $selected );
 					self::notice();
@@ -1137,7 +1160,7 @@ final class MI_Portal {
 		echo '<p class="mi-event-history-link"><a href="' . esc_url( $history_url ) . '">' . ( $show_past ? 'Torna agli eventi attuali' : 'Visualizza eventi passati' ) . '</a></p>';
 	}
 
-	private static function event_management_card( $event_id ) {
+	private static function event_management_card( $event_id, $active_count = null, $registration_count = null ) {
 		$event = get_post( $event_id );
 		if ( ! $event || ! MI_Access::can_access_event( $event_id ) ) return;
 		$starts_at = (string) get_post_meta( $event_id, '_mi_event_starts_at', true );
@@ -1147,9 +1170,12 @@ final class MI_Portal {
 		$cancelled = (string) get_post_meta( $event_id, '_mi_event_cancelled_at', true );
 		$expired = self::is_past_event( $closes_at );
 		$registration_url = 'publish' === $event->post_status ? esc_url( MI_Shortcode::url_iscrizione( $event_id ) ) : '';
-		global $wpdb;
-		$active_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED') AND capacity_released_at IS NULL", $event_id ) );
-		$registration_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d", $event_id ) );
+		if ( null === $active_count || null === $registration_count ) {
+			global $wpdb;
+			$totals = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) AS total_count,SUM(CASE WHEN status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED') AND capacity_released_at IS NULL THEN 1 ELSE 0 END) AS active_count FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d", $event_id ), ARRAY_A );
+			$active_count = (int) ( $totals['active_count'] ?? 0 );
+			$registration_count = (int) ( $totals['total_count'] ?? 0 );
+		}
 		$list_args = array( 'mi_portal_view' => 'manage' );
 		if ( ! empty( $_GET['mi_portal_history'] ) ) $list_args['mi_portal_history'] = '1';
 		$list_url = add_query_arg( $list_args, self::base_url() ) . '#mi-elenco-eventi';

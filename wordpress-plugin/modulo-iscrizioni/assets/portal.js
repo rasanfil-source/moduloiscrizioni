@@ -305,16 +305,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const selectedEvent = document.querySelector('[data-mi-selected-event]');
   const eventOutputs = document.querySelector('[data-mi-event-outputs]');
+	const placeEventPanel = (panel, selectedCard) => {
+	  const grid = selectedCard?.closest('.mi-event-grid');
+	  if (!grid || !panel) return;
+	  document.querySelector('[data-mi-event-inline-panel]')?.remove();
+	  panel.remove();
+	  const selectedTop = selectedCard.offsetTop;
+	  const rowCards = [...grid.querySelectorAll('.mi-event-card-shell')].filter((card) => Math.abs(card.offsetTop - selectedTop) < 2);
+	  (rowCards[rowCards.length - 1] || selectedCard).after(panel);
+	};
 	const inlineEventPanel = document.querySelector('[data-mi-event-inline-panel]');
 	if (inlineEventPanel) {
 	  const grid = inlineEventPanel.closest('.mi-event-grid');
 	  const eventId = inlineEventPanel.dataset.miEventId;
-	  const selectedCard = grid?.querySelector(`.mi-event-card[href*="mi_portal_event=${eventId}"]`)?.closest('.mi-event-card-shell');
+	  const selectedCard = grid?.querySelector(`.mi-event-card[data-mi-event-id="${eventId}"]`)?.closest('.mi-event-card-shell');
 	  if (grid && selectedCard) {
-		inlineEventPanel.remove();
-		const selectedTop = selectedCard.offsetTop;
-		const rowCards = [...grid.querySelectorAll('.mi-event-card-shell')].filter((card) => Math.abs(card.offsetTop - selectedTop) < 2);
-		(rowCards[rowCards.length - 1] || selectedCard).after(inlineEventPanel);
+		placeEventPanel(inlineEventPanel, selectedCard);
 	  }
 	}
 
@@ -330,7 +336,9 @@ document.addEventListener('DOMContentLoaded', () => {
 	return status;
   };
 
-  document.querySelectorAll('[data-mi-copy]').forEach((copyButton) => {
+	const bindCopyButtons = (root = document) => root.querySelectorAll('[data-mi-copy]').forEach((copyButton) => {
+	if (copyButton.dataset.miCopyBound === '1') return;
+	copyButton.dataset.miCopyBound = '1';
 	copyButton.addEventListener('click', async () => {
 	  if (copyButton.getAttribute('aria-busy') === 'true') return;
 	  const copyControl = copyButton.closest('.mi-output-copy') || copyButton.closest('.mi-output-copy-action');
@@ -358,9 +366,12 @@ document.addEventListener('DOMContentLoaded', () => {
 		copyButton.disabled = false;
 	  }
 	});
-  });
+	});
+	bindCopyButtons();
 
-  document.querySelectorAll('[data-mi-share]').forEach((shareButton) => {
+	const bindShareButtons = (root = document) => root.querySelectorAll('[data-mi-share]').forEach((shareButton) => {
+	if (shareButton.dataset.miShareBound === '1') return;
+	shareButton.dataset.miShareBound = '1';
 	shareButton.addEventListener('click', async () => {
 	  if (shareButton.getAttribute('aria-busy') === 'true') return;
 	  const shareControl = shareButton.closest('.mi-output-copy');
@@ -395,11 +406,14 @@ document.addEventListener('DOMContentLoaded', () => {
 		shareButton.disabled = false;
 	  }
 	});
-  });
+	});
+	bindShareButtons();
 
-  document.querySelectorAll('form').forEach((actionForm) => {
+	const bindProgressForms = (root = document) => root.querySelectorAll('form').forEach((actionForm) => {
+	if (actionForm.dataset.miProgressBound === '1') return;
 	const action = actionForm.querySelector('input[name="mi_portal_action"]')?.value;
 	if (!['create_event', 'publish_event_portal', 'prepare_event_outputs'].includes(action)) return;
+	actionForm.dataset.miProgressBound = '1';
 	actionForm.addEventListener('submit', (event) => {
 	  if (event.defaultPrevented || !actionForm.checkValidity()) return;
 	  const button = event.submitter || actionForm.querySelector('button[type="submit"]');
@@ -421,7 +435,8 @@ document.addEventListener('DOMContentLoaded', () => {
 		? 'Attendere, prego: sto creando il foglio Google e pubblicando l’evento.'
 		: 'Attendere, prego: sto salvando i dati dell’evento.';
 	});
-  });
+	});
+	bindProgressForms();
 
   document.querySelectorAll('textarea[data-mi-max-lines]').forEach((field) => {
 	const maximum = Math.max(1, Number(field.dataset.miMaxLines) || 6);
@@ -477,6 +492,114 @@ document.addEventListener('DOMContentLoaded', () => {
 	role.addEventListener('change', updateOperatorGroups);
 	updateOperatorGroups();
   });
+
+	const eventLinks = [...document.querySelectorAll('[data-mi-event-open]')];
+	if (eventLinks.length) {
+	  const eventPanelCache = new Map();
+	  const eventPanelRequests = new Map();
+	  const listUrl = new URL(window.location.href);
+	  listUrl.searchParams.delete('mi_portal_event');
+	  listUrl.searchParams.delete('mi_portal_event_panel');
+	  let eventNavigationId = 0;
+	  const fetchEventPanel = (link) => {
+		const eventId = link.dataset.miEventId;
+		if (eventPanelCache.has(eventId)) return Promise.resolve(eventPanelCache.get(eventId));
+		if (eventPanelRequests.has(eventId)) return eventPanelRequests.get(eventId);
+		const endpoint = new URL(link.href);
+		endpoint.searchParams.set('mi_portal_event', eventId);
+		endpoint.searchParams.set('mi_portal_event_panel', '1');
+		const request = fetch(endpoint, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+		  .then((response) => {
+			if (!response.ok) throw new Error('event_panel_unavailable');
+			return response.text();
+		  })
+		  .then((html) => {
+			const panel = new DOMParser().parseFromString(html, 'text/html').querySelector('[data-mi-event-inline-panel]');
+			if (!panel) throw new Error('event_panel_missing');
+			eventPanelCache.set(eventId, panel.outerHTML);
+			return panel.outerHTML;
+		  })
+		  .finally(() => eventPanelRequests.delete(eventId));
+		eventPanelRequests.set(eventId, request);
+		return request;
+	  };
+	  const clearEventSelection = () => {
+		document.querySelector('[data-mi-event-inline-panel]')?.remove();
+		eventLinks.forEach((candidate) => {
+		  candidate.closest('.mi-event-card-shell')?.classList.remove('is-selected');
+		  candidate.setAttribute('aria-expanded', 'false');
+		  candidate.removeAttribute('aria-controls');
+		  candidate.removeAttribute('aria-busy');
+		});
+	  };
+	  const showEventPanel = async (link, historyMode = 'push') => {
+		const shell = link.closest('.mi-event-card-shell');
+		const eventId = link.dataset.miEventId;
+		const currentPanel = document.querySelector(`[data-mi-event-inline-panel][data-mi-event-id="${eventId}"]`);
+		if (currentPanel && shell?.classList.contains('is-selected')) {
+		  clearEventSelection();
+		  if ('none' !== historyMode) window.history.pushState({}, '', listUrl);
+		  link.focus();
+		  return;
+		}
+		const navigationId = ++eventNavigationId;
+		clearEventSelection();
+		shell?.classList.add('is-selected');
+		link.setAttribute('aria-expanded', 'true');
+		link.setAttribute('aria-controls', `mi-event-inline-panel-${eventId}`);
+		link.setAttribute('aria-busy', 'true');
+		const loading = document.createElement('div');
+		loading.className = 'mi-event-inline-panel mi-event-inline-panel--loading';
+		loading.dataset.miEventInlinePanel = '';
+		loading.dataset.miEventId = eventId;
+		loading.setAttribute('role', 'status');
+		loading.innerHTML = '<span aria-hidden="true"></span><strong>Apro la scheda dell’evento…</strong>';
+		placeEventPanel(loading, shell);
+		try {
+		  const html = await fetchEventPanel(link);
+		  if (navigationId !== eventNavigationId) return;
+		  const panel = new DOMParser().parseFromString(html, 'text/html').querySelector('[data-mi-event-inline-panel]');
+		  if (!panel) throw new Error('event_panel_missing');
+		  placeEventPanel(panel, shell);
+		  bindCopyButtons(panel);
+		  bindShareButtons(panel);
+		  bindProgressForms(panel);
+		  link.removeAttribute('aria-busy');
+		  if ('push' === historyMode) window.history.pushState({}, '', link.href);
+		  if ('replace' === historyMode) window.history.replaceState({}, '', link.href);
+		  panel.querySelector('[data-mi-selected-event]')?.focus({ preventScroll: true });
+		  panel.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' });
+		} catch (error) {
+		  if (navigationId !== eventNavigationId) return;
+		  window.location.assign(link.href);
+		}
+	  };
+	  eventLinks.forEach((link) => {
+		link.addEventListener('pointerenter', () => { fetchEventPanel(link).catch(() => {}); }, { once: true, passive: true });
+		link.addEventListener('focus', () => { fetchEventPanel(link).catch(() => {}); }, { once: true });
+		link.addEventListener('click', (event) => {
+		  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+		  event.preventDefault();
+		  showEventPanel(link);
+		});
+	  });
+	  document.addEventListener('click', (event) => {
+		const backLink = event.target.closest('.mi-event-management__back');
+		if (!backLink || !backLink.closest('[data-mi-event-inline-panel]')) return;
+		event.preventDefault();
+		const selectedLink = document.querySelector('.mi-event-card-shell.is-selected [data-mi-event-open]');
+		eventNavigationId++;
+		clearEventSelection();
+		window.history.pushState({}, '', listUrl);
+		selectedLink?.focus();
+	  });
+	  window.addEventListener('popstate', () => {
+		const eventId = new URL(window.location.href).searchParams.get('mi_portal_event');
+		const target = eventLinks.find((link) => link.dataset.miEventId === eventId);
+		if (target) showEventPanel(target, 'none');
+		else { eventNavigationId++; clearEventSelection(); }
+	  });
+	}
 
   const bookingLinks = [...document.querySelectorAll('[data-mi-portal-booking-open]')]
     .filter((link, index, links) => links.findIndex((candidate) => candidate.href === link.href) === index);
