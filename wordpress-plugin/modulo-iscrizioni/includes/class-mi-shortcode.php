@@ -61,7 +61,8 @@ final class MI_Shortcode {
 	}
 
 	private static function render_focused_document( $content ) {
-		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width, initial-scale=1"><?php wp_print_styles( 'mi-public' ); ?></head><body class="mi-focused-page"><main class="mi-focused-page__main"><?php echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- HTML protetto dal renderer. ?></main><?php wp_print_scripts( array( 'mi-core', 'mi-public' ) ); ?></body></html><?php
+		$page_title = get_bloginfo( 'name' ) . ' — Iscrizione evento';
+		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><title><?php echo esc_html( $page_title ); ?></title><?php wp_print_styles( 'mi-public' ); ?></head><body class="mi-focused-page"><main class="mi-focused-page__main"><?php echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- HTML protetto dal renderer. ?></main><?php wp_print_scripts( array( 'mi-core', 'mi-public' ) ); ?></body></html><?php
 	}
 
 	public static function maybe_disable_page_cache() {
