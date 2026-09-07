@@ -24,3 +24,8 @@ Il comando finale **REGISTRA MOVIMENTO** è gestito da un trigger `onEdit` speci
 del file evento. Non è un timer e non invia email. Prima della scrittura verifica
 che il file sia quello registrato per l’evento, riusa il validatore economico
 centrale, impedisce sovraversamenti e rimborsi eccessivi e aggiorna lo storico.
+
+Nel progetto Apps Script **MODULI**, `InterfacciaMovimenti.gs` e
+`InterfacciaIscrizioni.gs` restano file separati. Per aggiornare `Codice.gs` si usa
+`dist/Codice-Workspace-Progetto-3.23.22.gs`, generato insieme al pacchetto completo:
+in questo modo le costanti delle due interfacce non vengono dichiarate due volte.
