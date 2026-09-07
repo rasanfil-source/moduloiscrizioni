@@ -89,16 +89,10 @@ function prenotazioniInterfacciaMovimentoEvento_(idEvento) {
 }
 
 function creaSceltePrenotazioniInterfacciaMovimentoEvento_(prenotazioni) {
-  const ricorrenze = {};
-  prenotazioni.forEach(function (item) {
-    const nome = [item.nome_referente, item.cognome_referente].map(function (parte) { return normalizzaTesto_(parte, 80); }).filter(String).join(' ') || 'Prenotazione senza nominativo';
-    ricorrenze[nome] = (ricorrenze[nome] || 0) + 1;
-  });
-  const progressivi = {};
   return prenotazioni.map(function (item) {
     const nome = [item.nome_referente, item.cognome_referente].map(function (parte) { return normalizzaTesto_(parte, 80); }).filter(String).join(' ') || 'Prenotazione senza nominativo';
-    progressivi[nome] = (progressivi[nome] || 0) + 1;
-    return { etichetta: ricorrenze[nome] > 1 ? nome + ' (' + progressivi[nome] + ')' : nome, codice: String(item.codice_ordine) };
+    const codice = String(item.codice_ordine);
+    return { etichetta: nome + ' · ' + codice, codice: codice };
   }).sort(function (a, b) { return a.etichetta.localeCompare(b.etichetta, 'it', { sensitivity: 'base' }); });
 }
 
