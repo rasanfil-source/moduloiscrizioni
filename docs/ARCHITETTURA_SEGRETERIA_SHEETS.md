@@ -23,7 +23,7 @@ Non aggiungere campi di caricamento file, collegamenti a servizi di upload o ist
 
 ## Segreteria eventi unificata
 
-La Segreteria eventi è il portale WordPress autonomo e leggero. Riunisce eventi, creazione, schede delle iscrizioni e comunicazioni. Il ruolo `Segretario iscrizioni` accede a tutti i gruppi; l’operatore accede soltanto ai gruppi assegnati mediante credenziali WordPress personali e non dispone del normale pannello amministrativo.
+La Segreteria eventi è il portale WordPress autonomo e leggero. Riunisce eventi, creazione, schede delle iscrizioni e comunicazioni. Il `Gestore iscrizioni` amministra tutto il modulo; il `Gestore gruppo` crea e gestisce eventi soltanto nei gruppi assegnati; il `Gestore evento` riceve singoli eventi in corso e li gestisce completamente senza poterne creare. Tutti usano credenziali WordPress personali e non ricevono poteri sulle altre parti del sito.
 
 Google Sheets non espone una seconda segreteria concorrente: resta l’ambiente operativo dei fogli evento, delle assegnazioni e dei movimenti economici, sincronizzato in modo esplicito e auditabile con `DB_MODULI`.
 

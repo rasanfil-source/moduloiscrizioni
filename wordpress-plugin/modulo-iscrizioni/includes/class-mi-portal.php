@@ -109,7 +109,7 @@ final class MI_Portal {
 			return self::redirect_cancel_result( MI_Registration_Service::cancel_participant_with_token( $participant_id, sanitize_text_field( wp_unslash( $_POST['cancel_token'] ?? '' ) ) ) );
 		}
 		if ( 'cancel_participant_portal' === $action ) {
-			if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_portal_access' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
+			if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_manage_events' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
 			$participant_id = absint( $_POST['participant_id'] ?? 0 );
 			check_admin_referer( 'mi_cancel_participant_portal_' . $participant_id, 'mi_portal_nonce' );
 			global $wpdb; $event_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT r.event_id FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE p.id=%d", $participant_id ) );
@@ -125,9 +125,10 @@ final class MI_Portal {
 		if ( in_array( $action, array( 'create_operator', 'update_operator' ), true ) ) return self::handle_operator_action( $action );
 		if ( in_array( $action, array( 'create_group', 'update_group', 'delete_group' ), true ) ) return self::handle_group_action( $action );
 		if ( 'create_event' !== $action ) return;
-		if ( ! is_user_logged_in() || ! current_user_can( 'mi_create_events' ) ) wp_die( 'Accesso non consentito.', 403 );
-		check_admin_referer( 'mi_portal_create_event', 'mi_portal_nonce' );
 		$existing_event_id = absint( $_POST['event_id'] ?? $_POST['draft_event_id'] ?? 0 );
+		$required_capability = $existing_event_id ? 'mi_manage_events' : 'mi_create_events';
+		if ( ! is_user_logged_in() || ( ! current_user_can( $required_capability ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
+		check_admin_referer( 'mi_portal_create_event', 'mi_portal_nonce' );
 		$existing_event = null;
 		if ( $existing_event_id ) {
 			$existing_event = get_post( $existing_event_id );
@@ -158,6 +159,10 @@ final class MI_Portal {
 		if ( $close_date > $start_date ) return self::redirect_result( 'La chiusura delle iscrizioni non può essere successiva all’inizio dell’evento.', true );
 		$copy_id = absint( $_POST['copy_event_id'] ?? 0 );
 		if ( $copy_id && ! MI_Access::can_access_event( $copy_id ) ) wp_die( 'Evento modello non accessibile.', 403 );
+		$activity_id = absint( $_POST['activity_id'] ?? 0 );
+		$current_activity_id = $existing_event ? absint( get_post_meta( $existing_event_id, '_mi_activity_id', true ) ) : 0;
+		$keeps_assigned_activity = $existing_event && $activity_id === $current_activity_id;
+		if ( ! $activity_id || MI_Event_Post_Type::GROUP_TYPE !== get_post_type( $activity_id ) || ( ! $keeps_assigned_activity && ! MI_Access::can_access_activity( $activity_id ) ) ) wp_die( 'Gruppo non accessibile.', 403 );
 		$description = self::limit_text_lines( sanitize_textarea_field( wp_unslash( $_POST['description'] ?? '' ) ), 6, 1200 );
 		if ( $existing_event ) {
 			$event_id = wp_update_post( array( 'ID' => $existing_event_id, 'post_title' => $title, 'post_content' => $description ), true );
@@ -170,8 +175,7 @@ final class MI_Portal {
 		if ( ! get_post_meta( $event_id, '_mi_privacy_policy_version', true ) ) update_post_meta( $event_id, '_mi_privacy_policy_version', wp_date( 'Y-m' ) );
 		if ( ! get_post_meta( $event_id, '_mi_privacy_consent_id', true ) ) update_post_meta( $event_id, '_mi_privacy_consent_id', 'privacy-' . $event_id );
 		if ( ! get_post_meta( $event_id, '_mi_marketing_consent_id', true ) ) update_post_meta( $event_id, '_mi_marketing_consent_id', 'marketing-' . $event_id );
-		$activity_id = absint( $_POST['activity_id'] ?? 0 );
-		if ( $activity_id && MI_Access::can_access_activity( $activity_id ) ) update_post_meta( $event_id, '_mi_activity_id', $activity_id );
+		update_post_meta( $event_id, '_mi_activity_id', $activity_id );
 		$gestore = self::risolvi_gestore_evento( $event_id, false );
 		if ( $gestore instanceof WP_User ) update_post_meta( $event_id, '_mi_manager_user_id', $gestore->ID );
 		self::save_date( $event_id, '_mi_event_starts_at', $starts_at );
@@ -293,7 +297,7 @@ final class MI_Portal {
 	}
 
 	private static function handle_event_outputs_action() {
-		if ( ! is_user_logged_in() || ! current_user_can( 'mi_create_events' ) ) wp_die( 'Accesso non consentito.', 403 );
+		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_manage_events' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
 		$event_id = absint( $_POST['event_id'] ?? 0 );
 		check_admin_referer( 'mi_portal_prepare_event_outputs_' . $event_id, 'mi_portal_nonce' );
 		$event = get_post( $event_id );
@@ -305,7 +309,7 @@ final class MI_Portal {
 
 	/** Verifica il collegamento e ricrea dai dati centrali un foglio mancante. */
 	private static function handle_event_sheet_repair_action() {
-		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_portal_access' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
+		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_manage_events' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
 		$event_id = absint( $_POST['event_id'] ?? 0 );
 		check_admin_referer( 'mi_portal_repair_event_sheet_' . $event_id, 'mi_portal_nonce' );
 		if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Evento non accessibile.', 403 );
@@ -374,22 +378,22 @@ final class MI_Portal {
 	/** Individua un solo gestore responsabile, senza ampliare implicitamente l'accesso ai dati. */
 	private static function risolvi_gestore_evento( $event_id, $obbligatorio ) {
 		$event_id = absint( $event_id );
-		$group_id = absint( get_post_meta( $event_id, '_mi_activity_id', true ) );
 		$stored_id = absint( get_post_meta( $event_id, '_mi_manager_user_id', true ) );
 		$candidates = array();
 		if ( $stored_id ) $candidates[] = $stored_id;
 		$author_id = absint( get_post_field( 'post_author', $event_id ) );
 		if ( $author_id ) $candidates[] = $author_id;
-		$users = get_users( array( 'role__in' => array( 'mi_event_manager', 'mi_event_operator' ), 'fields' => array( 'ID', 'user_email', 'roles' ) ) );
+		$manager_roles = array( 'mi_group_manager', 'mi_assigned_event_manager' );
+		$users = get_users( array( 'role__in' => $manager_roles, 'fields' => array( 'ID', 'user_email', 'roles' ) ) );
 		foreach ( $users as $user ) {
-			if ( ! MI_Access::is_suspended( $user->ID ) && MI_Access::can_access_activity( $group_id, $user->ID ) ) $candidates[] = $user->ID;
+			if ( ! MI_Access::is_suspended( $user->ID ) && MI_Access::can_access_event( $event_id, $user->ID ) ) $candidates[] = $user->ID;
 		}
 		$candidates = array_values( array_unique( array_filter( array_map( 'absint', $candidates ) ) ) );
 		$valid = array();
 		foreach ( $candidates as $user_id ) {
 			$user = get_user_by( 'id', $user_id );
-			if ( ! $user || ! is_email( $user->user_email ) || MI_Access::is_suspended( $user_id ) || ! MI_Access::can_access_activity( $group_id, $user_id ) ) continue;
-			if ( ! array_intersect( array( 'mi_event_manager', 'mi_event_operator' ), (array) $user->roles ) ) continue;
+			if ( ! $user || ! is_email( $user->user_email ) || MI_Access::is_suspended( $user_id ) || ! MI_Access::can_access_event( $event_id, $user_id ) ) continue;
+			if ( ! array_intersect( $manager_roles, (array) $user->roles ) ) continue;
 			$valid[ $user_id ] = $user;
 		}
 		if ( $stored_id && isset( $valid[ $stored_id ] ) ) return $valid[ $stored_id ];
@@ -423,7 +427,7 @@ final class MI_Portal {
 	}
 
 	private static function handle_communication_action() {
-		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_portal_access' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
+		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_manage_communications' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
 		check_admin_referer( 'mi_portal_prepare_communication', 'mi_portal_nonce' );
 		$event_id = absint( $_POST['event_id'] ?? 0 );
 		if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Evento non accessibile.', 403 );
@@ -445,7 +449,7 @@ final class MI_Portal {
 	}
 
 	private static function handle_communication_type_action( $action ) {
-		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_manage_all_events' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Solo il segretario generale può modificare i tipi di comunicazione.', 403 );
+		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_manage_all_events' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Solo un Gestore iscrizioni può modificare i tipi di comunicazione.', 403 );
 		check_admin_referer( 'mi_portal_manage_communication_types', 'mi_portal_nonce' );
 		$types = self::custom_communication_types();
 		if ( 'add_communication_type' === $action ) {
@@ -479,10 +483,30 @@ final class MI_Portal {
 
 	private static function operator_roles() {
 		return array(
-			'mi_secretary'      => 'Segretario iscrizioni — tutti gli eventi',
-			'mi_event_manager'  => 'Gestore iscrizioni — gestisce i gruppi assegnati',
-			'mi_event_operator' => 'Operatore di gruppo — consulta i gruppi assegnati',
+			'mi_registration_manager'   => 'Gestore iscrizioni — tutto il servizio',
+			'mi_group_manager'          => 'Gestore gruppo — gruppi assegnati',
+			'mi_assigned_event_manager' => 'Gestore evento — eventi assegnati',
 		);
+	}
+
+	private static function can_manage_module_users() {
+		return current_user_can( 'manage_options' ) || current_user_can( 'mi_manage_module_users' );
+	}
+
+	private static function save_operator_scope( $user_id, $role, $groups, $events ) {
+		$previous_events = get_user_meta( $user_id, '_mi_event_scope', true );
+		$previous_events = array_values( array_filter( array_map( 'absint', is_array( $previous_events ) ? $previous_events : array() ) ) );
+		if ( 'mi_group_manager' === $role ) update_user_meta( $user_id, '_mi_activity_scope', $groups ); else delete_user_meta( $user_id, '_mi_activity_scope' );
+		if ( 'mi_assigned_event_manager' === $role ) {
+			update_user_meta( $user_id, '_mi_event_scope', $events );
+			foreach ( $events as $event_id ) update_post_meta( $event_id, '_mi_manager_user_id', $user_id );
+		} else {
+			$events = array();
+			delete_user_meta( $user_id, '_mi_event_scope' );
+		}
+		foreach ( array_diff( $previous_events, $events ) as $event_id ) {
+			if ( $user_id === absint( get_post_meta( $event_id, '_mi_manager_user_id', true ) ) ) delete_post_meta( $event_id, '_mi_manager_user_id' );
+		}
 	}
 
 	private static function limit_text_lines( $value, $maximum_lines, $maximum_characters ) {
@@ -492,14 +516,18 @@ final class MI_Portal {
 	}
 
 	private static function handle_operator_action( $action ) {
-		if ( ! is_user_logged_in() || ! current_user_can( 'manage_options' ) ) wp_die( 'Solo un amministratore può gestire gli operatori.', 403 );
+		if ( ! is_user_logged_in() || ! self::can_manage_module_users() ) wp_die( 'Solo un amministratore o un Gestore iscrizioni può gestire gli operatori.', 403 );
 		check_admin_referer( 'mi_portal_manage_operators', 'mi_portal_nonce' );
 		$roles = self::operator_roles();
 		$role = sanitize_key( wp_unslash( $_POST['operator_role'] ?? '' ) );
 		if ( ! isset( $roles[ $role ] ) ) return self::redirect_portal_result( 'Ruolo non valido.', true, 'operators' );
 		$password = (string) wp_unslash( $_POST['operator_password'] ?? '' );
-		$scope = isset( $_POST['operator_groups'] ) ? array_values( array_unique( array_filter( array_map( 'absint', (array) wp_unslash( $_POST['operator_groups'] ) ) ) ) ) : array();
-		if ( 'mi_secretary' === $role ) $scope = array();
+		$groups = isset( $_POST['operator_groups'] ) ? array_values( array_unique( array_filter( array_map( 'absint', (array) wp_unslash( $_POST['operator_groups'] ) ) ) ) ) : array();
+		$events = isset( $_POST['operator_events'] ) ? array_values( array_unique( array_filter( array_map( 'absint', (array) wp_unslash( $_POST['operator_events'] ) ) ) ) ) : array();
+		$groups = array_values( array_filter( $groups, static function ( $group_id ) { return MI_Event_Post_Type::GROUP_TYPE === get_post_type( $group_id ); } ) );
+		$events = array_values( array_filter( $events, static function ( $event_id ) { return MI_Event_Post_Type::EVENT_TYPE === get_post_type( $event_id ); } ) );
+		if ( 'mi_group_manager' === $role && ! $groups ) return self::redirect_portal_result( 'Assegna almeno un gruppo al Gestore gruppo.', true, 'operators' );
+		if ( 'mi_assigned_event_manager' === $role && ! $events ) return self::redirect_portal_result( 'Assegna almeno un evento al Gestore evento.', true, 'operators' );
 		if ( 'create_operator' === $action ) {
 			$username = sanitize_user( wp_unslash( $_POST['operator_username'] ?? '' ), true );
 			$email = sanitize_email( wp_unslash( $_POST['operator_email'] ?? '' ) );
@@ -508,7 +536,7 @@ final class MI_Portal {
 			if ( strlen( $password ) < 12 ) return self::redirect_portal_result( 'La parola d’accesso deve contenere almeno 12 caratteri.', true, 'operators' );
 			$user_id = wp_insert_user( array( 'user_login' => $username, 'user_email' => $email, 'display_name' => $name ?: $username, 'user_pass' => $password, 'role' => $role ) );
 			if ( is_wp_error( $user_id ) ) return self::redirect_portal_result( $user_id->get_error_message(), true, 'operators' );
-			update_user_meta( $user_id, '_mi_activity_scope', $scope );
+			self::save_operator_scope( $user_id, $role, $groups, $events );
 			delete_user_meta( $user_id, '_mi_access_suspended' );
 			return self::redirect_portal_result( 'Operatore creato. La parola d’accesso non viene mostrata né inviata per email.', false, 'operators' );
 		}
@@ -527,7 +555,7 @@ final class MI_Portal {
 		}
 		$result = wp_update_user( $update );
 		if ( is_wp_error( $result ) ) return self::redirect_portal_result( $result->get_error_message(), true, 'operators' );
-		update_user_meta( $user_id, '_mi_activity_scope', $scope );
+		self::save_operator_scope( $user_id, $role, $groups, $events );
 		if ( ! empty( $_POST['operator_suspended'] ) ) update_user_meta( $user_id, '_mi_access_suspended', '1' ); else delete_user_meta( $user_id, '_mi_access_suspended' );
 		return self::redirect_portal_result( 'Operatore aggiornato.', false, 'operators' );
 	}
@@ -538,7 +566,7 @@ final class MI_Portal {
 	}
 
 	private static function handle_event_management_action( $action ) {
-		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_portal_access' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
+		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_manage_events' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
 		$event_id = absint( $_POST['event_id'] ?? 0 );
 		if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Evento non accessibile.', 403 );
 		check_admin_referer( 'mi_portal_manage_event_' . $event_id, 'mi_portal_nonce' );
@@ -704,7 +732,7 @@ final class MI_Portal {
 	}
 
 	private static function can_manage_groups() {
-		return current_user_can( 'manage_options' ) || current_user_can( 'mi_manage_all_events' );
+		return current_user_can( 'manage_options' ) || current_user_can( 'mi_manage_groups' );
 	}
 
 	private static function redirect_group_result( $message, $error = false, $group_id = 0 ) {
@@ -720,7 +748,7 @@ final class MI_Portal {
 	}
 
 	private static function handle_group_action( $action ) {
-		if ( ! is_user_logged_in() || ! self::can_manage_groups() ) wp_die( 'Solo un amministratore o un segretario può gestire i gruppi.', 403 );
+		if ( ! is_user_logged_in() || ! self::can_manage_groups() ) wp_die( 'Solo un amministratore o un Gestore iscrizioni può gestire i gruppi.', 403 );
 		check_admin_referer( 'mi_portal_manage_groups', 'mi_portal_nonce' );
 		$group_id = absint( $_POST['group_id'] ?? 0 );
 		if ( 'create_group' === $action ) {
@@ -803,11 +831,13 @@ final class MI_Portal {
 		if ( ! current_user_can( 'mi_portal_access' ) && ! current_user_can( 'manage_options' ) ) return '<div class="mi-portal-empty"><h2>C’è qualcuno qui…?</h2><p>Il tuo account non è abilitato al servizio iscrizioni.</p></div>';
 		$view = sanitize_key( wp_unslash( $_GET['mi_portal_view'] ?? 'manage' ) );
 		$can_create = current_user_can( 'mi_create_events' ) || current_user_can( 'manage_options' );
+		$requested_edit_id = absint( $_GET['mi_portal_edit'] ?? $_GET['mi_portal_draft'] ?? 0 );
+		$can_edit_requested = $requested_edit_id && ( current_user_can( 'mi_manage_events' ) || current_user_can( 'manage_options' ) ) && MI_Access::can_access_event( $requested_edit_id );
 		ob_start();
 		?><main class="mi-portal"><header class="mi-portal-header"><div><span class="mi-portal-eyebrow">Area riservata</span><h1>Segreteria eventi</h1></div><a class="mi-portal-logout" href="<?php echo esc_url( wp_logout_url( self::base_url() ) ); ?>"><span aria-hidden="true">↗</span> Esci</a></header>
-		<nav class="mi-portal-switcher" aria-label="Segreteria eventi"><a class="<?php echo 'manage' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'manage', self::base_url() ) ); ?>"><?php echo esc_html( self::manage_label() ); ?></a><?php if ( $can_create ) : ?><a class="<?php echo 'create' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'create', self::base_url() ) ); ?>">Crea evento</a><?php endif; ?><a class="<?php echo 'registrations' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'registrations', self::base_url() ) ); ?>">Iscrizioni</a><a class="<?php echo 'communications' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'communications', self::base_url() ) ); ?>">Comunicazioni</a><?php if ( self::can_manage_groups() ) : ?><a class="<?php echo 'groups' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'groups', self::base_url() ) ); ?>">Gruppi</a><?php endif; ?><?php if ( current_user_can( 'manage_options' ) ) : ?><a class="<?php echo 'operators' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'operators', self::base_url() ) ); ?>">Operatori</a><?php endif; ?></nav>
+		<nav class="mi-portal-switcher" aria-label="Segreteria eventi"><a class="<?php echo 'manage' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'manage', self::base_url() ) ); ?>"><?php echo esc_html( self::manage_label() ); ?></a><?php if ( $can_create ) : ?><a class="<?php echo 'create' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'create', self::base_url() ) ); ?>">Crea evento</a><?php endif; ?><a class="<?php echo 'registrations' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'registrations', self::base_url() ) ); ?>">Iscrizioni</a><a class="<?php echo 'communications' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'communications', self::base_url() ) ); ?>">Comunicazioni</a><?php if ( self::can_manage_groups() ) : ?><a class="<?php echo 'groups' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'groups', self::base_url() ) ); ?>">Gruppi</a><?php endif; ?><?php if ( self::can_manage_module_users() ) : ?><a class="<?php echo 'operators' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'operators', self::base_url() ) ); ?>">Operatori</a><?php endif; ?></nav>
 		<?php $notice_near_outputs = 'manage' === $view && ! empty( $_GET['mi_portal_event'] ) && ! empty( $_GET['mi_portal_outputs'] ); if ( ! $notice_near_outputs ) self::notice(); ?>
-		<?php if ( 'create' === $view && $can_create ) self::create_view( absint( $_GET['mi_portal_edit'] ?? $_GET['mi_portal_draft'] ?? 0 ) ); elseif ( 'registrations' === $view ) self::portal_registrations_view(); elseif ( 'communications' === $view ) self::communications_view(); elseif ( 'groups' === $view && self::can_manage_groups() ) self::groups_view(); elseif ( 'operators' === $view && current_user_can( 'manage_options' ) ) self::operators_view(); else self::manage_view(); ?>
+		<?php if ( 'create' === $view && ( $can_create || $can_edit_requested ) ) self::create_view( $requested_edit_id ); elseif ( 'registrations' === $view ) self::portal_registrations_view(); elseif ( 'communications' === $view ) self::communications_view(); elseif ( 'groups' === $view && self::can_manage_groups() ) self::groups_view(); elseif ( 'operators' === $view && self::can_manage_module_users() ) self::operators_view(); else self::manage_view(); ?>
 		</main><?php
 		return ob_get_clean();
 	}
@@ -854,7 +884,7 @@ final class MI_Portal {
 	private static function login_view() {
 		$errore = ! empty( $_GET['mi_errore_accesso'] );
 		$attesa = ! empty( $_GET['mi_accesso_in_attesa'] );
-		ob_start(); ?><section class="mi-portal mi-portal-login"><span class="mi-portal-eyebrow">Area riservata</span><h1>Segreteria eventi</h1><p>Accedi con le credenziali personali del servizio. Il segretario opera su tutto; ogni operatore vede soltanto i gruppi assegnati.</p><?php if ( $errore ) : ?><div class="mi-portal-notice mi-portal-error" role="alert"><strong>Accesso non riuscito.</strong><p><?php echo $attesa ? 'Troppi tentativi ravvicinati. Attendi quindici minuti prima di riprovare.' : 'Controlla nome utente e parola d’accesso oppure contatta un amministratore.'; ?></p></div><?php endif; ?><form class="mi-portal-login__form" method="post" action="<?php echo esc_url( self::base_url() ); ?>"><input type="hidden" name="mi_portal_action" value="accedi_portale"><?php wp_nonce_field( 'mi_accesso_portale', 'mi_portal_nonce' ); ?><label for="mi-login-utente">Nome utente per l’accesso</label><input id="mi-login-utente" name="mi_nome_utente" type="text" maxlength="60" autocomplete="username" required><label for="mi-login-password">Parola d’accesso</label><input id="mi-login-password" name="mi_parola_accesso" type="password" autocomplete="current-password" required><p class="login-remember"><label><input name="mi_ricordami" type="checkbox" value="1"> Ricordami</label></p><button class="mi-primary" type="submit">Accedi</button></form></section><?php return ob_get_clean();
+		ob_start(); ?><section class="mi-portal mi-portal-login"><span class="mi-portal-eyebrow">Area riservata</span><h1>Segreteria eventi</h1><p>Accedi con le credenziali personali del servizio. Vedrai soltanto le funzioni e gli eventi compresi nel tuo ruolo.</p><?php if ( $errore ) : ?><div class="mi-portal-notice mi-portal-error" role="alert"><strong>Accesso non riuscito.</strong><p><?php echo $attesa ? 'Troppi tentativi ravvicinati. Attendi quindici minuti prima di riprovare.' : 'Controlla nome utente e parola d’accesso oppure contatta un amministratore.'; ?></p></div><?php endif; ?><form class="mi-portal-login__form" method="post" action="<?php echo esc_url( self::base_url() ); ?>"><input type="hidden" name="mi_portal_action" value="accedi_portale"><?php wp_nonce_field( 'mi_accesso_portale', 'mi_portal_nonce' ); ?><label for="mi-login-utente">Nome utente per l’accesso</label><input id="mi-login-utente" name="mi_nome_utente" type="text" maxlength="60" autocomplete="username" required><label for="mi-login-password">Parola d’accesso</label><input id="mi-login-password" name="mi_parola_accesso" type="password" autocomplete="current-password" required><p class="login-remember"><label><input name="mi_ricordami" type="checkbox" value="1"> Ricordami</label></p><button class="mi-primary" type="submit">Accedi</button></form></section><?php return ob_get_clean();
 	}
 
 	/** Autentica esclusivamente nella pagina autonoma della Segreteria, senza passare da wp-login.php. */
@@ -983,7 +1013,7 @@ final class MI_Portal {
 	}
 
 	private static function groups_view() {
-		if ( ! self::can_manage_groups() ) { wp_die( 'Solo un amministratore o un segretario può gestire i gruppi.', 403 ); }
+		if ( ! self::can_manage_groups() ) { wp_die( 'Solo un amministratore o un Gestore iscrizioni può gestire i gruppi.', 403 ); }
 		$groups = get_posts( array( 'post_type' => MI_Event_Post_Type::GROUP_TYPE, 'post_status' => array( 'publish', 'draft' ), 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) );
 		$event_counts = array();
 		$group_ids = array_map( 'absint', wp_list_pluck( $groups, 'ID' ) );
@@ -1009,22 +1039,51 @@ final class MI_Portal {
 	}
 
 	private static function operators_view() {
-		if ( ! current_user_can( 'manage_options' ) ) { wp_die( 'Solo un amministratore può gestire gli operatori.', 403 ); }
+		if ( ! self::can_manage_module_users() ) wp_die( 'Solo un amministratore o un Gestore iscrizioni può gestire gli operatori.', 403 );
 		$roles = self::operator_roles();
 		$groups = get_posts( array( 'post_type' => MI_Event_Post_Type::ACTIVITY_TYPE, 'post_status' => array( 'publish', 'draft' ), 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) );
+		$all_events = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) );
+		$events = array_values( array_filter( $all_events, static function ( $event ) {
+			if ( get_post_meta( $event->ID, '_mi_event_cancelled_at', true ) || get_post_meta( $event->ID, '_mi_event_archived_at', true ) ) return false;
+			$closes_at = (string) get_post_meta( $event->ID, '_mi_registration_closes_at', true );
+			$starts_at = (string) get_post_meta( $event->ID, '_mi_event_starts_at', true );
+			return ! self::is_past_event( $closes_at ?: $starts_at );
+		} ) );
 		$group_names = wp_list_pluck( $groups, 'post_title', 'ID' );
+		$event_names = wp_list_pluck( $all_events, 'post_title', 'ID' );
 		$operators = get_users( array( 'role__in' => array_keys( $roles ), 'orderby' => 'display_name', 'order' => 'ASC' ) );
 		?>
-		<section class="mi-operators"><div class="mi-operators__heading"><div><span class="mi-portal-eyebrow">Amministrazione</span><h2>Operatori</h2></div><p class="mi-portal-muted">Ogni persona usa credenziali proprie. Il segretario vede tutto; gestori e operatori sono limitati ai gruppi selezionati.</p></div>
+		<section class="mi-operators"><div class="mi-operators__heading"><div><span class="mi-portal-eyebrow">Amministrazione del modulo</span><h2>Operatori</h2></div><p class="mi-portal-muted">Il Gestore iscrizioni opera su tutto il servizio. Il Gestore gruppo crea e amministra gli eventi dei gruppi assegnati. Il Gestore evento amministra soltanto gli eventi ricevuti e non può crearne.</p></div>
 		<details class="mi-operator-create"><summary>Crea un nuovo operatore</summary><form method="post" autocomplete="off" data-mi-operator-form><input type="hidden" name="mi_portal_action" value="create_operator"><?php wp_nonce_field( 'mi_portal_manage_operators', 'mi_portal_nonce' ); ?>
 		<div class="mi-operator-grid"><label>Nome visualizzato<input name="operator_name" maxlength="120" required></label><label>Nome utente per l’accesso<input name="operator_username" maxlength="60" autocomplete="off" required></label><label>Email<input type="email" name="operator_email" maxlength="100" autocomplete="off" required></label><label>Parola d’accesso iniziale<input type="password" name="operator_password" minlength="12" autocomplete="new-password" required><small>Almeno 12 caratteri. Comunicala direttamente alla persona interessata.</small></label><label>Ruolo<select name="operator_role" required><?php foreach ( $roles as $code => $label ) : ?><option value="<?php echo esc_attr( $code ); ?>"><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select></label></div>
-		<fieldset data-mi-operator-groups hidden><legend>Gruppi assegnati</legend><div class="mi-operator-groups"><?php foreach ( $groups as $group ) : ?><label class="mi-check"><input type="checkbox" name="operator_groups[]" value="<?php echo esc_attr( $group->ID ); ?>"> <?php echo esc_html( $group->post_title ); ?></label><?php endforeach; ?></div></fieldset>
+		<?php self::operator_scope_fields( $groups, $events, $event_names ); ?>
 		<button class="mi-primary" type="submit">Crea operatore</button></form></details>
-		<div class="mi-operator-list"><?php if ( ! $operators ) : ?><p class="mi-portal-empty">Non sono ancora presenti operatori dedicati.</p><?php endif; ?><?php foreach ( $operators as $operator ) : $selected = MI_Access::activity_ids( $operator->ID ); $selected = is_array( $selected ) ? $selected : array(); $role = current( array_intersect( array_keys( $roles ), (array) $operator->roles ) ) ?: 'mi_event_operator'; $suspended = MI_Access::is_suspended( $operator->ID ); $selected_names = array_values( array_filter( array_map( static function ( $group_id ) use ( $group_names ) { return $group_names[ $group_id ] ?? ''; }, $selected ) ) ); $role_title = array( 'mi_secretary' => 'Segretario iscrizioni', 'mi_event_manager' => 'Gestore iscrizioni', 'mi_event_operator' => 'Operatore di gruppo' )[ $role ] ?? $role; $scope_description = 'mi_secretary' === $role ? 'tutti gli eventi' : ( ( 'mi_event_manager' === $role ? 'gestisce ' : 'consulta ' ) . ( $selected_names ? implode( ', ', $selected_names ) : 'nessun gruppo assegnato' ) ); ?>
+		<div class="mi-operator-list"><?php if ( ! $operators ) : ?><p class="mi-portal-empty">Non sono ancora presenti operatori dedicati.</p><?php endif; ?><?php foreach ( $operators as $operator ) :
+			$role = current( array_intersect( array_keys( $roles ), (array) $operator->roles ) ) ?: 'mi_assigned_event_manager';
+			$selected_groups = 'mi_group_manager' === $role ? MI_Access::activity_ids( $operator->ID ) : array();
+			$selected_groups = is_array( $selected_groups ) ? $selected_groups : array();
+			$selected_events = 'mi_assigned_event_manager' === $role ? MI_Access::event_ids( $operator->ID ) : array();
+			$selected_events = is_array( $selected_events ) ? $selected_events : array();
+			$suspended = MI_Access::is_suspended( $operator->ID );
+			$selected_group_names = array_values( array_filter( array_map( static function ( $group_id ) use ( $group_names ) { return $group_names[ $group_id ] ?? ''; }, $selected_groups ) ) );
+			$selected_event_names = array_values( array_filter( array_map( static function ( $event_id ) use ( $event_names ) { return $event_names[ $event_id ] ?? ''; }, $selected_events ) ) );
+			$role_title = array( 'mi_registration_manager' => 'Gestore iscrizioni', 'mi_group_manager' => 'Gestore gruppo', 'mi_assigned_event_manager' => 'Gestore evento' )[ $role ] ?? $role;
+			$scope_description = 'mi_registration_manager' === $role ? 'tutto il servizio' : ( 'mi_group_manager' === $role ? ( $selected_group_names ? implode( ', ', $selected_group_names ) : 'nessun gruppo assegnato' ) : ( $selected_event_names ? implode( ', ', $selected_event_names ) : 'nessun evento assegnato' ) );
+		?>
 		<details class="mi-operator-card<?php echo $suspended ? ' is-suspended' : ''; ?>"><summary><span><strong><?php echo esc_html( $operator->display_name ?: $operator->user_login ); ?></strong><small><?php echo esc_html( $operator->user_login . ' · ' . $role_title . ' — ' . $scope_description ); ?></small></span><em><?php echo $suspended ? 'Sospeso' : 'Attivo'; ?></em></summary><form method="post" autocomplete="off" data-mi-operator-form><input type="hidden" name="mi_portal_action" value="update_operator"><input type="hidden" name="operator_id" value="<?php echo esc_attr( $operator->ID ); ?>"><?php wp_nonce_field( 'mi_portal_manage_operators', 'mi_portal_nonce' ); ?>
 		<div class="mi-operator-grid"><label>Nome visualizzato<input name="operator_name" maxlength="120" value="<?php echo esc_attr( $operator->display_name ); ?>" required></label><label>Nome utente per l’accesso<input value="<?php echo esc_attr( $operator->user_login ); ?>" disabled><small>Il nome utente non può essere modificato.</small></label><label>Email<input type="email" name="operator_email" maxlength="100" value="<?php echo esc_attr( $operator->user_email ); ?>" required></label><label>Nuova parola d’accesso <small>(facoltativa)</small><input type="password" name="operator_password" minlength="12" autocomplete="new-password" placeholder="Lascia vuoto per non cambiarla"></label><label>Ruolo<select name="operator_role" required><?php foreach ( $roles as $code => $label ) : ?><option value="<?php echo esc_attr( $code ); ?>" <?php selected( $role, $code ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select></label></div>
-		<fieldset data-mi-operator-groups <?php echo 'mi_secretary' === $role ? 'hidden' : ''; ?>><legend>Gruppi assegnati</legend><div class="mi-operator-groups"><?php foreach ( $groups as $group ) : ?><label class="mi-check"><input type="checkbox" name="operator_groups[]" value="<?php echo esc_attr( $group->ID ); ?>" <?php checked( in_array( $group->ID, $selected, true ) ); ?>> <?php echo esc_html( $group->post_title ); ?></label><?php endforeach; ?></div></fieldset><label class="mi-check mi-operator-suspension"><input type="checkbox" name="operator_suspended" value="1" <?php checked( $suspended ); ?>> Sospendi l’accesso alla Segreteria eventi</label><button class="mi-primary" type="submit">Salva operatore</button></form></details>
+		<?php self::operator_scope_fields( $groups, $events, $event_names, $role, $selected_groups, $selected_events ); ?>
+		<label class="mi-check mi-operator-suspension"><input type="checkbox" name="operator_suspended" value="1" <?php checked( $suspended ); ?>> Sospendi l’accesso alla Segreteria eventi</label><button class="mi-primary" type="submit">Salva operatore</button></form></details>
 		<?php endforeach; ?></div></section>
+		<?php
+	}
+
+	private static function operator_scope_fields( $groups, $events, $event_names, $role = 'mi_registration_manager', $selected_groups = array(), $selected_events = array() ) {
+		$current_event_ids = array_map( 'absint', wp_list_pluck( $events, 'ID' ) );
+		$historical_event_ids = array_values( array_diff( $selected_events, $current_event_ids ) );
+		?>
+		<fieldset data-mi-operator-groups <?php echo 'mi_group_manager' === $role ? '' : 'hidden'; ?>><legend>Gruppi assegnati</legend><p class="mi-portal-muted">Può creare e gestire eventi soltanto in questi gruppi.</p><div class="mi-operator-groups"><?php foreach ( $groups as $group ) : ?><label class="mi-check"><input type="checkbox" name="operator_groups[]" value="<?php echo esc_attr( $group->ID ); ?>" <?php checked( in_array( $group->ID, $selected_groups, true ) ); ?>> <?php echo esc_html( $group->post_title ); ?></label><?php endforeach; ?></div></fieldset>
+		<fieldset data-mi-operator-events <?php echo 'mi_assigned_event_manager' === $role ? '' : 'hidden'; ?>><legend>Eventi in corso assegnati</legend><p class="mi-portal-muted">Può gestire completamente gli eventi selezionati, ma non crearne di nuovi.</p><div class="mi-operator-groups"><?php foreach ( $events as $event ) : ?><label class="mi-check"><input type="checkbox" name="operator_events[]" value="<?php echo esc_attr( $event->ID ); ?>" <?php checked( in_array( $event->ID, $selected_events, true ) ); ?>> <?php echo esc_html( $event->post_title ); ?></label><?php endforeach; ?></div><?php if ( $historical_event_ids ) : ?><p class="mi-portal-muted">Restano consultabili nello storico: <?php echo esc_html( implode( ', ', array_values( array_filter( array_map( static function ( $event_id ) use ( $event_names ) { return $event_names[ $event_id ] ?? ''; }, $historical_event_ids ) ) ) ) ); ?>.</p><?php foreach ( $historical_event_ids as $event_id ) : ?><input type="hidden" name="operator_events[]" value="<?php echo esc_attr( $event_id ); ?>"><?php endforeach; ?><?php endif; ?></fieldset>
 		<?php
 	}
 
@@ -1038,7 +1097,7 @@ final class MI_Portal {
 	private static function manage_view() {
 		global $wpdb;
 		$scope = MI_Access::event_ids();
-		if ( 'ALL' !== $scope && ! $scope ) { echo '<section class="mi-portal-empty"><div class="mi-portal-bubble">Na⁺</div><h2>C’è qualcuno qui…?</h2><p>Al momento non ti è stato assegnato nessun evento. Chiedi all’amministratore o al segretario di associarti a un evento.</p></section>'; return; }
+		if ( 'ALL' !== $scope && ! $scope ) { echo '<section class="mi-portal-empty"><div class="mi-portal-bubble">Na⁺</div><h2>C’è qualcuno qui…?</h2><p>Al momento non ti è stato assegnato nessun evento. Chiedi all’amministratore o al Gestore iscrizioni di associarti a un gruppo o a un evento.</p></section>'; return; }
 		$query = array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => -1, 'orderby' => 'date', 'order' => 'DESC', 'update_post_term_cache' => false );
 		if ( 'ALL' !== $scope ) $query['post__in'] = $scope;
 		$all_events = get_posts( $query );
@@ -1350,7 +1409,10 @@ final class MI_Portal {
 		$economic_mode_selected = strtoupper( (string) $value( '_mi_economic_mode', 'FULL_PAYMENT' ) );
 		$deposit_mode_selected = 'FIXED' === strtoupper( (string) $value( '_mi_deposit_mode', 'PERCENTAGE' ) ) ? 'FIXED' : 'PERCENTAGE';
 		$models = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft' ), 'numberposts' => 30, 'orderby' => 'date', 'order' => 'DESC' ) );
+		$models = array_values( array_filter( $models, static function ( $model ) { return MI_Access::can_access_event( $model->ID ); } ) );
 		$activities = get_posts( array( 'post_type' => MI_Event_Post_Type::ACTIVITY_TYPE, 'post_status' => array( 'publish', 'draft' ), 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) );
+		$activity_scope = MI_Access::activity_ids();
+		if ( 'ALL' !== $activity_scope ) $activities = array_values( array_filter( $activities, static function ( $activity ) use ( $activity_scope, $activity_id ) { return (int) $activity->ID === $activity_id || in_array( (int) $activity->ID, $activity_scope, true ); } ) );
 		$catalog = MI_Field_Schema::catalog();
 		$common_fields = array_intersect_key( $catalog, array_flip( array( 'email', 'phone', 'birth_date' ) ) );
 		$additional_fields = array_diff_key( $catalog, $common_fields );

@@ -261,33 +261,71 @@ final class MI_Activator {
 	}
 
 	private static function add_roles_and_capabilities() {
-		$capabilities = array(
-			'read'                  => true,
-			'mi_portal_access'      => true,
-			'mi_manage_events'      => true,
-			'mi_publish_events'     => true,
-			'mi_view_registrations' => true,
-			'mi_manage_payments'   => true,
+		$common = array(
+			'read'                     => true,
+			'mi_portal_access'         => true,
+			'mi_manage_events'         => true,
+			'mi_publish_events'        => true,
+			'mi_view_registrations'    => true,
+			'mi_manage_payments'       => true,
+			'mi_manage_communications' => true,
 		);
-
-		add_role( 'mi_event_manager', 'Gestore iscrizioni', $capabilities );
-		add_role( 'mi_secretary', 'Segretario iscrizioni', array( 'read' => true, 'mi_portal_access' => true, 'mi_manage_all_events' => true, 'mi_create_events' => true, 'mi_manage_events' => true, 'mi_publish_events' => true, 'mi_view_registrations' => true ) );
-		add_role( 'mi_event_operator', 'Operatore di gruppo', array( 'read' => true, 'mi_portal_access' => true, 'mi_view_registrations' => true ) );
-		$manager = get_role( 'mi_event_manager' );
-		if ( $manager ) {
-			foreach ( $capabilities as $capability => $grant ) {
-				$manager->add_cap( $capability, $grant );
-			}
+		$roles = array(
+			'mi_registration_manager' => array(
+				'name' => 'Gestore iscrizioni',
+				'caps' => array_merge( $common, array( 'mi_manage_all_events' => true, 'mi_create_events' => true, 'mi_manage_groups' => true, 'mi_manage_module_users' => true ) ),
+			),
+			'mi_group_manager' => array(
+				'name' => 'Gestore gruppo',
+				'caps' => array_merge( $common, array( 'mi_create_events' => true ) ),
+			),
+			'mi_assigned_event_manager' => array(
+				'name' => 'Gestore evento',
+				'caps' => $common,
+			),
+		);
+		$all_plugin_capabilities = array( 'mi_portal_access', 'mi_manage_all_events', 'mi_create_events', 'mi_manage_events', 'mi_publish_events', 'mi_view_registrations', 'mi_manage_payments', 'mi_manage_communications', 'mi_manage_groups', 'mi_manage_module_users' );
+		foreach ( $roles as $slug => $definition ) {
+			add_role( $slug, $definition['name'], $definition['caps'] );
+			$role = get_role( $slug );
+			if ( ! $role ) continue;
+			foreach ( $all_plugin_capabilities as $capability ) $role->remove_cap( $capability );
+			foreach ( $definition['caps'] as $capability => $grant ) $role->add_cap( $capability, $grant );
 		}
+		self::migrate_legacy_roles();
 		$administrator = get_role( 'administrator' );
 		if ( $administrator ) {
-			foreach ( array_merge( array_keys( $capabilities ), array( 'mi_portal_access', 'mi_manage_all_events', 'mi_create_events' ) ) as $capability ) {
+			foreach ( $all_plugin_capabilities as $capability ) {
 				$administrator->add_cap( $capability );
 			}
 		}
-		$secretary = get_role( 'mi_secretary' );
-		if ( $secretary ) foreach ( array( 'read', 'mi_portal_access', 'mi_manage_all_events', 'mi_create_events', 'mi_manage_events', 'mi_publish_events', 'mi_view_registrations' ) as $capability ) $secretary->add_cap( $capability );
-		$operator = get_role( 'mi_event_operator' );
-		if ( $operator ) foreach ( array( 'read', 'mi_portal_access', 'mi_view_registrations' ) as $capability ) $operator->add_cap( $capability );
+	}
+
+	/** Migra una sola volta i ruoli storici, preservando gli ambiti già assegnati. */
+	private static function migrate_legacy_roles() {
+		$mapping = array(
+			'mi_secretary'      => 'mi_registration_manager',
+			'mi_event_manager'  => 'mi_group_manager',
+			'mi_event_operator' => 'mi_assigned_event_manager',
+		);
+		foreach ( $mapping as $legacy_role => $new_role ) {
+			$users = get_users( array( 'role' => $legacy_role, 'fields' => array( 'ID' ) ) );
+			foreach ( $users as $user_record ) {
+				$user = get_user_by( 'id', (int) $user_record->ID );
+				if ( ! $user ) continue;
+				if ( 'mi_event_operator' === $legacy_role ) {
+					$groups = array_values( array_filter( array_map( 'absint', (array) get_user_meta( $user->ID, '_mi_activity_scope', true ) ) ) );
+					$events = $groups ? get_posts( array(
+						'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ),
+						'numberposts' => -1, 'fields' => 'ids', 'meta_query' => array( array( 'key' => '_mi_activity_id', 'value' => $groups, 'compare' => 'IN', 'type' => 'NUMERIC' ) ),
+					) ) : array();
+					update_user_meta( $user->ID, '_mi_event_scope', array_values( array_unique( array_map( 'absint', $events ) ) ) );
+				}
+				$user->remove_role( $legacy_role );
+				$user->add_role( $new_role );
+				if ( in_array( $new_role, array( 'mi_registration_manager', 'mi_assigned_event_manager' ), true ) ) delete_user_meta( $user->ID, '_mi_activity_scope' );
+			}
+			remove_role( $legacy_role );
+		}
 	}
 }

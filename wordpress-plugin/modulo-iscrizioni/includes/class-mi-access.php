@@ -29,7 +29,7 @@ final class MI_Access {
 
 	public static function is_global_manager( $user_id = 0 ) {
 		$user = $user_id ? get_user_by( 'id', $user_id ) : wp_get_current_user();
-		return $user && user_can( $user, 'manage_options' );
+		return $user && ( user_can( $user, 'manage_options' ) || user_can( $user, 'mi_manage_all_events' ) );
 	}
 
 	public static function activity_ids( $user_id = 0 ) {
@@ -49,9 +49,9 @@ final class MI_Access {
 	public static function can_access_event( $event_id, $user_id = 0 ) {
 		$user = $user_id ? get_user_by( 'id', $user_id ) : wp_get_current_user();
 		if ( $user && user_can( $user, 'mi_manage_all_events' ) ) return true;
-		if ( $user && in_array( 'mi_event_operator', (array) $user->roles, true ) ) {
-			$scope = self::event_ids( $user->ID );
-			return in_array( absint( $event_id ), $scope, true );
+		if ( $user && in_array( 'mi_assigned_event_manager', (array) $user->roles, true ) ) {
+			$scope = get_user_meta( $user->ID, '_mi_event_scope', true );
+			return in_array( absint( $event_id ), array_map( 'absint', is_array( $scope ) ? $scope : array() ), true );
 		}
 		return self::can_access_activity( absint( get_post_meta( $event_id, '_mi_activity_id', true ) ), $user_id );
 	}
@@ -60,6 +60,10 @@ final class MI_Access {
 		$user_id = $user_id ?: get_current_user_id();
 		$user = get_user_by( 'id', $user_id );
 		if ( $user && ( user_can( $user, 'manage_options' ) || user_can( $user, 'mi_manage_all_events' ) ) ) return 'ALL';
+		if ( $user && in_array( 'mi_assigned_event_manager', (array) $user->roles, true ) ) {
+			$scope = get_user_meta( $user_id, '_mi_event_scope', true );
+			return array_values( array_unique( array_filter( array_map( 'absint', is_array( $scope ) ? $scope : array() ) ) ) );
+		}
 		$groups = self::activity_ids( $user_id );
 		if ( ! is_array( $groups ) || ! $groups ) return array();
 		return array_values( array_map( 'absint', get_posts( array(
@@ -98,12 +102,12 @@ final class MI_Access {
 		if ( ! is_admin() || ! $query->is_main_query() || MI_Event_Post_Type::EVENT_TYPE !== $query->get( 'post_type' ) || self::is_global_manager() ) {
 			return;
 		}
-		$scope = self::activity_ids();
+		$scope = self::event_ids();
 		if ( empty( $scope ) ) {
 			$query->set( 'post__in', array( 0 ) );
 			return;
 		}
-		$query->set( 'meta_query', array( array( 'key' => '_mi_activity_id', 'value' => $scope, 'compare' => 'IN', 'type' => 'NUMERIC' ) ) );
+		$query->set( 'post__in', $scope );
 	}
 
 	public static function guard_event_editor() {
@@ -112,12 +116,12 @@ final class MI_Access {
 		}
 		$post_id = absint( $_GET['post'] );
 		if ( MI_Event_Post_Type::EVENT_TYPE === get_post_type( $post_id ) && ! self::can_access_event( $post_id ) ) {
-			wp_die( esc_html__( 'Questo evento non appartiene ai gruppi assegnati.', 'modulo-iscrizioni' ), 403 );
+			wp_die( esc_html__( 'Questo evento non rientra nel tuo ambito assegnato.', 'modulo-iscrizioni' ), 403 );
 		}
 	}
 
 	public static function profile_scope( $user ) {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( 'manage_options' ) || ! in_array( 'mi_group_manager', (array) $user->roles, true ) ) {
 			return;
 		}
 		$selected = self::activity_ids( $user->ID );
@@ -131,7 +135,7 @@ final class MI_Access {
 		<table class="form-table"><tr><th>Gruppi assegnati</th><td>
 		<?php if ( ! $activities ) : ?><p>Crea prima almeno un gruppo.</p><?php endif; ?>
 		<?php foreach ( $activities as $activity ) : ?><label><input type="checkbox" name="mi_activity_scope[]" value="<?php echo esc_attr( $activity->ID ); ?>" <?php checked( in_array( $activity->ID, $selected, true ) ); ?>> <?php echo esc_html( $activity->post_title ); ?></label><br><?php endforeach; ?>
-		<p class="description">Usato soltanto per utenti con ruolo Gestore iscrizioni. Gli amministratori mantengono accesso globale.</p>
+		<p class="description">Usato soltanto per utenti con ruolo Gestore gruppo. Gli amministratori e i Gestori iscrizioni mantengono accesso globale.</p>
 		</td></tr></table>
 		<?php
 	}
@@ -140,6 +144,8 @@ final class MI_Access {
 		if ( ! current_user_can( 'manage_options' ) || ! isset( $_POST['mi_activity_scope_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['mi_activity_scope_nonce'] ) ), 'mi_save_activity_scope_' . $user_id ) ) {
 			return;
 		}
+		$user = get_user_by( 'id', $user_id );
+		if ( ! $user || ! in_array( 'mi_group_manager', (array) $user->roles, true ) ) return;
 		$scope = isset( $_POST['mi_activity_scope'] ) ? array_values( array_filter( array_map( 'absint', (array) wp_unslash( $_POST['mi_activity_scope'] ) ) ) ) : array();
 		update_user_meta( $user_id, '_mi_activity_scope', $scope );
 	}

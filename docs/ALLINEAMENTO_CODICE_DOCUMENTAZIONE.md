@@ -1,13 +1,13 @@
 # Allineamento tra documentazione e codice
 
-Verifica sistematica aggiornata per WordPress 3.23.22 e Workspace 1.8.0. Questo documento prevale sulle descrizioni progettuali quando occorre distinguere ciò che è già disponibile dalla sola architettura prevista.
+Verifica sistematica aggiornata per WordPress 3.23.23 e Workspace 1.8.0. Questo documento prevale sulle descrizioni progettuali quando occorre distinguere ciò che è già disponibile dalla sola architettura prevista.
 
 ## Implementato e verificato
 
 | Comportamento confermato | Stato nel codice | Verifica |
 |---|---|---|
-| Evento associato a un solo gruppo e accesso delegato limitato per gruppo | Implementato | controlli capability e assegnazione gruppo nel plugin; il nome tecnico storico resta interno per compatibilità |
-| Segreteria eventi WordPress unificata | Implementato | eventi, creazione, iscrizioni e comunicazioni nello stesso portale; segretario globale e operatori limitati ai gruppi assegnati |
+| Evento associato a un solo gruppo e accesso delegato per servizio, gruppo o evento | Implementato | capability esplicite e ambiti server-side; gli identificativi dei vecchi ruoli sono migrati e rimossi |
+| Segreteria eventi WordPress unificata | Implementato | Gestore iscrizioni globale, Gestore gruppo con creazione limitata ai gruppi assegnati e Gestore evento limitato ai singoli eventi ricevuti |
 | Revisione pubblicata e snapshot dell'iscrizione | Implementato | revisione, hash e snapshot persistiti e replicati |
 | Capienza globale/per tipologia, lista d'attesa, scadenza e rilascio posti | Implementato | servizio iscrizioni e test strutturali/comportamentali |
 | Nome e cognome di ogni partecipante obbligatori | Implementato | validazione WordPress e GAS |
