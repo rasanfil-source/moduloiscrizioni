@@ -66,6 +66,8 @@ In Gestisci eventi la scheda di dettaglio si apre nella griglia, subito dopo la 
 
 Il foglio interno «Registra movimento» segue quattro passaggi visibili e numerati: Prenotazione, Movimento, Tracciabilità, Verifica e registra. Il codice ordine viene scelto dall’elenco delle iscrizioni; stato, evento, referente, totale, versato e residuo vengono riletti dal registro prima della conferma. Le tendine native di Google Sheets sono il controllo canonico per tipo, rata e metodo. Il blu notte identifica la struttura, il verde compare soltanto dopo una registrazione convalidata e l’operatore deve spuntare una conferma esplicita per evitare inserimenti accidentali. La chiave idempotente resta nascosta e viene rinnovata soltanto dopo il successo.
 
+La lista d’attesa separa tre momenti: richiesta registrata, proposta temporanea e prenotazione accettata. La prima email precisa che non occorre pagare o agire; quando si libera posto, il sistema lo riserva per 48 ore salvo diversa configurazione dell’evento e invia un collegamento personale. La pagina collegata offre due azioni esplicite, «Accetta il posto» e «Rinuncia». Solo dopo l’accettazione vengono comunicate conferma e, se applicabili, istruzioni e scadenza di pagamento.
+
 La schermata Operatori rende visibile l’ambito prima del salvataggio. Il Gestore iscrizioni non mostra selettori perché opera sull’intero servizio; il Gestore gruppo mostra i gruppi assegnabili; il Gestore evento mostra soltanto gli eventi in corso assegnabili. Ruolo e ambito sono sempre riepilogati nella tessera dell’utente.
 
 ### Email del sistema

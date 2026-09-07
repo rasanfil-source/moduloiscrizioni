@@ -50,8 +50,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.23\.23\b/);
-  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.23'\s*\)/);
+  assert.match(source, /Version:\s+3\.23\.24\b/);
+  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.24'\s*\)/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -802,7 +802,9 @@ test('il prezzo supporta una quota di partecipazione uguale per tutti', async ()
 	assert.match(eventType, /value="FIXED"[\s\S]*Quota di partecipazione uguale per tutti/);
 	assert.match(eventType, /_mi_fixed_price_cents/);
 	assert.match(service, /'FIXED' === \$event\['pricing_mode'\]/);
-	assert.match(shortcode, /name="buyerEmail" type="email"[^>]*autocomplete="email">/);
+	assert.match(shortcode, /name="buyerEmail" type="email" maxlength="254"/);
+	assert.match(shortcode, /\$waitlist_email_required \? 'required ' : ''/);
+	assert.match(shortcode, /autocomplete="email">/);
 	assert.match(shortcode, /<h3 data-mi-participants-heading>Prenotazione<\/h3>/);
 	assert.match(shortcode, /mi-registration__availability[^>]*role="status"><span>/);
 	assert.match(await read('assets/public.css'), /\.mi-focused-page \.mi-registration p\.mi-registration__availability \{ display:flex;[^}]*padding:\.9rem 1rem;[^}]*flex-direction:column;gap:\.3rem/);
@@ -811,6 +813,9 @@ test('il prezzo supporta una quota di partecipazione uguale per tutti', async ()
 	assert.match(publicScript, /field\.help && field\.key !== 'birth_date'/);
 	assert.match(publicScript, /revealInvalidField\(invalid\)/);
 	assert.match(publicScript, /scrollIntoView\(\{ behavior:[^}]*block: 'center'/);
+	assert.match(publicScript, /Iscrizione confermata\. È stata inviata un’email di conferma alla casella: \$\{confirmationEmail\}/);
+	assert.match(publicScript, /Iscrizione confermata\. È stata registrata a nome di \$\{confirmationName\}\./);
+	assert.doesNotMatch(publicScript, /Iscrizione confermata\. Codice:/);
 	assert.match(portal, /'_mi_privacy_policy_version'.*wp_date\( 'Y-m' \)/);
 	assert.match(portal, /'_mi_privacy_consent_id'.*'privacy-' \. \$event_id/);
 	assert.match(adminScript, /\['FIXED', 'CALCULATED'\]/);
@@ -1007,20 +1012,41 @@ test('il registro pagamenti filtra in SQL, pagina la UI ed esporta a blocchi', a
   assert.match(admin, /Riepilogo filtro/);
 });
 
-test('rimborsi, scadenza originaria e lista attesa sono riconciliati', async () => {
+test('la lista d’attesa propone il posto con accettazione, rinuncia e scadenza sicure', async () => {
   const activator = await read('includes/class-mi-activator.php');
   const service = await read('includes/class-mi-registration-service.php');
   const admin = await read('includes/class-mi-admin.php');
+  const portal = await read('includes/class-mi-portal.php');
+  const email = await read('includes/class-mi-modello-email.php');
+  const plugin = await read('includes/class-mi-plugin.php');
   assert.match(activator, /payment_deadline_at/);
+  assert.match(activator, /waitlist_offer_token_hash char\(64\)/);
+  assert.match(activator, /waitlist_offer_expiry/);
   assert.match(admin, /\$net_paid/);
   assert.match(admin, /\$locked\['payment_deadline_at'\]/);
   assert.match(service, /promote_waitlisted_locked/);
-  assert.match(service, /WAITLIST_PROMOTED/);
-  assert.match(service, /WAITLIST_PROMOTION/);
+  assert.match(service, /WAITLIST_OFFERED/);
+  assert.match(service, /WAITLIST_ACCEPTED/);
+  assert.match(service, /WAITLIST_DECLINED/);
+  assert.match(service, /WAITLIST_OFFER_EXPIRED/);
+  assert.match(service, /hash\( 'sha256', \$offer_token \)/);
   assert.match(service, /ORDER BY created_at, id FOR UPDATE/);
   assert.match(service, /'publish' !== get_post_status\( \$event_id \)/);
   assert.match(service, /participant_cancel_url/);
-  assert.match(service, /\$email_values\['_participant_management'\]/);
+  assert.match(service, /expire_due_waitlist_offers/);
+  assert.match(service, /Nessun pagamento richiesto prima dell.accettazione/);
+  assert.match(plugin, /expire_due_waitlist_offers/);
+  const shortcode = await read('includes/class-mi-shortcode.php');
+  const portalScript = await read('assets/portal.js');
+  assert.match(shortcode, /\$waitlist_email_required = \$event\['availability'\]\['full'\] && \$event\['waitlist_enabled'\]/);
+  assert.match(portal, /data-mi-waitlist-offer/);
+  assert.match(portalScript, /updateWaitlist/);
+  assert.match(await read('assets/public.js'), /Richiesta inserita in lista d.attesa\. Riceverai gli aggiornamenti alla casella:/);
+  assert.doesNotMatch(await read('assets/public.js'), /Richiesta inserita in lista d.attesa\. Codice:/);
+  assert.match(portal, /Accetta il posto/);
+  assert.match(portal, /value="DECLINE"/);
+  assert.match(email, /Per ora non devi pagare né fare altro/);
+  assert.match(email, /Rispondi alla proposta/);
 });
 
 test('la rimozione dei dati di solo transito usa lo schema storico dell’iscrizione', async () => {
@@ -1875,10 +1901,32 @@ test('il controllo saldo può essere limitato all evento del pulsante', async ()
 
 test('la coerenza temporale impedisce nuove scadenze passate e segnala quelle già presenti', async () => {
   const portal = await read('includes/class-mi-portal.php');
+	const portalScript = await read('assets/portal.js');
   assert.match(portal, /La chiusura delle iscrizioni non può essere precedente a questo momento\./);
+	assert.match(portal, /La chiusura delle iscrizioni non può essere successiva all.inizio dell.evento\./);
   assert.match(portal, /\$is_expired = self::is_past_event\( \$closes_at \)/);
-  assert.match(portal, /\$is_expired \? 'Scaduto'/);
+  assert.match(portal, /Iscrizioni dal /);
   assert.match(portal, /current_time\( 'Y-m-d\\TH:i' \)/);
+	assert.match(portalScript, /validateWizardRelations = updateDateLimits/);
+	assert.match(portalScript, /dateFields\.forEach[\s\S]*field\.addEventListener\('input',[\s\S]*updateDateLimits\(\)/);
+	assert.match(portalScript, /form\.addEventListener\('submit',[\s\S]*validateWizardRelations\(\)/);
+});
+
+test('il percorso guidato limita le persone comprese in una prenotazione', async () => {
+	const portal = await read('includes/class-mi-portal.php');
+	const portalScript = await read('assets/portal.js');
+	const publicScript = await read('assets/public.js');
+	const service = await read('includes/class-mi-registration-service.php');
+	assert.match(portal, /Quante persone può comprendere una prenotazione\?/);
+	assert.match(portal, /name="booking_limit_mode" value="ONE"/);
+	assert.match(portal, /name="booking_limit_mode" value="MULTIPLE"/);
+	assert.match(portal, /name="max_per_order" min="2" max="20"/);
+	assert.match(portal, /'max_per_order' => \$max_per_order/);
+	assert.match(portal, /data-mi-max-per-order/);
+	assert.match(portalScript, /updateBookingLimit/);
+	assert.match(portalScript, /Massimo per prenotazione:/);
+	assert.match(service, /\$item_quantity > \(int\) \$allowed\[ \$code \]\['max_per_order'\]/);
+	assert.match(publicScript, /max: input\.max/);
 });
 
 test('il wizard limita l anno delle date a quattro cifre', async () => {
