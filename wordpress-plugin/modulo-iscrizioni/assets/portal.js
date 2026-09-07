@@ -63,6 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const back = form.querySelector('[data-mi-back]');
     const next = form.querySelector('[data-mi-next]');
     const save = form.querySelector('button[type="submit"]');
+	let validateWizardRelations = () => {};
     if (save) next.parentElement.append(save);
 	const backUrl = form.dataset.miBackUrl || '';
 	const coverImage = form.querySelector('[name="cover_image"][data-mi-max-bytes]');
@@ -137,14 +138,17 @@ document.addEventListener('DOMContentLoaded', () => {
       if (save) save.hidden = index !== steps.length - 1;
       if (index === steps.length - 1) {
         const value = (name) => form.querySelector(`[name="${name}"]`)?.value || 'Da definire';
+		const multipleBooking = form.querySelector('[name="booking_limit_mode"]:checked')?.value === 'MULTIPLE';
+		const bookingLimit = multipleBooking ? value('max_per_order') : '1';
         const review = form.querySelector('[data-mi-review]');
-        if (review) review.innerHTML = `<strong>${value('title')}</strong><span>Inizio: ${value('starts_at')}</span><span>Chiusura iscrizioni: ${value('closes_at')}</span><span>Posti: ${value('capacity')}</span>`;
+		if (review) review.innerHTML = `<strong>${value('title')}</strong><span>Inizio: ${value('starts_at')}</span><span>Chiusura iscrizioni: ${value('closes_at')}</span><span>Posti: ${value('capacity')}</span><span>Massimo per prenotazione: ${bookingLimit}</span>`;
 		renderConfirmationPreview();
       }
     };
 	form.querySelectorAll('[name="confirmation_email_subject"], [name="confirmation_email_text"]').forEach((field) => field.addEventListener('input', renderConfirmationPreview));
     const advance = () => {
-      const fields = [...steps[index].querySelectorAll('[required]')];
+	  validateWizardRelations();
+	  const fields = [...steps[index].querySelectorAll('input, select, textarea')].filter((field) => !field.disabled);
       if (fields.some((field) => !field.reportValidity())) return;
 	  if (coverImage && steps[index].contains(coverImage) && !validateCoverImage()) return;
       index = Math.min(steps.length - 1, index + 1);
@@ -159,7 +163,8 @@ document.addEventListener('DOMContentLoaded', () => {
       index = Math.max(0, index - 1);
       show();
     });
-    form.querySelector('button[type="submit"]')?.addEventListener('click', (event) => {
+	form.addEventListener('submit', (event) => {
+	  validateWizardRelations();
       const invalid = [...form.elements].find((field) => !field.disabled && field.validity && !field.validity.valid);
       if (!invalid) return;
       event.preventDefault();
@@ -168,7 +173,45 @@ document.addEventListener('DOMContentLoaded', () => {
       show();
       invalid.reportValidity();
     });
+    // La validazione nativa precede submit: rendi visibile il campo prima del focus.
+    form.addEventListener('invalid', (event) => {
+      const invalidStep = steps.findIndex((step) => step.contains(event.target));
+      if (invalidStep < 0) return;
+      index = invalidStep;
+      show();
+    }, true);
+    save?.addEventListener('click', () => validateWizardRelations());
     const pricing = form.querySelector('[data-mi-pricing]');
+	const waitlist = form.querySelector('[data-mi-waitlist]');
+	const waitlistOffer = form.querySelector('[data-mi-waitlist-offer]');
+	const updateWaitlist = () => {
+	  if (!waitlistOffer) return;
+	  waitlistOffer.hidden = !waitlist?.checked;
+	  const input = waitlistOffer.querySelector('input');
+	  if (input) input.disabled = !waitlist?.checked;
+	};
+	waitlist?.addEventListener('change', updateWaitlist);
+	updateWaitlist();
+	const bookingLimit = form.querySelector('[data-mi-booking-limit]');
+	const bookingLimitValue = form.querySelector('[data-mi-booking-limit-value]');
+	const updateBookingLimit = () => {
+	  const multiple = bookingLimit?.querySelector('[name="booking_limit_mode"]:checked')?.value === 'MULTIPLE';
+	  if (bookingLimitValue) bookingLimitValue.hidden = !multiple;
+	  const input = bookingLimitValue?.querySelector('input');
+	  if (input) input.disabled = !multiple;
+	};
+	bookingLimit?.querySelectorAll('[name="booking_limit_mode"]').forEach((option) => option.addEventListener('change', updateBookingLimit));
+	const copyEvent = form.querySelector('[data-mi-copy-event]');
+	copyEvent?.addEventListener('change', () => {
+	  const copiedMaximum = Number.parseInt(copyEvent.selectedOptions[0]?.dataset.miMaxPerOrder || '', 10);
+	  if (!copyEvent.value || !Number.isInteger(copiedMaximum)) return;
+	  const mode = bookingLimit?.querySelector(`[name="booking_limit_mode"][value="${copiedMaximum > 1 ? 'MULTIPLE' : 'ONE'}"]`);
+	  if (mode) mode.checked = true;
+	  const input = bookingLimitValue?.querySelector('input');
+	  if (input) input.value = String(Math.min(20, Math.max(2, copiedMaximum)));
+	  updateBookingLimit();
+	});
+	updateBookingLimit();
     const overnight = form.querySelector('[data-mi-overnight]');
     const rooms = form.querySelector('[data-mi-accommodations]');
     const updateOvernight = () => {
@@ -321,11 +364,6 @@ document.addEventListener('DOMContentLoaded', () => {
       latest.setFullYear(latest.getFullYear() + 10);
       field.setCustomValidity(date > latest ? 'La data dell’evento non può essere oltre dieci anni nel futuro.' : '');
     };
-    dateFields.forEach((field) => {
-      field.addEventListener('input', () => { enforceFourDigitYear(field); validateFourDigitYear(field); });
-      field.addEventListener('change', () => validateFourDigitYear(field));
-      validateFourDigitYear(field);
-    });
     const updateDateLimits = () => {
       dateFields.forEach((field) => validateFourDigitYear(field));
       const opening = parseItalianDate(opensAt?.value || '');
@@ -334,8 +372,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (opening && closing && closing < opening) closesAt.setCustomValidity('La chiusura non può precedere l’apertura delle iscrizioni.');
       if (closing && start && start < closing) startsAt.setCustomValidity('L’inizio dell’evento non può precedere la chiusura delle iscrizioni.');
     };
-    opensAt?.addEventListener('change', updateDateLimits);
-    closesAt?.addEventListener('change', updateDateLimits);
+	validateWizardRelations = updateDateLimits;
+	dateFields.forEach((field) => {
+	  field.addEventListener('input', () => { enforceFourDigitYear(field); updateDateLimits(); });
+	  field.addEventListener('change', updateDateLimits);
+	});
     updateDateLimits();
     show();
   }

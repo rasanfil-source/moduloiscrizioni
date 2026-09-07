@@ -151,6 +151,40 @@ final class MI_Modello_Email {
 		return $snapshot;
 	}
 
+	/** Comunicazione dedicata: la richiesta è in coda e non richiede azioni o pagamenti. */
+	public static function crea_istantanea_lista_attesa( $event_id, $values ) {
+		$snapshot = self::crea_istantanea( $event_id, $values );
+		$name = sanitize_text_field( (string) ( $values['{{sottoscrittore.nome_completo}}'] ?? '' ) );
+		$title = sanitize_text_field( (string) ( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) ) );
+		$summary = sanitize_text_field( (string) ( $values['{{ordine.riepilogo}}'] ?? '' ) );
+		$snapshot['oggetto'] = 'Richiesta in lista d’attesa — ' . $title;
+		$snapshot['preheader'] = 'La richiesta è stata registrata. Per ora non devi fare nulla.';
+		$snapshot['html'] = '<p>Ciao ' . esc_html( $name ) . ',</p><p>la tua richiesta per <strong>' . esc_html( $title ) . '</strong> è stata inserita in lista d’attesa.</p>' . ( $summary ? '<p><strong>Partecipazione:</strong> ' . esc_html( $summary ) . '</p>' : '' ) . '<p>Il posto non è ancora confermato. Per ora non devi pagare né fare altro.</p><p>Se si libereranno posti compatibili con la tua richiesta, riceverai un’altra email con il termine entro cui accettare o rinunciare.</p>';
+		$snapshot['testo'] = "Ciao {$name},\n\nla tua richiesta per {$title} è stata inserita in lista d’attesa.\n\nIl posto non è ancora confermato. Per ora non devi pagare né fare altro.\n\nSe si libereranno posti compatibili con la tua richiesta, riceverai un’altra email con il termine entro cui accettare o rinunciare.";
+		$snapshot['identificativo'] = array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' );
+		$snapshot['gestione_partecipanti'] = array();
+		$snapshot['status_url'] = '';
+		return $snapshot;
+	}
+
+	/** Comunicazione dedicata: il posto è riservato fino alla scadenza indicata. */
+	public static function crea_istantanea_offerta_lista_attesa( $event_id, $values, $offer_url, $expires_label ) {
+		$snapshot = self::crea_istantanea( $event_id, $values );
+		$name = sanitize_text_field( (string) ( $values['{{sottoscrittore.nome_completo}}'] ?? '' ) );
+		$title = sanitize_text_field( (string) ( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) ) );
+		$expires_label = sanitize_text_field( (string) $expires_label );
+		$snapshot['oggetto'] = 'Si è liberato un posto — ' . $title;
+		$snapshot['preheader'] = 'Accetta o rinuncia entro ' . $expires_label . '.';
+		$snapshot['html'] = '<p>Ciao ' . esc_html( $name ) . ',</p><p>si sono liberati i posti richiesti per <strong>' . esc_html( $title ) . '</strong>.</p><p>Li abbiamo riservati per te fino a <strong>' . esc_html( $expires_label ) . '</strong>.</p><p>Apri il collegamento e scegli <strong>Accetta il posto</strong> oppure <strong>Rinuncia</strong>. Se non rispondi entro il termine, la proposta scadrà e i posti passeranno alla richiesta successiva.</p><p>Non effettuare pagamenti prima di aver accettato.</p>';
+		$snapshot['testo'] = "Ciao {$name},\n\nsi sono liberati i posti richiesti per {$title}. Li abbiamo riservati per te fino a {$expires_label}.\n\nApri il collegamento e scegli Accetta il posto oppure Rinuncia. Se non rispondi entro il termine, la proposta scadrà e i posti passeranno alla richiesta successiva.\n\nNon effettuare pagamenti prima di aver accettato.";
+		$snapshot['identificativo'] = array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' );
+		$snapshot['gestione_partecipanti'] = array();
+		$snapshot['status_url'] = '';
+		$snapshot['action_url'] = esc_url_raw( (string) $offer_url );
+		$snapshot['action_label'] = 'Rispondi alla proposta';
+		return $snapshot;
+	}
+
 	public static function crea_istantanea_operativa( $event_id, $values, $template_type, $message, $status_url ) {
 		$snapshot = self::crea_istantanea( $event_id, $values );
 		$snapshot['identificativo']['modalita'] = 'NONE';
@@ -276,6 +310,9 @@ final class MI_Modello_Email {
 			$management_html .= '</td></tr></table>';
 		}
 		$status_html = ! empty( $istantanea['status_url'] ) ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . esc_url( $istantanea['status_url'] ) . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">Controlla stato e saldo</a></td></tr></table>' : '';
+		$action_url = ! empty( $istantanea['action_url'] ) ? esc_url( $istantanea['action_url'] ) : '';
+		$action_label = sanitize_text_field( (string) ( $istantanea['action_label'] ?? 'Apri' ) );
+		$action_html = $action_url ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . $action_url . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">' . esc_html( $action_label ) . '</a></td></tr></table>' : '';
 		$footer = nl2br( esc_html( $istantanea['footer'] ?? '' ) );
 		$code = (string) $codice_html;
 
@@ -286,7 +323,7 @@ final class MI_Modello_Email {
 			. '<div style="font-size:22px;font-weight:700;line-height:1.3;">' . esc_html( $title ?: 'Comunicazione iscrizione' ) . '</div>'
 			. ( $activity_name ? '<div style="font-size:13px;line-height:1.4;margin-top:5px;opacity:0.9;">' . esc_html( $activity_name ) . '</div>' : '' )
 			. '</td></tr><tr><td style="padding:26px 22px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:18px;line-height:1.65;">'
-			. $body . $code . $cta . $status_html . $management_html
+			. $body . $code . $action_html . $cta . $status_html . $management_html
 			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#eef2ff" style="width:100%;margin-top:20px;background:#eef2ff;border-radius:14px;"><tr><td style="padding:16px 20px;font-family:Arial,Helvetica,sans-serif;color:#333333;"><div style="font-size:15px;font-weight:700;margin-bottom:8px;">Assistenza</div><div style="font-size:14px;line-height:1.7;">' . $assistance . '</div></td></tr></table>'
 			. '<div style="font-family:Arial,Helvetica,sans-serif;color:' . esc_attr( $secondary ) . ';font-size:14px;font-style:italic;font-weight:700;margin-top:18px;text-align:right;">' . $footer . '</div>'
 			. '</td></tr></table>'
@@ -308,6 +345,7 @@ final class MI_Modello_Email {
 			! empty( $event['url'] ) ? 'Pagina evento: ' . esc_url_raw( $event['url'] ) : '',
 			$management_lines ? "Gestisci le partecipazioni:\n" . implode( "\n", $management_lines ) : '',
 			! empty( $istantanea['status_url'] ) ? 'Controlla stato e saldo: ' . esc_url_raw( $istantanea['status_url'] ) : '',
+			! empty( $istantanea['action_url'] ) ? sanitize_text_field( (string) ( $istantanea['action_label'] ?? 'Apri' ) ) . ': ' . esc_url_raw( $istantanea['action_url'] ) : '',
 			! empty( $email_identity['indirizzo_risposte'] ) ? 'Assistenza: ' . sanitize_email( $email_identity['indirizzo_risposte'] ) : 'Assistenza: rispondi a questa email.',
 			sanitize_textarea_field( (string) ( $istantanea['footer'] ?? '' ) ),
 		) );

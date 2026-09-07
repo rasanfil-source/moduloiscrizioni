@@ -527,11 +527,18 @@
         if (!response.ok) throw new Error(result.message || 'Invio non riuscito.');
         form.hidden = true;
         successBox.hidden = false;
+		const confirmationEmail = String(formData.get('buyerEmail') || '').trim();
+		const confirmationName = [formData.get('buyerFirstName'), formData.get('buyerLastName')]
+		  .map((value) => String(value || '').trim())
+		  .filter(Boolean)
+		  .join(' ');
 		const successText = result.status === 'WAITLISTED'
-		  ? `Richiesta inserita in lista d’attesa. Codice: ${result.order_code}`
+		  ? `Richiesta inserita in lista d’attesa. Riceverai gli aggiornamenti alla casella: ${confirmationEmail}`
 		  : result.status === 'PENDING_PAYMENT'
 			? `Prenotazione registrata e in attesa di pagamento. Codice: ${result.order_code}. Importo da versare: ${formatCurrency(result.economic_summary.initial_due_cents)}`
-			: `Iscrizione confermata. Codice: ${result.order_code}`;
+			: confirmationEmail
+			  ? `Iscrizione confermata. È stata inviata un’email di conferma alla casella: ${confirmationEmail}`
+			  : `Iscrizione confermata. È stata registrata a nome di ${confirmationName}.`;
         successBox.textContent = successText;
         if (config.event.identifier_display === 'QR') {
 		  try {

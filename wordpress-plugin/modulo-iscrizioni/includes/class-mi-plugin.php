@@ -32,6 +32,7 @@ final class MI_Plugin {
 		add_action( 'mi_sync_workspace_pending', array( 'MI_Registration_Service', 'sync_pending_workspace' ) );
 		add_action( 'mi_sync_workspace_registration', array( 'MI_Registration_Service', 'sincronizza_iscrizione_workspace' ) );
 		add_action( 'mi_expire_registrations', array( 'MI_Registration_Service', 'expire_due_registrations' ) );
+		add_action( 'mi_expire_registrations', array( 'MI_Registration_Service', 'expire_due_waitlist_offers' ), 20 );
 	}
 
 	public function load_textdomain() {

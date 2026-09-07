@@ -1,4 +1,4 @@
-# Modulo Iscrizioni — versione 3.23.23
+# Modulo Iscrizioni — versione 3.23.24
 
 Plugin WordPress per configurare e pubblicare moduli, raccogliere iscrizioni e consegnarle in modo firmato alla console operativa Google Workspace.
 
@@ -13,6 +13,7 @@ Plugin WordPress per configurare e pubblicare moduli, raccogliere iscrizioni e c
 - profili dati configurabili e approvazione esplicita dei campi privacy ad alto impatto;
 - consenso privacy versionato e consenso facoltativo separato per comunicazioni su future iniziative;
 - scadenza delle prenotazioni non saldate e annullamento con rilascio idempotente dei posti;
+- lista d’attesa con email dedicate, proposta temporanea configurabile, accettazione o rinuncia tramite collegamento personale e passaggio automatico al candidato successivo;
 - pagamenti e rimborsi manuali serializzati, auditati e privi di dati completi di carta;
 - outbox email con anteprima, prova sintetica, modalità operativa protetta, retry e recupero;
 - identificativo `NONE`, `TEXT`, `QR` o `BARCODE`, generato localmente anche nell’email;

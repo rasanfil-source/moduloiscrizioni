@@ -110,6 +110,9 @@ final class MI_Activator {
 			marketing_accepted_at datetime NULL,
 			expires_at datetime NULL,
 			payment_deadline_at datetime NULL,
+			waitlist_offer_token_hash char(64) NULL,
+			waitlist_offered_at datetime NULL,
+			waitlist_offer_expires_at datetime NULL,
 			capacity_released_at datetime NULL,
 			created_at datetime NOT NULL,
 			PRIMARY KEY  (id),
@@ -120,6 +123,7 @@ final class MI_Activator {
 			KEY workspace_status (workspace_status),
 			KEY workspace_queue (workspace_status,workspace_attempts,id),
 			KEY waitlist_queue (event_id,status,capacity_released_at,created_at),
+			KEY waitlist_offer_expiry (status,waitlist_offer_expires_at),
 			KEY payment_deadline (status,payment_deadline_at)
 		) ENGINE=InnoDB {$charset};" );
 
@@ -234,7 +238,7 @@ final class MI_Activator {
 			KEY effective_at (effective_at),
 			UNIQUE KEY origin_payment (origin_channel,origin_id)
 		) ENGINE=InnoDB {$charset};" );
-		$wpdb->query( "UPDATE {$registrations} SET payment_deadline_at = expires_at WHERE payment_deadline_at IS NULL AND expires_at IS NOT NULL" );
+		$wpdb->query( "UPDATE {$registrations} SET payment_deadline_at = expires_at WHERE payment_deadline_at IS NULL AND expires_at IS NOT NULL AND status IN ('CONFIRMED','PENDING_PAYMENT')" );
 
 		self::backfill_ticket_counters( $ticket_counters, $registrations, $items );
 		update_option( 'mi_db_version', MI_VERSION, false );
@@ -251,7 +255,7 @@ final class MI_Activator {
 			$wpdb->prepare(
 				"INSERT INTO {$ticket_counters} (event_id, ticket_type_code, confirmed_count, waitlisted_count, updated_at)
 				 SELECT r.event_id, i.ticket_type_code,
-				 SUM(CASE WHEN r.status IN ('CONFIRMED','PENDING_PAYMENT') AND r.capacity_released_at IS NULL THEN i.quantity ELSE 0 END),
+				 SUM(CASE WHEN r.status IN ('CONFIRMED','PENDING_PAYMENT','WAITLIST_OFFERED') AND r.capacity_released_at IS NULL THEN i.quantity ELSE 0 END),
 				 SUM(CASE WHEN r.status = 'WAITLISTED' AND r.capacity_released_at IS NULL THEN i.quantity ELSE 0 END), %s
 				 FROM {$items} i INNER JOIN {$registrations} r ON r.id = i.registration_id
 				 GROUP BY r.event_id, i.ticket_type_code",

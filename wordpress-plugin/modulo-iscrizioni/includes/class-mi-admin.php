@@ -629,7 +629,7 @@ final class MI_Admin {
 	}
 
 	private static function etichetta_stato( $status ) {
-		$labels = array( 'PENDING_PAYMENT' => 'In attesa di pagamento', 'CONFIRMED' => 'Confermata', 'WAITLISTED' => 'Lista d’attesa', 'CANCELLED' => 'Annullata', 'EXPIRED' => 'Scaduta' );
+		$labels = array( 'PENDING_PAYMENT' => 'In attesa di pagamento', 'CONFIRMED' => 'Confermata', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto', 'CANCELLED' => 'Annullata', 'EXPIRED' => 'Scaduta' );
 		return $labels[ $status ] ?? (string) $status;
 	}
 
