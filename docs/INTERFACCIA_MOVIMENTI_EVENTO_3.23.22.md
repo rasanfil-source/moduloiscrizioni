@@ -14,6 +14,13 @@ Il modulo limita le prenotazioni all’evento corrente e, dopo la scelta, mostra
 stato, referente, totale, versato e residuo. I menu cambiano in base allo snapshot
 della prenotazione:
 
+- il selettore mostra **nome e cognome**, è ricercabile digitando le prime lettere
+  e conserva il codice prenotazione in una mappa nascosta;
+- gli omonimi sono distinti con un progressivo visuale, senza esporre il codice;
+- il campo **Riferimento** è facoltativo;
+- campi modificabili, riepilogo non modificabile, residuo, comando e messaggi di
+  stato hanno segnali grafici distinti;
+
 - soluzione unica: rata **Intero**;
 - caparra e saldo: **Caparra**, **Intermedio**, **Saldo**;
 - metodi: soltanto quelli abilitati nell’evento;

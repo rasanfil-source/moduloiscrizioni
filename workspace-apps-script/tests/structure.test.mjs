@@ -126,6 +126,11 @@ test('i fogli evento mostrano il modulo movimento soltanto quando non sono total
   assert.match(form, /ScriptApp\.deleteTrigger\(trigger\)/);
   assert.match(form, /modalita_economica === 'DEPOSIT_BALANCE'|modalita === 'DEPOSIT_BALANCE'/);
   assert.match(form, /fonti_pagamento_json/);
+  assert.match(form, /Prenotazione \*/);
+  assert.match(form, /Riferimento \(facoltativo\)/);
+  assert.match(form, /requireValueInRange/);
+  assert.match(form, /codiceSceltaInterfacciaMovimentoEvento_/);
+  assert.match(form, /localeCompare\(b\.etichetta, 'it'/);
   const rotazione = form.indexOf("setValue(creaIdentificativoOpaco_('pevui'))", form.indexOf('function registraMovimentoInterfacciaEvento_'));
   const pulizia = form.indexOf('getRangeList([MI_EVENT_MOVEMENT_FORM.AMOUNT', rotazione);
   assert.ok(rotazione >= 0 && pulizia > rotazione);

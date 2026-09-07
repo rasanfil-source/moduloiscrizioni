@@ -12,7 +12,7 @@ function environment(events = []) {
     SpreadsheetApp: {
       newDataValidation: () => {
         const rule = { values: [] };
-        return { requireValueInList(values) { rule.values = [...values]; return this; }, setAllowInvalid() { return this; }, build() { return rule; } };
+        return { requireValueInList(values) { rule.values = [...values]; return this; }, requireValueInRange(range) { rule.range = range; return this; }, setAllowInvalid() { return this; }, build() { return rule; } };
       }
     }
   };
@@ -25,8 +25,11 @@ function environment(events = []) {
       const state = cells.get(a1);
       return {
         clearDataValidations() { state.validation = null; return this; },
+        clearContent() { state.value = ''; return this; },
         setDataValidation(rule) { state.validation = rule; return this; },
         setValue(value) { state.value = value; return this; },
+        setBackground(value) { state.background = value; return this; },
+        setFontColor(value) { state.fontColor = value; return this; },
         getValue() { return state.value; }
       };
     }
@@ -47,6 +50,20 @@ test('le schede economiche distinguono evento totalmente gratuito e tutti gli al
   assert.equal(env.context.eventoPrevedeMovimenti_('3'), true);
   assert.equal(env.context.eventoPrevedeMovimenti_('4'), true);
   assert.equal(env.context.eventoPrevedeMovimenti_('5'), false);
+});
+
+test('il selettore mostra nomi ordinati, mantiene i codici nascosti e distingue gli omonimi', () => {
+  const env = environment();
+  const scelte = env.context.creaSceltePrenotazioniInterfacciaMovimentoEvento_([
+    { codice_ordine: 'ORD-3', nome_referente: 'Luca', cognome_referente: 'Bianchi' },
+    { codice_ordine: 'ORD-1', nome_referente: 'Anna', cognome_referente: 'Rossi' },
+    { codice_ordine: 'ORD-2', nome_referente: 'Anna', cognome_referente: 'Rossi' }
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(scelte)), [
+    { etichetta: 'Anna Rossi (1)', codice: 'ORD-1' },
+    { etichetta: 'Anna Rossi (2)', codice: 'ORD-2' },
+    { etichetta: 'Luca Bianchi', codice: 'ORD-3' }
+  ]);
 });
 
 test('il modulo propone rata e metodo ammessi dalla configurazione della prenotazione', () => {
