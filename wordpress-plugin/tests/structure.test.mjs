@@ -50,8 +50,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.23\.22\b/);
-  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.22'\s*\)/);
+  assert.match(source, /Version:\s+3\.23\.23\b/);
+  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.23'\s*\)/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -352,8 +352,8 @@ test('il portale web riusa WordPress e limita operatori ed eventi sul server', a
   assert.match(portal, /MI_Access::can_access_event/);
   assert.match(access, /_mi_activity_scope/);
   assert.match(access, /meta_query/);
-  assert.match(activator, /mi_secretary/);
-  assert.match(activator, /mi_event_operator/);
+  assert.match(activator, /mi_registration_manager/);
+  assert.match(activator, /mi_assigned_event_manager/);
   assert.doesNotMatch(eventType, /Operatori dell’evento/);
   assert.match(portal, /Segreteria eventi/);
   assert.match(portal, /prepare_communication/);
@@ -1568,8 +1568,9 @@ test('presentazione e operatori usano testi sintetici e informazioni concrete', 
   assert.match(portal, /self::limit_text_lines/);
   assert.match(shortcode, /nl2br\( esc_html\( \$event\['description'\] \) \)/);
   assert.match(script, /textarea\[data-mi-max-lines\]/);
-  assert.match(portal, /\$selected_names/);
-  assert.match(portal, /'gestisce ' : 'consulta '/);
+  assert.match(portal, /\$selected_group_names/);
+  assert.match(portal, /\$selected_event_names/);
+  assert.match(portal, /'tutto il servizio'/);
   assert.doesNotMatch(portal, /si apre in una nuova scheda/);
 });
 
@@ -1781,7 +1782,7 @@ test('il wizard distingue anteprima e pubblicazione e crea il foglio pubblicando
 	assert.match(portal, /prepara_produzioni_workspace\( \$event_id, 'BOZZA' \)/);
 	assert.match(portal, /prepara_produzioni_workspace\( \$event_id, 'PUBBLICATO' \)/);
   assert.match(portal, /ensure_published_revision\( \$event_id, true \)/);
-  assert.match(activator, /mi_secretary[\s\S]*mi_publish_events/);
+  assert.match(activator, /mi_registration_manager[\s\S]*mi_publish_events/);
 });
 
 test('gli eventi senza copertina ereditano anche l’immagine in evidenza del gruppo', async () => {
@@ -1835,14 +1836,20 @@ test('la vista gruppi calcola i conteggi eventi con una sola query aggregata', a
   assert.doesNotMatch(groupsView, /\$event_count = count\( get_posts/);
 });
 
-test('i gruppi degli operatori compaiono soltanto per i ruoli limitati', async () => {
+test('l interfaccia degli operatori mostra soltanto l ambito pertinente al ruolo', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const script = await read('assets/portal.js');
-  assert.match(portal, /'mi_secretary'\s*=>\s*'Segretario/);
+  assert.match(portal, /'mi_registration_manager'\s*=>\s*'Gestore iscrizioni/);
+  assert.match(portal, /'mi_group_manager'\s*=>\s*'Gestore gruppo/);
+  assert.match(portal, /'mi_assigned_event_manager'\s*=>\s*'Gestore evento/);
   assert.match(portal, /data-mi-operator-form/);
-  assert.match(portal, /data-mi-operator-groups hidden/);
-  assert.match(script, /role\.value === 'mi_secretary'/);
-  assert.match(script, /groups\.hidden = globalAccess/);
+  assert.match(portal, /data-mi-operator-groups/);
+  assert.match(portal, /data-mi-operator-events/);
+  assert.match(portal, /Eventi in corso assegnati/);
+  assert.match(script, /role\.value === 'mi_group_manager'/);
+  assert.match(script, /role\.value === 'mi_assigned_event_manager'/);
+  assert.match(script, /groups\.hidden = !usesGroups/);
+  assert.match(script, /events\.hidden = !usesEvents/);
 });
 
 test('il portale allinea Ricordami e conserva per trenta giorni le bozze cestinate', async () => {
@@ -1895,24 +1902,43 @@ test('la Segreteria eventi gestisce operatori, ruoli, gruppi, password e sospens
   const access = await read('includes/class-mi-access.php');
   const css = await read('assets/portal.css');
   assert.match(portal, /mi_portal_view', 'operators'/);
-  assert.match(portal, /current_user_can\( 'manage_options' \)[\s\S]*>Operatori</);
+  assert.match(portal, /self::can_manage_module_users\(\)[\s\S]*>Operatori</);
   assert.match(portal, /function handle_operator_action/);
   assert.match(portal, /wp_insert_user/);
   assert.match(portal, /wp_update_user/);
   assert.match(portal, /operator_password/);
   assert.match(portal, /_mi_activity_scope/);
+  assert.match(portal, /_mi_event_scope/);
   assert.match(portal, /_mi_access_suspended/);
-  assert.match(portal, /mi_secretary[\s\S]*mi_event_manager[\s\S]*mi_event_operator/);
+  assert.match(portal, /mi_registration_manager[\s\S]*mi_group_manager[\s\S]*mi_assigned_event_manager/);
   assert.match(access, /wp_authenticate_user/);
   assert.match(access, /function block_suspended_user/);
   assert.match(css, /\.mi-operator-card/);
 });
 
-test('il Gestore iscrizioni riceve accesso al portale anche se il ruolo esiste già', async () => {
+test('i tre ruoli del modulo ricevono capability e ambiti distinti', async () => {
   const activator = await read('includes/class-mi-activator.php');
-  assert.match(activator, /\$capabilities = array\([\s\S]*'mi_portal_access'\s*=>\s*true/);
-  assert.match(activator, /add_role\( 'mi_event_manager', 'Gestore iscrizioni', \$capabilities \)/);
-  assert.match(activator, /foreach \( \$capabilities as \$capability => \$grant \)[\s\S]*\$manager->add_cap\( \$capability, \$grant \)/);
+  const access = await read('includes/class-mi-access.php');
+  const eventType = await read('includes/class-mi-event-post-type.php');
+  assert.match(activator, /'mi_registration_manager'[\s\S]*'mi_manage_all_events'[\s\S]*'mi_manage_module_users'/);
+  assert.match(activator, /'mi_group_manager'[\s\S]*'mi_create_events'/);
+  assert.match(activator, /'mi_assigned_event_manager'[\s\S]*'caps'\s*=>\s*\$common/);
+  assert.match(activator, /function migrate_legacy_roles/);
+  assert.match(activator, /remove_role\( \$legacy_role \)/);
+  assert.match(access, /mi_assigned_event_manager[\s\S]*_mi_event_scope/);
+  assert.match(eventType, /'create_posts'\s*=>\s*'mi_create_events'/);
+});
+
+test('le azioni sensibili verificano capability e ambito sul server', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const access = await read('includes/class-mi-access.php');
+  assert.match(portal, /cancel_participant_portal[\s\S]*current_user_can\( 'mi_manage_events' \)[\s\S]*MI_Access::can_access_event/);
+  assert.match(portal, /function handle_event_management_action[\s\S]*current_user_can\( 'mi_manage_events' \)[\s\S]*MI_Access::can_access_event/);
+  assert.match(portal, /function handle_communication_action[\s\S]*current_user_can\( 'mi_manage_communications' \)[\s\S]*MI_Access::can_access_event/);
+  assert.match(portal, /\$required_capability = \$existing_event_id \? 'mi_manage_events' : 'mi_create_events'/);
+  assert.match(portal, /Gruppo non accessibile/);
+  assert.match(access, /function event_ids[\s\S]*mi_assigned_event_manager[\s\S]*_mi_event_scope/);
+  assert.match(access, /scope_event_list[\s\S]*self::event_ids\(\)[\s\S]*post__in/);
 });
 
 test('il normale accesso WordPress non viene sostituito dalla Segreteria', async () => {

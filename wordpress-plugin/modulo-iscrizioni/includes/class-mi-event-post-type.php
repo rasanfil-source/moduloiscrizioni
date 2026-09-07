@@ -46,7 +46,7 @@ final class MI_Event_Post_Type {
 			'delete_published_posts' => 'mi_manage_events',
 			'edit_private_posts'     => 'mi_manage_events',
 			'edit_published_posts'   => 'mi_manage_events',
-			'create_posts'           => 'mi_manage_events',
+			'create_posts'           => 'mi_create_events',
 		);
 
 		register_post_type(

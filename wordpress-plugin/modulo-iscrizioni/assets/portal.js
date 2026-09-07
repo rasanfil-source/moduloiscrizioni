@@ -572,14 +572,18 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('[data-mi-operator-form]').forEach((operatorForm) => {
 	const role = operatorForm.querySelector('select[name="operator_role"]');
 	const groups = operatorForm.querySelector('[data-mi-operator-groups]');
-	if (!role || !groups) return;
-	const updateOperatorGroups = () => {
-	  const globalAccess = role.value === 'mi_secretary';
-	  groups.hidden = globalAccess;
-	  groups.querySelectorAll('input[name="operator_groups[]"]').forEach((field) => { field.disabled = globalAccess; });
+	const events = operatorForm.querySelector('[data-mi-operator-events]');
+	if (!role || !groups || !events) return;
+	const updateOperatorScope = () => {
+	  const usesGroups = role.value === 'mi_group_manager';
+	  const usesEvents = role.value === 'mi_assigned_event_manager';
+	  groups.hidden = !usesGroups;
+	  events.hidden = !usesEvents;
+	  groups.querySelectorAll('input[name="operator_groups[]"]').forEach((field) => { field.disabled = !usesGroups; });
+	  events.querySelectorAll('input[name="operator_events[]"]').forEach((field) => { field.disabled = !usesEvents; });
 	};
-	role.addEventListener('change', updateOperatorGroups);
-	updateOperatorGroups();
+	role.addEventListener('change', updateOperatorScope);
+	updateOperatorScope();
   });
 
 	const eventLinks = [...document.querySelectorAll('[data-mi-event-open]')];

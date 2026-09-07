@@ -7,8 +7,9 @@ Il servizio di gestione deve essere una pagina web pubblicamente raggiungibile, 
 Il portale non coincide con `wp-admin`. Riusa però l'autenticazione e la sessione sicura di WordPress:
 
 - un amministratore già autenticato entra senza un secondo accesso;
-- il segretario usa il proprio account e vede tutti gli eventi del servizio;
-- un operatore usa il proprio account e vede esclusivamente gli eventi assegnati.
+- il Gestore iscrizioni usa il proprio account e amministra tutto il servizio;
+- il Gestore gruppo opera soltanto nei gruppi assegnati;
+- il Gestore evento opera soltanto nei singoli eventi ricevuti.
 
 ## Credenziali e ruoli
 
@@ -17,16 +18,17 @@ Le password non vengono mai salvate nei metadati dell'evento e non vengono mai m
 | Ruolo | Ambito |
 | --- | --- |
 | Amministratore | Tutte le funzioni del portale e le normali funzioni WordPress |
-| Segretario | Tutte le funzioni del portale, nessun accesso alle altre parti del sito |
-| Operatore | Solo eventi assegnati, relative iscrizioni e azioni consentite |
+| Gestore iscrizioni | Tutte le funzioni del modulo, compresi gruppi e operatori, senza amministrare il resto del sito |
+| Gestore gruppo | Pieni poteri sugli eventi dei gruppi assegnati; può creare nuovi eventi in quei gruppi |
+| Gestore evento | Pieni poteri sui singoli eventi in corso assegnati; non può creare eventi |
 
-Nella scheda evento l'amministratore può scegliere uno o più operatori esistenti, crearne uno nuovo con una password iniziale robusta, assegnarlo a più eventi e revocare una singola assegnazione. L'evento conserva gli ID utente assegnati, non nomi e password. Un esempio come `Francesco:26` è troppo debole e deve essere rifiutato.
+L'amministratore e il Gestore iscrizioni possono creare e sospendere gli operatori del modulo. La schermata mostra i gruppi soltanto per il Gestore gruppo e gli eventi correnti soltanto per il Gestore evento. Le assegnazioni conservano ID WordPress, mai nomi o password. Un esempio come `Francesco:26` è troppo debole e deve essere rifiutato.
 
 ## Pagina iniziale autenticata
 
 Dopo l'accesso compaiono:
 
-1. il pulsante `Crea nuovo evento`, per amministratore e segretario;
+1. il pulsante `Crea nuovo evento`, per amministratore, Gestore iscrizioni e Gestore gruppo;
 2. gli eventi in corso o in bozza accessibili all'utente;
 3. le dieci iscrizioni più recenti comprese nello stesso ambito.
 
