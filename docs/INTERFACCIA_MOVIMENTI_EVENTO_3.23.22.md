@@ -14,9 +14,10 @@ Il modulo limita le prenotazioni all’evento corrente e, dopo la scelta, mostra
 stato, referente, totale, versato e residuo. I menu cambiano in base allo snapshot
 della prenotazione:
 
-- il selettore mostra **nome e cognome**, è ricercabile digitando le prime lettere
-  e conserva il codice prenotazione in una mappa nascosta;
-- gli omonimi sono distinti con un progressivo visuale, senza esporre il codice;
+- il selettore mostra **nome e cognome** come informazione principale ed è
+  ricercabile digitando le prime lettere;
+- il codice prenotazione compare dopo il nome, separato e in seconda posizione,
+  per distinguere con certezza gli omonimi e alimenta la mappa interna;
 - il campo **Riferimento** è facoltativo;
 - campi modificabili, riepilogo non modificabile, residuo, comando e messaggi di
   stato hanno segnali grafici distinti;

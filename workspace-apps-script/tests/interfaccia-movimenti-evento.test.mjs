@@ -52,7 +52,7 @@ test('le schede economiche distinguono evento totalmente gratuito e tutti gli al
   assert.equal(env.context.eventoPrevedeMovimenti_('5'), false);
 });
 
-test('il selettore mostra nomi ordinati, mantiene i codici nascosti e distingue gli omonimi', () => {
+test('il selettore mostra nomi ordinati e il codice in seconda posizione per distinguere gli omonimi', () => {
   const env = environment();
   const scelte = env.context.creaSceltePrenotazioniInterfacciaMovimentoEvento_([
     { codice_ordine: 'ORD-3', nome_referente: 'Luca', cognome_referente: 'Bianchi' },
@@ -60,9 +60,9 @@ test('il selettore mostra nomi ordinati, mantiene i codici nascosti e distingue 
     { codice_ordine: 'ORD-2', nome_referente: 'Anna', cognome_referente: 'Rossi' }
   ]);
   assert.deepEqual(JSON.parse(JSON.stringify(scelte)), [
-    { etichetta: 'Anna Rossi (1)', codice: 'ORD-1' },
-    { etichetta: 'Anna Rossi (2)', codice: 'ORD-2' },
-    { etichetta: 'Luca Bianchi', codice: 'ORD-3' }
+    { etichetta: 'Anna Rossi · ORD-1', codice: 'ORD-1' },
+    { etichetta: 'Anna Rossi · ORD-2', codice: 'ORD-2' },
+    { etichetta: 'Luca Bianchi · ORD-3', codice: 'ORD-3' }
   ]);
 });
 
