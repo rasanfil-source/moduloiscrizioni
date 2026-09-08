@@ -534,7 +534,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	  progress.hidden = false;
 	  if (!progress.textContent.trim()) {
 		progress.textContent = action === 'publish_event_portal'
-		  ? 'Attendere, prego: sto creando il foglio Google e pubblicando l’evento.'
+		  ? 'Sto creando il foglio Google e pubblicando l’evento.'
 		  : 'Salvataggio in corso…';
 	  }
 	});

@@ -138,6 +138,7 @@ final class MI_Registration_Service {
 			'participant_fields'=> array_merge( MI_Field_Schema::public_fields( $field_configuration ), MI_Field_Schema::sanitize_custom_fields( get_post_meta( $event_id, '_mi_custom_participant_fields', true ) ) ),
 			'participant_extra_scope' => 'ALL' === strtoupper( (string) get_post_meta( $event_id, '_mi_participant_extra_scope', true ) ) ? 'ALL' : 'ONE',
 			'special_requests_enabled' => '1' === get_post_meta( $event_id, '_mi_special_requests_enabled', true ),
+			'completion_url' => esc_url_raw( (string) get_post_meta( $event_id, '_mi_completion_url', true ), array( 'http', 'https' ) ),
 			'payment_deadline_at'=> (string) get_post_meta( $event_id, '_mi_payment_deadline_at', true ),
 			'reservation_minutes'=> min( 10080, absint( get_post_meta( $event_id, '_mi_reservation_minutes', true ) ) ),
 			'privacy_url'      => $privacy_url,

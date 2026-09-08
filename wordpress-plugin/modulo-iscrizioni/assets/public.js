@@ -17,6 +17,10 @@
     const errorBox = root.querySelector('[data-mi-error]');
     const successBox = root.querySelector('[data-mi-success]');
     const submitButton = root.querySelector('.mi-registration__submit');
+    const paymentInstructionsNote = document.createElement('p');
+    paymentInstructionsNote.className = 'mi-registration__payment-instructions-note';
+    paymentInstructionsNote.hidden = true;
+    root.querySelector('.mi-registration__action-bar').before(paymentInstructionsNote);
     const economicSummary = root.querySelector('[data-mi-economic-summary]');
 	const buyerFirstName = form.elements.namedItem('buyerFirstName');
 	const buyerLastName = form.elements.namedItem('buyerLastName');
@@ -176,6 +180,8 @@
 	  backButton.hidden = currentStep === 1;
 	  nextButton.hidden = currentStep === 3;
 	  submitButton.hidden = currentStep !== 3;
+      paymentInstructionsNote.hidden = currentStep !== 3 || totalCents() <= 0 || !['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(config.event.economic_mode);
+      paymentInstructionsNote.textContent = `Nell’email di conferma ${totalQuantity() > 1 ? 'delle prenotazioni' : 'della prenotazione'} riceverai le istruzioni per il pagamento.`;
 	  nextButton.textContent = currentStep === 2 ? 'Vai alla conferma' : 'Continua';
 	  updateStickySummary();
 	  if (focusHeading) steps[currentStep - 1]?.querySelector('h2')?.focus();
@@ -191,11 +197,11 @@
         steps[2].querySelector('h2').after(summary);
       }
       summary.replaceChildren();
-      const line = (parent, title, value) => {
+      const line = (parent, title, value, emphasizeValue = false) => {
         const row = document.createElement('p');
         const label = document.createElement('strong');
         label.textContent = title;
-        const detail = document.createElement('span');
+        const detail = document.createElement(emphasizeValue ? 'strong' : 'span');
         detail.textContent = value;
         row.append(label, detail);
         parent.append(row);
@@ -233,13 +239,13 @@
       const requests = form.elements.namedItem('specialRequests')?.value.trim();
       if (requests) line(summary, 'Richieste particolari', requests);
       const total = totalCents();
-      line(summary, 'Totale prenotazione', total > 0 ? formatCurrency(total) : 'Gratuito');
+      line(summary, 'Totale prenotazione', total > 0 ? formatCurrency(total) : 'Gratuito', true);
       if (total > 0 && config.event.economic_mode === 'DEPOSIT_BALANCE') {
         const deposit = config.event.deposit_mode === 'FIXED'
           ? Math.min(total, (Number(config.event.deposit_fixed_cents) || 0) * totalQuantity())
           : Math.round(total * Number(config.event.deposit_percentage || 30) / 100);
-        line(summary, 'Caparra', formatCurrency(deposit));
-        line(summary, 'Saldo successivo', formatCurrency(total - deposit));
+        line(summary, 'Caparra', formatCurrency(deposit), true);
+        line(summary, 'Saldo successivo', formatCurrency(total - deposit), true);
       }
     }
 
@@ -376,17 +382,22 @@
     }
 
     function participantOptionQuantity(input) {
-      return input.type === 'radio' ? (input.checked ? 1 : 0) : (Number.parseInt(input.value, 10) || 0);
+      return ['radio', 'checkbox'].includes(input.type) ? (input.checked ? 1 : 0) : (Number.parseInt(input.value, 10) || 0);
     }
 
     function configuredParticipantOption(option, value, index) {
       const label = document.createElement('label');
       const isAccommodation = String(option.code || '').startsWith('alloggio-');
-      label.className = isAccommodation ? 'mi-registration__option-choice' : '';
+      const isSingleChoice = Number(option.max_quantity || 1) === 1;
+      label.className = isAccommodation || isSingleChoice ? 'mi-registration__option-choice' : '';
       const input = document.createElement('input');
-      input.type = isAccommodation ? 'radio' : 'number';
+      input.type = isAccommodation ? 'radio' : (isSingleChoice ? 'checkbox' : 'number');
       if (isAccommodation) {
         input.name = `participant-${index}-accommodation`;
+        input.value = '1';
+        input.checked = String(value) === '1';
+      } else if (isSingleChoice) {
+        input.name = `participant-${index}-option-${option.code}`;
         input.value = '1';
         input.checked = String(value) === '1';
       } else {
@@ -396,7 +407,7 @@
         input.name = `participant-${index}-option-${option.code}`;
       }
       input.dataset.miParticipantOption = option.code;
-      input.addEventListener(isAccommodation ? 'change' : 'input', () => { renderEconomicSummary(); updateStickySummary(); });
+      input.addEventListener(isAccommodation || isSingleChoice ? 'change' : 'input', () => { renderEconomicSummary(); updateStickySummary(); });
       const text = document.createElement('span');
       text.textContent = `${option.name}${Number(option.price_cents) > 0 ? ` · ${formatCurrency(option.price_cents)}` : ''}`;
       label.append(input, text);
@@ -469,8 +480,50 @@
       input.addEventListener('input', () => { renderEconomicSummary(); updateStickySummary(); });
     });
 
+    let accommodationNotice = null;
+    function confirmMissingAccommodation() {
+      accommodationNotice?.remove();
+      accommodationNotice = null;
+      const missing = Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).filter((row) => {
+        const choices = Array.from(row.querySelectorAll('[data-mi-participant-option]')).filter((input) => input.dataset.miParticipantOption.startsWith('alloggio-'));
+        return choices.length && !choices.some((input) => participantOptionQuantity(input) > 0);
+      });
+      if (!missing.length) return false;
+      const notice = document.createElement('section');
+      notice.className = 'mi-registration__accommodation-notice';
+      notice.tabIndex = -1;
+      const title = document.createElement('h3');
+      title.textContent = 'Siamo sicuri?';
+      const description = document.createElement('p');
+      const names = missing.map((row) => [row.querySelector('[data-mi-first-name]')?.value, row.querySelector('[data-mi-last-name]')?.value].map((value) => String(value || '').trim()).filter(Boolean).join(' ') || row.querySelector('legend')?.textContent || 'Iscritto');
+      const namesLabel = names.length > 1 ? `${names.slice(0, -1).join(', ')} e ${names[names.length - 1]}` : names[0];
+      description.textContent = `${namesLabel} ${names.length === 1 ? 'non ha scelto' : 'non hanno scelto'} alloggio.`;
+      const choose = document.createElement('button');
+      choose.type = 'button';
+      choose.textContent = 'No, scegli l’alloggio';
+      choose.addEventListener('click', () => {
+        notice.remove();
+        missing[0].querySelector('[data-mi-participant-option^="alloggio-"]')?.focus();
+      });
+      const proceed = document.createElement('button');
+      proceed.type = 'button';
+      proceed.textContent = 'Sì, prosegui';
+      proceed.addEventListener('click', () => {
+        if (!currentStepIsValid()) return;
+        notice.remove();
+        showStep(3);
+      });
+      notice.append(description, title, choose, proceed);
+      steps[1].append(notice);
+      accommodationNotice = notice;
+      notice.focus();
+      notice.scrollIntoView({ block: 'center' });
+      return true;
+    }
+    participantsRoot.addEventListener('input', () => accommodationNotice?.remove());
 	nextButton.addEventListener('click', () => {
 	  if (!currentStepIsValid()) return;
+	  if (currentStep === 2 && confirmMissingAccommodation()) return;
 	  if (currentStep === 1) renderParticipants();
 	  showStep(currentStep + 1);
 	});
@@ -535,7 +588,7 @@
 		const successText = result.status === 'WAITLISTED'
 		  ? `Richiesta inserita in lista d’attesa. Riceverai gli aggiornamenti alla casella: ${confirmationEmail}`
 		  : result.status === 'PENDING_PAYMENT'
-			? `Prenotazione registrata e in attesa di pagamento. Codice: ${result.order_code}. Importo da versare: ${formatCurrency(result.economic_summary.initial_due_cents)}`
+			? `Prenotazione registrata a nome di ${confirmationName}, in attesa di pagamento. Totale da versare: ${formatCurrency(result.economic_summary.total_cents)}.${result.economic_summary.mode === 'DEPOSIT_BALANCE' ? ` Caparra: ${formatCurrency(result.economic_summary.initial_due_cents)}.` : ''}`
 			: confirmationEmail
 			  ? `Iscrizione confermata. È stata inviata un’email di conferma alla casella: ${confirmationEmail}`
 			  : `Iscrizione confermata. È stata registrata a nome di ${confirmationName}.`;
@@ -562,6 +615,32 @@
 		  successBox.appendChild(barcodeBox);
         }
         successBox.focus();
+        let completionUrl = config.homeUrl || '/';
+        try {
+          const destination = new URL(config.event.completion_url || completionUrl, window.location.href);
+          if (['http:', 'https:'].includes(destination.protocol)) completionUrl = destination.href;
+        } catch (invalidDestination) { /* La homepage rimane la destinazione di riserva. */ }
+        const completion = document.createElement('div');
+        completion.className = 'mi-registration__completion';
+        const countdown = document.createElement('p');
+        const finish = document.createElement('a');
+        finish.className = 'mi-registration__finish';
+        finish.href = completionUrl;
+        finish.textContent = 'Termina';
+        let seconds = 15;
+        countdown.textContent = `Passerai alla pagina successiva tra ${seconds} secondi.`;
+        completion.append(countdown, finish);
+        successBox.append(completion);
+        const completionTimer = window.setInterval(() => {
+          seconds -= 1;
+          countdown.textContent = `Passerai alla pagina successiva tra ${seconds} ${seconds === 1 ? 'secondo' : 'secondi'}.`;
+          if (seconds <= 0) {
+            window.clearInterval(completionTimer);
+            window.location.assign(completionUrl);
+          }
+        }, 1000);
+        finish.addEventListener('click', () => window.clearInterval(completionTimer));
+        window.addEventListener('pagehide', () => window.clearInterval(completionTimer), { once: true });
       } catch (error) {
         showError(error.message || 'Invio non riuscito. Riprova.');
         submitButton.disabled = false;
