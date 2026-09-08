@@ -50,6 +50,8 @@ Il contenuto segue lo scorrimento naturale della pagina. Le azioni correlate son
 
 ## Elevation & Depth
 
+Nel modulo Sheets «Registra movimento» si usa Arial: 12 pt come base, 14 pt nei campi, 20 pt per l’importo e 24 pt per il titolo. I controlli principali hanno altezza 44 px. La pagina occupa 920 px comprese le due colonne di margine; le colonne successive e le righe dopo la 30 sono nascoste, senza cancellarle. Si bloccano soltanto le prime due righe per lasciare spazio alla compilazione durante lo scorrimento. I campi editabili hanno fondo crema e bordo visibile; il riepilogo ha fondo grigio, con residuo ambra e importi allineati a destra. I colori dell’esito esistente sono conservati durante l’aggiornamento. Nel modulo evento si salva con la tendina «REGISTRA MOVIMENTO»; nel centrale con la spunta e il comando di menu «Registra movimento guidato».
+
 Le superfici usano bordi e ombre molto leggere. Non si usano gradienti, vetro, animazioni decorative o effetti che rallentino la lettura.
 
 ## Shapes

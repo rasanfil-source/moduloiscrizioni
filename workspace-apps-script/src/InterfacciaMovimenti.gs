@@ -28,6 +28,7 @@ function inizializzaInterfacciaMovimenti_() {
   const nuova = !sheet;
   if (!sheet) sheet = spreadsheet.insertSheet(MI_MOVEMENT_FORM.SHEET, 0);
   if (nuova || String(sheet.getRange(MI_MOVEMENT_FORM.MARKER).getValue()) !== MI_MOVEMENT_FORM.VERSION) costruisciInterfacciaMovimenti_(sheet);
+  if (String(sheet.getRange('Z4').getValue()) !== 'pagamenti-legibili-1') applicaStileModuloPagamenti_(sheet, false);
   aggiornaConvalideInterfacciaMovimenti_(sheet);
   return sheet;
 }

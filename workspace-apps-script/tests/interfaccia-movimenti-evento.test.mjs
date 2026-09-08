@@ -5,6 +5,39 @@ import vm from 'node:vm';
 
 const source = (await Promise.all(['Config.gs', 'Core.gs', 'InterfacciaMovimentiEvento.gs'].map((name) => readFile(new URL('../src/' + name, import.meta.url), 'utf8')))).join('\n');
 
+test('il restyling conserva bozza, chiave, convalide e colori dell’esito anche se ripetuto', () => {
+  const writes = [];
+  const mutations = [];
+  const range = (address) => new Proxy({}, {
+    get(_, method) {
+      if (method === 'getRanges') return () => address.map(range);
+      if (method === 'getMergedRanges') return () => [];
+      return (...args) => {
+        mutations.push({ address, method, args });
+        if (method === 'setValue') writes.push(address);
+        return range(address);
+      };
+    }
+  });
+  const sheet = new Proxy({}, {
+    get(_, method) {
+      if (method === 'getRange' || method === 'getRangeList') return range;
+      if (method === 'getMaxColumns') return () => 28;
+      if (method === 'getMaxRows') return () => 1000;
+      if (method === 'setFrozenRows' || method === 'setFrozenColumns') return () => null;
+      return () => sheet;
+    }
+  });
+  const context = { SpreadsheetApp: { BorderStyle: { SOLID: 'SOLID' } } };
+  vm.createContext(context);
+  vm.runInContext(source, context);
+  for (const evento of [true, false, true]) context.applicaStileModuloPagamenti_(sheet, evento);
+  const labels = new Set(['B14:C14', 'D14:E14', 'F14:H14', 'B20:H20', 'B3:H3', 'B25:D25', 'B26:H26', 'Z4']);
+  assert.ok(writes.every((address) => labels.has(address)), 'solo etichette e versione grafica possono cambiare valore');
+  assert.ok(!mutations.some(({ method }) => /clear|Validation/.test(method)), 'nessuna cancellazione o modifica delle convalide');
+  assert.ok(!mutations.some(({ address, method }) => address === 'B28:H29' && ['setBackground', 'setFontColor', 'setValue'].includes(method)));
+});
+
 function environment(events = []) {
   const cells = new Map();
   const context = {

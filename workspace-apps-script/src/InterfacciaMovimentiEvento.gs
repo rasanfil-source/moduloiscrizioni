@@ -11,10 +11,114 @@ function preparaInterfacciaMovimentoEvento_(foglio, idEvento) {
   const nuova = !sheet;
   if (!sheet) sheet = foglio.insertSheet(MI_EVENT_MOVEMENT_FORM.SHEET, 0);
   if (nuova || String(sheet.getRange(MI_EVENT_MOVEMENT_FORM.MARKER).getValue()) !== MI_EVENT_MOVEMENT_FORM.VERSION) costruisciInterfacciaMovimentoEvento_(sheet, idEvento);
+  if (String(sheet.getRange('Z4').getValue()) !== 'pagamenti-legibili-1') applicaStileModuloPagamenti_(sheet, true);
   sheet.getRange(MI_EVENT_MOVEMENT_FORM.EVENT_ID).setValue(String(idEvento));
   aggiornaScelteInterfacciaMovimentoEvento_(sheet, idEvento);
   assicuraTriggerInterfacciaMovimentoEvento_(foglio);
   return sheet;
+}
+
+/** Aggiorna solo la presentazione: conserva valori, convalide e chiave del movimento in corso. */
+function aggiornaGraficaModuliPagamenti() {
+  const centrale = ottieniFoglioDiLavoroAssociato_();
+  const esiti = [];
+  const aggiorna = function (foglio, evento, idEvento) {
+    const scheda = foglio.getSheetByName('Registra movimento');
+    if (!scheda) return;
+    applicaStileModuloPagamenti_(scheda, evento);
+    if (evento) {
+      scheda.getRange(MI_EVENT_MOVEMENT_FORM.EVENT_ID).setValue(String(idEvento));
+      aggiornaScelteInterfacciaMovimentoEvento_(scheda, idEvento);
+      assicuraTriggerInterfacciaMovimentoEvento_(foglio);
+    }
+    esiti.push({ foglio: foglio.getName(), url: foglio.getUrl() + '#gid=' + scheda.getSheetId(), aggiornato: true });
+  };
+  aggiorna(centrale, false);
+  const collegamenti = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES));
+  const visitati = {};
+  visitati[centrale.getId()] = true;
+  collegamenti.forEach(function (item) {
+    const id = String(item.id_foglio || '');
+    if (!id || visitati[id]) return;
+    visitati[id] = true;
+    try { aggiorna(SpreadsheetApp.openById(id), true, String(item.id_evento)); }
+    catch (error) { esiti.push({ id_evento: String(item.id_evento), aggiornato: false, errore: String(error.message || error) }); }
+  });
+  SpreadsheetApp.flush();
+  console.log(JSON.stringify(esiti));
+  if (esiti.some(function (esito) { return !esito.aggiornato; })) throw new Error('Alcuni moduli non sono stati aggiornati: consultare il log.');
+  return esiti;
+}
+
+function applicaStileModuloPagamenti_(sheet, moduloEvento) {
+  const bordo = SpreadsheetApp.BorderStyle.SOLID;
+  sheet.setHiddenGridlines(true);
+  sheet.setFrozenRows(2);
+  sheet.setFrozenColumns(0);
+  sheet.setTabColor('#244fc2');
+  sheet.setColumnWidth(1, 24);
+  [104, 158, 104, 158, 124, 112, 112].forEach(function (larghezza, indice) { sheet.setColumnWidth(indice + 2, larghezza); });
+  sheet.setColumnWidth(9, 24);
+  sheet.hideColumns(10, sheet.getMaxColumns() - 9);
+  // Il canvas termina dopo l'esito; le righe tecniche rimangono disponibili, nascoste.
+  if (sheet.getMaxRows() > 30) sheet.hideRows(31, sheet.getMaxRows() - 30);
+  sheet.getRange('A1:I30').setFontFamily('Arial').setFontSize(12)
+    .setVerticalAlignment('middle').setWrap(true);
+  sheet.getRange('B1:H27').setFontColor('#172033');
+  sheet.getRangeList(['A1:A30', 'I1:I30', 'B4:H4', 'B16:H16', 'B23:H23', 'B30:H30']).setBackground('#f5f7fa');
+  sheet.setRowHeights(1, 30, 24);
+  sheet.setRowHeights(1, 2, 28).setRowHeight(3, 40);
+  [4, 16, 23, 30].forEach(function (riga) { sheet.setRowHeight(riga, 12); });
+  [5, 11, 17, 24].forEach(function (riga) { sheet.setRowHeight(riga, 32); });
+  [7, 13, 15, 19, 25].forEach(function (riga) { sheet.setRowHeight(riga, 44); });
+  sheet.setRowHeight(9, 64).setRowHeight(10, 52).setRowHeight(26, 44).setRowHeights(28, 2, 44);
+  sheet.getRange('B1:H2').setFontSize(24).setFontWeight('bold').setBackground('#17224a').setFontColor('#ffffff');
+  sheet.getRange('B3:H3').setFontSize(12).setFontColor('#475569').setBackground('#ffffff');
+  sheet.getRangeList(['B5:H5', 'B11:H11', 'B17:H17', 'B24:H24'])
+    .setFontSize(13).setFontWeight('bold').setBackground('#e8edf7').setFontColor('#17224a');
+  sheet.getRangeList(['B6:H6', 'B8:H8', 'B12:H12', 'B14:H14', 'B18:H18', 'B20:H20', 'B27:H27'])
+    .setFontSize(11).setFontWeight('bold').setFontColor('#475569').setBackground('#ffffff');
+  const campi = ['B7:E7', 'B13:C13', 'D13:E13', 'F13:H13', 'B15:C15', 'D15:E15', 'F15:H15', 'B19:H19', 'B21:H22'];
+  sheet.getRangeList(campi).setBackground('#fffdf3').setFontSize(14).setFontColor('#172033');
+  sheet.getRangeList(campi).getRanges().forEach(function (range) {
+    range.setBorder(true, true, true, true, false, false, '#94a3b8', bordo);
+  });
+  sheet.getRange('B7:E7').setFontWeight('bold');
+  sheet.getRange('B21:H22').setFontSize(12).setVerticalAlignment('top');
+  sheet.getRange('B9:H9').setBackground('#f1f5f9').setFontSize(12);
+  sheet.getRange('F7:H7').setBackground('#f1f5f9').setFontSize(12).setFontWeight('bold');
+  sheet.getRange('B10:H10').setBackground('#f1f5f9');
+  sheet.getRangeList(['B10', 'D10', 'F10']).setFontSize(11).setFontWeight('normal').setFontColor('#475569');
+  sheet.getRangeList(['C10', 'E10', 'G10:H10']).setFontSize(16).setFontWeight('bold').setHorizontalAlignment('right')
+    .setNumberFormat('#,##0.00 [$€-it-IT]');
+  sheet.getRange('F10:H10').setBackground('#fff1cc').setFontColor('#713f12');
+  sheet.getRange('B15:C15').setFontSize(20).setFontWeight('bold').setHorizontalAlignment('right');
+  sheet.getRange('B28:H29').setFontSize(12); // Conserva il colore dell'ultimo esito.
+  sheet.getRange('B14:C14').setValue('Importo in euro *');
+  sheet.getRange('D14:E14').setValue('Metodo *');
+  sheet.getRange('F14:H14').setValue('Riferimento (facoltativo)');
+  sheet.getRange('B20:H20').setValue('Nota amministrativa (facoltativa)');
+  sheet.getRange('B3:H3').setValue('1. Scegli la prenotazione   →   2. Compila il movimento   →   3. Controlla e registra');
+  sheet.getRange('B15').setNote('Inserisci l’importo in euro, con al massimo due decimali. Esempio: 125,50.');
+  sheet.getRange('F15').setNote('Facoltativo: identificativo del bonifico o della ricevuta.');
+  if (moduloEvento) {
+    // Alcuni fogli storici hanno ancora il comando esteso da B25 a H25.
+    const comandoStorico = sheet.getRange('B25:H25').getMergedRanges().some(function (range) { return range.getA1Notation() === 'B25:H25'; });
+    if (comandoStorico) {
+      sheet.getRange('B25:H25').breakApart().clearContent().clearDataValidations();
+      sheet.getRange('B25:D25').merge();
+      sheet.getRange('E25:H25').merge().setBackground('#64748b').setHorizontalAlignment('center');
+      sheet.getRange('E25').setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['REGISTRA MOVIMENTO'], true).setAllowInvalid(false).build());
+    }
+    sheet.getRange('B25:D25').setValue('* Obbligatori · celle chiare da compilare').setBackground('#ffffff').setFontSize(11).setFontColor('#475569');
+    sheet.getRange('E25:H25').setFontSize(14).setFontWeight('bold').setFontColor('#ffffff');
+    sheet.getRange('B26:H26').setValue('Per salvare, apri la tendina blu qui sopra e scegli REGISTRA MOVIMENTO. Si attiva dopo la scelta della prenotazione.')
+      .setFontSize(11).setFontColor('#475569').setHorizontalAlignment('left');
+  } else {
+    sheet.getRange('B25:H25').setBackground('#eef2ff').setFontSize(13);
+    sheet.getRange('B26:H26').merge().setValue('Dopo la verifica, usa Modulo iscrizioni → Registra movimento guidato.').setFontSize(11).setFontColor('#475569');
+  }
+  sheet.getRange('Z4').setValue('pagamenti-legibili-1');
 }
 
 /** ZERO è la scelta esplicita “Evento totalmente gratuito”; i dati precedenti usavano REGISTRATION_ONLY. */
@@ -99,12 +203,16 @@ function creaSceltePrenotazioniInterfacciaMovimentoEvento_(prenotazioni) {
 function aggiornaScelteInterfacciaMovimentoEvento_(sheet, idEvento) {
   const prenotazioni = prenotazioniInterfacciaMovimentoEvento_(idEvento).filter(function (item) { return !!String(item.codice_ordine || ''); });
   const scelte = creaSceltePrenotazioniInterfacciaMovimentoEvento_(prenotazioni);
+  const selezione = String(sheet.getRange(MI_EVENT_MOVEMENT_FORM.ORDER).getValue() || '');
   const righeDaPulire = Math.max(sheet.getLastRow(), scelte.length + 1, 2);
   sheet.getRange(1, 27, righeDaPulire, 2).clearContent();
   sheet.getRange('AA1:AB1').setValues([['Etichetta prenotazione', 'Codice prenotazione']]);
   if (scelte.length) sheet.getRange(2, 27, scelte.length, 2).setValues(scelte.map(function (item) { return [item.etichetta, item.codice]; }));
   const cella = sheet.getRange(MI_EVENT_MOVEMENT_FORM.ORDER).clearDataValidations();
   if (scelte.length) cella.setDataValidation(SpreadsheetApp.newDataValidation().requireValueInRange(sheet.getRange(2, 27, scelte.length, 1), true).setAllowInvalid(false).build());
+  const precedente = scelte.find(function (scelta) { return scelta.codice === selezione; });
+  if (precedente) cella.setValue(precedente.etichetta);
+  sheet.getRange('B6:E6').setValue('Prenotazione · cerca nome o cognome *');
   cella.setNote('Digita le prime lettere del nome o del cognome per restringere l’elenco. Il codice prenotazione resta associato internamente.');
 }
 
