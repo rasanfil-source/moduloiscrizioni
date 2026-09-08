@@ -50,8 +50,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.23\.29\b/);
-  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.29'\s*\)/);
+  assert.match(source, /Version:\s+3\.23\.30\b/);
+  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.30'\s*\)/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1482,7 +1482,7 @@ test('la scheda rapida apre il wizard completo per modificare lo stesso evento a
   assert.match(portal, /Stai aggiornando lo stesso evento/);
   assert.match(portal, /Il modulo e il foglio già collegati non saranno duplicati/);
   assert.match(portal, /Immagine attuale/);
-  assert.match(portal, /Salva le modifiche/);
+  assert.match(portal, /if \( \$is_editing \)[\s\S]*?>Salva modifiche</);
   assert.match(portal, /Modifiche salvate\./);
   assert.match(portal, /ensure_published_revision\( \$event_id, true \)/);
   assert.match(portal, /prepara_produzioni_workspace\( \$event_id, 'PUBBLICATO' \)/);
@@ -1763,13 +1763,13 @@ test('il wizard mostra soltanto i costi coerenti con il tipo di evento', async (
   assert.match(script, /servicePricingNodes\.forEach\(\(node\) => \{ node\.hidden = pricing\.value !== 'NONE'; \}\)/);
   assert.match(script, /economicLabel\.hidden = !paidEvent/);
 });
-test('il wizard distingue anteprima e pubblicazione e crea il foglio pubblicando', async () => {
+test('il wizard distingue salvataggio, anteprima e pubblicazione', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const shortcode = await read('includes/class-mi-shortcode.php');
   const activator = await read('includes/class-mi-activator.php');
   const script = await read('assets/portal.js');
   const css = await read('assets/portal.css');
-  assert.match(portal, /Salva la bozza e vai ad Attiva l’evento/);
+  assert.match(portal, /if \( \$is_editing \)[\s\S]*?>Salva modifiche<\/button>[\s\S]*?Crea la bozza e vai ad Attiva l’evento/);
   assert.match(portal, /Crea la bozza e vai ad Attiva l’evento/);
 	assert.match(portal, /Visualizza anteprima/);
 	assert.match(portal, /Apri l’anteprima del modulo di iscrizione/);
