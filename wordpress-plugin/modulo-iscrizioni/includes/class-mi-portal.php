@@ -1605,9 +1605,9 @@ final class MI_Portal {
 			echo '<p>Controlla il modulo. L’evento sarà pubblicato e verrà creato il foglio di calcolo per la registrazione delle iscrizioni.</p><ol><li><strong>Visualizza anteprima</strong><span class="mi-preview-action"><a href="' . esc_url( $preview_url ) . '" target="_blank" rel="noopener noreferrer">Apri l’anteprima del modulo di iscrizione <span aria-hidden="true">↗</span></a></span></li><li><strong>Pubblica evento</strong><span>Crea il foglio Google e attiva il modulo di iscrizione.</span></li></ol>';
 		}
 		if ( ! $is_published && ( current_user_can( 'mi_publish_events' ) || current_user_can( 'manage_options' ) ) ) {
-			echo '<form method="post"><input type="hidden" name="mi_portal_action" value="publish_event_portal"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
+			echo '<div class="mi-event-outputs__actions"><form method="post"><input type="hidden" name="mi_portal_action" value="publish_event_portal"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
 			wp_nonce_field( 'mi_portal_publish_event_' . $event_id, 'mi_portal_nonce' );
-			echo '<button class="mi-primary" type="submit">Pubblica evento</button><span class="mi-action-progress" role="status" aria-live="polite" hidden></span></form>';
+			echo '<button class="mi-primary" type="submit">Pubblica evento</button><span class="mi-action-progress" role="status" aria-live="polite" hidden></span></form></div>';
 		} elseif ( $is_published ) {
 			echo '<div class="mi-event-outputs__success"><span aria-hidden="true">✓</span><div><strong>L’evento è pubblicato</strong><p>Il modulo di iscrizione è pronto. Puoi condividerlo con le persone interessate.</p></div></div>';
 			echo '<div class="mi-event-outputs__grid"><article class="mi-output-card mi-output-card--public"><span class="mi-output-card__audience">Per i partecipanti</span><h3>Condividi il modulo di iscrizione</h3><label>Link per le iscrizioni<div class="mi-output-copy"><input type="url" readonly value="' . esc_attr( $registration_url ) . '"><button type="button" class="mi-primary" data-mi-copy="' . esc_attr( $registration_url ) . '">Copia link</button></div></label><a class="mi-secondary mi-output-link" href="' . $registration_url . '" target="_blank" rel="noopener noreferrer">Apri il modulo <span aria-hidden="true">↗</span></a></article>';
@@ -1631,18 +1631,8 @@ final class MI_Portal {
 		if ( ! $error && $event_id && MI_Access::can_access_event( $event_id ) ) {
 			// La bozza appartiene al percorso guidato della Segreteria: riprendiamo
 			// lo stesso evento senza passare dall'editor interno di WordPress.
-			$edit_url = add_query_arg(
-				array(
-					'mi_portal_view'  => 'create',
-					'mi_portal_draft' => $event_id,
-				),
-				self::base_url()
-			);
-			$preview_url = wp_nonce_url( admin_url( 'admin-post.php?action=mi_anteprima_evento&event=' . $event_id ), 'mi_anteprima_evento_' . $event_id );
 			$is_published = 'publish' === get_post_status( $event_id );
-			echo '<p>' . ( $is_published ? 'L’evento è pubblicato.' : 'La bozza è stata salvata e resta non pubblicata.' ) . '</p><div class="mi-portal-notice__actions">';
-			if ( ! $is_published && $edit_url ) echo '<a class="mi-primary" href="' . esc_url( $edit_url ) . '">Completa la bozza</a>';
-			echo '<a class="mi-secondary" href="' . esc_url( $preview_url ) . '" target="_blank" rel="noopener noreferrer">Apri anteprima</a></div>';
+			if ( $is_published ) echo '<p>L’evento è pubblicato.</p>';
 		}
 		echo '</div>';
 	}
