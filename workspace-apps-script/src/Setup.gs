@@ -1,5 +1,6 @@
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('Modulo iscrizioni')
+    .addItem('Inserisci pagamento · finestra', 'apriFinestraPagamenti')
     .addItem('Inizializza/aggiorna struttura', 'configuraCartellaDiLavoro')
     .addSeparator()
     .addItem('Assegna camere e pullman', 'apriAssegnazioniEvento')
