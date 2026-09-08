@@ -50,8 +50,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.23\.28\b/);
-  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.28'\s*\)/);
+  assert.match(source, /Version:\s+3\.23\.29\b/);
+  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.29'\s*\)/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -1445,8 +1445,7 @@ test('il wizard crea una bozza completa e mostra collegamenti espliciti', async 
 	assert.match(portal, /'scope' => 'TICKET'/);
 	assert.match(script, /data-mi-service-fee/);
   assert.match(portal, /Bozza creata correttamente/);
-  assert.match(portal, /Completa la bozza/);
-  assert.match(portal, /Apri anteprima/);
+  assert.match(portal, /Apri l’anteprima del modulo di iscrizione/);
   assert.match(script, /data-mi-review/);
   assert.match(script, /data-mi-pricing/);
   assert.match(portal, /name="starts_at"[\s\S]*placeholder="gg\/mm\/aaaa hh:mm"/);
@@ -1511,10 +1510,10 @@ test('ogni tessera bozza riapre tutti i campi del percorso di creazione', async 
 	const portal = await read('includes/class-mi-portal.php');
 	const script = await read('assets/portal.js');
 	assert.match(portal, /'draft' === \$event->post_status[\s\S]{0,400}'mi_portal_view' => 'create'[\s\S]{0,120}'mi_portal_draft'/);
-	assert.match(portal, /'mi_portal_view'\s*=> 'create',[\s\S]{0,100}'mi_portal_draft' => \$event_id/);
 	assert.doesNotMatch(portal, /\$edit_url = get_edit_post_link\( \$event_id/);
-	assert.match(portal, /href="' \. esc_url\( \$preview_url \) \. '" target="_blank" rel="noopener noreferrer">Apri anteprima/);
-	assert.match(portal, /La bozza è stata salvata e resta non pubblicata\./);
+	assert.match(portal, /mi-event-outputs__actions[\s\S]{0,500}>Pubblica evento</);
+	assert.match(portal, /mi-preview-action[\s\S]{0,300}Apri l’anteprima del modulo di iscrizione/);
+	assert.doesNotMatch(portal, /Completa la bozza|La bozza è stata salvata e resta non pubblicata\./);
 	assert.doesNotMatch(portal, /La bozza #/);
 	assert.match(portal, /<h3>Condividi il modulo di iscrizione<\/h3>/);
 	assert.match(portal, /data-mi-copy-success-label="Copiato">Copia il collegamento al foglio<\/button>/);
