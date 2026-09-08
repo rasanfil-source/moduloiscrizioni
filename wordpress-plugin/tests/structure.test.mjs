@@ -50,8 +50,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.23\.24\b/);
-  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.24'\s*\)/);
+  assert.match(source, /Version:\s+3\.23\.28\b/);
+  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.28'\s*\)/);
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -107,7 +107,7 @@ test('la pubblicazione mostra attesa ed esito vicino al comando senza duplicare 
   const portal = await read('includes/class-mi-portal.php');
   const portalJs = await read('assets/portal.js');
   const shortcode = await read('includes/class-mi-shortcode.php');
-  assert.match(portalJs, /Attendere, prego: sto creando il foglio Google e pubblicando l.evento/);
+  assert.match(portalJs, /Sto creando il foglio Google e pubblicando l.evento/);
   assert.match(portal, /event_outputs_panel\( \$selected \);\s*self::notice\(\);/);
   assert.doesNotMatch(portal, /self::event_outputs_panel\( \$event_id \);\s*\}\s*echo '<\/div>'/);
   assert.match(shortcode, /Iscrizioni<\/h2>/);
@@ -1142,7 +1142,7 @@ test('il modulo conserva i calcoli economici senza mostrarli nel primo passaggio
   assert.match(script, /deposit_percentage/);
   assert.match(script, /deposit_mode === 'FIXED'/);
   assert.match(script, /deposit_fixed_cents/);
-  assert.match(script, /Importo da versare/);
+  assert.match(script, /Totale da versare/);
   assert.match(script, /registrat[oi] manualmente dall’organizzazione/);
   assert.doesNotMatch(script, /stripe|paypal|checkout/i);
 });
@@ -1177,7 +1177,7 @@ test('le prenotazioni a pagamento attendono il versamento prima della conferma',
   assert.match(service, /PAYMENT_STATUS_CHANGED/);
   assert.match(admin, /'PENDING_PAYMENT'.*'CONFIRMED'/s);
   assert.match(admin, /In attesa di pagamento/);
-  assert.match(script, /Prenotazione registrata e in attesa di pagamento/);
+  assert.match(script, /Prenotazione registrata a nome di/);
 });
 
 test('il nome storico della tipologia resta una stringa', async () => {
@@ -1607,6 +1607,8 @@ test('la pubblicazione inizializza rapidamente il foglio e recupera un 404 trans
   const segreteria = await readFile(new URL('../../workspace-apps-script/src/Segreteria.gs', import.meta.url), 'utf8');
   assert.match(portal, /'profilo_operativo'/);
   assert.match(client, /404 === \$http_status[\s\S]*PREPARA_PRODUZIONI_EVENTO[\s\S]*self::request\( \$action, \$payload, 1 \)/);
+  assert.match(client, /PREPARA_PRODUZIONI_EVENTO' === \$action \? 240/);
+  assert.match(portal, /VERIFICA_FOGLIO_EVENTO[\s\S]*'recuperato'\s*=>\s*true[\s\S]*PREPARA_PRODUZIONI_EVENTO/);
   assert.match(fogli, /generaVistaOperativaIniziale_/);
   assert.match(fogli, /campiElencoOperativo_\(false\)/);
   assert.match(segreteria, /if \(includiDinamici === false\) return fields/);
@@ -1905,7 +1907,7 @@ test('la coerenza temporale impedisce nuove scadenze passate e segnala quelle gi
   assert.match(portal, /La chiusura delle iscrizioni non può essere precedente a questo momento\./);
 	assert.match(portal, /La chiusura delle iscrizioni non può essere successiva all.inizio dell.evento\./);
   assert.match(portal, /\$is_expired = self::is_past_event\( \$closes_at \)/);
-  assert.match(portal, /Iscrizioni dal /);
+  assert.match(portal, /dal /);
   assert.match(portal, /current_time\( 'Y-m-d\\TH:i' \)/);
 	assert.match(portalScript, /validateWizardRelations = updateDateLimits/);
 	assert.match(portalScript, /dateFields\.forEach[\s\S]*field\.addEventListener\('input',[\s\S]*updateDateLimits\(\)/);

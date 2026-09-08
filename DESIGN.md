@@ -82,3 +82,7 @@ Tutte le email — conferma, promemoria saldo, annullamento, informazioni operat
 - Non ripetere la stessa istruzione in più punti.
 - Non mostrare identificativi tecnici quando è disponibile il nome dell’evento.
 - Non applicare gli stili del plugin al resto del sito o a Divi.
+
+Nelle tessere degli eventi pubblicati con iscrizioni future, «Attivo» conserva il grassetto attuale; sotto compare «dal 12/10/2026», con data numerica giorno/mese/anno senza orario, nel corpo piccolo esistente e in grassetto. La data usa il fuso del sito.
+
+Nella seconda schermata pubblica, i servizi con massimo una unità per partecipante (pullman, pranzo, rimborso spese) usano caselle di spunta nella scheda di ciascun iscritto. Gli alloggi conservano la scelta esclusiva; le opzioni configurate con quantità multiple conservano il controllo numerico.

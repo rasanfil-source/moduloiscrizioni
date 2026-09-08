@@ -105,7 +105,7 @@ final class MI_Shortcode {
 		self::$rendered++;
 		$instance_id = 'mi-registration-' . self::$rendered . '-' . $event_id;
 		self::enqueue_assets();
-		$config = array( 'event' => $event, 'state' => $is_preview ? 'OPEN' : MI_Registration_Service::registration_state( $event ), 'preview' => $is_preview, 'endpoint' => esc_url_raw( rest_url( MI_REST_Controller::NAMESPACE . '/events/' . $event_id . '/registrations' ) ), 'instanceId' => $instance_id, 'privacyUrl' => $event['privacy_url'], 'qrScriptUrl' => esc_url_raw( MI_PLUGIN_URL . 'assets/qrcode-generator-2.0.4.js?ver=2.0.4' ) );
+		$config = array( 'event' => $event, 'state' => $is_preview ? 'OPEN' : MI_Registration_Service::registration_state( $event ), 'preview' => $is_preview, 'endpoint' => esc_url_raw( rest_url( MI_REST_Controller::NAMESPACE . '/events/' . $event_id . '/registrations' ) ), 'instanceId' => $instance_id, 'homeUrl' => esc_url_raw( home_url( '/' ) ), 'privacyUrl' => $event['privacy_url'], 'qrScriptUrl' => esc_url_raw( MI_PLUGIN_URL . 'assets/qrcode-generator-2.0.4.js?ver=2.0.4' ) );
 		$formatted_date = self::formatted_event_date( $event['event_starts_at'] );
 		$formatted_closes = self::formatted_event_date( $event['closes_at'] );
 		ob_start(); ?>

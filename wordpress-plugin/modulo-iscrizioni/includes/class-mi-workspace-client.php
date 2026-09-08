@@ -46,7 +46,10 @@ final class MI_Workspace_Client {
 		);
 		// La prima preparazione del foglio può richiedere più tempo delle normali repliche.
 		// L'operazione remota è idempotente e un nuovo tentativo non duplica il foglio.
-		$timeout = in_array( $action, array( 'PREPARA_PRODUZIONI_EVENTO', 'INVIA_EMAIL_PROVA' ), true ) ? 30 : 15;
+		// La prima costruzione del foglio include formattazione, convalide e schede
+		// economiche. Le esecuzioni reali possono superare i tre minuti; interrompere
+		// a 30 secondi produce un falso "non raggiungibile" mentre Google continua.
+		$timeout = 'PREPARA_PRODUZIONI_EVENTO' === $action ? 240 : ( 'INVIA_EMAIL_PROVA' === $action ? 30 : 15 );
 		$response = wp_remote_post(
 			self::webapp_url(),
 			array(
