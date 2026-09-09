@@ -1,5 +1,12 @@
 /** Prepara il registro dell'evento e il relativo foglio operativo su richiesta firmata di WordPress. */
 function preparaProduzioniEventoDaWordPress_(payload) {
+  const lock=LockService.getScriptLock();lock.waitLock(30000);
+  try {
+    if (eventoInEliminazione_(String((payload||{}).id_evento||''))) return {ok:false,error:'EVENT_DELETED'};
+    return preparaProduzioniEventoConLock_(payload);
+  } finally {lock.releaseLock();}
+}
+function preparaProduzioniEventoConLock_(payload) {
   payload = payload || {};
   const idEvento = normalizzaTesto_(payload.id_evento, 40);
   const titolo = normalizzaTesto_(payload.titolo, 200);
@@ -21,7 +28,7 @@ function preparaProduzioniEventoDaWordPress_(payload) {
   if (esistente) eventi.getRange(esistente._row, 1, 1, valori.length).setValues([valori]);
   else eventi.appendRow(valori);
 	const profiloOperativo = normalizzaValoreElenco_(payload.profilo_operativo, ['AUTOMATICO', 'MINIMO', 'QUOTA_UNICA', 'SERVIZI_MULTIPLI', 'VIAGGIO_COMPLESSO']) || 'AUTOMATICO';
-  const risultato = apriFoglioOperativoEvento({ id_evento: idEvento, titolo: titolo, profilo_operativo: profiloOperativo });
+  const risultato = apriFoglioOperativoConLock_({ id_evento: idEvento, titolo: titolo, profilo_operativo: profiloOperativo });
 	const urlIscrizione = normalizzaUrlPubblico_(payload.url_iscrizione);
 	const urlSaldo = normalizzaUrlPubblico_(payload.url_saldo);
 	const emailGestore = payload.email_gestore ? normalizzaEmailGestore_(payload.email_gestore) : '';
@@ -61,6 +68,7 @@ function apriFoglioOperativoConLock_(form) {
   form = form || {};
   const idEvento = normalizzaTesto_(form.id_evento, 40);
   if (!idEvento) throw new Error('Scegli un evento.');
+  if (typeof eventoInEliminazione_ === 'function' && eventoInEliminazione_(idEvento)) throw new Error('Evento eliminato o in eliminazione.');
   const registro = ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES);
   const esistente = convertiRigheInOggetti_(registro).find(function (riga) { return String(riga.id_evento) === idEvento; });
   if (esistente && esistente.id_foglio) {
@@ -193,7 +201,7 @@ function eliminaFoglioEventoDaWordPress_(payload) {
 	const collegamento = convertiRigheInOggetti_(registro).find(function (riga) { return String(riga.id_evento) === idEvento; });
 	if (!collegamento) return { ok: true, id_evento: idEvento, eliminato: false };
 	if (collegamento.id_foglio) {
-		try { DriveApp.getFileById(String(collegamento.id_foglio)).setTrashed(true); } catch (errore) {}
+		DriveApp.getFileById(String(collegamento.id_foglio)).setTrashed(true);
 	}
 	registro.deleteRow(collegamento._row);
 	aggiungiControllo_('FOGLIO_OPERATIVO', 'DELETE', idEvento, 'SUCCESS', 'WORDPRESS', 'MOVED_TO_TRASH', 'WORDPRESS_PROXY');
@@ -244,6 +252,7 @@ function aggiornaFoglioOperativoEventoConLock_(form) {
   form = form || {};
   const idEvento = normalizzaTesto_(form.id_evento, 40);
   if (!idEvento) throw new Error('Scegli un evento.');
+  if (typeof eventoInEliminazione_ === 'function' && eventoInEliminazione_(idEvento)) throw new Error('Evento eliminato o in eliminazione.');
   const registro = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES));
   const collegamento = registro.find(function (riga) { return String(riga.id_evento) === idEvento; });
   if (!collegamento || !collegamento.id_foglio) throw new Error('Crea prima il foglio operativo dell’evento.');

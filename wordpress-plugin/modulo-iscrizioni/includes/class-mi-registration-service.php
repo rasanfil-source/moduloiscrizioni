@@ -4,6 +4,7 @@ defined( 'ABSPATH' ) || exit;
 
 final class MI_Registration_Service {
 	public static function ensure_published_revision( $event_id, $force = false ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( $event_id ); if ( is_wp_error( $lease ) ) return $lease; }
 		global $wpdb;
 		$event_id = absint( $event_id );
 		$event = get_post( $event_id );
@@ -66,6 +67,7 @@ final class MI_Registration_Service {
 	}
 
 	public static function public_event( $event_id, $allow_unpublished = false ) {
+		if ( class_exists( 'MI_Event_Deletion' ) && MI_Event_Deletion::job( $event_id ) ) return new WP_Error( 'mi_event_deleting', 'Evento non disponibile: eliminazione in corso.', array( 'status' => 410 ) );
 		$event = get_post( $event_id );
 		$allowed_status = $allow_unpublished ? array( 'publish', 'draft', 'private' ) : array( 'publish' );
 		if ( ! $event || MI_Event_Post_Type::EVENT_TYPE !== $event->post_type || ! in_array( $event->post_status, $allowed_status, true ) ) {
@@ -238,6 +240,7 @@ final class MI_Registration_Service {
 	}
 
 	public static function create( $event_id, $payload, $idempotency_key, $allow_unpublished = false, $audit_actor = 'PUBLIC_FORM', $trusted_operator = false ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( $event_id ); if ( is_wp_error( $lease ) ) return $lease; }
 		global $wpdb;
 		$event_id = absint( $event_id );
 		$idempotency_key = preg_replace( '/[^a-zA-Z0-9_-]/', '', (string) $idempotency_key );
@@ -513,6 +516,7 @@ final class MI_Registration_Service {
 	}
 
 	public static function sync_workspace( $registration_id ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( MI_Event_Deletion::registration_event( $registration_id ) ); if ( is_wp_error( $lease ) ) return 'PENDING'; }
 		global $wpdb;
 		$registration_id = absint( $registration_id );
 		$registrations_table = $wpdb->prefix . 'mi_registrations';
@@ -773,6 +777,7 @@ final class MI_Registration_Service {
 	}
 
 	public static function cancel_participant( $participant_id, $actor_label = 'ADMIN' ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( MI_Event_Deletion::participant_event( $participant_id ) ); if ( is_wp_error( $lease ) ) return $lease; }
 		global $wpdb;
 		$participants = $wpdb->prefix . 'mi_participants';
 		$registrations = $wpdb->prefix . 'mi_registrations';
@@ -823,6 +828,7 @@ final class MI_Registration_Service {
 	}
 
 	private static function transition_registration_status( $registration_id, $target_status, $actor_label, $promote_waitlist = true ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( MI_Event_Deletion::registration_event( $registration_id ) ); if ( is_wp_error( $lease ) ) return $lease; }
 		global $wpdb;
 		$registrations = $wpdb->prefix . 'mi_registrations';
 		$items_table = $wpdb->prefix . 'mi_registration_items';
@@ -902,6 +908,7 @@ final class MI_Registration_Service {
 	}
 
 	public static function respond_waitlist_offer( $registration_id, $token, $decision, $system_expiry = false ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( MI_Event_Deletion::registration_event( $registration_id ) ); if ( is_wp_error( $lease ) ) return $lease; }
 		global $wpdb;
 		$registrations = $wpdb->prefix . 'mi_registrations';
 		$participants = $wpdb->prefix . 'mi_participants';
@@ -1058,6 +1065,7 @@ final class MI_Registration_Service {
 	}
 
 	public static function accoda_iscrizione_workspace( $registration_id ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( MI_Event_Deletion::registration_event( $registration_id ) ); if ( is_wp_error( $lease ) ) return $lease; }
 		global $wpdb;
 		$registration_id = absint( $registration_id );
 		$table = $wpdb->prefix . 'mi_registrations';

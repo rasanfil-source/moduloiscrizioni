@@ -18,6 +18,7 @@ final class MI_Plugin {
 		add_filter( 'cron_schedules', array( 'MI_Activator', 'cron_schedules' ) );
 		add_action( 'plugins_loaded', array( 'MI_Activator', 'maybe_upgrade' ), 5 );
 		add_action( 'plugins_loaded', array( $this, 'load_textdomain' ) );
+		MI_Event_Deletion::boot();
 		MI_Event_Post_Type::boot();
 		MI_Event_Activity_Migration::boot();
 		MI_Access::boot();

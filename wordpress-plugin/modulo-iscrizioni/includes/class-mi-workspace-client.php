@@ -50,7 +50,7 @@ final class MI_Workspace_Client {
 		// economiche. Le esecuzioni reali possono superare i tre minuti; interrompere
 		// a 30 secondi produce un falso "non raggiungibile" mentre Google continua.
 		// La replica gira nella coda: la formattazione Google può superare un minuto.
-		$timeout = 'PREPARA_PRODUZIONI_EVENTO' === $action ? 240 : ( 'APPEND_REGISTRATION' === $action ? 120 : ( 'LEGGI_MODIFICHE_FOGLIO' === $action ? 45 : ( 'INVIA_EMAIL_PROVA' === $action ? 30 : 15 ) ) );
+		$timeout = 'PREPARA_PRODUZIONI_EVENTO' === $action ? 240 : ( 'APPEND_REGISTRATION' === $action ? 120 : ( in_array( $action, array( 'LEGGI_MODIFICHE_FOGLIO', 'ELIMINA_DATI_EVENTO' ), true ) ? 45 : ( 'INVIA_EMAIL_PROVA' === $action ? 30 : 15 ) ) );
 		$response = wp_remote_post(
 			self::webapp_url(),
 			array(
@@ -97,6 +97,10 @@ final class MI_Workspace_Client {
 		if ( ! is_array( $decoded ) || empty( $decoded['ok'] ) ) {
 			$remote_code = is_array( $decoded ) ? strtoupper( sanitize_key( (string) ( $decoded['error'] ?? '' ) ) ) : '';
 			$motivi = array(
+				'EVENT_BUSY' => 'è in corso un aggiornamento Google; riprova tra poco',
+				'DELETION_CONFLICT' => 'esiste una cancellazione con identificativo o scelta differenti',
+				'INVALID_DELETION' => 'i parametri della cancellazione non sono validi',
+				'SHARED_EVENT_SHEET' => 'il foglio risulta collegato anche a un altro evento',
 				'ACTION_NOT_ALLOWED' => 'la distribuzione Apps Script non riconosce ancora questa operazione',
 				'INVALID_SIGNATURE'  => 'la firma condivisa non coincide',
 				'INVALID_PAYLOAD_HASH' => 'il contenuto ricevuto non coincide con quello firmato',

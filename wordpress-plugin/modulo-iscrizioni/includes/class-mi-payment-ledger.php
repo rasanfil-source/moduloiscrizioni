@@ -50,6 +50,7 @@ final class MI_Payment_Ledger {
 		return array( 'ok' => true, 'data' => wp_date( 'Y-m-d' ), 'saldo' => array( 'codice' => $r['order_code'], 'referente' => trim( $r['buyer_first_name'] . ' ' . $r['buyer_last_name'] ), 'evento' => get_the_title( (int) $r['event_id'] ), 'totale' => (int) $r['total_cents'], 'versato' => max( 0, $paid ), 'residuo' => max( 0, (int) $r['total_cents'] - $paid ), 'movimenti' => $movements ) );
 	}
 	public static function save( $id, array $input ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( MI_Event_Deletion::registration_event( $id ) ); if ( is_wp_error( $lease ) ) return $lease; }
 		global $wpdb;
 		if ( ! MI_Portal_Payments::allowed() ) return new WP_Error( 'mi_payment_forbidden', 'Accesso non consentito.' );
 		try { $payment = self::normalize( $input ); } catch ( InvalidArgumentException $e ) { return array( 'ok' => true, 'saved' => false, 'message' => $e->getMessage() ); }

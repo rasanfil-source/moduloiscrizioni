@@ -9,6 +9,8 @@ for (const email of [undefined, '', 'gestore@example.invalid']) {
   test(`creazione foglio con gestore ${email || 'assente'}`, () => {
     const ambiente = vm.createContext({
       MI_SHEETS: { EVENTS: 'Eventi' },
+      LockService: {getScriptLock:()=>({waitLock(){},releaseLock(){}})},
+      eventoInEliminazione_:()=>false,
       normalizzaTesto_: valore => String(valore || '').trim(),
       neutralizzaFormula_: valore => valore,
       normalizzaValoreElenco_: valore => valore,
@@ -19,7 +21,7 @@ for (const email of [undefined, '', 'gestore@example.invalid']) {
     });
     vm.runInContext(codice, ambiente);
     // Isoliamo Drive: nessuna chiamata esterna o modifica ai permessi durante il test.
-    ambiente.apriFoglioOperativoEvento = () => ({ id_foglio: 'foglio-prova', url_foglio: 'https://docs.google.com/spreadsheets/d/foglio-prova', creato: true });
+    ambiente.apriFoglioOperativoConLock_ = () => ({ id_foglio: 'foglio-prova', url_foglio: 'https://docs.google.com/spreadsheets/d/foglio-prova', creato: true });
     ambiente.aggiornaCollegamentiProduzioneEvento_ = () => {};
     const risultato = ambiente.preparaProduzioniEventoDaWordPress_({ id_evento: '123', titolo: 'Evento dimostrativo', email_gestore: email });
     assert.equal(risultato.ok, true);

@@ -100,6 +100,7 @@ final class MI_Management_Service {
 		} catch ( Throwable $error ) { return new WP_Error( 'mi_management_read', $error->getMessage() ); }
 	}
 	public static function save( $id, $operation, $data, $version, $request_id ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( MI_Event_Deletion::registration_event( $id ) ); if ( is_wp_error( $lease ) ) return $lease; }
 		global $wpdb;
 		if ( ! MI_Portal_Management::allowed() || ! preg_match( '/^wp_' . get_current_user_id() . '_[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', $request_id ) || ! is_array( $data ) || ! in_array( $operation, array( 'participant','room_save','room_delete' ), true ) ) return new WP_Error( 'mi_management_request', 'Richiesta non valida.' );
 		try { $registration = self::registration( $id ); } catch ( Throwable $error ) { return new WP_Error( 'mi_management_scope', $error->getMessage() ); }
@@ -139,6 +140,7 @@ final class MI_Management_Service {
 	}
 	/** Explicit Sheets commit. All affected people, including room swaps, commit together. */
 	public static function save_sheet( $event_id, $changes, $request_id ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( $event_id ); if ( is_wp_error( $lease ) ) return $lease; }
 		global $wpdb;
 		if ( ! MI_Portal_Management::allowed() || ! MI_Access::can_access_event( $event_id ) || ! preg_match( '/^wp_' . get_current_user_id() . '_[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', $request_id ) || ! is_array( $changes ) || count( $changes ) > 500 ) return new WP_Error( 'mi_sheet_request', 'Richiesta non valida (massimo 500 celle per sincronizzazione).' );
 		if ( ! $changes ) return array( 'ok' => true, 'saved' => true, 'message' => 'Nessuna modifica da sincronizzare.' );

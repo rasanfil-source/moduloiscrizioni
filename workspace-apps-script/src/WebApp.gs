@@ -8,6 +8,7 @@ function doPost(event) {
     const envelope = JSON.parse(event.postData.contents);
     const verified = verificaBusta_(envelope);
     if (!verified.ok) return creaRispostaJson_({ ok: false, error: verified.error });
+    if (envelope.action === 'ELIMINA_DATI_EVENTO') return creaRispostaJson_(eliminaDatiEventoDaWordPress_(envelope.payload));
     if (envelope.action === 'PING') return creaRispostaJson_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, mode: 'PREVIEW' });
 	if (envelope.action === 'STATO_SCHEMA') return creaRispostaJson_({ ok: true, schema_version: MI_SCHEMA_VERSION, registration_headers: MI_HEADERS[MI_SHEETS.REGISTRATIONS], accommodation_headers: MI_HEADERS[MI_SHEETS.ACCOMMODATIONS], group_headers: MI_HEADERS[MI_SHEETS.GROUPS], report_template_headers: MI_HEADERS[MI_SHEETS.REPORT_TEMPLATES], event_headers: MI_HEADERS[MI_SHEETS.EVENTS], mode: 'PREVIEW' });
 	if (envelope.action === 'STATO_REPLICA_ISCRIZIONE') return creaRispostaJson_(statoReplicaIscrizione_(envelope.payload));
@@ -207,6 +208,7 @@ function registraIscrizioneCentrale_(payload) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
+    if (typeof eventoInEliminazione_ === 'function' && eventoInEliminazione_(eventId)) return {ok:false,error:'EVENT_DELETED'};
     const registrations = ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS);
     const registrationRows = convertiRigheInOggetti_(registrations);
     const byKey = registrationRows.find(function (item) { return String(item.chiave_idempotenza) === idempotencyKey; });

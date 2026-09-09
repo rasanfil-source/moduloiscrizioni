@@ -28,29 +28,9 @@ final class MI_Portal {
 		return array();
 	}
 
-	/** Elimina definitivamente soltanto le bozze-evento nel cestino da oltre 30 giorni e prive di iscrizioni. */
+	/** La cancellazione definitiva passa sempre dalla procedura coordinata. */
 	public static function purge_trashed_drafts() {
-		$drafts = get_posts( array(
-			'post_type'              => MI_Event_Post_Type::EVENT_TYPE,
-			'post_status'            => 'trash',
-			'numberposts'            => 100,
-			'fields'                 => 'ids',
-			'date_query'             => array( array( 'column' => 'post_modified_gmt', 'before' => gmdate( 'Y-m-d H:i:s', time() - 30 * DAY_IN_SECONDS ), 'inclusive' => true ) ),
-			'no_found_rows'          => true,
-			'update_post_meta_cache' => false,
-			'update_post_term_cache' => false,
-		) );
-		if ( ! $drafts ) return;
-		global $wpdb;
-		foreach ( $drafts as $event_id ) {
-			$registrations = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d", $event_id ) );
-			if ( 0 !== $registrations ) continue;
-			if ( ! get_post_meta( $event_id, '_mi_operational_sheet_id', true ) ) { wp_delete_post( $event_id, true ); continue; }
-			$pulizia = MI_Workspace_Client::request( 'ELIMINA_FOGLIO_EVENTO', array( 'id_evento' => (string) $event_id ) );
-			// In caso di indisponibilità Workspace conserviamo la bozza e riproviamo:
-			// è preferibile non lasciare un documento Drive senza riferimento.
-			if ( ! is_wp_error( $pulizia ) ) wp_delete_post( $event_id, true );
-		}
+		// Definitive removal now requires the reviewed, resumable deletion workflow.
 	}
 
 	/** Allinea i fogli alla stessa distinzione tra eventi correnti e passati mostrata nel portale. */
@@ -130,7 +110,7 @@ final class MI_Portal {
 			if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Partecipante non accessibile.', 403 );
 			return self::redirect_cancel_result( MI_Registration_Service::cancel_participant( $participant_id, wp_get_current_user()->display_name ) );
 		}
-		if ( in_array( $action, array( 'update_event', 'cancel_event', 'archive_event', 'trash_event' ), true ) ) return self::handle_event_management_action( $action );
+		if ( in_array( $action, array( 'update_event', 'cancel_event', 'archive_event', 'trash_event', 'duplicate_event' ), true ) ) return self::handle_event_management_action( $action );
 		if ( 'prepare_event_outputs' === $action ) return self::handle_event_outputs_action();
 		if ( 'repair_event_sheet' === $action ) return self::handle_event_sheet_repair_action();
 		if ( 'publish_event_portal' === $action ) return self::handle_event_publication_action();
@@ -346,6 +326,7 @@ final class MI_Portal {
 
 	/** Crea o riallinea il foglio operativo e conserva tutti i collegamenti restituiti. */
 	private static function prepara_produzioni_workspace( $event_id, $stato ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( $event_id ); if ( is_wp_error( $lease ) ) return $lease; }
 		$event = get_post( $event_id );
 		if ( ! $event || MI_Event_Post_Type::EVENT_TYPE !== $event->post_type ) return new WP_Error( 'mi_evento_non_valido', 'Evento non valido.' );
 		$gestore = self::risolvi_gestore_evento( $event_id, false );
@@ -605,10 +586,16 @@ final class MI_Portal {
 	}
 
 	private static function handle_event_management_action( $action ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( absint( $_POST['event_id'] ?? 0 ) ); if ( is_wp_error( $lease ) ) wp_die( esc_html( $lease->get_error_message() ), '', array( 'response' => 409 ) ); }
 		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_manage_events' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
 		$event_id = absint( $_POST['event_id'] ?? 0 );
 		if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Evento non accessibile.', 403 );
 		check_admin_referer( 'mi_portal_manage_event_' . $event_id, 'mi_portal_nonce' );
+		if ( 'duplicate_event' === $action ) {
+			$result = MI_Event_Duplicator::duplicate( $event_id, sanitize_text_field( wp_unslash( $_POST['duplicate_request'] ?? '' ) ) );
+			if ( is_wp_error( $result ) ) return self::redirect_result( $result->get_error_message(), true, $event_id );
+			return self::redirect_result( 'Bozza creata: ' . get_the_title( $result ) . '. Date e impostazioni sono state mantenute.', false, $result );
+		}
 		if ( 'archive_event' === $action ) {
 			if ( ! get_post_meta( $event_id, '_mi_event_cancelled_at', true ) ) return self::redirect_result( 'Soltanto un evento annullato può essere archiviato.', true, $event_id );
 			update_post_meta( $event_id, '_mi_event_archived_at', current_time( 'mysql', true ) );
@@ -621,7 +608,7 @@ final class MI_Portal {
 			$registration_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d", $event_id ) );
 			if ( $registration_count > 0 ) return self::redirect_result( 'La bozza possiede iscrizioni e non può essere eliminata. Puoi conservarla nello storico.', true, $event_id );
 			if ( ! wp_trash_post( $event_id ) ) return self::redirect_result( 'Non è stato possibile spostare la bozza nel cestino.', true, $event_id );
-			return self::redirect_result( 'Bozza spostata nel cestino. Potrà essere ripristinata per 30 giorni, poi sarà eliminata definitivamente.', false );
+			return self::redirect_result( 'Bozza spostata nel cestino. Puoi ripristinarla oppure eliminarla definitivamente con la procedura «Elimina evento e dati».', false );
 		}
 		if ( 'update_event' === $action ) {
 			$title = sanitize_text_field( wp_unslash( $_POST['title'] ?? '' ) );
@@ -882,7 +869,7 @@ final class MI_Portal {
 		?><main class="mi-portal"><header class="mi-portal-header"><div><span class="mi-portal-eyebrow">Area riservata</span><h1>Segreteria eventi</h1></div><a class="mi-portal-logout" href="<?php echo esc_url( wp_logout_url( self::base_url() ) ); ?>"><span aria-hidden="true">↗</span> Esci</a></header>
 		<nav class="mi-portal-switcher" aria-label="Segreteria eventi"><a href="<?php echo esc_url( MI_Portal_Management::url() ); ?>">Riepilogo e gestione</a><a class="<?php echo 'manage' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'manage', self::base_url() ) ); ?>"><?php echo esc_html( self::manage_label() ); ?></a><?php if ( $can_create ) : ?><a class="<?php echo 'create' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'create', self::base_url() ) ); ?>">Crea evento</a><?php endif; ?><a class="<?php echo 'registrations' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'registrations', self::base_url() ) ); ?>">Iscrizioni</a><?php if ( MI_Portal_Payments::allowed() ) : ?><a class="<?php echo 'payments' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'payments', self::base_url() ) ); ?>">Pagamenti</a><?php endif; ?><a class="<?php echo 'communications' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'communications', self::base_url() ) ); ?>">Comunicazioni</a><?php if ( self::can_manage_groups() ) : ?><a class="<?php echo 'groups' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'groups', self::base_url() ) ); ?>">Gruppi</a><?php endif; ?><?php if ( self::can_manage_module_users() ) : ?><a class="<?php echo 'operators' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'operators', self::base_url() ) ); ?>">Operatori</a><?php endif; ?></nav>
 		<?php $notice_near_outputs = 'manage' === $view && ! empty( $_GET['mi_portal_event'] ) && ! empty( $_GET['mi_portal_outputs'] ); if ( ! $notice_near_outputs ) self::notice(); ?>
-		<?php if ( 'create' === $view && ( $can_create || $can_edit_requested ) ) self::create_view( $requested_edit_id ); elseif ( 'management' === $view ) MI_Portal_Management::render(); elseif ( 'registrations' === $view ) self::portal_registrations_view(); elseif ( 'payments' === $view ) MI_Portal_Payments::render(); elseif ( 'communications' === $view ) self::communications_view(); elseif ( 'groups' === $view && self::can_manage_groups() ) self::groups_view(); elseif ( 'operators' === $view && self::can_manage_module_users() ) self::operators_view(); else self::manage_view(); ?>
+		<?php if ( 'delete' === $view ) MI_Event_Deletion::render(); elseif ( 'create' === $view && ( $can_create || $can_edit_requested ) ) self::create_view( $requested_edit_id ); elseif ( 'management' === $view ) MI_Portal_Management::render(); elseif ( 'registrations' === $view ) self::portal_registrations_view(); elseif ( 'payments' === $view ) MI_Portal_Payments::render(); elseif ( 'communications' === $view ) self::communications_view(); elseif ( 'groups' === $view && self::can_manage_groups() ) self::groups_view(); elseif ( 'operators' === $view && self::can_manage_module_users() ) self::operators_view(); else self::manage_view(); ?>
 		</main><?php
 		return ob_get_clean();
 	}
@@ -1270,8 +1257,14 @@ final class MI_Portal {
 			$can_trash = ! $is_cancelled && 'draft' === $event->post_status && 0 === $registration_count;
 			$can_archive = $is_cancelled && empty( $archived_events[ $event->ID ] );
 			$can_cancel = ! $is_cancelled && 'draft' !== $event->post_status;
-			if ( $can_trash || $can_archive || $can_cancel ) {
+			$can_duplicate = current_user_can( 'mi_create_events' ) || current_user_can( 'manage_options' );
+			if ( $can_trash || $can_archive || $can_cancel || $can_duplicate || MI_Event_Deletion::allowed() ) {
 				echo '<details class="mi-event-card-menu"><summary aria-label="Azioni per ' . esc_attr( $event_title ) . '"><span aria-hidden="true">⋮</span></summary><div>';
+				if ( $can_duplicate ) {
+					echo '<form method="post"><input type="hidden" name="mi_portal_action" value="duplicate_event"><input type="hidden" name="event_id" value="' . esc_attr( $event->ID ) . '"><input type="hidden" name="duplicate_request" value="' . esc_attr( wp_generate_uuid4() ) . '">';
+					wp_nonce_field( 'mi_portal_manage_event_' . $event->ID, 'mi_portal_nonce' );
+					echo '<button type="submit">Duplica evento</button></form>';
+				}
 				if ( $can_trash ) {
 					echo '<form method="post" onsubmit="return confirm(\'Eliminare questa bozza? Sarà spostata nel cestino di WordPress.\')"><input type="hidden" name="mi_portal_action" value="trash_event"><input type="hidden" name="event_id" value="' . esc_attr( $event->ID ) . '">';
 					wp_nonce_field( 'mi_portal_manage_event_' . $event->ID, 'mi_portal_nonce' );
@@ -1283,6 +1276,7 @@ final class MI_Portal {
 				} elseif ( $can_cancel ) {
 					echo '<button class="mi-text-danger" type="button" data-mi-cancel-dialog-open="mi-cancel-event-' . esc_attr( $event->ID ) . '">Annulla evento</button>';
 				}
+				if ( MI_Event_Deletion::allowed() ) echo '<a class="mi-text-danger" href="' . esc_url( MI_Event_Deletion::url( $event->ID ) ) . '">Elimina definitivamente…</a>';
 				echo '</div></details>';
 				if ( $can_cancel ) {
 					echo '<dialog class="mi-event-cancel-dialog" id="mi-cancel-event-' . esc_attr( $event->ID ) . '" aria-labelledby="mi-cancel-event-title-' . esc_attr( $event->ID ) . '"><form method="post" onsubmit="return confirm(\'Confermi definitivamente l’annullamento di questo evento?\')"><input type="hidden" name="mi_portal_action" value="cancel_event"><input type="hidden" name="event_id" value="' . esc_attr( $event->ID ) . '">';

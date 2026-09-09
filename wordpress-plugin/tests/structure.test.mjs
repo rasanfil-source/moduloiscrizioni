@@ -170,7 +170,7 @@ test('i fogli evento vengono verificati, ricreati, archiviati e ripuliti senza p
 	const fogli = await readFile(new URL('../../workspace-apps-script/src/FogliOperativi.gs', import.meta.url), 'utf8');
 	assert.match(portal, /VERIFICA_FOGLIO_EVENTO/);
 	assert.match(portal, /VERIFICA_FOGLI_EVENTO/);
-	assert.match(portal, /ELIMINA_FOGLIO_EVENTO/);
+	assert.match(await read('includes/class-mi-event-deletion.php'), /ELIMINA_DATI_EVENTO/);
 	assert.match(portal, /Verifica o ricrea il foglio Google/);
 	assert.match(webApp, /VERIFICA_FOGLIO_EVENTO/);
 	assert.match(webApp, /VERIFICA_FOGLI_EVENTO/);
@@ -1837,15 +1837,15 @@ test('l interfaccia degli operatori mostra soltanto l ambito pertinente al ruolo
   assert.match(script, /events\.hidden = !usesEvents/);
 });
 
-test('il portale allinea Ricordami e conserva per trenta giorni le bozze cestinate', async () => {
+test('il portale allinea Ricordami e affida la pulizia al servizio coordinato', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const activator = await read('includes/class-mi-activator.php');
   const css = await read('assets/portal.css');
   assert.match(portal, /Nome utente per l’accesso/);
   assert.match(css, /\.mi-portal-login \.login-remember label\{display:inline-flex;align-items:center/);
   assert.match(portal, /function purge_trashed_drafts/);
-  assert.match(portal, /30 \* DAY_IN_SECONDS/);
-  assert.match(portal, /wp_delete_post\( \$event_id, true \)/);
+  assert.doesNotMatch(portal, /30 \* DAY_IN_SECONDS/);
+  assert.match(await read('includes/class-mi-event-deletion.php'), /pre_delete_post/);
   assert.match(activator, /wp_schedule_event\( time\(\) \+ DAY_IN_SECONDS, 'daily', 'mi_pulisci_bozze_cestinate' \)/);
   assert.match(activator, /wp_clear_scheduled_hook\( 'mi_pulisci_bozze_cestinate' \)/);
 });
