@@ -206,7 +206,7 @@
         row.append(label, detail);
         parent.append(row);
       };
-      line(summary, 'Contatto', [buyerFirstName.value, buyerLastName.value, buyerEmail.value, buyerPhone.value].filter(Boolean).join(' · '));
+      line(summary, 'Referente', [buyerFirstName.value, buyerLastName.value].filter(Boolean).join(' '));
       const options = config.event.options || [];
       participantValues.forEach((participant, index) => {
         const section = document.createElement('section');
@@ -217,10 +217,6 @@
         const base = config.event.pricing_mode === 'FIXED' ? Number(config.event.fixed_price_cents) || 0 : Number(ticket?.price_cents) || 0;
         let subtotal = base;
         if (base > 0) line(section, 'Quota di partecipazione', formatCurrency(base));
-        (config.event.participant_fields || []).forEach((field) => {
-          const value = participant.fields?.[field.key];
-          if (value) line(section, field.label, value);
-        });
         options.filter((option) => option.scope === 'TICKET').forEach((option) => {
           const quantity = Number(participant.options?.[option.code]) || 0;
           if (!quantity) return;
@@ -236,8 +232,6 @@
         const quantity = Number(orderSelection[option.code]) || 0;
         if (quantity) line(summary, `${option.name} × ${quantity}`, formatCurrency(quantity * (Number(option.price_cents) || 0)));
       });
-      const requests = form.elements.namedItem('specialRequests')?.value.trim();
-      if (requests) line(summary, 'Richieste particolari', requests);
       const total = totalCents();
       line(summary, 'Totale prenotazione', total > 0 ? formatCurrency(total) : 'Gratuito', true);
       if (total > 0 && config.event.economic_mode === 'DEPOSIT_BALANCE') {
@@ -320,6 +314,12 @@
 		const allRequired = config.event.participant_extra_scope === 'ALL';
 		(config.event.participant_fields || []).forEach((field) => grid.append(configuredParticipantField(field, previous.fields?.[field.key] || '', index, allRequired || index === 0)));
 		(config.event.options || []).filter((option) => option.scope === 'TICKET').forEach((option) => grid.append(configuredParticipantOption(option, previous.options?.[option.code] || '0', index)));
+        const groups = new Set(Array.from(grid.querySelectorAll('[data-mi-choice-group]')).map(input=>input.dataset.miChoiceGroup).filter(Boolean));
+        groups.forEach(group=>{
+          const clear=document.createElement('button');clear.type='button';clear.textContent=`Nessuna scelta: ${group}`;
+          clear.addEventListener('click',()=>{grid.querySelectorAll('[data-mi-choice-group]').forEach(input=>{if(input.dataset.miChoiceGroup===group)input.checked=false;});renderEconomicSummary();updateStickySummary();});
+          grid.append(clear);
+        });
         row.append(legend, grid);
 		participantsRoot.append(row);
       });
@@ -388,12 +388,13 @@
     function configuredParticipantOption(option, value, index) {
       const label = document.createElement('label');
       const isAccommodation = String(option.code || '').startsWith('alloggio-');
+      const choiceGroup = option.choice_group || (isAccommodation ? 'alloggio' : '');
       const isSingleChoice = Number(option.max_quantity || 1) === 1;
       label.className = isAccommodation || isSingleChoice ? 'mi-registration__option-choice' : '';
       const input = document.createElement('input');
-      input.type = isAccommodation ? 'radio' : (isSingleChoice ? 'checkbox' : 'number');
-      if (isAccommodation) {
-        input.name = `participant-${index}-accommodation`;
+      input.type = choiceGroup ? 'radio' : (isSingleChoice ? 'checkbox' : 'number');
+      if (choiceGroup) {
+        input.name = `participant-${index}-choice-${choiceGroup}`;
         input.value = '1';
         input.checked = String(value) === '1';
       } else if (isSingleChoice) {
@@ -407,6 +408,8 @@
         input.name = `participant-${index}-option-${option.code}`;
       }
       input.dataset.miParticipantOption = option.code;
+      input.dataset.miChoiceGroup = choiceGroup;
+      label.dataset.serviceCategory = option.category || (isAccommodation ? 'alloggio' : (String(option.code).startsWith('pullman') ? 'pullman' : (option.code==='pranzo' ? 'pranzo' : 'altro')));
       input.addEventListener(isAccommodation || isSingleChoice ? 'change' : 'input', () => { renderEconomicSummary(); updateStickySummary(); });
       const text = document.createElement('span');
       text.textContent = `${option.name}${Number(option.price_cents) > 0 ? ` · ${formatCurrency(option.price_cents)}` : ''}`;
@@ -485,7 +488,7 @@
       accommodationNotice?.remove();
       accommodationNotice = null;
       const missing = Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).filter((row) => {
-        const choices = Array.from(row.querySelectorAll('[data-mi-participant-option]')).filter((input) => input.dataset.miParticipantOption.startsWith('alloggio-'));
+        const choices = Array.from(row.querySelectorAll('[data-mi-participant-option]')).filter((input) => input.dataset.miChoiceGroup==='alloggio');
         return choices.length && !choices.some((input) => participantOptionQuantity(input) > 0);
       });
       if (!missing.length) return false;
@@ -503,7 +506,7 @@
       choose.textContent = 'No, scegli l’alloggio';
       choose.addEventListener('click', () => {
         notice.remove();
-        missing[0].querySelector('[data-mi-participant-option^="alloggio-"]')?.focus();
+        missing[0].querySelector('[data-mi-choice-group="alloggio"]')?.focus();
       });
       const proceed = document.createElement('button');
       proceed.type = 'button';

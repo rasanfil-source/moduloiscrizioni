@@ -88,6 +88,20 @@ test('una risposta in volo non ripopola una cache invalidata', async () => {
   const request = cache.get('event');
   cache.clear();
   pending.resolve({ id: 'event' });
-  await request;
+  await assert.rejects(request, { name: 'AbortError' });
   assert.equal(cache.peek('event'), null);
+});
+
+test('un clic dopo invalidazione non riusa il prefetch precedente', async () => {
+  const pending = deferred();
+  let calls = 0;
+  const { cache } = setup(() => ++calls === 1 ? pending.promise : Promise.resolve({ fresh: true }));
+  const old = cache.get('event', true);
+  await Promise.resolve();
+  cache.clear();
+  assert.equal((await cache.get('event')).fresh, true);
+  pending.resolve({ fresh: false });
+  await assert.rejects(old, { name: 'AbortError' });
+  assert.equal(cache.peek('event').fresh, true);
+  assert.equal(calls, 2);
 });

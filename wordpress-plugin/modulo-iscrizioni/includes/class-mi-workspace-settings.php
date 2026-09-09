@@ -32,10 +32,15 @@ final class MI_Workspace_Settings {
 		?>
 		<div class="wrap">
 			<h1>Collegamento Google Workspace</h1>
+			<details><summary>Diagnostica aggiornamenti automatici</summary>
+			<p>Avvio WordPress tramite visite: <strong><?php echo defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ? 'Disabilitato; il cron deve essere avviato da un servizio esterno, come l’attivatore Google configurato.' : 'Abilitato'; ?></strong></p>
+			<p>Prossima elaborazione coda: <strong><?php $next = wp_next_scheduled( 'mi_sync_workspace_pending' ); echo esc_html( $next ? wp_date( 'd/m/Y H:i:s', $next ) : 'Non programmata' ); ?></strong></p>
+			<p>Blocco cron: <strong><?php $cron_lock = get_transient( 'doing_cron' ); echo esc_html( $cron_lock ? max( 0, time() - (int) $cron_lock ) . ' secondi fa' : 'Libero' ); ?></strong></p>
+			</details>
 			<?php if ( 'salvato' === $notice ) : ?><div class="notice notice-success"><p>Configurazione salvata.</p></div><?php endif; ?>
 			<?php if ( 'ping_ok' === $notice ) : ?><div class="notice notice-success"><p>Collegamento firmato verificato. Workspace è in modalità ANTEPRIMA.</p></div><?php endif; ?>
 			<?php if ( 'ping_errore' === $notice ) : ?><div class="notice notice-error"><p>Collegamento non riuscito. Codice diagnostico: <code><?php echo esc_html( $error_code ?: 'non_disponibile' ); ?></code>.</p></div><?php endif; ?>
-			<?php if ( 'schema_ok' === $notice ) : ?><div class="notice notice-success"><p>Schema Workspace 1.8.0 verificato: gruppi, eventi, report, prenotazioni, sistemazioni e colonne economiche sono disponibili.</p></div><?php endif; ?>
+			<?php if ( 'schema_ok' === $notice ) : ?><div class="notice notice-success"><p>Schema Workspace 1.9.0 verificato: gruppi, eventi, report, prenotazioni, sistemazioni e colonne economiche sono disponibili.</p></div><?php endif; ?>
 			<?php if ( 'schema_errore' === $notice ) : ?><div class="notice notice-error"><p>Schema Workspace non allineato. Aggiorna il deployment e la struttura del foglio.</p></div><?php endif; ?>
 			<p>Il segreto salvato non viene mai mostrato. Inseriscilo nuovamente soltanto per sostituirlo.</p>
 			<p><strong>URL per la procedura guidata Sheets:</strong><br><code><?php echo esc_html( rest_url( MI_REST_Controller::NAMESPACE . '/workspace/commands' ) ); ?></code></p>
@@ -104,7 +109,7 @@ final class MI_Workspace_Settings {
 		$group_headers = is_wp_error( $result ) ? array() : (array) ( $result['group_headers'] ?? array() );
 		$report_headers = is_wp_error( $result ) ? array() : (array) ( $result['report_template_headers'] ?? array() );
 		$event_headers = is_wp_error( $result ) ? array() : (array) ( $result['event_headers'] ?? array() );
-		$valid = ! is_wp_error( $result ) && '1.8.0' === ( $result['schema_version'] ?? '' ) && ! array_diff( $required, $headers ) && ! array_diff( array( 'id_evento', 'codice', 'nome', 'capienza', 'attiva' ), $accommodation_headers ) && ! array_diff( array( 'id_gruppo', 'nome', 'slug', 'stato', 'logo_url', 'immagine_url' ), $group_headers ) && ! array_diff( array( 'id_modello', 'nome', 'tipo', 'colonne_json', 'filtri_json' ), $report_headers ) && ! array_diff( array( 'id_evento', 'id_gruppo', 'titolo' ), $event_headers );
+		$valid = ! is_wp_error( $result ) && '1.9.0' === ( $result['schema_version'] ?? '' ) && ! array_diff( $required, $headers ) && ! array_diff( array( 'id_evento', 'codice', 'nome', 'capienza', 'attiva' ), $accommodation_headers ) && ! array_diff( array( 'id_gruppo', 'nome', 'slug', 'stato', 'logo_url', 'immagine_url' ), $group_headers ) && ! array_diff( array( 'id_modello', 'nome', 'tipo', 'colonne_json', 'filtri_json' ), $report_headers ) && ! array_diff( array( 'id_evento', 'id_gruppo', 'titolo' ), $event_headers );
 		wp_safe_redirect( self::page_url( $valid ? 'schema_ok' : 'schema_errore' ) );
 		exit;
 	}

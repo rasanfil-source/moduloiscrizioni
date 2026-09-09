@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Modulo Iscrizioni
  * Description: Gestione essenziale di gruppi, eventi, capienza e iscrizioni.
- * Version: 3.23.30
+ * Version: 3.25.2
  * Requires at least: 6.4
  * Requires PHP: 7.4
  * Author: HappyDuck
@@ -11,13 +11,14 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'MI_VERSION', '3.23.30' );
+define( 'MI_VERSION', '3.25.2' );
 define( 'MI_PLUGIN_FILE', __FILE__ );
 define( 'MI_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MI_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
 require_once MI_PLUGIN_DIR . 'includes/class-mi-activator.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-field-schema.php';
+require_once MI_PLUGIN_DIR . 'includes/class-mi-extra-services.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-event-post-type.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-event-activity-migration.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-access.php';
@@ -30,7 +31,11 @@ require_once MI_PLUGIN_DIR . 'includes/class-mi-workspace-settings.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-registration-service.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-rest-controller.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-shortcode.php';
+require_once MI_PLUGIN_DIR . 'includes/class-mi-portal-payments.php';
+require_once MI_PLUGIN_DIR . 'includes/class-mi-payment-ledger.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-portal.php';
+require_once MI_PLUGIN_DIR . 'includes/class-mi-portal-management.php';
+require_once MI_PLUGIN_DIR . 'includes/class-mi-management-service.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-site-performance.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-integrazione-divi.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-plugin.php';

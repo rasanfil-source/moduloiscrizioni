@@ -1,4 +1,8 @@
-# Modulo Iscrizioni — versione 3.23.30
+# Gestione web unificata — 3.24.0
+
+Il rilascio corrente introduce scheda operativa e riepilogo evento nel portale, con storico pagamenti, correzioni, camere e annullamenti. Consultare [le istruzioni di rilascio](../../docs/rilascio-3.24.0.md). Le note sottostanti descrivono le altre funzioni del plugin.
+
+# Modulo Iscrizioni — versione 3.23.32
 
 Plugin WordPress per configurare e pubblicare moduli, raccogliere iscrizioni e consegnarle in modo firmato alla console operativa Google Workspace.
 

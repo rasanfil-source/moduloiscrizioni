@@ -12,22 +12,22 @@ La parrocchia è l'ente base. Ogni gruppo può avere logo, immagine, colori e co
 
 ## Stato
 
-Il repository contiene il plugin WordPress `3.12.0` e lo schema Apps Script `1.8.0`. Il portale WordPress autenticato è l’unica **Segreteria eventi**: riunisce gestione degli eventi, creazione, schede delle iscrizioni e comunicazioni. Il segretario generale opera su tutti i gruppi; ogni operatore usa credenziali personali WordPress e vede soltanto gli eventi dei gruppi assegnati, senza entrare nel resto di `wp-admin`.
+Il repository contiene il plugin WordPress **3.25.2**. La Segreteria eventi web riunisce gestione degli eventi, iscrizioni, pagamenti e comunicazioni. Ogni operatore vede soltanto gli eventi autorizzati. Il passaggio a MySQL è distribuito e collaudato, con 38 repliche completate e nessuna pendente: [esiti e dipendenze operative](docs/PASSAGGIO_MYSQL.md).
 
 Una bozza è una creazione interrotta: selezionandola da **Gestisci eventi** si riapre dal primo passaggio incompleto, già popolato con i dati salvati. Se la configurazione è completa, si apre direttamente **Attiva l’evento**, con gli indirizzi pronti per i pulsanti **Iscriviti** e, quando previsto, **Saldo**, oltre allo shortcode per WordPress e Divi. Workspace crea in modo idempotente un foglio operativo dedicato nella stessa cartella Drive di `DB_MODULI`, con nome `Evento ID - Titolo`, e ne restituisce il collegamento. La preparazione non pubblica l’evento e non invia email.
 
-WordPress raccoglie le iscrizioni e le consegna in modo firmato a Workspace. I fogli Google restano lo strumento operativo per pagamenti, sistemazioni, assegnazioni e viste adattive, mentre `DB_MODULI` conserva l’archivio centrale e lo storico. Il referente può consultare conferma e saldo senza vedere note interne o altri dati personali. Email, QR e barcode sono generati localmente; la modalità email iniziale resta `ANTEPRIMA` e `OPERATIVO` richiede una prova sintetica accettata dal sistema di posta.
+MySQL WordPress è il registro autorevole per iscrizioni, pagamenti, camere e dati operativi. Google riceve la replica; nel foglio evento le celle azzurre si correggono e si confermano tramite Sincronizza nel portale. Il referente può consultare conferma e saldo senza vedere note interne o altri dati personali. Email, QR e barcode sono generati localmente; la modalità email iniziale resta `ANTEPRIMA` e `OPERATIVO` richiede una prova sintetica accettata dal sistema di posta.
 
-Il sistema non richiede mai fotografie o scansioni dei documenti. Se indispensabili per l'iniziativa, raccoglie soltanto dati testuali strutturati e li rimuove da WordPress dopo la consegna confermata a Sheets. La separazione operativa e le regole sui dati personali sono descritte in [Architettura operativa: WordPress e Google Sheets](docs/ARCHITETTURA_SEGRETERIA_SHEETS.md).
+Il sistema non richiede fotografie o scansioni dei documenti. Se indispensabili per l'iniziativa, raccoglie soltanto dati testuali strutturati. La replica conserva i dati operativi in MySQL, necessari alla gestione centrale.
 
 Il codice non memorizza IBAN, numeri completi di carta, link operativi, ID del foglio, URL di distribuzione, segreti o destinatari reali. L’aggiornamento del repository non equivale a un deploy: prima dell’uso occorre aggiornare il plugin, eseguire `configuraCartellaDiLavoro()` sul progetto Apps Script aggiornato e collaudare in ambiente autorizzato con sole identità fittizie.
 
 - [Progetto funzionale e tecnico](PROGETTO.md)
-- [Decisioni della Fase A](docs/DECISIONI_FASE_A.md)
+- [Rilascio corrente](docs/rilascio-3.25.1.md)
 - [Schema dati](docs/SCHEMA_DATI.md)
 - [Allineamento tra documentazione e codice](docs/ALLINEAMENTO_CODICE_DOCUMENTAZIONE.md)
 - [Guida rapida per l'operatore](docs/GUIDA_OPERATORE.md)
-- [Criteri di accettazione della prima vertical slice](docs/CRITERI_ACCETTAZIONE_VERTICAL_SLICE.md)
+- [Contratto della gestione web](UX-CONTRACT.md)
 - [Configurazione evento dimostrativa](schema/evento.example.json)
 - [Prototipo statico](prototipo/README.md)
 - [Plugin WordPress — vertical slice](wordpress-plugin/modulo-iscrizioni/README.md)

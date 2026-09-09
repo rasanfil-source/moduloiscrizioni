@@ -43,15 +43,15 @@ final class MI_Field_Schema {
 			),
 			'document_number' => array(
 				'key' => 'document_number', 'label' => 'Numero del documento', 'type' => 'text', 'max_length' => 80,
-				'help' => 'Viene trasferito a Sheets e rimosso da WordPress dopo la consegna.', 'high_impact' => true, 'retention' => 'SHEETS_ONLY',
+				'help' => 'Disponibile ai gestori autorizzati nel registro e nel foglio evento.', 'high_impact' => true, 'retention' => 'SHEETS_ONLY',
 			),
 			'document_country' => array(
 				'key' => 'document_country', 'label' => 'Paese di rilascio del documento', 'type' => 'text', 'max_length' => 80,
-				'help' => 'Viene trasferito a Sheets e rimosso da WordPress dopo la consegna.', 'high_impact' => true, 'retention' => 'SHEETS_ONLY',
+				'help' => 'Disponibile ai gestori autorizzati nel registro e nel foglio evento.', 'high_impact' => true, 'retention' => 'SHEETS_ONLY',
 			),
 			'document_expiry' => array(
 				'key' => 'document_expiry', 'label' => 'Scadenza del documento', 'type' => 'date', 'date_rule' => 'future',
-				'help' => 'Viene trasferita a Sheets e rimossa da WordPress dopo la consegna.', 'high_impact' => true, 'retention' => 'SHEETS_ONLY',
+				'help' => 'Disponibile ai gestori autorizzati nel registro e nel foglio evento.', 'high_impact' => true, 'retention' => 'SHEETS_ONLY',
 			),
 			'postal_address' => array(
 				'key'          => 'postal_address',

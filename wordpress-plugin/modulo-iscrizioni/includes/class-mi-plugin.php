@@ -15,6 +15,7 @@ final class MI_Plugin {
 	private function __construct() {}
 
 	public function boot() {
+		add_filter( 'cron_schedules', array( 'MI_Activator', 'cron_schedules' ) );
 		add_action( 'plugins_loaded', array( 'MI_Activator', 'maybe_upgrade' ), 5 );
 		add_action( 'plugins_loaded', array( $this, 'load_textdomain' ) );
 		MI_Event_Post_Type::boot();
@@ -27,6 +28,8 @@ final class MI_Plugin {
 		MI_REST_Controller::boot();
 		MI_Shortcode::boot();
 		MI_Portal::boot();
+		MI_Portal_Payments::boot();
+		MI_Portal_Management::boot();
 		MI_Site_Performance::boot();
 		MI_Integrazione_Divi::avvia();
 		add_action( 'mi_sync_workspace_pending', array( 'MI_Registration_Service', 'sync_pending_workspace' ) );

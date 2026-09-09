@@ -20,25 +20,7 @@ test('il setup dichiara tutte le schede operative', () => {
   assert.match(sources['Setup.gs'], /configuraCartellaDiLavoro/);
   assert.match(sources['Setup.gs'], /console\.log\('Struttura aggiornata/);
   assert.match(sources['Setup.gs'], /rinominaSchedePrecedenti_/);
-  assert.match(sources['Setup.gs'], /requireValueInList/);
-});
-
-test('il foglio iscrizione manuale usa WordPress per disponibilità e capienza', () => {
-	const source = sources['InterfacciaIscrizioni.gs'];
-	assert.match(sources['Config.gs'], /REGISTRATION_FORM:\s*'Registra iscrizione'/);
-	assert.match(sources['Setup.gs'], /Apri iscrizione manuale/);
-	assert.match(source, /GET_MANUAL_REGISTRATION_SCHEMA/);
-	assert.match(source, /CREATE_MANUAL_REGISTRATION/);
-	assert.match(source, /registration_state\) !== 'OPEN'/);
-	assert.match(source, /privacy_accepted:true/);
-	assert.match(source, /ticket_index:counts\[ticket\]/);
-	assert.match(source, /choice:code \+ ' — ' \+ name/);
-	assert.match(source, /ticketByChoice/);
-	assert.match(source, /field_types:fieldTypes/);
-	assert.match(source, /sheet\.getParent\(\)\.getSpreadsheetTimeZone\(\)/);
-	assert.match(source, /Utilities\.formatDate\(value, timeZone, 'yyyy-MM-dd'\)/);
-	const successTail = source.slice(source.indexOf("const result = inviaComandoWordPress_('CREATE_MANUAL_REGISTRATION'"));
-	assert.match(successTail, /preparaNuovaIscrizioneManuale_\(sheet, columns\)/);
+  assert.match(sources['Setup.gs'], /apriGestioneWeb/);
 });
 
 test('i modelli report personalizzati sono validati e non sovrascrivono quelli standard', () => {
@@ -102,42 +84,6 @@ test('i pagamenti ammettono solo bonifico carta e contanti senza dati carta', ()
 	assert.match(sources['Payments.gs'], /EXCESS_REFUND/);
 });
 
-test('l’inserimento guidato ordina il controllo prima della registrazione e riusa la convalida centrale', () => {
-  const form = sources['InterfacciaMovimenti.gs'];
-  assert.match(sources['Config.gs'], /PAYMENT_FORM:\s*'Registra movimento'/);
-  assert.match(sources['Setup.gs'], /Apri inserimento guidato/);
-  assert.match(form, /1 · Prenotazione[\s\S]*2 · Movimento[\s\S]*3 · Tracciabilità[\s\S]*4 · Verifica e registra/);
-  assert.match(form, /requireValueInRange/);
-  assert.match(form, /requireValueInList\(MI_PAYMENT_ENUMS\.transactionKinds/);
-  assert.match(form, /getValue\(\) !== true/);
-  assert.match(form, /registraPagamentoValidato_/);
-  assert.match(form, /creaIdentificativoOpaco_\('pui'\)/);
-  assert.match(form, /aggiornaProiezionePagamentiEvento_/);
-});
-
-test('i fogli evento mostrano il modulo movimento soltanto quando non sono totalmente gratuiti', () => {
-  const form = sources['InterfacciaMovimentiEvento.gs'];
-  assert.match(form, /eventoPrevedeMovimenti_/);
-  assert.match(form, /\['ZERO', 'REGISTRATION_ONLY'\]/);
-  assert.match(form, /Registra un movimento/);
-  assert.match(form, /REGISTRA MOVIMENTO/);
-  assert.match(form, /gestisciModificaInterfacciaMovimentoEvento/);
-  assert.match(form, /forSpreadsheet\(foglio\)\.onEdit\(\)\.create\(\)/);
-  assert.match(form, /ScriptApp\.deleteTrigger\(trigger\)/);
-  assert.match(form, /modalita_economica === 'DEPOSIT_BALANCE'|modalita === 'DEPOSIT_BALANCE'/);
-  assert.match(form, /fonti_pagamento_json/);
-  assert.match(form, /Prenotazione \*/);
-  assert.match(form, /Riferimento \(facoltativo\)/);
-  assert.match(form, /requireValueInRange/);
-  assert.match(form, /codiceSceltaInterfacciaMovimentoEvento_/);
-  assert.match(form, /localeCompare\(b\.etichetta, 'it'/);
-  const rotazione = form.indexOf("setValue(creaIdentificativoOpaco_('pevui'))", form.indexOf('function registraMovimentoInterfacciaEvento_'));
-  const pulizia = form.indexOf('getRangeList([MI_EVENT_MOVEMENT_FORM.AMOUNT', rotazione);
-  assert.ok(rotazione >= 0 && pulizia > rotazione);
-  assert.match(sources['FogliOperativi.gs'], /configuraSchedeEconomicheEvento_\(foglio, idEvento\)/);
-  assert.match(sources['Setup.gs'], /Prepara moduli movimento nei fogli evento/);
-});
-
 test('il retry WordPress verifica prima una replica già completata', () => {
   assert.match(sources['WebApp.gs'], /STATO_REPLICA_ISCRIZIONE/);
   assert.match(sources['WebApp.gs'], /function statoReplicaIscrizione_/);
@@ -156,7 +102,7 @@ test('le funzioni Apps Script applicative hanno nomi italiani', () => {
 });
 
 test('la migrazione aggiunge riepilogo economico e sistemazioni operative', () => {
-	assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.8\.0'/);
+	assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.9\.0'/);
   assert.match(sources['Config.gs'], /modalita_economica/);
   assert.match(sources['Config.gs'], /primo_versamento_centesimi/);
   assert.match(sources['Config.gs'], /saldo_centesimi/);
@@ -170,7 +116,7 @@ test('la console Sheets consulta prenotazioni e genera elenchi operativi per eve
 	assert.match(sources['Setup.gs'], /Configura elenco operativo/);
 	assert.doesNotMatch(sources['Setup.gs'], /Comunicazioni operative/);
 	assert.match(sources['Segreteria.gs'], /showSidebar/);
-	assert.match(sources['Segreteria.gs'], /showModelessDialog/);
+
 	assert.doesNotMatch(sources['Segreteria.gs'], /SpreadsheetApp\.create/);
 	assert.doesNotMatch(sources['Segreteria.gs'], /creaIniziativaGuidata|CREATE_EVENT_DRAFT/);
 	assert.match(sources['Config.gs'], /Operazioni segreteria/);
@@ -178,8 +124,8 @@ test('la console Sheets consulta prenotazioni e genera elenchi operativi per eve
 	assert.match(sources['Segreteria.gs'], /MI_SHEETS\.OPERATIONAL_VIEWS/);
 	assert.match(sources['Segreteria.gs'], /generaElencoOperativo_/);
 	assert.match(sources['Segreteria.gs'], /cercaPrenotazioniSegreteria/);
-  assert.match(sources['Segreteria.gs'], /cambiaSistemazioneSegreteria/);
-  assert.match(sources['Segreteria.gs'], /Opzione dimostrativa predefinita/);
+  assert.match(sources['GestionePortale.gs'], /Camera non disponibile/);
+  assert.doesNotMatch(sources['Segreteria.gs'], /Opzione dimostrativa predefinita/);
   assert.match(sources['Segreteria.gs'], /Data di nascita/);
 	assert.match(sources['Segreteria.gs'], /destinatariComunicazioneOperativa_/);
 	assert.match(sources['Segreteria.gs'], /statoComunicazioniOperative/);
@@ -215,7 +161,7 @@ test('le viste operative seguono il tipo di evento e comprimono il dettaglio deg
 	assert.match(segreteriaHtml, /Navigazione segreteria/);
 	assert.match(segreteriaHtml, /Dettaglio incassi/);
 	assert.match(segreteriaHtml, /mostraDettagliColonne/);
-	assert.match(segreteriaHtml, /Registrare.*modific/);
+  assert.doesNotMatch(segreteriaHtml, /call\('salvaAssegnazioniEvento'/);
 });
 
 test('la segreteria essenziale apre un foglio operativo dedicato per evento', () => {
@@ -223,9 +169,6 @@ test('la segreteria essenziale apre un foglio operativo dedicato per evento', ()
 	assert.match(sources['FogliOperativi.gs'], /SpreadsheetApp\.create/);
 	assert.match(sources['FogliOperativi.gs'], /MI_SHEETS\.EVENT_WORKSPACES/);
 	assert.match(sources['FogliOperativi.gs'], /function raggruppaColonneFoglioOperativo_/);
-	assert.match(sources['FogliOperativi.gs'], /function preparaSincronizzazioneFoglioOperativo/);
-	assert.match(sources['FogliOperativi.gs'], /function confermaSincronizzazioneFoglioOperativo/);
-	assert.match(sources['FogliOperativi.gs'], /Il foglio è cambiato dopo l’anteprima/);
 	assert.match(segreteriaHtml, /Apri il foglio operativo dell’evento/);
 	assert.match(segreteriaHtml, /Controlla modifiche del foglio/);
 	assert.doesNotMatch(segreteriaHtml.match(/function navigazioneSegreteria[\s\S]*?\n/)[0], /Viste operative|Camere e pullman/);
@@ -237,7 +180,7 @@ test('la preparazione del foglio non modifica le condivisioni e accetta il gesto
   const preparazione = source.slice(0, source.indexOf('function condividiFoglioSoltantoConGestore_'));
   assert.doesNotMatch(preparazione, /addEditor|removeEditor|removeViewer|setSharing/);
   assert.match(preparazione, /payload\.email_gestore \? normalizzaEmailGestore_\(payload\.email_gestore\) : ''/);
-  assert.match(source, /addEditor\(emailGestore\)/);
+  assert.match(source, /addViewer\(emailGestore\)/);
 });
 
 test('WordPress può preparare il foglio dell evento senza duplicarlo', () => {
@@ -277,15 +220,11 @@ test('lo stato individuale dei partecipanti arriva nelle schede e negli elenchi'
 	assert.match(sources['Segreteria.gs'], /row\.stato_partecipante/);
 });
 
-test('camere e pullman si assegnano collettivamente senza superare la capienza', () => {
-	assert.match(sources['Setup.gs'], /Assegna camere e pullman/);
-	assert.match(sources['Segreteria.gs'], /function apriAssegnazioniEvento/);
-	assert.match(sources['Assegnazioni.gs'], /function caricaAssegnazioniEvento/);
-	assert.match(sources['Assegnazioni.gs'], /function salvaAssegnazioniEvento/);
-	assert.match(sources['Assegnazioni.gs'], /finalRoomCounts\[code\] > rooms\[code\]\.capacity/);
-	assert.match(sources['Assegnazioni.gs'], /BULK_ASSIGNMENTS/);
-	assert.match(segreteriaHtml, /Assegnazioni collettive/);
-	assert.match(segreteriaHtml, /data-assignment/);
+test('camere e pullman si gestiscono dal portale unico', () => {
+  assert.match(sources['Setup.gs'], /Apri gestione web/);
+  assert.match(sources['GestionePortale.gs'], /Camera non disponibile o al completo/);
+  assert.match(sources['GestionePortale.gs'], /Assegnazione pullman/);
+  assert.doesNotMatch(segreteriaHtml, /call\('salvaAssegnazioniEvento'/);
 });
 
 test('la console non richiede mai foto o scansioni dei documenti', () => {
