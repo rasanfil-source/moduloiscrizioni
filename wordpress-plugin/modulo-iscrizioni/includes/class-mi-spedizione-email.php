@@ -35,6 +35,7 @@ final class MI_Spedizione_Email {
 
 	/** Prepara la comunicazione privata destinata al solo gestore responsabile dell'evento. */
 	public static function accoda_notifica_gestore_evento( $event_id, ?WP_User $gestore, $sheet_url, $email_segreteria = '' ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( $event_id ); if ( is_wp_error( $lease ) ) return $lease; }
 		$event_id = absint( $event_id );
 		$recipient = sanitize_email( $gestore ? $gestore->user_email : $email_segreteria );
 		$nome_destinatario = $gestore ? $gestore->display_name : 'Segreteria';
@@ -79,6 +80,7 @@ final class MI_Spedizione_Email {
 	}
 
 	public static function accoda_comunicazione_operativa( array $payload ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( absint( $payload['event_id'] ?? 0 ) ); if ( is_wp_error( $lease ) ) return $lease; }
 		global $wpdb;
 		$communication_id = sanitize_key( (string) ( $payload['communication_id'] ?? '' ) );
 		$event_id = absint( $payload['event_id'] ?? 0 );
@@ -264,8 +266,11 @@ final class MI_Spedizione_Email {
 		$table = $wpdb->prefix . 'mi_email_outbox';
 		$stale = gmdate( 'Y-m-d H:i:s', time() - 15 * MINUTE_IN_SECONDS );
 		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'PENDING', processing_started_at = NULL WHERE status = 'SENDING' AND processing_started_at < %s", $stale ) );
-		$righe = $wpdb->get_results( "SELECT id, recipient, payload_json, attempts FROM {$table} WHERE status = 'PENDING' AND attempts < 5 ORDER BY id ASC LIMIT 10", ARRAY_A );
+		$righe = $wpdb->get_results( "SELECT id, registration_id, recipient, payload_json, attempts FROM {$table} WHERE status = 'PENDING' AND attempts < 5 ORDER BY id ASC LIMIT 10", ARRAY_A );
 		foreach ( $righe as $riga ) {
+			$event_payload = json_decode( (string) $riga['payload_json'], true );
+			$event_id = ! empty( $riga['registration_id'] ) ? MI_Event_Deletion::registration_event( $riga['registration_id'] ) : absint( $event_payload['event_id'] ?? 0 );
+			if ( ! $event_id || is_wp_error( MI_Event_Deletion::enter( $event_id ) ) ) continue;
 			$id = absint( $riga['id'] );
 			if ( 1 !== $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'SENDING', attempts = attempts + 1, processing_started_at = %s WHERE id = %d AND status = 'PENDING'", gmdate( 'Y-m-d H:i:s' ), $id ) ) ) {
 				continue;

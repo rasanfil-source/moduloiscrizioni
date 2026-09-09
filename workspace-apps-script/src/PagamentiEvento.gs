@@ -23,7 +23,7 @@ function aggiornaProiezionePagamentiEventoConLock_(foglio, idEvento) {
 }
 function aggiornaProiezionePagamentiPrenotazioneEvento_(foglio,idEvento,codice) {return aggiornaProiezionePagamentiEvento_(foglio,idEvento);}
 function sincronizzaFogliEventi() {
-  const collegamenti = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES)).filter(function (riga) { return !!riga.id_foglio; });
+  const collegamenti = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES)).filter(function (riga) { return !!riga.id_foglio && !(typeof eventoInEliminazione_ === 'function' && eventoInEliminazione_(riga.id_evento)); });
   if (!collegamenti.length) return [];
   const proprieta = PropertiesService.getScriptProperties();
   const inizio = Math.max(0, Number(proprieta.getProperty('MI_EVENT_SYNC_CURSOR')) || 0) % collegamenti.length;

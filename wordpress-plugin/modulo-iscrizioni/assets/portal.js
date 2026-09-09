@@ -868,3 +868,8 @@ document.addEventListener('DOMContentLoaded', () => {
     showBooking(inlineDetail);
   }
 });
+
+// Preserve the explicit deletion choice and prevent repeated submissions.
+document.addEventListener('submit',function(event){const form=event.target.closest('[data-mi-delete-form]');if(!form)return;if(form.dataset.busy){event.preventDefault();return;}form.dataset.busy='1';form.setAttribute('aria-busy','true');const button=form.querySelector('button[type="submit"]');if(button)button.disabled=true;});
+
+const miDeletionContinuation=document.querySelector('[data-mi-delete-continue]');if(miDeletionContinuation)setTimeout(()=>miDeletionContinuation.requestSubmit(),2000);
