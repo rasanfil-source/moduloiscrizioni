@@ -1260,7 +1260,6 @@ final class MI_Portal {
 			$can_duplicate = current_user_can( 'mi_create_events' ) || current_user_can( 'manage_options' );
 			if ( $can_trash || $can_archive || $can_cancel || $can_duplicate || MI_Event_Deletion::allowed() ) {
 				echo '<details class="mi-event-card-menu"><summary aria-label="Azioni per ' . esc_attr( $event_title ) . '"><span aria-hidden="true">⋮</span></summary><div>';
-				if ( MI_Event_Deletion::allowed() ) echo '<a class="mi-text-danger" href="' . esc_url( MI_Event_Deletion::url( $event->ID ) ) . '">Elimina definitivamente…</a>';
 				if ( $can_duplicate ) {
 					echo '<form method="post"><input type="hidden" name="mi_portal_action" value="duplicate_event"><input type="hidden" name="event_id" value="' . esc_attr( $event->ID ) . '"><input type="hidden" name="duplicate_request" value="' . esc_attr( wp_generate_uuid4() ) . '">';
 					wp_nonce_field( 'mi_portal_manage_event_' . $event->ID, 'mi_portal_nonce' );
@@ -1277,6 +1276,7 @@ final class MI_Portal {
 				} elseif ( $can_cancel ) {
 					echo '<button class="mi-text-danger" type="button" data-mi-cancel-dialog-open="mi-cancel-event-' . esc_attr( $event->ID ) . '">Annulla evento</button>';
 				}
+				if ( MI_Event_Deletion::allowed() ) echo '<a class="mi-text-danger" href="' . esc_url( MI_Event_Deletion::url( $event->ID ) ) . '">Elimina definitivamente…</a>';
 				echo '</div></details>';
 				if ( $can_cancel ) {
 					echo '<dialog class="mi-event-cancel-dialog" id="mi-cancel-event-' . esc_attr( $event->ID ) . '" aria-labelledby="mi-cancel-event-title-' . esc_attr( $event->ID ) . '"><form method="post" onsubmit="return confirm(\'Confermi definitivamente l’annullamento di questo evento?\')"><input type="hidden" name="mi_portal_action" value="cancel_event"><input type="hidden" name="event_id" value="' . esc_attr( $event->ID ) . '">';
