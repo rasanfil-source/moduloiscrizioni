@@ -30,7 +30,7 @@ class FakeSheet {
 
 function environment() {
   const headers = {
-    Iscrizioni: ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'richieste_particolari', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'hash_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'versione_informativa_privacy', 'data_accettazione_privacy', 'biglietti_json', 'id_consenso_marketing', 'data_accettazione_marketing', 'opzioni_ordine_json'],
+    Iscrizioni: ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'richieste_particolari', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'hash_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'versione_informativa_privacy', 'data_accettazione_privacy', 'biglietti_json', 'id_consenso_marketing', 'data_accettazione_marketing', 'opzioni_ordine_json', 'workspace_revision'],
     Partecipanti: ['codice_ordine', 'numero_partecipante', 'codice_tipologia', 'indice_tipologia', 'nome', 'cognome', 'dati_aggiuntivi_json', 'opzioni_json'],
     Pagamenti: ['id_pagamento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo_centesimi', 'valuta', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'canale_registrazione', 'id_inserimento_origine', 'data_creazione', 'nota_amministrativa'],
     'Coda email': ['id_messaggio', 'codice_ordine', 'destinatario', 'tipo_modello', 'contenuto_json', 'stato', 'data_creazione'],
@@ -48,9 +48,24 @@ function environment() {
   };
   vm.createContext(context);
   vm.runInContext(source, context);
+  for (const [name, headers] of Object.entries(vm.runInContext('MI_HEADERS', context))) if (!sheets[name]) sheets[name] = new FakeSheet(headers);
+  context.indiceStatoOperativo_ = () => ({});
   context.aggiornaFoglioOperativoEvento = () => ({ ok: true });
   return { context, sheets };
 }
+
+test('replica MySQL conserva movimenti identici distinti, oltre 100 righe e revisione', () => {
+  const {context,sheets}=environment();
+  const payments=Array.from({length:105},(_,i)=>({payment_id:String(i+1),transaction_kind:'PAYMENT',movement_kind:'INCASSO',installment_kind:'OTHER',effective_at:'2026-09-09 08:00:00',amount_cents:10,payment_source:'CASH',external_reference:'',operator_label:'Test',administrative_note:''}));
+  const p=payload({payments,workspace_revision:'9'});
+  assert.equal(context.aggiungiIscrizione_(p).workspace_revision,'9');
+  assert.equal(sheets.Pagamenti.rows.length,106);
+  assert.equal(context.aggiungiIscrizione_(p).complete,true);
+  assert.equal(sheets.Pagamenti.rows.length,106);
+  assert.equal(sheets.Pagamenti.rows[1][4].toISOString(),'2026-09-09T08:00:00.000Z');
+  payments[0].amount_cents=11;
+  assert.throws(()=>context.aggiungiIscrizione_(p),/PAYMENT_ID_CONFLICT/);
+});
 
 function payload(overrides = {}) {
   const buyer = { first_name: 'Referente', last_name: 'Demo', email: 'demo@example.invalid', phone: '+39 000 0000000' };
@@ -68,6 +83,33 @@ function payload(overrides = {}) {
     ...overrides
   };
 }
+
+test('una richiesta vecchia non sovrascrive la revisione nuova, anche dopo un errore di proiezione', () => {
+  const { context, sheets } = environment();
+  context.aggiornaFoglioOperativoEvento = () => { throw new Error('Offline'); };
+  assert.equal(context.aggiungiIscrizione_(payload({ workspace_revision: '10', status: 'CANCELLED' })).central_complete, true);
+  const before = JSON.stringify(sheets.Iscrizioni.rows);
+  assert.equal(context.aggiungiIscrizione_(payload({ workspace_revision: '9' })).error, 'STALE_WORKSPACE_REVISION');
+  assert.equal(JSON.stringify(sheets.Iscrizioni.rows), before);
+  context.aggiornaFoglioOperativoEvento = () => ({ ok: true });
+  assert.equal(context.aggiungiIscrizione_(payload({ workspace_revision: '10', status: 'CANCELLED' })).complete, true);
+});
+
+test('la replica MySQL conferma il centro senza attendere la vista e ignora camere più vecchie', () => {
+  const {context,sheets}=environment();
+  context.aggiornaFoglioOperativoEvento = () => { throw new Error('La vista non deve bloccare la risposta MySQL'); };
+  const canonical={canonical_source:'MYSQL',workspace_revision:'1',workspace_event_revision:'10',rooms:[{code:'A',name:'Camera A',capacity:'2'}]};
+  const response=context.aggiungiIscrizione_(payload(canonical));
+  assert.equal(response.complete,true);
+  assert.equal(response.central_complete,true);
+  assert.equal(response.event_sheet_pending,true);
+  assert.equal(response.event_sheet_complete,false);
+  assert.equal(sheets.Sistemazioni.rows[1][2],'Camera A');
+  assert.equal(context.aggiungiIscrizione_(payload({...canonical,workspace_revision:'2',workspace_event_revision:'9',rooms:[]})).complete,true);
+  assert.equal(sheets.Sistemazioni.rows.length,2);
+  assert.equal(context.aggiungiIscrizione_(payload({...canonical,workspace_revision:'3',workspace_event_revision:'11',rooms:[]})).complete,true);
+  assert.equal(sheets.Sistemazioni.rows.length,1);
+});
 
 test('APPEND_REGISTRATION riconcilia retry e ripara una proiezione partecipanti parziale', () => {
   const { context, sheets } = environment();

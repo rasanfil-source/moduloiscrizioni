@@ -49,7 +49,8 @@ final class MI_Workspace_Client {
 		// La prima costruzione del foglio include formattazione, convalide e schede
 		// economiche. Le esecuzioni reali possono superare i tre minuti; interrompere
 		// a 30 secondi produce un falso "non raggiungibile" mentre Google continua.
-		$timeout = 'PREPARA_PRODUZIONI_EVENTO' === $action ? 240 : ( 'INVIA_EMAIL_PROVA' === $action ? 30 : 15 );
+		// La replica gira nella coda: la formattazione Google può superare un minuto.
+		$timeout = 'PREPARA_PRODUZIONI_EVENTO' === $action ? 240 : ( 'APPEND_REGISTRATION' === $action ? 120 : ( 'LEGGI_MODIFICHE_FOGLIO' === $action ? 45 : ( 'INVIA_EMAIL_PROVA' === $action ? 30 : 15 ) ) );
 		$response = wp_remote_post(
 			self::webapp_url(),
 			array(
@@ -112,7 +113,7 @@ final class MI_Workspace_Client {
 				$diagnostic = sanitize_text_field( (string) $decoded['diagnostic'] );
 				if ( $diagnostic ) $detail .= ' (' . $diagnostic . ')';
 			}
-			return new WP_Error( 'mi_workspace_rejected', 'Workspace ha rifiutato la richiesta: ' . $detail . '.' );
+			return new WP_Error( 'mi_workspace_rejected', 'Workspace ha rifiutato la richiesta: ' . $detail . '.', array( 'remote_code' => $remote_code, 'diagnostic' => current_user_can( 'manage_options' ) ? sanitize_text_field( (string) ( $decoded['diagnostic'] ?? '' ) ) : '' ) );
 		}
 		return $decoded;
 	}

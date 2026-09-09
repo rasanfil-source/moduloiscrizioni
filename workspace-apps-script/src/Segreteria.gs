@@ -1,15 +1,6 @@
-function apriSchedaPrenotazione() {
-  const template = HtmlService.createTemplateFromFile('Segreteria');
-  template.modalita = 'LISTA'; template.codiceOrdineIniziale = ''; template.isWebApp = false; template.webAppUrl = '';
-  SpreadsheetApp.getUi().showSidebar(template.evaluate().setTitle('Segreteria eventi'));
-}
+function apriSchedaPrenotazione() { return apriGestioneWeb(); }
 
-function apriDialogoPrenotazione(orderCode) {
-  const template = HtmlService.createTemplateFromFile('Segreteria');
-  template.modalita = 'PRENOTAZIONE'; template.codiceOrdineIniziale = normalizzaTesto_(orderCode, 64); template.isWebApp = false; template.webAppUrl = '';
-  SpreadsheetApp.getUi().showModelessDialog(template.evaluate().setWidth(680).setHeight(720), 'Scheda prenotazione');
-  return { ok: true };
-}
+function apriDialogoPrenotazione() { return apriGestioneWeb(); }
 
 function apriConfigurazioneElencoOperativo() {
   const template = HtmlService.createTemplateFromFile('Segreteria');
@@ -17,11 +8,7 @@ function apriConfigurazioneElencoOperativo() {
   SpreadsheetApp.getUi().showSidebar(template.evaluate().setTitle('Elenco operativo'));
 }
 
-function apriAssegnazioniEvento() {
-  const template = HtmlService.createTemplateFromFile('Segreteria');
-  template.modalita = 'ASSEGNAZIONI'; template.codiceOrdineIniziale = ''; template.isWebApp = false; template.webAppUrl = '';
-  SpreadsheetApp.getUi().showSidebar(template.evaluate().setTitle('Assegnazioni collettive'));
-}
+function apriAssegnazioniEvento() { return apriGestioneWeb(); }
 
 function apriConfigurazioneModelliReport() {
   const template = HtmlService.createTemplateFromFile('Segreteria');
@@ -85,52 +72,35 @@ function cercaPrenotazioniSegreteria(form) {
   return { items: items.slice(0, limit), total: items.length, has_more: items.length > limit };
 }
 
+/** Letture riutilizzate solo durante questa chiamata; mai condivise tra richieste o scritture. */
+function creaLetturaGestione_() {
+  const righe = Object.create(null);
+  let stato;
+  return {
+    righe: function(nome) {
+      if (!Object.prototype.hasOwnProperty.call(righe, nome)) righe[nome] = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(nome));
+      return righe[nome];
+    },
+    stato: function() { if (!stato) stato = indiceStatoOperativo_(); return stato; }
+  };
+}
 function caricaSchedaPrenotazione(orderCode) {
+  return caricaSchedaPrenotazioneConDati_(orderCode, creaLetturaGestione_());
+}
+function caricaSchedaPrenotazioneConDati_(orderCode, lettura) {
   orderCode = normalizzaTesto_(orderCode, 64);
-  const registration = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).find(function (row) { return String(row.codice_ordine) === orderCode; });
+  const registration = lettura.righe(MI_SHEETS.REGISTRATIONS).find(function (row) { return String(row.codice_ordine) === orderCode; });
   if (!registration) throw new Error('Prenotazione non trovata.');
-  const event = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS)).find(function (row) { return String(row.id_evento) === String(registration.id_evento); }) || {};
-  const operational = indiceStatoOperativo_();
-  const participants = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).filter(function (row) { return String(row.codice_ordine) === orderCode; }).map(function (row) {
+  const event = lettura.righe(MI_SHEETS.EVENTS).find(function (row) { return String(row.id_evento) === String(registration.id_evento); }) || {};
+  const operational = lettura.stato();
+  const participants = lettura.righe(MI_SHEETS.PARTICIPANTS).filter(function (row) { return String(row.codice_ordine) === orderCode; }).map(function (row) {
     const number = Number(row.numero_partecipante) || 0; const fields = datiOperativiPartecipante_(row, operational[orderCode + '|' + number] || {}); const room = String(fields.room || fields.camera || fields.alloggio || '');
     delete fields.room; delete fields.camera; delete fields.alloggio;
     return { number: number, first_name: String(row.nome || ''), last_name: String(row.cognome || ''), ticket_type: String(row.codice_tipologia || ''), status: String(row.stato_partecipante || 'ACTIVE'), room: room, fields: fields, options: decodificaElenco_(row.opzioni_json) };
   });
-  const payments = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS)).filter(function (row) { return String(row.codice_ordine) === orderCode; });
+  const payments = lettura.righe(MI_SHEETS.PAYMENTS).filter(function (row) { return String(row.codice_ordine) === orderCode; });
   const netPaid = calcolaVersatoPerOrdine_(payments)[orderCode] || 0;
-  return { order_code: orderCode, event_id: String(registration.id_evento || ''), event_title: String(event.titolo || registration.id_evento || ''), status: String(registration.stato || ''), payment_status: statoPagamento_(registration, netPaid), created_at: registration.data_creazione, buyer: { first_name: String(registration.nome_referente || ''), last_name: String(registration.cognome_referente || ''), email: String(registration.email_referente || ''), phone: String(registration.telefono_referente || '') }, special_requests: String(registration.richieste_particolari || ''), total_cents: Number(registration.totale_centesimi) || 0, deposit_cents: Number(registration.primo_versamento_centesimi) || 0, paid_cents: netPaid, balance_cents: Math.max(0, (Number(registration.totale_centesimi) || 0) - netPaid), participants: participants, accommodations: elencaSistemazioniDisponibili_(String(registration.id_evento || '')), active_operator: normalizzaTesto_(Session.getActiveUser().getEmail(), 120) };
-}
-
-function salvaModifichePrenotazione(form) {
-  form = form || {}; const orderCode = normalizzaTesto_(form.order_code, 64); const changes = Array.isArray(form.changes) ? form.changes.slice(0, 100) : [];
-  if (!orderCode || !changes.length) throw new Error('Nessuna modifica da confermare.');
-  const operator = normalizzaTesto_(Session.getActiveUser().getEmail() || 'SEGRETERIA', 120);
-  changes.forEach(function (change) {
-    const participantNumber = Math.max(0, Math.round(Number(change.participant_number) || 0)); const key = normalizzaTesto_(change.key, 80); const value = normalizzaTesto_(change.value, 1000);
-    if (!key) return;
-    if (['room', 'camera', 'alloggio'].indexOf(key.toLowerCase()) >= 0) throw new Error('La sistemazione deve essere modificata con il selettore dedicato.');
-    registraOperazioneSegreteria_(orderCode, participantNumber, 'UPDATE_FIELD', { key: key, value: value }, form.reason, operator, 'Modifica confermata dalla scheda prenotazione.');
-  });
-  aggiungiControllo_('BOOKING_UPDATE', 'REGISTRATION', orderCode, 'SUCCESS', operator, String(changes.length), 'WORKSPACE_UI');
-  return { ok: true, message: 'Modifiche confermate e registrate nello storico.' };
-}
-
-function cambiaSistemazioneSegreteria(form) {
-  form = form || {}; const orderCode = normalizzaTesto_(form.order_code, 64); const participantNumber = Math.max(0, Math.round(Number(form.participant_number) || 0)); const roomCode = normalizzaTesto_(form.room_code, 80);
-  if (!orderCode || !participantNumber || !roomCode) throw new Error('Partecipante o sistemazione non validi.');
-  const operator = normalizzaTesto_(Session.getActiveUser().getEmail() || 'SEGRETERIA', 120); const lock = LockService.getDocumentLock(); lock.waitLock(5000);
-  try {
-    const registration = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).find(function (row) { return String(row.codice_ordine) === orderCode; });
-    const participant = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).find(function (row) { return String(row.codice_ordine) === orderCode && Number(row.numero_partecipante) === participantNumber; });
-    if (!registration || !participant || String(participant.stato_partecipante || 'ACTIVE').toUpperCase() === 'CANCELLED') throw new Error('Partecipante non disponibile.');
-    const selected = elencaSistemazioniDisponibili_(String(registration.id_evento || '')).find(function (room) { return room.code === roomCode; });
-    const currentFields = datiOperativiPartecipante_(participant, indiceStatoOperativo_()[orderCode + '|' + participantNumber] || {}); const currentRoom = String(currentFields.room || currentFields.camera || currentFields.alloggio || '');
-    if (!selected) throw new Error('Sistemazione non disponibile per questo evento.');
-    if (selected.available < 1 && currentRoom !== roomCode) throw new Error('La sistemazione selezionata è al completo.');
-    registraOperazioneSegreteria_(orderCode, participantNumber, 'CHANGE_ACCOMMODATION', { key: 'room', value: roomCode, previous: currentRoom }, form.reason, operator, 'Sistemazione aggiornata con controllo capienza.');
-    aggiungiControllo_('CHANGE_ACCOMMODATION', 'PARTICIPANT', orderCode + ':' + participantNumber, 'SUCCESS', operator, roomCode, 'WORKSPACE_UI');
-    return { ok: true, message: 'Sistemazione aggiornata.' };
-  } finally { lock.releaseLock(); }
+  return { order_code: orderCode, event_id: String(registration.id_evento || ''), event_title: String(event.titolo || registration.id_evento || ''), status: String(registration.stato || ''), payment_status: statoPagamento_(registration, netPaid), created_at: registration.data_creazione, buyer: { first_name: String(registration.nome_referente || ''), last_name: String(registration.cognome_referente || ''), email: String(registration.email_referente || ''), phone: String(registration.telefono_referente || '') }, special_requests: String(registration.richieste_particolari || ''), total_cents: Number(registration.totale_centesimi) || 0, deposit_cents: Number(registration.primo_versamento_centesimi) || 0, paid_cents: netPaid, balance_cents: Math.max(0, (Number(registration.totale_centesimi) || 0) - netPaid), participants: participants, accommodations: elencaSistemazioniConDati_(String(registration.id_evento || ''), lettura), active_operator: normalizzaTesto_(Session.getActiveUser().getEmail(), 120) };
 }
 
 function configuraElencoOperativo(form) {
@@ -207,20 +177,18 @@ function indiceStatoOperativo_() {
 }
 
 function datiOperativiPartecipante_(participant, overrides) {
-  const fields = decodificaOggetto_(participant.dati_aggiuntivi_json); Object.keys(overrides || {}).forEach(function (key) { fields[key] = overrides[key]; }); return fields;
+  const fields = decodificaOggetto_(participant.dati_aggiuntivi_json); Object.keys(overrides || {}).forEach(function (key) { fields[key] = overrides[key]; });
+  if (Object.prototype.hasOwnProperty.call(overrides || {}, 'room')) { delete fields.camera; delete fields.alloggio; }
+  return fields;
 }
 
 function elencaSistemazioniDisponibili_(eventId) {
-  const accommodationsSheet = ottieniSchedaObbligatoria_(MI_SHEETS.ACCOMMODATIONS);
-  let rooms = convertiRigheInOggetti_(accommodationsSheet).filter(function (row) { return String(row.id_evento) === String(eventId) && ['0', 'NO', 'FALSE', 'INATTIVA'].indexOf(String(row.attiva).toUpperCase()) < 0; });
-  if (!rooms.length && eventId) {
-    [['SINGOLA','Camera singola',1],['DOPPIA','Camera doppia',2],['TRIPLA','Camera tripla',3],['MULTIPLA','Camera multipla',8]].forEach(function (item) {
-      accommodationsSheet.appendRow([String(eventId), item[0], item[1], item[2], 'SI', 'Opzione dimostrativa predefinita']);
-    });
-    rooms = convertiRigheInOggetti_(accommodationsSheet).filter(function (row) { return String(row.id_evento) === String(eventId); });
-  }
-  const registrations = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(function (row) { return String(row.id_evento) === String(eventId) && ['ANNULLATO', 'SCADUTO', 'CANCELLED', 'EXPIRED'].indexOf(String(row.stato).toUpperCase()) < 0; }); const allowedOrders = registrations.reduce(function (result, row) { result[String(row.codice_ordine)] = true; return result; }, {}); const operational = indiceStatoOperativo_(); const occupied = {};
-  convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).forEach(function (participant) { const orderCode = String(participant.codice_ordine || ''); if (!allowedOrders[orderCode] || String(participant.stato_partecipante || 'ACTIVE').toUpperCase() === 'CANCELLED') return; const number = Number(participant.numero_partecipante) || 0; const fields = datiOperativiPartecipante_(participant, operational[orderCode + '|' + number] || {}); const code = String(fields.room || fields.camera || fields.alloggio || ''); if (code) occupied[code] = (occupied[code] || 0) + 1; });
+  return elencaSistemazioniConDati_(eventId, creaLetturaGestione_());
+}
+function elencaSistemazioniConDati_(eventId, lettura) {
+  let rooms = lettura.righe(MI_SHEETS.ACCOMMODATIONS).filter(function (row) { return String(row.id_evento) === String(eventId) && ['0', 'NO', 'FALSE', 'INATTIVA'].indexOf(String(row.attiva).toUpperCase()) < 0; });
+  const registrations = lettura.righe(MI_SHEETS.REGISTRATIONS).filter(function (row) { return String(row.id_evento) === String(eventId) && ['ANNULLATO', 'SCADUTO', 'CANCELLED', 'EXPIRED'].indexOf(String(row.stato).toUpperCase()) < 0; }); const allowedOrders = registrations.reduce(function (result, row) { result[String(row.codice_ordine)] = true; return result; }, {}); const operational = lettura.stato(); const occupied = {};
+  lettura.righe(MI_SHEETS.PARTICIPANTS).forEach(function (participant) { const orderCode = String(participant.codice_ordine || ''); if (!allowedOrders[orderCode] || String(participant.stato_partecipante || 'ACTIVE').toUpperCase() === 'CANCELLED') return; const number = Number(participant.numero_partecipante) || 0; const fields = datiOperativiPartecipante_(participant, operational[orderCode + '|' + number] || {}); const code = String(fields.room || fields.camera || fields.alloggio || ''); if (code) occupied[code] = (occupied[code] || 0) + 1; });
   return rooms.map(function (room) { const code = String(room.codice || ''); const capacity = Math.max(0, Math.round(Number(room.capienza) || 0)); const used = occupied[code] || 0; return { code: code, name: String(room.nome || code), capacity: capacity, occupied: used, available: Math.max(0, capacity - used) }; });
 }
 
@@ -309,6 +277,8 @@ function generaVistaOperativaEvento_(idEvento, campiForzati) {
   const colonne = campi.filter(function (chiave) { return !!catalogo[chiave]; }).map(function (chiave) {
     return { key: chiave, label: catalogo[chiave].label, gruppo: gruppoCampoVistaOperativa_(chiave), comprimibile: ['paid_cash', 'paid_transfer', 'paid_card'].indexOf(chiave) >= 0 };
   });
+  aggiungiColonneServizi_(colonne, decodificaElenco_(evento.servizi_json));
+  iscrizioni.forEach(r=>{const snapshot=decodificaOggetto_(r.snapshot_json);aggiungiColonneServizi_(colonne, (snapshot.event||{}).options||[]);});
   const righe = partecipanti.map(function (partecipante) {
     const iscrizione = iscrizioniPerCodice[String(partecipante.codice_ordine)];
     const numero = Number(partecipante.numero_partecipante) || 0;
@@ -432,6 +402,11 @@ function campiElencoOperativo_(includiDinamici) {
 }
 
 function valoreCampoElenco_(field, event, registration, participant, data, payments) {
+  if (field === 'status') return etichettaStatoIscrizione_(participant.stato_partecipante || registration.stato);
+  if (String(field).indexOf('option_')===0) {
+    const option=decodificaElenco_(participant.opzioni_json).find(o=>'option_'+String(o.code)===field);
+    return option ? Number(option.quantity)||0 : 0;
+  }
   const aliases = { email: ['participant_email', 'email'], phone: ['participant_phone', 'phone', 'mobile'], birth_date: ['birth_date', 'data_nascita'], document_type: ['document_type', 'tipo_documento'], document_number: ['document_number', 'numero_documento'], document_issue_date: ['document_issue_date', 'data_emissione_documento'], document_expiry_date: ['document_expiry_date', 'document_expiry', 'scadenza_documento'], nationality: ['nationality', 'nazionalita'], room: ['room', 'camera', 'alloggio'], transport: ['pullman', 'transport'], breakfast: ['colazione', 'breakfast'], lunch: ['pranzo', 'lunch'], insurance: ['assicurazione', 'insurance'], emergency_contact: ['emergency_contact', 'emergency_phone', 'contatto_emergenza', 'telefono_emergenza'] };
   const direct = { event: event.titolo || registration.id_evento, order_code: registration.codice_ordine, participant_number: participant.numero_partecipante, first_name: participant.nome, last_name: participant.cognome, status: participant.stato_partecipante || registration.stato, special_requests: registration.richieste_particolari || '' };
   if (Object.prototype.hasOwnProperty.call(direct, field)) return direct[field];
@@ -447,6 +422,11 @@ function valoreCampoElenco_(field, event, registration, participant, data, payme
   if (field === 'balance') return Math.max(0, (Number(registration.totale_centesimi) || 0) - paid) / 100;
   const candidates = aliases[field] || [field]; for (let index = 0; index < candidates.length; index += 1) if (data[candidates[index]] != null && data[candidates[index]] !== '') return data[candidates[index]];
   if (field === 'email') return registration.email_referente || ''; if (field === 'phone') return registration.telefono_referente || ''; return '';
+}
+
+function etichettaStatoIscrizione_(value) {
+  const labels = { PENDING_PAYMENT: 'Da pagare', IN_ATTESA_PAGAMENTO: 'Da pagare', CONFIRMED: 'Confermata', CONFERMATA: 'Confermata', WAITLISTED: 'Lista d’attesa', WAITLIST_OFFERED: 'Posto proposto', CANCELLED: 'Annullata', EXPIRED: 'Scaduta', ACTIVE: 'Attiva', CANCELLED_PARTICIPANT: 'Annullata' };
+  return labels[String(value || '').toUpperCase()] || String(value || '');
 }
 
 function aggiornaStatoOperativo_(orderCode, participantNumber, key, value, operator, operationId) {

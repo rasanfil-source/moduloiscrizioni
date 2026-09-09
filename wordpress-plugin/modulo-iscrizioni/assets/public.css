@@ -63,3 +63,10 @@
 .mi-registration__payment-instructions-note{margin:1.25rem 0 .5rem;line-height:1.5}.mi-registration__payment-instructions-note:not([hidden]) + .mi-registration__action-bar{margin-top:.5rem}
 
 .mi-registration__completion{display:flex;flex-direction:column;gap:.75rem;margin-top:1.25rem}.mi-registration__completion p{margin:0}.mi-registration__finish{align-self:flex-end;display:inline-block;padding:.75rem 1.25rem;border-radius:9px;background:var(--mi-primary);color:#fff!important;font-weight:800;text-decoration:none}.mi-registration__finish:hover{background:var(--mi-primary-dark)}.mi-registration__finish:focus-visible{outline:3px solid var(--mi-ink);outline-offset:3px}
+
+/* Service categories share a restrained blue palette. */
+.mi-registration [data-service-category]{padding:.75rem;border-left:4px solid #597c9b;border-radius:4px}
+.mi-registration [data-service-category="alloggio"]{background:#e3edf7}
+.mi-registration [data-service-category="pullman"]{background:#edf3f9}
+.mi-registration [data-service-category="pranzo"]{background:#d5e5f3}
+.mi-registration [data-service-category="altro"]{background:#f2f6fa}

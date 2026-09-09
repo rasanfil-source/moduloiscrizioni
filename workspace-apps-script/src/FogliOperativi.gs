@@ -15,7 +15,8 @@ function preparaProduzioniEventoDaWordPress_(payload) {
     normalizzaTesto_(payload.apertura_iscrizioni, 40),
     normalizzaTesto_(payload.chiusura_iscrizioni, 40),
     payload.evento_gratuito === true ? 'ZERO' : normalizzaTesto_(payload.modalita_prezzo, 40),
-    new Date()
+    new Date(),
+    JSON.stringify(Array.isArray(payload.servizi) ? payload.servizi : [])
   ];
   if (esistente) eventi.getRange(esistente._row, 1, 1, valori.length).setValues([valori]);
   else eventi.appendRow(valori);
@@ -34,7 +35,7 @@ function preparaProduzioniEventoDaWordPress_(payload) {
 function condividiFoglioSoltantoConGestore_(idFoglio, emailGestore) {
 	const file = DriveApp.getFileById(String(idFoglio));
 	try {
-		file.addEditor(emailGestore);
+		file.addViewer(emailGestore);
 		return { ok: true, email: emailGestore };
 	} catch (errore) {
 		aggiungiControllo_('PRODUZIONI_EVENTO', 'SHARE', String(idFoglio), 'WARNING', 'WORDPRESS', normalizzaTesto_(errore && errore.message ? errore.message : errore, 500), 'WORDPRESS_PROXY');
@@ -76,13 +77,15 @@ function apriFoglioOperativoConLock_(form) {
 	// Un evento appena creato non possiede ancora iscrizioni: evitiamo di rileggere
 	// l'intero database e prepariamo subito la struttura scelta in WordPress.
 	const vista = esistente ? generaVistaOperativaEvento_(idEvento) : generaVistaOperativaIniziale_(idEvento, normalizzaTesto_(form.titolo, 200), normalizzaTesto_(form.profilo_operativo, 30));
+	const datiEvento = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS)).find(r=>String(r.id_evento)===idEvento);
+	aggiungiColonneServizi_(vista.colonne, decodificaElenco_(datiEvento && datiEvento.servizi_json));
 	const titoloPulito = String(vista.evento.titolo || idEvento).replace(/[\\/:*?"<>|#%{}]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140);
 	const titolo = 'Evento ' + idEvento + ' - ' + titoloPulito;
   const foglio = SpreadsheetApp.create(titolo);
 	const cartella = spostaFoglioAccantoAlDatabase_(foglio.getId());
   const scheda = foglio.getSheets()[0];
   scheda.setName('Dati operativi');
-  aggiornaDatiIncrementaliEvento_(scheda, vista);
+  scriviProiezioneEvento_(scheda, vista);
   configuraSchedeEconomicheEvento_(foglio, idEvento);
   const valori = [idEvento, neutralizzaFormula_(vista.evento.titolo, 200), foglio.getId(), foglio.getUrl(), '', '', new Date()];
 	if (esistente) registro.getRange(esistente._row, 1, 1, valori.length).setValues([valori]);
@@ -231,6 +234,13 @@ function normalizzaUrlPubblico_(valore) {
 
 /** Riallinea dal database soltanto dopo una conferma esplicita nell'interfaccia. */
 function aggiornaFoglioOperativoEvento(form) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try { return aggiornaFoglioOperativoEventoConLock_(form); }
+  finally { lock.releaseLock(); }
+}
+
+function aggiornaFoglioOperativoEventoConLock_(form) {
   form = form || {};
   const idEvento = normalizzaTesto_(form.id_evento, 40);
   if (!idEvento) throw new Error('Scegli un evento.');
@@ -240,104 +250,22 @@ function aggiornaFoglioOperativoEvento(form) {
   const foglio = SpreadsheetApp.openById(String(collegamento.id_foglio));
   const scheda = foglio.getSheetByName('Dati operativi') || foglio.getSheets()[0];
   const vista = generaVistaOperativaEvento_(idEvento);
-  const esito = scriviFoglioOperativoEvento_(scheda, vista);
+  const proprieta = PropertiesService.getScriptProperties();
+  const chiaveProiezione = 'MI_EVENT_VIEW_' + String(collegamento.id_foglio);
+  const ordiniEvento = new Set(convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(r=>String(r.id_evento)===idEvento).map(r=>String(r.codice_ordine)));
+  const movimentiEvento = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS)).filter(r=>ordiniEvento.has(String(r.codice_ordine))).map(r=>{const copia=Object.assign({},r);delete copia._row;return copia;});
+  const impronta = versioneGestione_({vista:vista,movimenti:movimentiEvento});
+  if (form.soloModificati === true && proprieta.getProperty(chiaveProiezione) === impronta) {
+    return {ok:true, invariato:true, esito:{aggiunte:0,manuali:0,conflitti:0}};
+  }
+  const esito = scriviProiezioneEvento_(scheda, vista);
   configuraSchedeEconomicheEvento_(foglio, idEvento);
-  if (eventoPrevedeMovimenti_(idEvento)) aggiornaProiezionePagamentiEvento_(foglio, idEvento);
+  aggiornaProiezionePagamentiEventoConLock_(foglio, idEvento);
+  // Store only after all writes succeed. Pending edits remain in the sheet;
+  // a new canonical value changes the fingerprint and retries acknowledgment.
+  proprieta.setProperty(chiaveProiezione, impronta);
   aggiungiControllo_('FOGLIO_OPERATIVO', 'REFRESH', idEvento, 'SUCCESS', normalizzaTesto_(Session.getActiveUser().getEmail() || 'SEGRETERIA', 120), 'DATABASE_TO_EVENT_SHEET', 'SEGRETERIA');
-  return { ok: true, url_foglio: foglio.getUrl(), righe: vista.righe.length, esito: esito, message: 'Aggiornamento completato: ' + esito.aggiunte + ' partecipanti aggiunti, ' + esito.manuali + ' modifiche manuali conservate, ' + esito.conflitti + ' celle da verificare.' };
-}
-
-/** Confronta il foglio evento con DB_MODULI senza scrivere alcun dato. */
-function preparaSincronizzazioneFoglioOperativo(form) {
-  form = form || {};
-  const idEvento = normalizzaTesto_(form.id_evento, 40);
-  if (!idEvento) throw new Error('Scegli un evento.');
-  const collegamento = trovaCollegamentoFoglioOperativo_(idEvento);
-  const foglio = SpreadsheetApp.openById(String(collegamento.id_foglio));
-  const scheda = foglio.getSheetByName('Dati operativi') || foglio.getSheets()[0];
-  const mappa = mappaColonneEvento_(scheda);
-  if (!mappa._ordine || !mappa._numero || !mappa._base) throw new Error('Verifica prima la migrazione del foglio agli identificativi stabili.');
-  const campi = Object.keys(mappa).filter(function (campo) { return campo.charAt(0) !== '_'; });
-  const vista = generaVistaOperativaEvento_(idEvento, campi);
-  const centrali = vista.righe.reduce(function (indice, riga) { indice[riga.codice_ordine + '|' + riga.numero_partecipante] = riga; return indice; }, {});
-  const valori = scheda.getLastRow() > 1 ? scheda.getRange(2, 1, scheda.getLastRow() - 1, scheda.getLastColumn()).getValues() : [];
-  // Servizi, sistemazioni e domande dinamiche richiedono un comando coordinato con WordPress.
-  const modificabili = ['email', 'phone', 'birth_date', 'document_type', 'document_number', 'document_issue_date', 'document_expiry_date', 'nationality', 'emergency_contact'];
-  const modifiche = [];
-  const problemi = [];
-  const viste = {};
-  const identitaViste = {};
-  vista.colonne.forEach(function (colonna) { viste[colonna.key] = colonna.label; });
-  valori.forEach(function (riga, indiceRiga) {
-    if (riga.every(function (valore) { return valore === ''; })) return;
-    const codice = normalizzaTesto_(riga[mappa._ordine - 1], 64);
-    const numero = Number(riga[mappa._numero - 1]);
-    const id = identitaRigaEvento_(idEvento, codice, numero);
-    const centrale = centrali[codice + '|' + numero];
-    if (!id || !centrale || identitaViste[id]) { problemi.push('Riga ' + (indiceRiga + 2) + ': collegamento tecnico assente, storico o duplicato; nessuna cancellazione automatica.'); return; }
-    identitaViste[id] = true;
-    let base;
-    try { base = baseRigaEvento_(riga[mappa._base - 1], id); }
-    catch (errore) { problemi.push('Riga ' + (indiceRiga + 2) + ': ' + errore.message); return; }
-    campi.forEach(function (campo) {
-      if (!Object.prototype.hasOwnProperty.call(centrale.valori, campo)) return; // Colonna storica.
-      const nuovo = testoCellaEvento_(riga[mappa[campo] - 1]);
-      const precedente = testoCellaEvento_(centrale.valori[campo]);
-      const stato = statoCellaEvento_(nuovo, precedente, base.campi[campo], scheda.getRange(indiceRiga + 2, mappa[campo]).getFormula());
-      if (stato === 'ALLINEATO' || stato === 'AGGIORNAMENTO_CENTRALE') return;
-      if (stato !== 'MODIFICA_MANUALE' || modificabili.indexOf(campo) < 0) { problemi.push('Riga ' + (indiceRiga + 2) + ': “' + (viste[campo] || campo) + '” richiede verifica (' + stato + ').'); return; }
-      if (nuovo.length > 1000 || (campo === 'email' && nuovo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nuovo))) { problemi.push('Riga ' + (indiceRiga + 2) + ': valore non valido per ' + viste[campo] + '.'); return; }
-      modifiche.push({ codice_ordine: codice, numero_partecipante: numero, campo: campo, etichetta: viste[campo] || campo, precedente: precedente, nuovo: nuovo });
-    });
-  });
-  if (modifiche.length > 200) throw new Error('Sono state rilevate più di 200 modifiche: suddividere il lavoro in blocchi più piccoli.');
-  const firma = creaFirmaSincronizzazioneFoglio_(idEvento, modifiche);
-  return { id_evento: idEvento, modifiche: modifiche, problemi: problemi.slice(0, 50), firma: firma, applicabile: modifiche.length > 0 && problemi.length === 0 };
-}
-
-/** Applica soltanto una differenza appena ricalcolata e confermata dall'operatore. */
-function confermaSincronizzazioneFoglioOperativo(form) {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
-  try { return applicaSincronizzazioneFoglioOperativo_(form); }
-  finally { lock.releaseLock(); }
-}
-
-function applicaSincronizzazioneFoglioOperativo_(form) {
-  form = form || {};
-  const idEvento = normalizzaTesto_(form.id_evento, 40);
-  const firma = normalizzaTesto_(form.firma, 128);
-  const motivo = normalizzaTesto_(form.motivo, 500);
-  if (!idEvento || !firma || !motivo) throw new Error('Evento, firma e motivo della sincronizzazione sono obbligatori.');
-  const anteprima = preparaSincronizzazioneFoglioOperativo({ id_evento: idEvento });
-  if (!anteprima.applicabile || anteprima.firma !== firma) throw new Error('Il foglio è cambiato dopo l’anteprima: controllare nuovamente le differenze.');
-  const operatore = normalizzaTesto_(Session.getActiveUser().getEmail() || 'SEGRETERIA', 120);
-  anteprima.modifiche.forEach(function (modifica) {
-    if (modifica.campo === 'room') {
-      cambiaSistemazioneSegreteria({ order_code: modifica.codice_ordine, participant_number: modifica.numero_partecipante, room_code: modifica.nuovo, reason: motivo });
-      return;
-    }
-    registraOperazioneSegreteria_(modifica.codice_ordine, modifica.numero_partecipante, 'SYNC_EVENT_SHEET', { key: modifica.campo, value: modifica.nuovo, previous: modifica.precedente }, motivo, operatore, 'Modifica confermata dal foglio operativo dell’evento.');
-  });
-  aggiungiControllo_('FOGLIO_OPERATIVO', 'SYNC', idEvento, 'SUCCESS', operatore, String(anteprima.modifiche.length), 'SEGRETERIA');
-  return { ok: true, count: anteprima.modifiche.length, message: 'Sincronizzate ' + anteprima.modifiche.length + ' modifiche con storico.' };
-}
-
-function trovaCollegamentoFoglioOperativo_(idEvento) {
-  const collegamento = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES)).find(function (riga) { return String(riga.id_evento) === idEvento; });
-  if (!collegamento || !collegamento.id_foglio) throw new Error('Crea prima il foglio operativo dell’evento.');
-  return collegamento;
-}
-
-function creaFirmaSincronizzazioneFoglio_(idEvento, modifiche) {
-  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, idEvento + '|' + JSON.stringify(modifiche), Utilities.Charset.UTF_8).map(function (valore) { return ('0' + (valore & 255).toString(16)).slice(-2); }).join('');
-}
-
-function scriviFoglioOperativoEvento_(scheda, vista) {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
-  try { return aggiornaDatiIncrementaliEvento_(scheda, vista); }
-  finally { lock.releaseLock(); }
+  return { ok: true, url_foglio: foglio.getUrl(), righe: vista.righe.length, esito: esito, message: 'Controllo completato. Le modifiche nelle celle blu si inviano con Sincronizza.' };
 }
 
 function rimuoviRaggruppamentiColonne_(scheda) {

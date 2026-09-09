@@ -1,12 +1,18 @@
-# Schema dati iniziale
+# Schema logico dei dati
 
-Questo documento dettaglia il modello descritto in `PROGETTO.md`. Definisce la gerarchia organizzativa, il formato delle revisioni pubblicate e le regole minime di integrità per WordPress, Google Apps Script e Google Sheets.
+## Registro fisico corrente — 3.25.1
+
+MySQL WordPress è autorevole. `mi_registrations`, `mi_participants` e `mi_payments` conservano iscrizioni, persone e movimenti; `mi_rooms`, `mi_management_state` e `mi_management_requests` gestiscono camere, revisioni e idempotenza operativa. `mi_booking_codes` assegna una sigla univoca per evento (indice UNIQUE su prefix) e un progressivo aggiornato nella transazione di iscrizione. Il codice visibile non sostituisce l'identificativo numerico interno.
+
+Google riceve repliche con revisioni e identificativi stabili. `_MI_BASE` conserva i valori di confronto del foglio operativo; le modifiche locali vengono confermate nel servizio MySQL prima dell'aggiornamento della base. Gli importi e le identità delle righe non sono modificabili nelle celle operative.
+
+Questo documento conserva il modello logico di eventi e iscrizioni. Per il comportamento effettivamente implementato prevalgono PROGETTO.md e ALLINEAMENTO_CODICE_DOCUMENTAZIONE.md; le entità concettuali qui descritte non corrispondono tutte a tabelle fisiche separate. Definisce la gerarchia organizzativa, il formato delle revisioni pubblicate e le regole minime di integrità per WordPress, Google Apps Script e Google Sheets.
 
 La struttura completa di una revisione è esemplificata in `schema/evento.example.json`. La fixture è intenzionalmente non pubblicabile: nomi, indirizzi, profili e URL sono fittizi e marcati `DEMO_ONLY`.
 
 ## Stato normativo del documento
 
-- **Confermato**: gerarchia parrocchia/attività/evento, assi economici, snapshot immutabili, rettifiche append-only, pagamenti canonici separati dall'intake e ACL WordPress per attività.
+- **Confermato**: gerarchia parrocchia/attività/evento, assi economici, snapshot immutabili, rettifiche append-only, registro canonico dei pagamenti e ACL WordPress per attività.
 - **Default di Fase A**: nomi esatti dei fogli, granularità di alcune capability, tempi di hold e struttura fisica delle proiezioni Sheets.
 - **Da validare in Fase B**: dimensione dei batch, indici ausiliari, cache, checkpoint e dettagli di deploy GAS in base alla prova di carico.
 
@@ -198,7 +204,7 @@ La revisione pubblicata dichiara sempre quattro assi:
 Combinazioni non valide vengono rifiutate alla pubblicazione. In particolare:
 
 - `NONE` o `ZERO` non ammettono rate o incasso tracciato;
-- `NOT_MANAGED` non ammette metodi, hold o righe `PaymentIntake`;
+- `NOT_MANAGED` non ammette metodi, hold o registrazione di incassi;
 - una modalità tracciata richiede almeno un metodo attivo e un piano;
 - `DEPOSIT_BALANCE` richiede una caparra positiva e inferiore al totale iniziale;
 - `POST_ORDER` richiede scadenza, procedura e capability di finalizzazione.
@@ -309,30 +315,13 @@ Il totale corrente è `base_total + CHARGE - CREDIT`. Un errore viene corretto d
 
 Ogni movimento effettivo conserva `transaction_kind` (`RECEIPT`, `REFUND`, `REVERSAL`), eventuale `installment_kind` (`FULL`, `DEPOSIT`, `INTERIM`, `BALANCE`, `UNALLOCATED`), importo, valuta, fonte, data, riferimento, operatore e stato di convalida. Un rimborso non è un prezzo negativo e una rettifica di prezzo non è un pagamento.
 
-### Inserimento manuale dei pagamenti
+### Registrazione dei pagamenti — modello corrente
 
-Il primo rilascio usa due fogli nello stesso spreadsheet:
+Il portale WordPress è l'unica interfaccia operatore. Verifica sessione, permessi e ambito evento e invia il movimento al validatore Apps Script. Il registro canonico è Pagamenti; non esiste più un foglio intake.
 
-- `PaymentIntake`, area protetta modificabile soltanto dagli operatori finanziari globali autorizzati;
-- `Payments`, registro canonico scritto da Apps Script e non modificato direttamente durante il flusso ordinario.
+Ogni movimento identifica prenotazione, tipo, importo in centesimi, data, metodo, riferimento, operatore e richiesta idempotente. La classificazione della rata non è obbligatoria nella UI. Solo movimenti convalidati contribuiscono agli aggregati. Le rettifiche non sovrascrivono i movimenti confermati.
 
-Le colonne editabili di `PaymentIntake` sono almeno:
-
-- `order_code`;
-- `transaction_kind`, con lista `RECEIPT`, `REFUND`, `REVERSAL`;
-- `installment_kind`, obbligatorio per un incasso quando la rata è nota: `FULL`, `DEPOSIT`, `INTERIM`, `BALANCE`, `UNALLOCATED`;
-- `effective_at`;
-- `amount` positivo nel formato valuta del foglio;
-- `payment_source`, con convalida a elenco obbligatoria: `BANK_TRANSFER`, `CARD`, `CASH`;
-- `external_reference`, facoltativo e privo di dati completi della carta;
-- `operator_label`, obbligatorio per `CASH` e quando Google non espone l'identità dell'editor;
-- `administrative_note`, facoltativa.
-
-Apps Script convalida le righe tramite comando esplicito o trigger installabile, converte l'importo nel valore canonico `amount_cents`, risolve `order_id`, verifica profilo economico, valuta e duplicati, assegna `payment_id` e scrive `Payments`. Le colonne di esito dell'area di acquisizione indicano `PENDING`, `VALIDATED`, `REJECTED` o `REVIEW_REQUIRED` e un errore breve. Soltanto righe canoniche convalidate contribuiscono agli aggregati dell'ordine. Un ordine `NOT_REQUIRED` o `NOT_MANAGED` viene rifiutato; un ordine scaduto o annullato richiede revisione e non viene aggiornato automaticamente.
-
-Ogni riga canonica conserva anche `recording_channel: MANUAL_SHEET`, riferimento alla riga di acquisizione, timestamp e attore quando disponibile. Una correzione di un pagamento convalidato genera una rettifica collegata invece di sovrascrivere la storia. Per la fonte `CARD` non sono ammessi PAN, data di scadenza, CVV o altri dati della carta.
-
-L'accesso Google allo spreadsheet globale consente la visibilità dei dati di tutte le attività ed è quindi distinto dalle ACL WordPress per attività. Non viene concesso ai normali delegati activity-scoped: gli editor di `PaymentIntake` sono operatori finanziari globali. Un futuro operatore finanziario limitato a una singola attività dovrà usare il pannello WordPress oppure un intake separato che non esponga le altre attività.
+I fogli evento sono proiezioni protette. Gli operatori limitati a un evento lavorano attraverso le autorizzazioni WordPress, senza bisogno di accesso al registro centrale.
 
 ## 9. Ruoli WordPress, scope attività e audit
 
@@ -374,7 +363,7 @@ Questo contesto:
 
 GAS verifica firma, freschezza, nonce e coerenza dello scope prima di leggere o modificare dati privati. Anche esportazione, retry email, modifica pagamento e cambio stato ripetono il controllo. Le richieste pubbliche usano un contesto distinto `PUBLIC` legato all'evento e non ottengono mai capability amministrative.
 
-L'acquisizione manuale da `PaymentIntake` è un canale separato e non finge di provenire da WordPress. Il foglio e gli intervalli sono protetti per operatori finanziari globali autorizzati come editor Google; l'audit usa `channel: MANUAL_SHEET` e registra l'identità dell'editor quando disponibile. Se Google non la espone, conserva l'operatore dichiarato e marca l'identità come non verificata automaticamente.
+I movimenti inseriti nel portale conservano l’identità WordPress verificata dal proxy e il relativo identificativo di richiesta. Non viene acquisita alcuna riga manuale dai fogli.
 
 ## 10. Integrità minima
 

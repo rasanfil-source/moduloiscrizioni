@@ -127,58 +127,12 @@ final class MI_Admin {
 	}
 
 	public static function add_payment() {
-		if ( ! current_user_can( 'mi_manage_payments' ) ) { wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) ); }
-		$registration_id = isset( $_POST['registration_id'] ) ? absint( $_POST['registration_id'] ) : 0;
+		if ( ! MI_Portal_Payments::allowed() ) wp_die( 'Accesso non consentito.' );
+		$registration_id = absint( $_POST['registration_id'] ?? 0 );
 		check_admin_referer( 'mi_add_payment_' . $registration_id );
-		global $wpdb;
-		$registration = $wpdb->get_row( $wpdb->prepare( "SELECT event_id FROM {$wpdb->prefix}mi_registrations WHERE id = %d", $registration_id ), ARRAY_A );
-		if ( ! $registration || ! MI_Access::can_access_event( (int) $registration['event_id'] ) ) { wp_die( esc_html__( 'Iscrizione non accessibile.', 'modulo-iscrizioni' ) ); }
-		$source = strtoupper( sanitize_key( wp_unslash( $_POST['payment_source'] ?? '' ) ) );
-		$kind = strtoupper( sanitize_key( wp_unslash( $_POST['installment_kind'] ?? 'FULL' ) ) );
-		$transaction = strtoupper( sanitize_key( wp_unslash( $_POST['transaction_kind'] ?? 'PAYMENT' ) ) );
-		$amount = self::parse_importo_centesimi( wp_unslash( $_POST['amount'] ?? '' ) );
-		$effective_raw = sanitize_text_field( wp_unslash( $_POST['effective_at'] ?? '' ) );
-		$effective_at = current_time( 'mysql', true );
-		if ( $effective_raw ) {
-			$effective_date = DateTimeImmutable::createFromFormat( 'Y-m-d\\TH:i', $effective_raw, wp_timezone() );
-			if ( ! $effective_date || $effective_date->format( 'Y-m-d\\TH:i' ) !== $effective_raw ) { wp_die( esc_html__( 'Data effettiva non valida.', 'modulo-iscrizioni' ) ); }
-			$effective_at = $effective_date->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
-		}
-		if ( ! in_array( $source, array( 'BANK_TRANSFER', 'CARD', 'CASH' ), true ) || ! in_array( $kind, array( 'DEPOSIT', 'BALANCE', 'FULL', 'OTHER' ), true ) || ! in_array( $transaction, array( 'PAYMENT', 'REFUND' ), true ) || null === $amount ) { wp_die( esc_html__( 'Dati del versamento non validi.', 'modulo-iscrizioni' ) ); }
-		$external_reference = sanitize_text_field( wp_unslash( $_POST['external_reference'] ?? '' ) );
-		$administrative_note = sanitize_textarea_field( wp_unslash( $_POST['administrative_note'] ?? '' ) );
-		if ( self::contiene_numero_carta( $external_reference ) || self::contiene_numero_carta( $administrative_note ) ) { wp_die( esc_html__( 'Non inserire numeri completi di carta.', 'modulo-iscrizioni' ) ); }
-		$wpdb->query( 'START TRANSACTION' );
-		$locked = $wpdb->get_row( $wpdb->prepare( "SELECT id, status, initial_due_cents, payment_deadline_at FROM {$wpdb->prefix}mi_registrations WHERE id = %d FOR UPDATE", $registration_id ), ARRAY_A );
-		if ( ! $locked ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Iscrizione non disponibile.', 'modulo-iscrizioni' ) ); }
-		if ( 'PAYMENT' === $transaction && in_array( $locked['status'], array( 'CANCELLED', 'EXPIRED' ), true ) ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Non è possibile registrare un nuovo versamento su un’iscrizione annullata o scaduta.', 'modulo-iscrizioni' ) ); }
-		if ( 'REFUND' === $transaction && $amount > self::totale_pagamenti( $registration_id ) ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Il rimborso non può superare il totale già versato.', 'modulo-iscrizioni' ) ); }
-		$inserted = $wpdb->insert( $wpdb->prefix . 'mi_payments', array( 'registration_id' => $registration_id, 'transaction_kind' => $transaction, 'installment_kind' => $kind, 'effective_at' => $effective_at, 'amount_cents' => $amount, 'payment_source' => $source, 'external_reference' => $external_reference, 'operator_label' => wp_get_current_user()->display_name, 'administrative_note' => $administrative_note, 'created_at' => current_time( 'mysql', true ) ), array( '%d', '%s', '%s', '%s', '%d', '%s', '%s', '%s', '%s' ) );
-		if ( false === $inserted ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Il movimento non è stato salvato. Riprova.', 'modulo-iscrizioni' ) ); }
-		$registration_changes = array( 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_changed' );
-		$registration_formats = array( '%s', '%s' );
-		$net_paid = self::totale_pagamenti( $registration_id );
-		$new_status = $locked['status'];
-		if ( 'PENDING_PAYMENT' === $locked['status'] && $net_paid >= (int) $locked['initial_due_cents'] ) {
-			$new_status = 'CONFIRMED';
-			$registration_changes['status'] = $new_status;
-			$registration_formats[] = '%s';
-			$registration_changes['expires_at'] = null;
-			$registration_formats[] = '%s';
-		} elseif ( 'CONFIRMED' === $locked['status'] && (int) $locked['initial_due_cents'] > 0 && $net_paid < (int) $locked['initial_due_cents'] ) {
-			$new_status = 'PENDING_PAYMENT';
-			$registration_changes['status'] = $new_status;
-			$registration_formats[] = '%s';
-			$registration_changes['expires_at'] = $locked['payment_deadline_at'];
-			$registration_formats[] = '%s';
-		}
-		$marked_pending = $wpdb->update( $wpdb->prefix . 'mi_registrations', $registration_changes, array( 'id' => $registration_id ), $registration_formats, array( '%d' ) );
-		if ( false === $marked_pending ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Il movimento non è stato accodato per Workspace. Riprova.', 'modulo-iscrizioni' ) ); }
-		if ( $new_status !== $locked['status'] && ! MI_Registration_Service::append_registration_event( $registration_id, 'PAYMENT_STATUS_CHANGED', $locked['status'], $new_status, wp_get_current_user()->display_name, array( 'net_paid_cents' => $net_paid, 'initial_due_cents' => (int) $locked['initial_due_cents'] ) ) ) { $wpdb->query( 'ROLLBACK' ); wp_die( esc_html__( 'Lo stato del pagamento non è stato registrato. Riprova.', 'modulo-iscrizioni' ) ); }
-		$wpdb->query( 'COMMIT' );
-		MI_Registration_Service::accoda_iscrizione_workspace( $registration_id );
-		$url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-registrations', 'registration_id' => $registration_id, 'mi_payment_added' => '1' ), admin_url( 'edit.php' ) );
-		wp_safe_redirect( $url ); exit;
+		$row = MI_Portal_Payments::registration( $registration_id );
+		if ( ! $row ) wp_die( 'Prenotazione non accessibile.' );
+		wp_die( 'Questo modulo è stato ritirato. Nessun movimento è stato registrato. Apri la sezione Pagamenti del portale per registrarlo.' );
 	}
 
 	public static function cancel_registration() {
@@ -413,7 +367,7 @@ final class MI_Admin {
 		</tbody></table>
 		</details>
 		<?php if ( $payment_rows || in_array( $detail['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) : ?><h3>Versamenti registrati</h3><?php if ( ! $payment_rows ) : ?><p>Nessun versamento registrato.</p><?php else : ?><table class="widefat striped" style="max-width:900px"><thead><tr><th>Data</th><th>Rata</th><th>Importo</th><th>Fonte</th><th>Riferimento</th><th>Nota</th></tr></thead><tbody><?php $payment_labels = array( 'BANK_TRANSFER' => 'Bonifico', 'CARD' => 'Carta', 'CASH' => 'Contante' ); foreach ( $payment_rows as $payment ) : ?><tr><td><?php echo esc_html( self::formatta_data_locale( $payment['effective_at'] ) ); ?></td><td><?php echo esc_html( $payment['installment_kind'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $payment['amount_cents'] ) ); ?></td><td><?php echo esc_html( $payment_labels[ $payment['payment_source'] ] ?? $payment['payment_source'] ); ?></td><td><?php echo esc_html( $payment['external_reference'] ?: '—' ); ?></td><td><?php echo esc_html( $payment['administrative_note'] ?: '—' ); ?></td></tr><?php endforeach; ?></tbody></table><?php endif; ?><?php endif; ?>
-		<p class="notice notice-info" style="max-width:900px;padding:12px"><strong>Operazioni di segreteria in Google Sheets.</strong> Pagamenti, rimborsi, variazioni, ritiri e integrazioni si registrano dal menu <em>Modulo iscrizioni → Gestisci un’iscrizione</em> nel foglio di lavoro.</p>
+		<p class="notice notice-info" style="max-width:900px;padding:12px"><strong>Gestione nel portale.</strong> Pagamenti, rimborsi, variazioni e ritiri si registrano dalla scheda della prenotazione. Nel foglio Google puoi correggere le celle azzurre e confermarle con Sincronizza.</p>
 		<h3>Tipologie e opzioni ordine</h3>
 		<?php $detail_order_options = json_decode( (string) ( $detail['order_options_json'] ?? '' ), true ); if ( ! is_array( $detail_order_options ) && $registration_items ) { $detail_order_options = json_decode( (string) $registration_items[0]['options_json'], true ); } $detail_order_options = is_array( $detail_order_options ) ? $detail_order_options : array(); ?>
 		<?php if ( $detail_order_options ) : ?><p><strong>Opzioni ordine:</strong> <?php echo esc_html( implode( ', ', array_map( static function ( $option ) { return ( $option['name'] ?? $option['code'] ?? 'Opzione' ) . ' × ' . absint( $option['quantity'] ?? 0 ); }, $detail_order_options ) ) ); ?></p><?php else : ?><p>Nessuna opzione ordine.</p><?php endif; ?>
@@ -629,7 +583,7 @@ final class MI_Admin {
 	}
 
 	private static function etichetta_stato( $status ) {
-		$labels = array( 'PENDING_PAYMENT' => 'In attesa di pagamento', 'CONFIRMED' => 'Confermata', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto', 'CANCELLED' => 'Annullata', 'EXPIRED' => 'Scaduta' );
+		$labels = array( 'PENDING_PAYMENT' => 'Da pagare', 'CONFIRMED' => 'Confermata', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto', 'CANCELLED' => 'Annullata', 'EXPIRED' => 'Scaduta' );
 		return $labels[ $status ] ?? (string) $status;
 	}
 

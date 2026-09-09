@@ -1,12 +1,10 @@
-const MI_SCHEMA_VERSION = '1.8.0';
+const MI_SCHEMA_VERSION = '1.9.0';
 const MI_SHEETS = Object.freeze({
   CONFIG: 'Configurazione',
   GROUPS: 'Gruppi',
   EVENTS: 'Eventi',
   REGISTRATIONS: 'Iscrizioni',
   PARTICIPANTS: 'Partecipanti',
-  PAYMENT_INTAKE: 'Inserimento pagamenti',
-  PAYMENT_FORM: 'Registra movimento',
   REGISTRATION_FORM: 'Registra iscrizione',
   PAYMENTS: 'Pagamenti',
   EMAIL_OUTBOX: 'Coda email',
@@ -17,16 +15,16 @@ const MI_SHEETS = Object.freeze({
   OPERATIONAL_LIST: 'Elenco operativo',
   REPORT_TEMPLATES: 'Modelli report',
   ACCOMMODATIONS: 'Sistemazioni',
+  REPLICA_REVISIONS: 'Revisioni replica',
   AUDIT_LOG: 'Registro controlli'
 });
 
 const MI_HEADERS = Object.freeze({
   'Configurazione': ['chiave', 'valore', 'descrizione'],
   'Gruppi': ['id_gruppo', 'nome', 'slug', 'stato', 'logo_url', 'immagine_url', 'data_aggiornamento'],
-  'Eventi': ['id_evento', 'id_gruppo', 'titolo', 'stato', 'capienza', 'apertura_iscrizioni', 'chiusura_iscrizioni', 'modalita_prezzo', 'data_aggiornamento'],
-  'Iscrizioni': ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'richieste_particolari', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'hash_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'versione_informativa_privacy', 'data_accettazione_privacy', 'biglietti_json', 'id_consenso_marketing', 'data_accettazione_marketing', 'opzioni_ordine_json'],
+  'Eventi': ['id_evento', 'id_gruppo', 'titolo', 'stato', 'capienza', 'apertura_iscrizioni', 'chiusura_iscrizioni', 'modalita_prezzo', 'data_aggiornamento', 'servizi_json'],
+  'Iscrizioni': ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'richieste_particolari', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'hash_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'versione_informativa_privacy', 'data_accettazione_privacy', 'biglietti_json', 'id_consenso_marketing', 'data_accettazione_marketing', 'opzioni_ordine_json', 'workspace_revision'],
   'Partecipanti': ['codice_ordine', 'numero_partecipante', 'codice_tipologia', 'indice_tipologia', 'nome', 'cognome', 'dati_aggiuntivi_json', 'opzioni_json', 'stato_partecipante', 'data_annullamento'],
-  'Inserimento pagamenti': ['id_inserimento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'nota_amministrativa', 'stato_convalida', 'messaggio_convalida', 'data_convalida'],
   'Pagamenti': ['id_pagamento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo_centesimi', 'valuta', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'canale_registrazione', 'id_inserimento_origine', 'data_creazione', 'nota_amministrativa'],
   'Coda email': ['id_messaggio', 'codice_ordine', 'destinatario', 'tipo_modello', 'contenuto_json', 'stato', 'data_creazione'],
   'Operazioni segreteria': ['id_operazione', 'data_richiesta', 'codice_ordine', 'numero_partecipante', 'tipo_operazione', 'dati_json', 'motivo', 'etichetta_operatore', 'stato', 'messaggio', 'data_esito'],
@@ -36,6 +34,7 @@ const MI_HEADERS = Object.freeze({
   'Elenco operativo': ['evento', 'codice_ordine', 'numero_partecipante', 'nome', 'cognome', 'stato'],
   'Modelli report': ['id_modello', 'nome', 'tipo', 'id_evento', 'colonne_json', 'filtri_json', 'raggruppamenti_json', 'ordinamento_json', 'predefinito', 'data_aggiornamento', 'etichetta_operatore'],
   'Sistemazioni': ['id_evento', 'codice', 'nome', 'capienza', 'attiva', 'note'],
+  'Revisioni replica': ['id_evento', 'revisione_camere'],
   'Registro controlli': ['id_controllo', 'data_evento', 'canale', 'azione', 'tipo_entita', 'riferimento_entita', 'esito', 'etichetta_attore', 'codice_dettaglio']
 });
 
@@ -44,7 +43,6 @@ const MI_LEGACY_SHEET_NAMES = Object.freeze({
   Events: MI_SHEETS.EVENTS,
   Registrations: MI_SHEETS.REGISTRATIONS,
   Participants: MI_SHEETS.PARTICIPANTS,
-  PaymentIntake: MI_SHEETS.PAYMENT_INTAKE,
   Payments: MI_SHEETS.PAYMENTS,
   EmailOutbox: MI_SHEETS.EMAIL_OUTBOX,
   AuditLog: MI_SHEETS.AUDIT_LOG
@@ -62,7 +60,6 @@ const MI_LEGACY_HEADERS = Object.freeze({
   'Eventi': ['event_id', 'activity_id', 'title', 'status', 'capacity', 'opens_at', 'closes_at', 'pricing_mode', 'updated_at'],
   'Iscrizioni': ['order_code', 'event_id', 'status', 'buyer_first_name', 'buyer_last_name', 'buyer_email', 'buyer_phone', 'total_qty', 'total_cents', 'idempotency_key', 'created_at'],
   'Partecipanti': ['order_code', 'participant_index', 'first_name', 'last_name', 'fields_json'],
-  'Inserimento pagamenti': ['intake_id', 'order_code', 'transaction_kind', 'installment_kind', 'effective_at', 'amount', 'payment_source', 'external_reference', 'operator_label', 'administrative_note', 'validation_status', 'validation_message', 'validated_at'],
   'Pagamenti': ['payment_id', 'order_code', 'transaction_kind', 'installment_kind', 'effective_at', 'amount_cents', 'currency', 'payment_source', 'external_reference', 'operator_label', 'recording_channel', 'source_intake_id', 'created_at'],
   'Coda email': ['message_id', 'order_code', 'recipient', 'template_type', 'payload_json', 'status', 'created_at'],
   'Registro controlli': ['audit_id', 'occurred_at', 'channel', 'action', 'entity_type', 'entity_ref', 'outcome', 'actor_label', 'detail_code']
@@ -77,11 +74,19 @@ const MI_PAYMENT_ENUMS = Object.freeze({
 function ottieniFoglioDiLavoroAssociato_() {
   const properties = typeof PropertiesService !== 'undefined' ? PropertiesService.getScriptProperties() : null;
   const configuredId = properties ? String(properties.getProperty('MI_SPREADSHEET_ID') || '').trim() : '';
+  // Quando il codice viene eseguito dal menu di un progetto associato,
+  // il foglio attivo è la fonte attendibile. L'ID memorizzato può essere
+  // rimasto da una precedente configurazione e causare PERMISSION_DENIED.
+  const active = typeof SpreadsheetApp !== 'undefined' ? SpreadsheetApp.getActiveSpreadsheet() : null;
+  if (active) {
+    if (typeof active.getId === 'function') {
+      const activeId = String(active.getId());
+      if (properties && configuredId !== activeId) properties.setProperty('MI_SPREADSHEET_ID', activeId);
+    }
+    return active;
+  }
   if (configuredId) return SpreadsheetApp.openById(configuredId);
-  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-  if (!spreadsheet) throw new Error('Foglio operativo non configurato. Esegui Inizializza/aggiorna struttura dal Google Sheet.');
-  if (properties) properties.setProperty('MI_SPREADSHEET_ID', spreadsheet.getId());
-  return spreadsheet;
+  throw new Error('Foglio operativo non configurato. Esegui Inizializza/aggiorna struttura dal Google Sheet.');
 }
 
 function ottieniSchedaObbligatoria_(name) {

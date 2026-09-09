@@ -38,7 +38,11 @@ function miPanelCache(load, { ttl = 30000, limit = 12 } = {}) {
     requests.set(key, entry);
     return entry.promise;
   };
-  return { get, peek, clear: () => { generation++; values.clear(); } };
+  return { get, peek, clear: () => {
+    generation++; values.clear();
+    for (const entry of requests.values()) entry.controller.abort();
+    requests.clear();
+  } };
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -251,9 +255,17 @@ document.addEventListener('DOMContentLoaded', () => {
 	const busRouteTemplate = form.querySelector('[data-mi-bus-route-template]');
 	const updateBusRoutes = () => {
 	  const active = pricing?.value === 'NONE';
+	  const extra = form.querySelector('[data-mi-extra-services]');
+	  if(extra){extra.hidden=!active;extra.querySelectorAll('input,select').forEach(input=>{input.disabled=!active;});}
 	  if (busRoutes) busRoutes.hidden = !active;
 	  busRoutes?.querySelectorAll('input').forEach((input) => { input.disabled = !active; });
 	};
+	form.querySelector('[data-mi-add-extra]')?.addEventListener('click',()=>{
+	  const list=form.querySelector('[data-mi-extra-list]'),template=form.querySelector('[data-mi-extra-template]');
+	  if(!list||!template||list.children.length>=20)return;
+	  const row=template.content.firstElementChild.cloneNode(true);list.append(row);row.querySelector('input[name="extra_service_label[]"]').focus();
+	});
+	form.querySelector('[data-mi-extra-list]')?.addEventListener('click',event=>{event.target.closest('[data-mi-remove-extra]')?.closest('.mi-extra-service')?.remove();});
 	form.querySelector('[data-mi-add-bus-route]')?.addEventListener('click', () => {
 	  if (!busRouteTemplate || !busRoutesList) return;
 	  if (busRoutesList.children.length >= 12) return;
@@ -637,6 +649,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		return panel;
 	  });
 	  document.addEventListener('visibilitychange', () => { if (document.hidden) eventPanelCache.clear(); });
+	  document.addEventListener('mi:operational-saved', () => eventPanelCache.clear());
 	  const listUrl = new URL(window.location.href);
 	  listUrl.searchParams.delete('mi_portal_event');
 	  listUrl.searchParams.delete('mi_portal_event_panel');
@@ -756,6 +769,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return detail;
   });
   document.addEventListener('visibilitychange', () => { if (document.hidden) detailCache.clear(); });
+  document.addEventListener('mi:operational-saved', () => detailCache.clear());
 
   const parseDetail = (html) => new DOMParser().parseFromString(html, 'text/html').getElementById('mi-portal-booking-detail');
 

@@ -1,25 +1,14 @@
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('Modulo iscrizioni')
-    .addItem('Inserisci pagamento · finestra', 'apriFinestraPagamenti')
+    .addItem('Apri gestione web', 'apriGestioneWeb')
     .addItem('Inizializza/aggiorna struttura', 'configuraCartellaDiLavoro')
     .addSeparator()
-    .addItem('Assegna camere e pullman', 'apriAssegnazioniEvento')
     .addItem('Configura elenco operativo', 'apriConfigurazioneElencoOperativo')
     .addItem('Configura modelli report', 'apriConfigurazioneModelliReport')
     .addItem('Gestisci gruppi', 'apriGestioneGruppi')
     .addItem('Allinea gruppi con WordPress', 'sincronizzaGruppiConWordPress')
     .addItem('Configura collegamento WordPress', 'configuraEndpointWordPress')
     .addSeparator()
-    .addItem('Apri iscrizione manuale', 'apriIscrizioneManuale')
-    .addItem('Aggiorna campi iscrizione manuale', 'aggiornaSchemaIscrizioneManuale')
-    .addSeparator()
-    .addItem('Apri inserimento guidato', 'apriInserimentoMovimentoGuidato')
-    .addItem('Aggiorna riepilogo movimento', 'aggiornaRiepilogoMovimentoGuidato')
-    .addItem('Riallinea movimenti della prenotazione', 'aggiornaProiezioneMovimentoGuidato')
-    .addItem('Registra movimento guidato', 'registraMovimentoGuidato')
-    .addItem('Convalida pagamenti selezionati', 'convalidaPagamentiSelezionati')
-    .addItem('Convalida tutti i pagamenti in attesa', 'convalidaPagamentiInAttesa')
-    .addItem('Prepara moduli movimento nei fogli evento', 'preparaInterfacceMovimentiFogliEventi')
     .addItem('Sincronizza fogli e pagamenti degli eventi', 'sincronizzaFogliEventi')
     .addItem('Attiva sincronizzazione automatica eventi', 'attivaSincronizzazioneFogliEventi')
     .addSeparator()
@@ -47,10 +36,8 @@ function configuraCartellaDiLavoro() {
     });
 
     inizializzaConfigurazione_();
+    ['Registra movimento','Inserimento pagamenti','Registra iscrizione'].forEach(function(nome) { const s=spreadsheet.getSheetByName(nome); if(s && spreadsheet.getSheets().length>1)spreadsheet.deleteSheet(s); });
 		inizializzaGruppi_();
-    inizializzaConvalidaPagamenti_();
-		inizializzaInterfacciaMovimenti_();
-		inizializzaInterfacciaIscrizioni_();
 		inizializzaModelliReport_();
     applicaProtezioniConAvviso_();
     aggiungiControllo_('SETUP_WORKBOOK', 'WORKBOOK', 'BOUND', 'SUCCESS', Session.getActiveUser().getEmail(), MI_SCHEMA_VERSION, 'WORKSPACE_UI');
@@ -113,7 +100,7 @@ function inizializzaScheda_(sheet, headers) {
 	const usesPreviousHeaders = previous.length > 0 && current.slice(0, previous.length).join('|') === previous.join('|') && current.slice(previous.length).every(function (value) { return value === ''; });
 	const italianPrevious = MI_INTESTAZIONI_PRECEDENTI[sheet.getName()] || [];
 	const usesItalianPrevious = italianPrevious.length > 0 && current.slice(0, italianPrevious.length).join('|') === italianPrevious.join('|') && current.slice(italianPrevious.length).every(function (value) { return value === ''; });
-	const immediatelyPrevious = sheet.getName() === MI_SHEETS.PARTICIPANTS ? headers.slice(0, -2) : ([MI_SHEETS.REGISTRATIONS, MI_SHEETS.PAYMENTS].indexOf(sheet.getName()) >= 0 ? headers.slice(0, -1) : []);
+	const immediatelyPrevious = sheet.getName() === MI_SHEETS.PARTICIPANTS ? headers.slice(0, -2) : ([MI_SHEETS.REGISTRATIONS, MI_SHEETS.PAYMENTS, MI_SHEETS.EVENTS].indexOf(sheet.getName()) >= 0 ? headers.slice(0, -1) : []);
 	const usesImmediatelyPrevious = immediatelyPrevious.length > 0 && current.slice(0, immediatelyPrevious.length).join('|') === immediatelyPrevious.join('|') && current.slice(immediatelyPrevious.length).every(function (value) { return value === ''; });
   if (hasData && current.join('|') !== headers.join('|') && !usesPreviousHeaders && !usesItalianPrevious && !usesImmediatelyPrevious) {
     throw new Error('Intestazioni inattese nel foglio ' + sheet.getName() + '. Intervento manuale richiesto.');
@@ -155,20 +142,8 @@ function inizializzaConfigurazione_() {
   ]);
 }
 
-function inizializzaConvalidaPagamenti_() {
-  const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENT_INTAKE);
-  const index = creaIndiceIntestazioni_(sheet);
-  const rowCount = Math.max(1, sheet.getMaxRows() - 1);
-  sheet.getRange(2, index.tipo_movimento + 1, rowCount, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(MI_PAYMENT_ENUMS.transactionKinds, true).setAllowInvalid(false).build());
-  sheet.getRange(2, index.tipo_rata + 1, rowCount, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(MI_PAYMENT_ENUMS.installmentKinds, true).setAllowInvalid(false).build());
-  sheet.getRange(2, index.fonte_pagamento + 1, rowCount, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(MI_PAYMENT_ENUMS.paymentSources, true).setAllowInvalid(false).build());
-  sheet.getRange(2, index.stato_convalida + 1, rowCount, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(['IN_ATTESA', 'CONVALIDATO', 'RIFIUTATO', 'DA_VERIFICARE'], true).setAllowInvalid(false).build());
-  sheet.getRange(2, index.data_effettiva + 1, rowCount, 1).setNumberFormat('yyyy-mm-dd hh:mm');
-  sheet.getRange(2, index.importo + 1, rowCount, 1).setNumberFormat('#,##0.00 [$€-it-IT]');
-}
-
 function applicaProtezioniConAvviso_() {
-  const editable = [MI_SHEETS.PAYMENT_INTAKE, MI_SHEETS.SECRETARY_OPERATIONS, MI_SHEETS.OPERATIONAL_VIEWS, MI_SHEETS.ACCOMMODATIONS];
+  const editable = [MI_SHEETS.SECRETARY_OPERATIONS, MI_SHEETS.OPERATIONAL_VIEWS, MI_SHEETS.ACCOMMODATIONS];
   Object.keys(MI_HEADERS).forEach(function (name) {
     const sheet = ottieniSchedaObbligatoria_(name);
     sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET).forEach(function (protection) { protection.remove(); });

@@ -1,57 +1,17 @@
-# Allineamento tra documentazione e codice
+# Allineamento tra documentazione e codice — 3.24.0
 
-Verifica sistematica aggiornata per WordPress 3.23.23 e Workspace 1.8.0. Questo documento prevale sulle descrizioni progettuali quando occorre distinguere ciò che è già disponibile dalla sola architettura prevista.
+La gestione operativa è descritta in [Architettura corrente](ARCHITETTURA_SEGRETERIA_SHEETS.md) e nella [guida operatore](GUIDA_OPERATORE.md).
 
-## Implementato e verificato
-
-| Comportamento confermato | Stato nel codice | Verifica |
-|---|---|---|
-| Evento associato a un solo gruppo e accesso delegato per servizio, gruppo o evento | Implementato | capability esplicite e ambiti server-side; gli identificativi dei vecchi ruoli sono migrati e rimossi |
-| Segreteria eventi WordPress unificata | Implementato | Gestore iscrizioni globale, Gestore gruppo con creazione limitata ai gruppi assegnati e Gestore evento limitato ai singoli eventi ricevuti |
-| Revisione pubblicata e snapshot dell'iscrizione | Implementato | revisione, hash e snapshot persistiti e replicati |
-| Capienza globale/per tipologia, lista d'attesa, scadenza e rilascio posti | Implementato | servizio iscrizioni e test strutturali/comportamentali |
-| Nome e cognome di ogni partecipante obbligatori | Implementato | validazione WordPress e GAS |
-| Campi dei partecipanti configurabili per evento | Implementato | campi predefiniti e domande personalizzate tipizzate |
-| Email e cellulare dei partecipanti configurabili | Implementato | schema campi e validazione dedicata |
-| Richieste particolari facoltative | Implementato | configurazione evento, modulo, database, export e replica Sheets |
-| Prezzo assente, informativo, quota comune, pagamento completo o caparra/saldo | Implementato | calcolo autorevole lato server |
-| Pagamenti e rimborsi registrati senza sovrascrivere la storia | Implementato | movimenti separati e ricalcolo del totale |
-| Riconciliazione dei pagamenti inseriti in `PaymentIntake` | Implementato | GAS espone i movimenti canonici non WordPress; il plugin li importa in modo idempotente |
-| `effective_at` uniforme in UTC | Implementato | l'orario inserito nel pannello viene interpretato nel fuso del sito e salvato in UTC |
-| HMAC e anti-replay | Implementato | finestra 120 secondi, `ScriptLock`, cache e registro nonce durevole in Script Properties |
-| Modalità email sicure | Implementato | anteprima predefinita, prova su destinatario controllato, operativo protetto |
-| Sanitizzazione del repository pubblico | Implementato | `tools/check-sanitization.ps1` eseguito anche da GitHub Actions su push e pull request |
-| Consultazione autonoma di stato e saldo | Implementato | codice/email o collegamento HMAC, limite tentativi, pagina `noindex` priva di dati personali |
-| Promemoria prima dell'evento e del saldo | Implementato | selezione destinatari in Sheets e accodamento firmato in WordPress; bozze sempre `PREVIEW` |
-| Scheda segreteria rapida | Implementato | lista a card, dialogo dettaglio, versamenti con validatore condiviso e sistemazioni con capienza |
-| Viste ed elenco operativo | Implementato | profili per evento, dettagli comprimibili, approvazione e conservazione materializzata per apertura rapida, aggiornamento dati separato dalla rigenerazione della struttura, PDF A4 e neutralizzazione formule |
-| Gruppi con logo e immagine ereditabili | Implementato | catalogo condiviso WordPress/Workspace, valori iniziali e creazione controllata da entrambe le interfacce |
-| Report standard e personalizzati riutilizzabili | Implementato | modelli protetti, scelta colonne, ordinamento, generazione per evento e salvataggio configurazione |
-| Assegnazioni collettive di camere e pullman | Implementato | vista per evento, modifica multipla auditabile e controllo della capienza finale |
-| Identità stabile di domande e tratte | Implementato | chiavi opache persistenti nel wizard; etichette e ordine possono cambiare senza cambiare il collegamento |
-| Iscrizione manuale da Sheets | Implementato | schema caricato da WordPress, richiesta HMAC e commit tramite lo stesso servizio transazionale del modulo pubblico |
-| Inserimento movimenti nel foglio evento | Implementato | modulo visuale con riepilogo, campi e menu coerenti con la configurazione; assente negli eventi totalmente gratuiti |
-
-## Implementato in forma più semplice nella v1
-
-| Descrizione progettuale | Ambito reale della v1 |
+| Funzione | Implementazione corrente |
 |---|---|
-| Entità logiche separate per risposte, selezioni e piano rateale | Il database WordPress usa tabelle normalizzate per le entità principali e JSON controllato per alcune risposte/opzioni; Sheets è una proiezione operativa, non una replica fisica completa dello schema concettuale. |
-| Coda email completa con tentativi e notifiche | Sono presenti conferma, promemoria pre-evento/saldo, anteprima, prova controllata, invio protetto e stato della coda; altri modelli e l'osservabilità avanzata restano limitati. |
-| Cache pubblica con grafo completo di invalidazione | La configurazione pubblica è calcolata dal backend e legata alla revisione; non è implementato un sottosistema generale di dipendenze e cache. |
-| Audit con differenze complete | Sono registrate le operazioni essenziali; non tutte le modifiche producono un diff campo per campo. |
-| Profili estesi con finalità e conservazione per singolo campo | I campi sono configurabili e i campi ad alto impatto sono controllati, ma non esiste ancora un motore completo di policy per ogni domanda. |
+| Pagamenti e rimborsi | Un modulo web, validatore centrale e storico movimenti |
+| Dati partecipanti | Correzioni web e completamento dei campi configurati |
+| Camere e pullman | Assegnazione individuale; creazione/modifica camere e cancellazione di camere vuote |
+| Nuove iscrizioni e annullamenti | Modulo evento e servizio WordPress esistente |
+| Consultazione | Foglio evento protetto, riepilogo web filtrabile e modelli report |
+| Scritture interrotte | Identificativo stabile, registro persistente e ripresa dal portale dello stesso operatore |
+| Interfacce a celle e confronto modifiche locali | Ritirati |
 
-## Fuori dallo scope della v1
+La verifica locale comprende test del backend, controllo sintattico PHP/JavaScript e browser con API sintetiche. Deploy eseguito l'8 settembre 2026: WordPress 3.24.0 e Apps Script versione 59. Verificati sul sito connessione firmata, schema e lettura della gestione prenotazione; resta distinto il collaudo completo delle operazioni di scrittura. Lo storico fittizio incompleto non viene riallineato.
 
-- riscossione diretta o conferma automatica tramite API di banche e carte;
-- CAPTCHA e rate limiting distribuito avanzato;
-- portale amministrativo separato da `wp-admin`;
-- cancellazione automatica dei dati allo scadere di politiche di conservazione configurabili;
-- API REST amministrative generiche descritte in `PROGETTO.md` come architettura indicativa;
-- infrastruttura a microservizi, code cloud o database applicativi ulteriori;
-- garanzia di carico fino a 300 persone senza eseguire il collaudo previsto.
-
-## Regola di manutenzione
-
-Una funzione può essere marcata “confermata” nei documenti soltanto se esiste almeno una verifica ripetibile (test automatico o voce della checklist manuale). Ogni pull request che cambia un comportamento pubblico, amministrativo, economico o di replica deve aggiornare nello stesso commit il test e, se necessario, questa matrice e la guida operatore.
+Non è implementato un editor delle opzioni economiche di una prenotazione già acquisita. Le nuove persone entrano con una nuova iscrizione; i rimborsi si registrano separatamente dall'annullamento.

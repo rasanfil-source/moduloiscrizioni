@@ -27,9 +27,18 @@ final class MI_Activator {
 		self::ensure_schedule();
 	}
 
+	public static function cron_schedules( $schedules ) {
+		$schedules['mi_five_minutes'] = array( 'interval' => 300, 'display' => 'Ogni cinque minuti' );
+		return $schedules;
+	}
+
 	private static function ensure_schedule() {
+		// Aggiorna anche le installazioni che avevano il recupero orario.
+		if ( wp_next_scheduled( 'mi_sync_workspace_pending' ) && 'mi_five_minutes' !== wp_get_schedule( 'mi_sync_workspace_pending' ) ) {
+			wp_clear_scheduled_hook( 'mi_sync_workspace_pending' );
+		}
 		if ( ! wp_next_scheduled( 'mi_sync_workspace_pending' ) ) {
-			wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', 'mi_sync_workspace_pending' );
+			wp_schedule_event( time() + 1, 'mi_five_minutes', 'mi_sync_workspace_pending' );
 		}
 		if ( ! wp_next_scheduled( 'mi_expire_registrations' ) ) {
 			wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', 'mi_expire_registrations' );
@@ -77,6 +86,9 @@ final class MI_Activator {
 		$ticket_counters = $wpdb->prefix . 'mi_ticket_counters';
 		$event_revisions = $wpdb->prefix . 'mi_event_revisions';
 		$registration_events = $wpdb->prefix . 'mi_registration_events';
+		$rooms = $wpdb->prefix . 'mi_rooms';
+		$management_state = $wpdb->prefix . 'mi_management_state';
+		$management_requests = $wpdb->prefix . 'mi_management_requests';
 
 		dbDelta( "CREATE TABLE {$registrations} (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -100,6 +112,7 @@ final class MI_Activator {
 			workspace_attempts smallint(5) unsigned NOT NULL DEFAULT 0,
 			workspace_last_error varchar(80) NULL,
 			workspace_synced_at datetime NULL,
+			workspace_revision bigint(20) unsigned NOT NULL DEFAULT 0,
 			event_revision_id bigint(20) unsigned NULL,
 			event_revision_hash varchar(64) NULL,
 			snapshot_json longtext NULL,
@@ -147,6 +160,7 @@ final class MI_Activator {
 			first_name varchar(80) NOT NULL,
 			last_name varchar(80) NOT NULL,
 			extra_json longtext NULL,
+			room_code varchar(80) NOT NULL DEFAULT '',
 			options_json longtext NULL,
 			status varchar(24) NOT NULL DEFAULT 'ACTIVE',
 			cancellation_token_hash char(64) NULL,
@@ -154,7 +168,8 @@ final class MI_Activator {
 			cancellation_actor varchar(120) NULL,
 			PRIMARY KEY  (id),
 			KEY registration_id (registration_id),
-			KEY participant_status (registration_id,status)
+			KEY participant_status (registration_id,status),
+			KEY room_occupancy (room_code,status,registration_id)
 		) ENGINE=InnoDB {$charset};" );
 
 		dbDelta( "CREATE TABLE {$counters} (
@@ -223,6 +238,8 @@ final class MI_Activator {
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			registration_id bigint(20) unsigned NOT NULL,
 			transaction_kind varchar(24) NOT NULL DEFAULT 'PAYMENT',
+			movement_kind varchar(24) NOT NULL DEFAULT '',
+			request_hash char(64) NULL,
 			installment_kind varchar(24) NOT NULL DEFAULT 'FULL',
 			effective_at datetime NOT NULL,
 			amount_cents int(10) unsigned NOT NULL DEFAULT 0,
@@ -237,6 +254,35 @@ final class MI_Activator {
 			KEY registration_id (registration_id),
 			KEY effective_at (effective_at),
 			UNIQUE KEY origin_payment (origin_channel,origin_id)
+		) ENGINE=InnoDB {$charset};" );
+		dbDelta( "CREATE TABLE {$rooms} (
+			event_id bigint(20) unsigned NOT NULL,
+			code varchar(80) NOT NULL,
+			name varchar(120) NOT NULL,
+			capacity smallint unsigned NOT NULL,
+			PRIMARY KEY  (event_id,code)
+		) ENGINE=InnoDB {$charset};" );
+		dbDelta( "CREATE TABLE {$management_state} (
+			event_id bigint(20) unsigned NOT NULL,
+			revision bigint(20) unsigned NOT NULL DEFAULT 0,
+			PRIMARY KEY  (event_id)
+		) ENGINE=InnoDB {$charset};" );
+		dbDelta( "CREATE TABLE {$management_requests} (
+			request_id varchar(100) NOT NULL,
+			event_id bigint(20) unsigned NOT NULL,
+			registration_id bigint(20) unsigned NOT NULL,
+			request_hash char(64) NOT NULL,
+			actor_id bigint(20) unsigned NOT NULL,
+			created_at datetime NOT NULL,
+			PRIMARY KEY  (request_id),
+			KEY event_requests (event_id,created_at)
+		) ENGINE=InnoDB {$charset};" );
+		dbDelta( "CREATE TABLE {$wpdb->prefix}mi_booking_codes (
+			event_id bigint(20) unsigned NOT NULL,
+			prefix varchar(16) NOT NULL,
+			sequence bigint(20) unsigned NOT NULL DEFAULT 0,
+			PRIMARY KEY  (event_id),
+			UNIQUE KEY prefix (prefix)
 		) ENGINE=InnoDB {$charset};" );
 		$wpdb->query( "UPDATE {$registrations} SET payment_deadline_at = expires_at WHERE payment_deadline_at IS NULL AND expires_at IS NOT NULL AND status IN ('CONFIRMED','PENDING_PAYMENT')" );
 

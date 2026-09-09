@@ -14,10 +14,8 @@ const destinazione = new URL(`dist/Codice-Workspace-${versione}.gs`, radice);
 await writeFile(destinazione, codice, 'utf8');
 console.log(`Sorgente Workspace verificato e generato: ${destinazione.pathname}`);
 
-// Il progetto MODULI conserva queste due interfacce come file Apps Script separati.
-// Questo artefatto aggiorna Codice.gs senza dichiararle una seconda volta.
-const separatiNelProgetto = new Set(['InterfacciaIscrizioni.gs', 'InterfacciaMovimenti.gs']);
-const codiceProgetto = await componi(nomi.filter(nome => !separatiNelProgetto.has(nome)));
+// Entrambi i nomi di distribuzione contengono lo stesso backend completo.
+const codiceProgetto = codice;
 new vm.Script(codiceProgetto);
 const destinazioneProgetto = new URL(`dist/Codice-Workspace-Progetto-${versione}.gs`, radice);
 await writeFile(destinazioneProgetto, codiceProgetto, 'utf8');

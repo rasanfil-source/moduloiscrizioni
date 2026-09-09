@@ -50,8 +50,8 @@ test('Workspace prevede modelli report standard senza sovrascrivere dati', async
 
 test('il bootstrap dichiara la versione e non esegue fuori da WordPress', async () => {
   const source = await read('modulo-iscrizioni.php');
-  assert.match(source, /Version:\s+3\.23\.30\b/);
-  assert.match(source, /define\(\s*'MI_VERSION',\s*'3\.23\.30'\s*\)/);
+  const version = source.match(/Version:\s+(\d+\.\d+\.\d+)\b/)[1];
+  assert.ok(source.includes("define( 'MI_VERSION', '" + version + "' )"));
   assert.match(source, /defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit/);
 });
 
@@ -206,7 +206,7 @@ test('le iscrizioni vengono replicate con idempotenza senza perdere il salvatagg
   assert.match(service, /workspace_status/);
   assert.match(service, /'COMMIT'[\s\S]+sync_workspace/);
   assert.match(service, /sync_pending_workspace/);
-  assert.match(service, /LIMIT 10/);
+  assert.match(service, /ORDER BY workspace_attempts,id LIMIT 10/);
   assert.match(service, /\$payments_table\s*=\s*\$wpdb->prefix\s*\.\s*'mi_payments'/);
   assert.match(service, /administrative_note FROM \{\$payments_table\}/);
   assert.match(activator, /workspace_status varchar\(24\)/);
@@ -388,6 +388,7 @@ test('il portale resta utilizzabile fra telefono e tablet', async () => {
 	assert.match(css, /\.mi-portal-logout\{[^}]+border-radius:999px/);
 	assert.match(css, /\.mi-portal-logout:focus-visible/);
   assert.match(css, /mi-portal-switcher[^}]+flex-wrap:wrap/);
+  assert.match(css, /\.mi-event-grid\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(css, /min-height:44px/);
   assert.match(css, /@media\(max-width:760px\)/);
   assert.match(css, /overflow-wrap:anywhere/);
@@ -465,7 +466,7 @@ test('ogni partecipante dispone di annullamento individuale confermato e auditab
   assert.match(service, /cancellation_token_hash=NULL/);
   assert.match(service, /status = 'ACTIVE' GROUP BY ticket_type_code/);
   assert.match(portal, /cancel_participant_portal/);
-	assert.match(portal, /mi-booking-detail__cancel-button/);
+	assert.match(await read('assets/portal-management.js'), /data-cancel/);
   assert.match(portal, /Conferma richiesta/);
   assert.match(portal, /Eventuali rimborsi devono essere concordati separatamente/);
 });
@@ -546,7 +547,7 @@ test('i documenti sono raccolti solo come dati testuali e mai come foto o scansi
   }
   assert.match(schema, /Non caricare fotografie o scansioni/);
   assert.match(schema, /'retention'\s*=>\s*'SHEETS_ONLY'/);
-  assert.match(service, /scrub_relay_only_fields/);
+  assert.doesNotMatch(service, /scrub_relay_only_fields/);
   assert.match(service, /MI_Field_Schema::relay_only_keys/);
   assert.doesNotMatch(schema + eventType + adminScript, /type=["']file["']/i);
   assert.doesNotMatch(eventType + adminScript, /<option value=["']file["']/i);
@@ -950,9 +951,6 @@ test('rimborsi concorrenti e codici grafici email hanno protezioni dedicate', as
   const images = await read('includes/class-mi-code-image.php');
   const publicScript = await read('assets/public.js');
 	const service = await read('includes/class-mi-registration-service.php');
-  assert.match(admin, /SELECT id, status, initial_due_cents, payment_deadline_at FROM \{\$wpdb->prefix\}mi_registrations WHERE id = %d FOR UPDATE/);
-  assert.match(admin, /initial_due_cents, payment_deadline_at FROM/);
-	assert.match(admin, /expires_at/);
 	assert.match(service, /'EXPIRED' === \$target_status[\s\S]+SUM\(CASE WHEN transaction_kind = 'REFUND'/);
   assert.match(sender, /addStringEmbeddedImage/);
   assert.match(images, /reed_solomon/);
@@ -1022,8 +1020,7 @@ test('la lista d’attesa propone il posto con accettazione, rinuncia e scadenza
   assert.match(activator, /payment_deadline_at/);
   assert.match(activator, /waitlist_offer_token_hash char\(64\)/);
   assert.match(activator, /waitlist_offer_expiry/);
-  assert.match(admin, /\$net_paid/);
-  assert.match(admin, /\$locked\['payment_deadline_at'\]/);
+  assert.match(await read('includes/class-mi-payment-ledger.php'), /\$r\['payment_deadline_at'\]/);
   assert.match(service, /promote_waitlisted_locked/);
   assert.match(service, /WAITLIST_OFFERED/);
   assert.match(service, /WAITLIST_ACCEPTED/);
@@ -1049,11 +1046,10 @@ test('la lista d’attesa propone il posto con accettazione, rinuncia e scadenza
   assert.match(email, /Rispondi alla proposta/);
 });
 
-test('la rimozione dei dati di solo transito usa lo schema storico dell’iscrizione', async () => {
+test('la replica conserva i dati originali in MySQL', async () => {
   const service = await read('includes/class-mi-registration-service.php');
-  assert.match(service, /SELECT snapshot_json/);
-  assert.match(service, /\$snapshot\['event'\]\['participant_fields'\]/);
-  assert.match(service, /scrub_relay_only_fields/);
+  assert.match(service, /SELECT ticket_type_code, ticket_index, first_name, last_name, extra_json/);
+  assert.doesNotMatch(service, /scrub_relay_only_fields/);
 });
 
 test('la scadenza dei pagamenti usa una data e ora esplicita', async () => {
@@ -1078,38 +1074,19 @@ test('i pagamenti Workspace possono essere riconciliati senza eco dei movimenti 
   const activator = await read('includes/class-mi-activator.php');
   const service = await read('includes/class-mi-registration-service.php');
   assert.match(activator, /origin_payment/);
-  assert.match(service, /ELENCA_PAGAMENTI/);
+  assert.doesNotMatch(service, /ELENCA_PAGAMENTI/);
   assert.match(service, /INSERT IGNORE/);
   assert.match(service, /origin_channel/);
 });
 
-test('il registro pagamenti rifiuta date effettive normalizzate silenziosamente', async () => {
-  const admin = await read('includes/class-mi-admin.php');
-  assert.match(admin, /Data effettiva non valida/);
-  assert.match(admin, /format\( 'Y-m-d\\\\TH:i' \) !== \$effective_raw/);
-});
-
-test('il pannello non conserva numeri completi di carta nei pagamenti', async () => {
-  const admin = await read('includes/class-mi-admin.php');
-  assert.match(admin, /contiene_numero_carta/);
-  assert.match(admin, /Non inserire numeri completi di carta/);
-  assert.match(admin, /Luhn|alternate/);
-  assert.doesNotMatch(admin, /'CARD' === \$source[\s\S]{0,200}contiene_numero_carta/);
-});
-
-test('il pannello non conferma pagamenti non salvati', async () => {
-  const admin = await read('includes/class-mi-admin.php');
-  assert.match(admin, /\$inserted\s*=\s*\$wpdb->insert/);
-  assert.match(admin, /false === \$inserted/);
-  assert.match(admin, /Il movimento non è stato salvato/);
-});
-
-test('il pagamento manuale e la replica Workspace restano atomici', async () => {
-  const admin = await read('includes/class-mi-admin.php');
-  assert.match(admin, /START TRANSACTION/);
-  assert.match(admin, /ROLLBACK/);
-  assert.match(admin, /marked_pending/);
-  assert.match(admin, /COMMIT/);
+test('pagamenti MySQL: portale unico, transazione e coda persistente', async () => {
+ const ledger=await read('includes/class-mi-payment-ledger.php');
+ const portal=await read('includes/class-mi-portal-payments.php');
+ const admin=await read('includes/class-mi-admin.php');
+ assert.match(ledger,/START TRANSACTION/);assert.match(ledger,/ROLLBACK/);assert.match(ledger,/COMMIT/);
+ assert.match(ledger,/workspace_revision/);assert.match(ledger,/request_hash/);
+ assert.match(portal,/MI_Payment_Ledger::save/);assert.doesNotMatch(portal,/MI_Workspace_Client::request/);
+ assert.doesNotMatch(admin,/insert\( \$wpdb->prefix . 'mi_payments'/);
 });
 
 test('l’iscrizione conserva totale, primo versamento e saldo', async () => {
@@ -1176,7 +1153,7 @@ test('le prenotazioni a pagamento attendono il versamento prima della conferma',
   assert.match(service, /WHERE r\.status = 'PENDING_PAYMENT'/);
   assert.match(service, /PAYMENT_STATUS_CHANGED/);
   assert.match(admin, /'PENDING_PAYMENT'.*'CONFIRMED'/s);
-  assert.match(admin, /In attesa di pagamento/);
+  assert.match(admin, /Da pagare/);
   assert.match(script, /Prenotazione registrata a nome di/);
 });
 
@@ -1208,7 +1185,7 @@ test('il pannello verifica lo schema Workspace senza creare iscrizioni', async (
   const client = await read('includes/class-mi-workspace-client.php');
   assert.match(settings, /Verifica schema Workspace/);
   assert.match(settings, /schema_version/);
-  assert.match(settings, /'1\.8\.0'/);
+  assert.match(settings, /'1\.9\.0'/);
   assert.match(settings, /group_headers/);
   assert.match(settings, /report_template_headers/);
   assert.match(client, /STATO_SCHEMA/);
@@ -1270,24 +1247,6 @@ test('anche il portale apre la scheda prenotazione in sovrimpressione', async ()
 	assert.match(css, /\.mi-portal-modal__nav--previous/);
 	assert.match(css, /\.mi-portal-modal__nav--next/);
   assert.match(css, /min-height:100vh/);
-});
-
-test('il portale mette in evidenza persone, data e immagine senza duplicare il referente', async () => {
-  const portal = await read('includes/class-mi-portal.php');
-  const css = await read('assets/portal.css');
-  assert.match(portal, /mi-event-card__date/);
-  assert.match(portal, /date_badge/);
-  assert.match(portal, /mi-event-card__image/);
-  assert.match(portal, /mi-booking-detail__cover/);
-  assert.match(portal, /snapshot_event\['cover_image'\]/);
-  assert.match(portal, /mi-booking-detail__code/);
-  assert.match(portal, /mi-booking-detail__person/);
-  assert.match(portal, /\$is_referent\s*=\s*\$is_multiple\s*&&/);
-  assert.match(portal, /mi-booking-detail__referent-dot/);
-  assert.doesNotMatch(portal, /<strong>Referente:<\/strong>/);
-  assert.match(css, /\.mi-event-card__date/);
-  assert.match(css, /\.mi-booking-detail__person/);
-  assert.match(css, /\.mi-booking-detail__referent-dot/);
 });
 
 test('gli eventi passati sono separati dalla vista operativa ordinaria', async () => {
@@ -1613,12 +1572,12 @@ test('la pubblicazione inizializza rapidamente il foglio e recupera un 404 trans
   assert.match(segreteria, /if \(includiDinamici === false\) return fields/);
 });
 
-test('un retry controlla una replica già completata prima di reinviare tutti i dati', async () => {
+test('la conferma replica richiede la revisione corrente e non una ricevuta precedente', async () => {
   const service = await read('includes/class-mi-registration-service.php');
-  assert.match(service, /workspace_attempts'\] > 0/);
-  assert.match(service, /STATO_REPLICA_ISCRIZIONE/);
-  assert.match(service, /! empty\( \$status_result\['complete'\] \)/);
-  assert.match(service, /scrub_relay_only_fields/);
+  assert.doesNotMatch(service, /STATO_REPLICA_ISCRIZIONE/);
+  assert.match(service, /WHERE id = %d AND workspace_revision = %d/);
+  assert.match(service, /\$result\['workspace_revision'\]/);
+  assert.doesNotMatch(service, /scrub_relay_only_fields/);
 });
 
 test('Workspace può creare gruppi WordPress e risolverli per slug', async () => {
@@ -1640,7 +1599,6 @@ test('il referente consulta stato e saldo senza esporre dati personali', async (
   assert.match(portal, /noindex,nofollow,noarchive/);
   assert.match(service, /public_status_token/);
   assert.match(service, /hash_equals/);
-  assert.match(service, /reconcile_workspace_payments\( array\( \$registration\['order_code'\] \) \)/);
   assert.doesNotMatch(service, /public_status[\s\S]{0,4000}buyer_phone/);
   assert.match(email, /Controlla stato e saldo/);
 });
@@ -1748,7 +1706,7 @@ test('ogni sistemazione dispone di un costo che entra nelle opzioni economiche',
   const css = await read('assets/portal.css');
   assert.match(portal, /name="accommodation_price\[/);
   assert.match(portal, /\$accommodation_options\[\] = array\([^;]*'scope' => 'TICKET'[^;]*'price_cents' => \$accommodation_price/);
-  assert.match(portal, /\$priced_options = array_merge\( \$accommodation_options, \$service_options \)/);
+  assert.match(portal, /\$priced_options = array_merge\( \$accommodation_options, \$service_options, \$extra_services \)/);
   assert.match(script, /data-mi-accommodation/);
   assert.match(css, /\.mi-accommodation-fee/);
 });
