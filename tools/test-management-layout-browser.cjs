@@ -21,7 +21,7 @@ for(const deposit of [false,true]){
 features={rooms:false,payments:true,deposit};await page.reload();await page.locator('[data-more]').waitFor();
 const state=page.locator('select[data-deposit-filter]');assert.match(await state.locator('..').innerText(),/^Stato/);assert.equal(await state.count(),1);assert.equal(await state.inputValue(),'');
 assert.deepEqual(await state.locator('option').allTextContents(),deposit?['Tutti gli iscritti','Nessun versamento','Caparra da completare','Caparra versata','Saldato']:['Tutti gli iscritti','Da saldare','Saldato']);
-assert.deepEqual(await page.locator('.mi-summary-section').allTextContents(),['Persone','Importi','Dati da completare']);
+assert.deepEqual(await page.locator('.mi-summary-section').allTextContents(),['Persone','Importi']);
 assert.match(await page.locator('[data-net-paid]').innerText(),/10,00/);
 if(deposit){await page.locator('.mi-management-summary').screenshot({path:'.tmp/riepilogo-grafica-desktop.png'});await page.setViewportSize({width:390,height:844});await page.locator('.mi-management-summary').screenshot({path:'.tmp/riepilogo-grafica-mobile.png'});await page.setViewportSize({width:1280,height:900});}
 }

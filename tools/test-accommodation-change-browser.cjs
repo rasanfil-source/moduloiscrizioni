@@ -22,11 +22,12 @@ const file=path.join(assets,path.basename(req.url));if(!fs.existsSync(file)){res
 const page=await browser.newPage({viewport:{width:1280,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:'+server.address().port);
 const planner=page.locator('[data-room-planner]'),selector=planner.locator('[data-room-type]');await selector.waitFor();
 
-const panel=page.locator('[data-accommodation-change]');await panel.locator('summary').click();
-await panel.locator('[name=person][value="1"]').check();await panel.locator('[name=person][value="2"]').check();await panel.locator('[name=type]').selectOption('alloggio-tripla');await panel.locator('[name=reason]').fill('Cambio concordato');
-await panel.getByRole('button',{name:'Calcola anteprima'}).click();await panel.locator('[data-confirm-accommodation]').waitFor();assert.equal(seen.size,0);assert.equal(await panel.locator('[data-accommodation-preview] tbody tr').count(),2);assert.match(await panel.locator('[data-accommodation-preview]').innerText(),/Da restituire/);
-await panel.locator('[name=reason]').fill('Motivo corretto');assert.equal(await panel.locator('[data-confirm-accommodation]').count(),0);
-await panel.getByRole('button',{name:'Calcola anteprima'}).click();await panel.locator('[data-confirm-accommodation]').waitFor();
+const panel=page.locator('[data-accommodation-change]');await panel.locator(':scope > summary').click();
+assert.equal(await panel.locator('[name=reason]').isVisible(),false);
+await panel.locator('[name=person][value="1"]').check();await panel.locator('[name=person][value="2"]').check();await panel.locator('[name=type]').selectOption('alloggio-tripla');
+await panel.getByRole('button',{name:'Verifica il cambio'}).click();await panel.locator('[data-confirm-accommodation]').waitFor();assert.equal(seen.size,0);assert.equal(await panel.locator('[data-accommodation-preview] tbody tr').count(),2);assert.match(await panel.locator('[data-accommodation-preview]').innerText(),/Da restituire/);
+await panel.locator('[data-accommodation-notes] summary').click();await panel.locator('[name=reason]').fill('Annotazione aggiunta');assert.equal(await panel.locator('[data-confirm-accommodation]').count(),0);
+await panel.getByRole('button',{name:'Verifica il cambio'}).click();await panel.locator('[data-confirm-accommodation]').waitFor();
 await page.screenshot({path:'.tmp/accommodation-preview.png',fullPage:true});await panel.locator('[data-confirm-accommodation]').click();await page.getByRole('button',{name:'Riprova lo stesso salvataggio'}).click();await page.getByText('Cambio salvato',{exact:true}).waitFor();
 const saves=requests.filter(x=>x.operation==='change_accommodation');assert.equal(saves.length,2);assert.equal(saves[0].request_id,saves[1].request_id);assert.equal(saves[0].data,saves[1].data);assert.equal(seen.size,1);assert.equal(people[0].room,'T1');assert.equal(people[1].room,'T1');assert.deepEqual(errors,[]);
 await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
