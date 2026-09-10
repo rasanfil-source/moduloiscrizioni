@@ -1,6 +1,6 @@
-# Gestione web unificata — 3.24.0
+# Segreteria eventi — aggiornamento 3.26.5
 
-Il rilascio corrente introduce scheda operativa e riepilogo evento nel portale, con storico pagamenti, correzioni, camere e annullamenti. Consultare [le istruzioni di rilascio](../../docs/rilascio-3.24.0.md). Le note sottostanti descrivono le altre funzioni del plugin.
+Riepilogo delle persone, filtro Stato condizionale, gestione camere per sistemazione e progressivi automatici S/DM/DS/T/M. Il comando Cambia sistemazione mostra l’anteprima per persona e per iscrizione e aggiorna servizi, camera e dovuto in un’unica transazione. Conserva le tariffe dell’iscrizione, gli altri servizi e le rettifiche precedenti. I rimborsi restano manuali. Apps Script non richiede aggiornamenti rispetto alla distribuzione 3.26.1. Installazione sul sito da completare.
 
 # Modulo Iscrizioni — versione 3.23.32
 

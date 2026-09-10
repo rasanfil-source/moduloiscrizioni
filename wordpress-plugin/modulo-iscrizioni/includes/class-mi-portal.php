@@ -1,6 +1,7 @@
 <?php
 
 defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/class-mi-booking-search.php';
 
 final class MI_Portal {
 	const SHORTCODE = 'mi_portale_gestione';
@@ -54,7 +55,7 @@ final class MI_Portal {
 			$archiviato = (bool) get_post_meta( $event_id, '_mi_event_archived_at', true );
 			$chiusura = (string) get_post_meta( $event_id, '_mi_registration_closes_at', true );
 			$inizio = (string) get_post_meta( $event_id, '_mi_event_starts_at', true );
-			$passato = $archiviato || ( ! $annullato && self::is_past_event( $chiusura ?: $inizio ) );
+			$passato = $archiviato || ( ! $annullato && self::is_past_event( $inizio ?: $chiusura ) );
 			if ( $passato ) $passati[] = (string) $event_id;
 			else $correnti[] = (string) $event_id;
 		}
@@ -79,7 +80,7 @@ final class MI_Portal {
 		wp_enqueue_script( 'mi-portal', MI_PLUGIN_URL . 'assets/portal.js', array(), MI_VERSION, true );
 		wp_enqueue_script( 'mi-portal-management', MI_PLUGIN_URL . 'assets/portal-management.js', array(), MI_VERSION . '.' . filemtime( MI_PLUGIN_DIR . 'assets/portal-management.js' ), true );
 		wp_enqueue_style( 'mi-portal-management', MI_PLUGIN_URL . 'assets/portal-management.css', array( 'mi-portal' ), MI_VERSION );
-		if ( 'payments' === ( $_GET['mi_portal_view'] ?? '' ) ) {
+		if ( MI_Portal_Payments::allowed() ) {
 			wp_enqueue_style( 'mi-portal-payments', MI_PLUGIN_URL . 'assets/portal-payments.css', array( 'mi-portal' ), MI_VERSION );
 			wp_enqueue_script( 'mi-portal-payments', MI_PLUGIN_URL . 'assets/portal-payments.js', array(), MI_VERSION, true );
 		}
@@ -332,7 +333,7 @@ final class MI_Portal {
 		$gestore = self::risolvi_gestore_evento( $event_id, false );
 		$url_iscrizione = MI_Shortcode::url_iscrizione( $event_id );
 		$ha_saldo = 'DEPOSIT_BALANCE' === get_post_meta( $event_id, '_mi_economic_mode', true );
-		$url_saldo = $ha_saldo ? add_query_arg( array( 'mi_status' => '1', 'evento' => $event_id ), home_url( '/' ) ) : '';
+		$url_saldo = $ha_saldo ? add_query_arg( array( 'mi_status' => 'balance', 'evento' => $event_id ), home_url( '/' ) ) : '';
 		$profilo_operativo = self::initial_operational_profile( $event_id );
 		$result = null;
 		// Un tentativo precedente può essere scaduto su WordPress mentre Apps Script
@@ -456,9 +457,11 @@ final class MI_Portal {
 		if ( ! in_array( $template, $allowed_templates, true ) ) return self::redirect_portal_result( 'Tipo di comunicazione non valido.', true, 'communications' );
 		$message = mb_substr( sanitize_textarea_field( wp_unslash( $_POST['message'] ?? '' ) ), 0, 4000 );
 		global $wpdb;
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT order_code,total_cents,balance_cents FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status IN ('CONFIRMED','PENDING_PAYMENT') AND capacity_released_at IS NULL ORDER BY id LIMIT 1000", $event_id ), ARRAY_A );
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,total_cents,economic_mode FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status IN ('CONFIRMED','PENDING_PAYMENT') AND capacity_released_at IS NULL ORDER BY id LIMIT 1000", $event_id ), ARRAY_A );
 		$recipients = array();
-		foreach ( $rows as $row ) $recipients[] = array( 'order_code' => $row['order_code'], 'paid_cents' => max( 0, (int) $row['total_cents'] - (int) $row['balance_cents'] ), 'balance_cents' => max( 0, (int) $row['balance_cents'] ) );
+		try { $positions = MI_Payment_Ledger::positions( $rows ); }
+		catch ( Throwable $error ) { return self::redirect_portal_result( 'Saldo non disponibile. Nessuna comunicazione preparata.', true, 'communications' ); }
+		foreach ( $rows as $row ) { $position = $positions[$row['id']]; $recipients[] = array( 'order_code' => $row['order_code'], 'paid_cents' => $position['paid'], 'balance_cents' => $position['managed'] ? $position['balance'] : 0 ); }
 		$result = MI_Spedizione_Email::accoda_comunicazione_operativa( array(
 			'communication_id' => 'portal-' . $event_id . '-' . get_current_user_id() . '-' . time() . '-' . wp_generate_password( 6, false, false ),
 			'event_id' => $event_id, 'template_type' => $template, 'message' => $message,
@@ -630,9 +633,11 @@ final class MI_Portal {
 		if ( empty( $_POST['confirm_cancellation'] ) ) return self::redirect_result( 'Conferma esplicitamente l’annullamento dell’evento.', true, $event_id );
 		$reason = mb_substr( sanitize_textarea_field( wp_unslash( $_POST['cancellation_reason'] ?? '' ) ), 0, 2000 );
 		global $wpdb;
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,status,total_cents,balance_cents FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED','WAITLIST_OFFERED') AND capacity_released_at IS NULL ORDER BY id", $event_id ), ARRAY_A );
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,status,total_cents,economic_mode FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED','WAITLIST_OFFERED') AND capacity_released_at IS NULL ORDER BY id", $event_id ), ARRAY_A );
 		$recipients = array();
-		foreach ( $rows as $row ) $recipients[] = array( 'order_code' => $row['order_code'], 'paid_cents' => max( 0, (int) $row['total_cents'] - (int) $row['balance_cents'] ), 'balance_cents' => max( 0, (int) $row['balance_cents'] ) );
+		try { $positions = MI_Payment_Ledger::positions( $rows ); }
+		catch ( Throwable $error ) { return self::redirect_result( 'Saldo non disponibile. Annullamento non eseguito.', true, $event_id ); }
+		foreach ( $rows as $row ) { $position = $positions[$row['id']]; $recipients[] = array( 'order_code' => $row['order_code'], 'paid_cents' => $position['paid'], 'balance_cents' => $position['managed'] ? $position['balance'] : 0 ); }
 		$email_result = $recipients ? MI_Spedizione_Email::accoda_comunicazione_operativa( array( 'communication_id' => 'event-cancel-' . $event_id . '-' . time(), 'event_id' => $event_id, 'template_type' => 'EVENT_CANCELLATION', 'message' => $reason, 'allow_operational' => true, 'recipients' => $recipients ) ) : array( 'count' => 0, 'mode' => MI_Spedizione_Email::modalita() );
 		if ( is_wp_error( $email_result ) ) return self::redirect_result( 'Impossibile preparare gli avvisi: evento non annullato.', true, $event_id );
 		foreach ( $rows as $row ) {
@@ -666,6 +671,9 @@ final class MI_Portal {
 	public static function status_url( $registration_id, $order_code, $email ) {
 		return add_query_arg( array( 'mi_status' => '1', 'ordine' => sanitize_text_field( (string) $order_code ), 'token' => MI_Registration_Service::public_status_token( $registration_id, $order_code, $email ) ), home_url( '/' ) );
 	}
+	public static function balance_url( $registration_id, $order_code, $email ) {
+		return add_query_arg( 'mi_status', 'balance', self::status_url( $registration_id, $order_code, $email ) );
+	}
 
 	public static function render_virtual_page() {
 		if ( empty( $_GET['mi_portal'] ) && empty( $_GET['mi_status'] ) && empty( $_GET['mi_waitlist_offer'] ) ) return;
@@ -692,7 +700,7 @@ final class MI_Portal {
 		// Ricarica anche le correzioni distribuite con lo stesso numero di versione.
 		$asset_version = rawurlencode( MI_VERSION . '.' . filemtime( MI_PLUGIN_DIR . 'assets/portal-management.js' ) );
 		$page_title = ! empty( $_GET['mi_status'] ) ? 'Stato della prenotazione' : ( ! empty( $_GET['mi_waitlist_offer'] ) ? 'Posto disponibile' : 'Segreteria eventi' );
-		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><title><?php echo esc_html( get_bloginfo( 'name' ) . ' — ' . $page_title ); ?></title><link rel="stylesheet" href="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal.css?ver=' . $asset_version ); ?>"></head><body class="mi-portal-standalone"><?php echo self::render(); ?><script defer src="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal.js?ver=' . $asset_version ); ?>"></script><?php if ( 'payments' === ( $_GET['mi_portal_view'] ?? '' ) ) : ?><link rel="stylesheet" href="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal-payments.css?ver=' . $asset_version ); ?>"><script defer src="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal-payments.js?ver=' . $asset_version ); ?>"></script><?php endif; ?><link rel="stylesheet" href="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal-management.css?ver=' . $asset_version ); ?>"><script defer src="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal-management.js?ver=' . $asset_version ); ?>"></script></body></html><?php
+		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><title><?php echo esc_html( get_bloginfo( 'name' ) . ' — ' . $page_title ); ?></title><link rel="stylesheet" href="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal.css?ver=' . $asset_version ); ?>"></head><body class="mi-portal-standalone"><?php echo self::render(); ?><script defer src="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal.js?ver=' . $asset_version ); ?>"></script><?php if ( MI_Portal_Payments::allowed() ) : ?><link rel="stylesheet" href="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal-payments.css?ver=' . $asset_version ); ?>"><script defer src="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal-payments.js?ver=' . $asset_version ); ?>"></script><?php endif; ?><link rel="stylesheet" href="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal-management.css?ver=' . $asset_version ); ?>"><script defer src="<?php echo esc_url( MI_PLUGIN_URL . 'assets/portal-management.js?ver=' . $asset_version ); ?>"></script></body></html><?php
 		exit;
 	}
 
@@ -867,7 +875,7 @@ final class MI_Portal {
 		$can_edit_requested = $requested_edit_id && ( current_user_can( 'mi_manage_events' ) || current_user_can( 'manage_options' ) ) && MI_Access::can_access_event( $requested_edit_id );
 		ob_start();
 		?><main class="mi-portal"><header class="mi-portal-header"><div><span class="mi-portal-eyebrow">Area riservata</span><h1>Segreteria eventi</h1></div><a class="mi-portal-logout" href="<?php echo esc_url( wp_logout_url( self::base_url() ) ); ?>"><span aria-hidden="true">↗</span> Esci</a></header>
-		<nav class="mi-portal-switcher" aria-label="Segreteria eventi"><a href="<?php echo esc_url( MI_Portal_Management::url() ); ?>">Riepilogo e gestione</a><a class="<?php echo 'manage' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'manage', self::base_url() ) ); ?>"><?php echo esc_html( self::manage_label() ); ?></a><?php if ( $can_create ) : ?><a class="<?php echo 'create' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'create', self::base_url() ) ); ?>">Crea evento</a><?php endif; ?><a class="<?php echo 'registrations' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'registrations', self::base_url() ) ); ?>">Iscrizioni</a><?php if ( MI_Portal_Payments::allowed() ) : ?><a class="<?php echo 'payments' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'payments', self::base_url() ) ); ?>">Pagamenti</a><?php endif; ?><a class="<?php echo 'communications' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'communications', self::base_url() ) ); ?>">Comunicazioni</a><?php if ( self::can_manage_groups() ) : ?><a class="<?php echo 'groups' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'groups', self::base_url() ) ); ?>">Gruppi</a><?php endif; ?><?php if ( self::can_manage_module_users() ) : ?><a class="<?php echo 'operators' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'operators', self::base_url() ) ); ?>">Operatori</a><?php endif; ?></nav>
+		<nav class="mi-portal-switcher" aria-label="Segreteria eventi"><a class="<?php echo 'management' === $view ? 'is-active' : ''; ?>" <?php if ( 'management' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( MI_Portal_Management::url( absint( $_GET['mi_portal_event'] ?? 0 ) ) ); ?>">Gestione iscrizioni</a><a class="<?php echo 'manage' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'manage', self::base_url() ) ); ?>"><?php echo esc_html( self::manage_label() ); ?></a><?php if ( $can_create ) : ?><a class="<?php echo 'create' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'create', self::base_url() ) ); ?>">Crea evento</a><?php endif; ?><a class="<?php echo 'registrations' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( array( 'mi_portal_view' => 'registrations', 'mi_portal_event' => absint( $_GET['mi_portal_event'] ?? 0 ), 'mi_portal_period' => 'past' === ( $_GET['mi_portal_period'] ?? '' ) ? 'past' : 'current' ), self::base_url() ) ); ?>">Iscrizioni</a><?php if ( MI_Portal_Payments::allowed() ) : ?><a class="<?php echo 'payments' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( array( 'mi_portal_view' => 'payments', 'mi_portal_event' => absint( $_GET['mi_portal_event'] ?? 0 ) ), self::base_url() ) ); ?>">Pagamenti</a><?php endif; ?><a class="<?php echo 'communications' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'communications', self::base_url() ) ); ?>">Comunicazioni</a><?php if ( self::can_manage_groups() ) : ?><a class="<?php echo 'groups' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'groups', self::base_url() ) ); ?>">Gruppi</a><?php endif; ?><?php if ( self::can_manage_module_users() ) : ?><a class="<?php echo 'operators' === $view ? 'is-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'operators', self::base_url() ) ); ?>">Operatori</a><?php endif; ?></nav>
 		<?php $notice_near_outputs = 'manage' === $view && ! empty( $_GET['mi_portal_event'] ) && ! empty( $_GET['mi_portal_outputs'] ); if ( ! $notice_near_outputs ) self::notice(); ?>
 		<?php if ( 'delete' === $view ) MI_Event_Deletion::render(); elseif ( 'create' === $view && ( $can_create || $can_edit_requested ) ) self::create_view( $requested_edit_id ); elseif ( 'management' === $view ) MI_Portal_Management::render(); elseif ( 'registrations' === $view ) self::portal_registrations_view(); elseif ( 'payments' === $view ) MI_Portal_Payments::render(); elseif ( 'communications' === $view ) self::communications_view(); elseif ( 'groups' === $view && self::can_manage_groups() ) self::groups_view(); elseif ( 'operators' === $view && self::can_manage_module_users() ) self::operators_view(); else self::manage_view(); ?>
 		</main><?php
@@ -875,6 +883,7 @@ final class MI_Portal {
 	}
 
 	private static function public_status_view() {
+		$balance_view = 'balance' === ( $_GET['mi_status'] ?? '' );
 		$event_id = absint( $_GET['evento'] ?? 0 );
 		$order_code = sanitize_text_field( wp_unslash( $_GET['ordine'] ?? '' ) );
 		$token = sanitize_text_field( wp_unslash( $_GET['token'] ?? '' ) );
@@ -897,10 +906,11 @@ final class MI_Portal {
 			}
 		}
 		ob_start(); ?>
-		<main class="mi-portal mi-public-status"><section class="mi-portal-login"><span class="mi-portal-eyebrow">Consultazione riservata</span><h1>Stato della prenotazione</h1><p>Controlla conferma, pagamenti registrati e saldo residuo. Non vengono mostrati dati personali o note interne.</p>
-		<?php if ( is_array( $result ) ) : ?><div class="mi-status-result"><p class="mi-status-event"><?php echo esc_html( $result['event_title'] ); ?></p><p class="mi-booking-detail__code">Codice <code><?php echo esc_html( $result['order_code'] ); ?></code></p><div class="mi-status-grid"><p><span>Prenotazione</span><strong><?php echo esc_html( $result['status'] ); ?></strong></p><p><span>Pagamento</span><strong><?php echo esc_html( $result['payment_status'] ); ?></strong></p><p><span>Versato</span><strong><?php echo esc_html( self::format_money( $result['paid_cents'] ) ); ?></strong></p><p><span>Saldo residuo</span><strong><?php echo esc_html( self::format_money( $result['balance_cents'] ) ); ?></strong></p></div><?php if ( ! empty( $result['payment_deadline'] ) ) : ?><p class="mi-portal-muted">Scadenza indicata: <?php echo esc_html( self::format_utc_date( $result['payment_deadline'] ) ); ?></p><?php endif; ?></div>
-		<?php elseif ( is_wp_error( $result ) ) : ?><div class="mi-portal-notice mi-portal-error"><?php echo esc_html( $result->get_error_message() ); ?></div><?php endif; ?>
-		<form method="post" action="<?php echo esc_url( add_query_arg( array_filter( array( 'mi_status' => '1', 'evento' => $event_id ) ), home_url( '/' ) ) ); ?>"><input type="hidden" name="mi_portal_action" value="public_status_lookup"><input type="hidden" name="mi_status_nonce" value="<?php echo esc_attr( wp_create_nonce( 'mi_public_status' ) ); ?>"><label>Codice prenotazione<input name="order_code" value="<?php echo esc_attr( $order_code ); ?>" maxlength="32" autocomplete="off" required></label><label>Email del referente<input type="email" name="email" value="<?php echo esc_attr( $email ); ?>" autocomplete="email" required></label><button type="submit">Controlla stato e saldo</button></form></section></main><?php
+		<main class="mi-portal mi-public-status"><section class="mi-portal-login"><span class="mi-portal-eyebrow">Consultazione riservata</span><h1><?php echo $balance_view ? 'Saldo della prenotazione' : 'Stato della prenotazione'; ?></h1><p>Controlla conferma, pagamenti registrati e saldo residuo. Non vengono mostrati dati personali o note interne.</p>
+		<?php if ( is_array( $result ) ) : ?><div class="mi-status-result"><p class="mi-status-event"><?php echo esc_html( $result['event_title'] ); ?></p><p class="mi-booking-detail__code">Codice <code><?php echo esc_html( $result['order_code'] ); ?></code></p><div class="mi-status-grid"><p><span>Prenotazione</span><strong><?php echo esc_html( $result['status'] ); ?></strong></p><p><span>Pagamento</span><strong><?php echo esc_html( $result['payment_status'] ); ?></strong></p><p><span>Versato</span><strong><?php echo esc_html( self::format_money( $result['paid_cents'] ) ); ?></strong></p><p><span><?php echo ! empty( $result['collectible'] ) ? 'Saldo residuo' : 'Differenza contabile (non richiesta di pagamento)'; ?></span><strong><?php echo esc_html( self::format_money( $result['balance_cents'] ) ); ?></strong></p></div><?php if ( ! empty( $result['payment_deadline'] ) ) : ?><p class="mi-portal-muted">Scadenza indicata: <?php echo esc_html( self::format_utc_date( $result['payment_deadline'] ) ); ?></p><?php endif; ?></div>
+		<?php if ( ! empty( $result['collectible'] ) && $result['balance_cents'] > 0 ) : ?><h2>Come completare il pagamento</h2><p>Importo residuo: <strong><?php echo esc_html( self::format_money( $result['balance_cents'] ) ); ?></strong>. Usa il codice <strong><?php echo esc_html( $result['order_code'] ); ?></strong> come riferimento.</p><ul><?php $instructions = array( 'BANK_TRANSFER' => 'Bonifico: usa le coordinate comunicate dall’organizzazione.', 'CARD' => 'Carta: segui le indicazioni comunicate dall’organizzazione.', 'CASH' => 'Contanti: concorda la consegna con l’organizzazione.' ); foreach ( $result['payment_methods'] as $method ) echo '<li>' . esc_html( $instructions[$method] ) . '</li>'; ?></ul><p>Se hai già versato l’importo, attendi la registrazione da parte della segreteria prima di effettuare un altro pagamento. Questa pagina conferma i movimenti registrati; non esegue un addebito.</p><?php endif; ?>
+        <?php elseif ( is_wp_error( $result ) ) : ?><div class="mi-portal-notice mi-portal-error"><?php echo esc_html( $result->get_error_message() ); ?></div><?php endif; ?>
+		<form method="post" action="<?php echo esc_url( add_query_arg( array_filter( array( 'mi_status' => $balance_view ? 'balance' : '1', 'evento' => $event_id ) ), home_url( '/' ) ) ); ?>"><input type="hidden" name="mi_portal_action" value="public_status_lookup"><input type="hidden" name="mi_status_nonce" value="<?php echo esc_attr( wp_create_nonce( 'mi_public_status' ) ); ?>"><label>Codice prenotazione<input name="order_code" value="<?php echo esc_attr( $order_code ); ?>" maxlength="32" autocomplete="off" required></label><label>Email del referente<input type="email" name="email" value="<?php echo esc_attr( $email ); ?>" autocomplete="email" required></label><button type="submit">Controlla stato e saldo</button></form></section></main><?php
 		return ob_get_clean();
 	}
 
@@ -1017,7 +1027,7 @@ final class MI_Portal {
 		$period_events = array_values( array_filter( $selectable_events, static function ( $event ) use ( $period ) {
 			$starts_at = (string) get_post_meta( $event->ID, '_mi_event_starts_at', true );
 			$closes_at = (string) get_post_meta( $event->ID, '_mi_registration_closes_at', true );
-			$is_past = (bool) get_post_meta( $event->ID, '_mi_event_archived_at', true ) || self::is_past_event( $closes_at ?: $starts_at );
+			$is_past = (bool) get_post_meta( $event->ID, '_mi_event_archived_at', true ) || self::is_past_event( $starts_at ?: $closes_at );
 			return 'past' === $period ? $is_past : ! $is_past;
 		} ) );
 		$period_event_ids = array_map( 'absint', wp_list_pluck( $period_events, 'ID' ) );
@@ -1028,7 +1038,7 @@ final class MI_Portal {
 		$status = strtoupper( sanitize_text_field( wp_unslash( $_GET['mi_portal_status'] ?? '' ) ) );
 		$statuses = array( 'CONFIRMED' => 'Confermate', 'PENDING_PAYMENT' => 'Da pagare', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto', 'CANCELLED' => 'Annullate', 'EXPIRED' => 'Scadute' );
 		if ( ! isset( $statuses[ $status ] ) ) $status = '';
-		echo '<p><a class="mi-primary" href="' . esc_url( MI_Portal_Management::url( $selected ) ) . '">Apri riepilogo e gestione</a></p>';
+		echo '<p><a class="mi-primary" href="' . esc_url( MI_Portal_Management::url( $selected ) ) . '">Apri gestione iscrizioni</a></p>';
 		echo '<section class="mi-registrations"><div class="mi-registrations__heading"><div><span class="mi-portal-eyebrow">Archivio operativo</span><h2>Iscrizioni</h2></div><p class="mi-portal-muted">Cerca una prenotazione e apri la scheda completa senza lasciare la pagina.</p></div><form class="mi-registrations-toolbar" method="get"><input type="hidden" name="mi_portal" value="1"><input type="hidden" name="mi_portal_view" value="registrations"><div class="mi-registration-search"><label class="screen-reader-text" for="mi-portal-query">Cerca nelle iscrizioni</label><input id="mi-portal-query" type="search" name="mi_portal_query" value="' . esc_attr( $query ) . '" placeholder="Nome, email, cellulare o codice prenotazione"><button class="mi-primary" type="submit">Cerca</button></div><div class="mi-registration-chips"><label>Periodo<select name="mi_portal_period" data-mi-auto-submit><option value="current" ' . selected( $period, 'current', false ) . '>Eventi in corso</option><option value="past" ' . selected( $period, 'past', false ) . '>Eventi passati</option></select></label><label>Eventi<select name="mi_portal_event" data-mi-auto-submit><option value="">Tutti gli eventi</option>';
 		foreach ( $period_events as $event ) echo '<option value="' . esc_attr( $event->ID ) . '" ' . selected( $selected, $event->ID, false ) . '>' . esc_html( $event->post_title ) . '</option>';
 		echo '</select></label><label>Stato<select name="mi_portal_status" data-mi-auto-submit><option value="">Tutti gli stati</option>';
@@ -1101,7 +1111,7 @@ final class MI_Portal {
 			if ( get_post_meta( $event->ID, '_mi_event_cancelled_at', true ) || get_post_meta( $event->ID, '_mi_event_archived_at', true ) ) return false;
 			$closes_at = (string) get_post_meta( $event->ID, '_mi_registration_closes_at', true );
 			$starts_at = (string) get_post_meta( $event->ID, '_mi_event_starts_at', true );
-			return ! self::is_past_event( $closes_at ?: $starts_at );
+			return ! self::is_past_event( $starts_at ?: $closes_at );
 		} ) );
 		$group_names = wp_list_pluck( $groups, 'post_title', 'ID' );
 		$event_names = wp_list_pluck( $all_events, 'post_title', 'ID' );
@@ -1148,6 +1158,11 @@ final class MI_Portal {
 		return 'Gestisci eventi';
 	}
 
+	/** The manager's explicit declaration owns this label, never computed prices. */
+	public static function is_free_configuration( array $config ) {
+		return 'ZERO' === ( $config['pricing_mode'] ?? '' );
+	}
+
 	private static function manage_view() {
 		global $wpdb;
 		$scope = MI_Access::event_ids();
@@ -1181,7 +1196,7 @@ final class MI_Portal {
 			$archived_events[ $event->ID ] = (bool) get_post_meta( $event->ID, '_mi_event_archived_at', true );
 			if ( $archived_events[ $event->ID ] ) $past_events[] = $event;
 			elseif ( $cancelled_events[ $event->ID ] ) $current_events[] = $event;
-			elseif ( self::is_past_event( $closes_at ?: $starts_at ) ) $past_events[] = $event;
+			elseif ( self::is_past_event( $starts_at ?: $closes_at ) ) $past_events[] = $event;
 			else $current_events[] = $event;
 		}
 		$events = $show_past ? $past_events : $current_events;
@@ -1250,6 +1265,8 @@ final class MI_Portal {
 			if ( $cover_image ) echo '<img src="' . esc_url( $cover_image ) . '" alt="" loading="lazy" decoding="async" fetchpriority="low">';
 			echo '</span><span class="mi-event-card__identity"><strong>' . esc_html( $event_title ) . '</strong>';
 			if ( $activity_name ) echo '<small>' . esc_html( $activity_name ) . '</small>';
+			$price_config = $published ?: array( 'pricing_mode' => get_post_meta( $event->ID, '_mi_pricing_mode', true ) );
+			if ( self::is_free_configuration( $price_config ) ) echo '<span class="mi-event-free">Gratuito</span>';
 			$status_label = $is_cancelled ? 'Annullato' : ( 'publish' === $event->post_status ? ( self::is_past_event( $starts_at ) ? 'Concluso' : 'Attivo' ) : 'Bozza' );
 			echo '<small>' . esc_html( self::format_date( $starts_at ) ) . '</small></span><span class="mi-event-card__footer"><span class="mi-event-card__capacity"><small>Posti occupati</small><strong>' . esc_html( $count . ' / ' . $capacity ) . '</strong><i aria-hidden="true"><b style="width:' . esc_attr( $occupancy_percentage ) . '%"></b></i></span><span class="mi-event-card__status"><strong>' . esc_html( $status_label ) . '</strong>' . ( $registration_label ? '<small>' . ( $registration_opens_later ? '<b>' . esc_html( $registration_label ) . '</b>' : esc_html( $registration_label ) ) . '</small>' : '' ) . '<small>Scadenza: ' . esc_html( self::format_date( $closes_at ) ) . '</small></span></span></span></a>';
 			$registration_count = (int) ( $registration_counts[ $event->ID ] ?? 0 );
@@ -1326,6 +1343,7 @@ final class MI_Portal {
 		if ( ! empty( $_GET['mi_portal_history'] ) ) $list_args['mi_portal_history'] = '1';
 		$list_url = add_query_arg( $list_args, self::base_url() ) . '#mi-elenco-eventi';
 		echo '<section class="mi-event-management" data-mi-selected-event tabindex="-1"><a class="mi-event-management__back" href="' . esc_url( $list_url ) . '" aria-label="Comprimi la scheda dell’evento" title="Comprimi la scheda"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 11 6-6 6 6M6 18l6-6 6 6"/></svg></a><div class="mi-event-management__heading"><div><span class="mi-portal-eyebrow">Evento selezionato</span><h2>' . esc_html( $event->post_title ) . '</h2></div><span class="mi-event-management__state">' . esc_html( $cancelled ? 'Annullato' : ( $expired ? 'Scaduto' : ( 'publish' === $event->post_status ? 'Attivo' : 'Bozza' ) ) ) . '</span></div>';
+		echo '<p><a class="mi-primary" href="' . esc_url( MI_Portal_Management::url( $event_id ) ) . '">Gestisci iscrizioni di questo evento</a></p>';
 		if ( $cancelled ) { echo '<div class="mi-portal-notice mi-portal-error"><strong>Evento annullato</strong><p>La scheda e le iscrizioni sono conservate nello storico.</p></div></section>'; return; }
 		echo '<details open><summary>Dettagli principali</summary><form class="mi-event-management__form" method="post" data-mi-event-quick-form><input type="hidden" name="mi_portal_action" value="update_event"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
 		wp_nonce_field( 'mi_portal_manage_event_' . $event_id, 'mi_portal_nonce' );
@@ -1358,12 +1376,25 @@ final class MI_Portal {
 		if ( in_array( $status, $allowed_statuses, true ) ) $conditions[] = $wpdb->prepare( 'r.status=%s', $status );
 		if ( '' !== $query ) {
 			$like = '%' . $wpdb->esc_like( $query ) . '%';
-			$conditions[] = $wpdb->prepare( '(r.order_code LIKE %s OR r.buyer_first_name LIKE %s OR r.buyer_last_name LIKE %s OR r.buyer_email LIKE %s OR r.buyer_phone LIKE %s)', $like, $like, $like, $like, $like );
+			$conditions[] = MI_Booking_Search::sql( $query );
 		}
 		$where = implode( ' AND ', $conditions );
-		$rows = $wpdb->get_results( "SELECT r.id registration_id,r.event_id,r.order_code,r.status,r.created_at,r.buyer_first_name,r.buyer_last_name,r.buyer_email,r.buyer_phone,r.total_qty,r.total_cents,r.balance_cents,events.post_title event_title FROM {$wpdb->prefix}mi_registrations r JOIN {$wpdb->posts} events ON events.ID=r.event_id WHERE {$where} ORDER BY r.created_at DESC,r.id DESC LIMIT 30", ARRAY_A );
+		$page = max( 1, absint( $_GET['mi_portal_page'] ?? 1 ) ); $offset = ( $page - 1 ) * 30;
+		$rows = $wpdb->get_results( "SELECT r.id registration_id,r.event_id,r.order_code,r.status,r.economic_mode,r.created_at,r.buyer_first_name,r.buyer_last_name,r.buyer_email,r.buyer_phone,r.total_qty,r.total_cents,r.balance_cents,events.post_title event_title FROM {$wpdb->prefix}mi_registrations r JOIN {$wpdb->posts} events ON events.ID=r.event_id WHERE {$where} ORDER BY r.created_at DESC,r.id DESC LIMIT 31 OFFSET {$offset}", ARRAY_A );
+		if ( $wpdb->last_error ) { echo '<p role="alert">Iscrizioni non disponibili. Riprova.</p>'; return; }
+		$has_next = count( $rows ) > 30; $rows = array_slice( $rows, 0, 30 );
+		$people_by_order = array();
+		if ( $rows ) {
+			$order_ids = implode( ',', array_map( 'intval', array_column( $rows, 'registration_id' ) ) );
+			$people_rows = $wpdb->get_results( "SELECT registration_id,first_name,last_name,status FROM {$wpdb->prefix}mi_participants WHERE registration_id IN ({$order_ids}) ORDER BY id", ARRAY_A );
+			if ( $wpdb->last_error ) { echo '<p role="alert">Partecipanti non disponibili. Riprova.</p>'; return; }
+			foreach ( $people_rows as $person ) $people_by_order[$person['registration_id']][] = $person;
+		}
+		try { $positions = MI_Payment_Ledger::positions( $rows, 'registration_id' ); }
+		catch ( Throwable $error ) { echo '<p role="alert">Saldo non disponibile. Riprova.</p>'; return; }
 		$base_url = self::base_url();
 		$base_url = add_query_arg( 'mi_portal_period', $period, $base_url );
+		if ( $page > 1 ) $base_url = add_query_arg( 'mi_portal_page', $page, $base_url );
 		if ( $event_id ) $base_url = add_query_arg( 'mi_portal_event', $event_id, $base_url );
 		if ( '' !== $query ) $base_url = add_query_arg( 'mi_portal_query', $query, $base_url );
 		if ( in_array( $status, $allowed_statuses, true ) ) $base_url = add_query_arg( 'mi_portal_status', $status, $base_url );
@@ -1380,14 +1411,23 @@ final class MI_Portal {
 			$name = trim( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] );
 			$initials = strtoupper( substr( (string) $row['buyer_first_name'], 0, 1 ) . substr( (string) $row['buyer_last_name'], 0, 1 ) );
 			$contact = $row['buyer_phone'] ?: $row['buyer_email'];
+			$person_names = '';
+			foreach ( $people_by_order[$row['registration_id']] ?? array() as $person ) $person_names .= '<small>' . esc_html( trim( $person['first_name'] . ' ' . $person['last_name'] ) . ( 'CANCELLED' === $person['status'] ? ' — Annullato' : '' ) ) . '</small>';
 			$status_label = $status_labels[ $row['status'] ] ?? $row['status'];
 			$status_class = $status_classes[ $row['status'] ] ?? 'is-blue';
-			if ( (int) $row['total_cents'] < 1 ) { $payment_label = 'Gratuito'; $payment_class = 'is-blue'; }
-			elseif ( (int) $row['balance_cents'] < 1 ) { $payment_label = 'Saldato'; $payment_class = 'is-green'; }
-			else { $payment_label = 'Rata successiva prevista ' . self::format_money( $row['balance_cents'] ); $payment_class = 'is-yellow'; }
-			echo '<a class="mi-booking-card" data-mi-portal-booking-open href="' . esc_url( $url ) . '"><span class="mi-booking-card__avatar" aria-hidden="true">' . esc_html( $initials ?: '—' ) . '</span><span class="mi-booking-card__content"><strong>' . esc_html( $name ?: 'Referente non indicato' ) . '</strong><small>' . esc_html( $row['event_title'] . ' · ' . $row['order_code'] ) . '</small><small>' . esc_html( self::format_utc_date( $row['created_at'] ) . ( $contact ? ' · ' . $contact : '' ) . ' · ' . (int) $row['total_qty'] . ' partecipanti' ) . '</small></span><span class="mi-booking-card__states"><small class="mi-status-pill ' . esc_attr( $status_class ) . '">' . esc_html( $status_label ) . '</small><small class="mi-status-pill ' . esc_attr( $payment_class ) . '">' . esc_html( $payment_label ) . '</small></span></a>';
+			$position = $positions[$row['registration_id']];
+			if ( $position['total'] < 1 ) { $payment_label = 'Nessun importo dovuto'; $payment_class = 'is-green'; }
+			elseif ( ! $position['managed'] ) { $payment_label = 'Quota ' . self::format_money( $position['total'] ); $payment_class = 'is-blue'; }
+			elseif ( in_array( $row['status'], array( 'CANCELLED', 'EXPIRED', 'WAITLISTED', 'WAITLIST_OFFERED' ), true ) ) { $payment_label = 'Versato netto ' . self::format_money( $position['paid'] ); $payment_class = 'is-blue'; }
+			elseif ( $position['balance'] < 1 ) { $payment_label = 'Saldato'; $payment_class = 'is-green'; }
+			else { $payment_label = 'Da versare ' . self::format_money( $position['balance'] ); $payment_class = 'is-yellow'; }
+			echo '<a class="mi-booking-card" data-mi-portal-booking-open href="' . esc_url( $url ) . '"><span class="mi-booking-card__avatar" aria-hidden="true">' . esc_html( $initials ?: '—' ) . '</span><span class="mi-booking-card__content"><strong>' . esc_html( $name ?: 'Referente non indicato' ) . '</strong><small>' . esc_html( $row['event_title'] . ' · ' . $row['order_code'] ) . '</small><small>' . esc_html( self::format_utc_date( $row['created_at'] ) . ( $contact ? ' · ' . $contact : '' ) . ' · ' . (int) $row['total_qty'] . ' partecipanti originari' ) . '</small>' . $person_names . '</span><span class="mi-booking-card__states"><small class="mi-status-pill ' . esc_attr( $status_class ) . '">' . esc_html( $status_label ) . '</small><small class="mi-status-pill ' . esc_attr( $payment_class ) . '">' . esc_html( $payment_label ) . '</small></span></a>';
 		}
 		if ( ! $rows ) echo '<div class="mi-registration-empty"><strong>Nessuna iscrizione trovata</strong><p class="mi-portal-muted">Prova a modificare il testo cercato o i filtri selezionati.</p></div>';
+		echo '<nav aria-label="Pagine delle prenotazioni"><span>Pagina ' . esc_html( $page ) . '</span> ';
+		if ( $page > 1 ) echo '<a href="' . esc_url( add_query_arg( array( 'mi_portal_view' => 'registrations', 'mi_portal_page' => $page - 1 ), $base_url ) ) . '">Precedente</a> ';
+		if ( $has_next ) echo '<a href="' . esc_url( add_query_arg( array( 'mi_portal_view' => 'registrations', 'mi_portal_page' => $page + 1 ), $base_url ) ) . '">Successiva</a>';
+		echo '</nav>';
 		echo '</div></section>';
 		$booking_id = absint( $_GET['mi_portal_booking'] ?? 0 ); if ( $booking_id ) self::booking_detail( $booking_id );
 	}

@@ -786,8 +786,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if ('push' === historyMode && url) window.history.pushState({}, '', url);
     if ('replace' === historyMode && url) window.history.replaceState({}, '', url);
   };
+  const canNavigateBooking = () => [...content.querySelectorAll('[data-mi-management]')].every(root => root.dispatchEvent(new CustomEvent('mi:before-booking-navigation', {cancelable:true})));
   const closeBooking = (replaceHistory = true) => {
     if (modal.hidden) return;
+    if (!canNavigateBooking()) {
+      if (!replaceHistory && bookingLinks[activeBookingIndex]) window.history.pushState({}, '', bookingLinks[activeBookingIndex].href);
+      return;
+    }
     bookingNavigationId++;
     modal.hidden = true;
     content.replaceChildren();
@@ -796,6 +801,7 @@ document.addEventListener('DOMContentLoaded', () => {
     previousFocus?.focus();
   };
   const openBooking = async (link, historyMode = 'push') => {
+	if (!canNavigateBooking()) return;
 	const navigationId = ++bookingNavigationId;
 	previousFocus = link;
 	activeBookingIndex = bookingLinks.indexOf(link);
@@ -873,3 +879,12 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('submit',function(event){const form=event.target.closest('[data-mi-delete-form]');if(!form)return;if(form.dataset.busy){event.preventDefault();return;}form.dataset.busy='1';form.setAttribute('aria-busy','true');const button=form.querySelector('button[type="submit"]');if(button)button.disabled=true;});
 
 const miDeletionContinuation=document.querySelector('[data-mi-delete-continue]');if(miDeletionContinuation)setTimeout(()=>miDeletionContinuation.requestSubmit(),2000);
+// Event selection is updated inline: keep navigation aligned with the current URL.
+document.addEventListener('click', event => {
+  const link=event.target.closest('.mi-portal-switcher a');if(!link)return;
+  const destination=new URL(link.href),current=new URL(location.href);
+  if(!['management','registrations','payments'].includes(destination.searchParams.get('mi_portal_view')))return;
+  destination.searchParams.set('mi_portal_event',current.searchParams.get('mi_portal_event')||'0');
+  destination.searchParams.set('mi_portal_period',current.searchParams.get('mi_portal_period')||(current.searchParams.get('mi_portal_history')==='1'?'past':'current'));
+  link.href=destination.href;
+},true);

@@ -1,15 +1,24 @@
-document.addEventListener('DOMContentLoaded', () => {
-  const root = document.querySelector('[data-mi-payments]');
-  if (!root) return;
+(() => {
+function init(root) {
+  if(root.dataset.ready)return;root.dataset.ready='1';
   const el = selector => root.querySelector(selector);
   const search = el('#mi-payment-search'), results = el('[data-results]');
   const status = el('[data-status]'), searchStatus = el('#mi-payment-search-status');
   const form = el('[data-payment-form]'), fields = el('[data-payment-fields]');
   const save = el('[data-save]'), next = el('[data-new]'), error = el('#mi-payment-error');
   const searchFields = el('[data-search-fields]'), retryDetail = el('[data-retry-detail]');
-  let generation = 0, timer, controller, selected = null, pending = null, busy = false;
+  const ids=new Map();root.querySelectorAll('[id]').forEach(element=>{const previous=element.id;const next=previous+'-'+crypto.randomUUID();ids.set(previous,next);element.id=next;});
+  root.querySelectorAll('[for],[aria-describedby],[aria-labelledby]').forEach(element=>{for(const attribute of ['for','aria-describedby','aria-labelledby'])if(element.hasAttribute(attribute))element.setAttribute(attribute,element.getAttribute(attribute).split(/\s+/).map(id=>ids.get(id)||id).join(' '));});
+  let generation = 0, timer, controller, selected = null, pending = null, busy = false, foundCount=0;
+  const publishDraft=()=>{root.dataset.paymentDraft='1';searchFields.disabled=true;root.closest('[data-mi-management]')?.querySelectorAll('form').forEach(other=>{if(other!==form)other.querySelectorAll('input,select,textarea,button').forEach(control=>{if(!control.disabled){control.dataset.paymentLocked='1';control.disabled=true;}});});};
+  form.addEventListener('input',publishDraft);form.addEventListener('change',publishDraft);
+  window.addEventListener('beforeunload',e=>{if(root.isConnected&&(pending||busy||root.dataset.paymentDraft==='1')){e.preventDefault();e.returnValue='';}});
   const field = name => form.elements.namedItem(name);
+  const unlock=()=>{delete root.dataset.paymentDraft;searchFields.disabled=false;root.closest('[data-mi-management]')?.querySelectorAll('[data-payment-locked]').forEach(control=>{control.disabled=false;delete control.dataset.paymentLocked;});};
+  const discard=document.createElement('button');discard.type='button';discard.textContent='Svuota la bozza del movimento';form.querySelector('.mi-payment-actions').append(discard);
+  discard.onclick=()=>{if(busy||pending){say('Verifica l’esito della registrazione prima di svuotare il modulo.',true);return;}form.reset();unlock();if(selected)choose(selected);};
   const money = cents => (Number(cents) / 100).toLocaleString('it-IT', {style:'currency', currency:'EUR'});
+  document.addEventListener('click',e=>{if(root.isConnected&&!root.closest('[data-mi-management]')&&(pending||busy||root.dataset.paymentDraft==='1')&&e.target.closest('a')){e.preventDefault();e.stopImmediatePropagation();say('Completa la registrazione oppure svuota la bozza prima di cambiare pagina.',true);}},true);
   const say = (text, failed = false) => {
     status.textContent = text;
     status.className = 'mi-payment-status' + (failed ? ' mi-portal-error' : '');
@@ -31,14 +40,18 @@ document.addEventListener('DOMContentLoaded', () => {
       if (signal) signal.removeEventListener('abort', abort);
     }
   }
+  function showDeposit(r) {
+      let deposit=el('[data-deposit-summary]');if(!deposit){deposit=document.createElement('p');deposit.dataset.depositSummary='1';el('[data-balance]').closest('.mi-payment-summary').append(deposit);}
+      deposit.hidden=!r.deposit_plan;deposit.textContent=r.deposit_plan?'Caparra prevista '+money(r.deposit_due)+' · Ancora da coprire '+money(r.deposit_missing)+(r.deposit_covered&&r.residuo>0?' · Caparra coperta, saldo da completare':r.deposit_due===0?' · Nessuna caparra richiesta':''):'';
+  }
   function showHistory(movements) {
     const host=el('[data-payment-history]');host.replaceChildren();
     const title=document.createElement('h3');title.textContent='Movimenti registrati';host.append(title);
     if(!movements.length){const p=document.createElement('p');p.textContent='Nessun movimento registrato.';host.append(p);return;}
     const table=document.createElement('table'),head=table.createTHead().insertRow();
-    for(const label of ['Data','Tipo','Importo','Metodo','Riferimento','Operatore']){const th=document.createElement('th');th.textContent=label;head.append(th);}
+    for(const label of ['Data','Tipo','Importo','Metodo','Riferimento','Operatore','Nota']){const th=document.createElement('th');th.textContent=label;head.append(th);}
     const body=table.createTBody();
-    for(const m of movements){const row=body.insertRow();for(const value of [new Date(m.data).toLocaleDateString('it-IT'),m.tipo,money(m.importo),m.metodo,m.riferimento,m.operatore])row.insertCell().textContent=value;}
+    for(const m of movements){const row=body.insertRow();for(const value of [new Date(m.data).toLocaleDateString('it-IT'),m.tipo,money(m.importo),m.metodo,m.riferimento,m.operatore,m.nota||''])row.insertCell().textContent=value;}
     host.append(table);
   }
   function invalidate() {
@@ -46,27 +59,27 @@ document.addEventListener('DOMContentLoaded', () => {
     selected = null; form.hidden = true; retryDetail.hidden = true; results.replaceChildren();
     say(''); error.textContent = '';
   }
-  async function find() {
+  async function find(page=1) {
     const query = search.value.trim();
     if (query.length < 2) { searchStatus.textContent = 'Digita almeno due caratteri.'; return; }
     const ticket = generation;
     controller = new AbortController();
     searchStatus.textContent = 'Ricerca in corso…';
     try {
-      const data = await request('search', {query}, controller.signal);
+      const data = await request('search', {query,page,event_id:root.dataset.event||0}, controller.signal);
       if (ticket !== generation) return;
-      results.replaceChildren();
+      if(page===1){results.replaceChildren();foundCount=0;}else results.querySelector('[data-more-payments]')?.remove();
       for (const p of data.prenotazioni) {
         const button = document.createElement('button');
         button.type = 'button'; button.className = 'mi-payment-choice';
         const name = document.createElement('strong'), detail = document.createElement('small');
-        name.textContent = p.nome; detail.textContent = p.evento + ' · ' + p.codice;
+        name.textContent = p.nome; detail.textContent = p.evento + ' · ' + p.codice + (p.partecipanti?.length?' · Partecipanti: '+p.partecipanti.join(', '):'');
         button.append(name, detail); button.addEventListener('click', () => choose(p));
         results.append(button);
       }
-      searchStatus.textContent = data.prenotazioni.length
-        ? data.prenotazioni.length + ' prenotazioni trovate.' + (data.prenotazioni.length === 30 ? ' Sono mostrate le prime 30: precisa la ricerca.' : '')
-        : 'Nessuna prenotazione trovata nelle iniziative a cui hai accesso.';
+      foundCount+=data.prenotazioni.length;
+      if(data.has_more){const more=document.createElement('button');more.type='button';more.dataset.morePayments='1';more.textContent='Mostra altre 30 prenotazioni';more.onclick=()=>{more.disabled=true;find(page+1).finally(()=>{more.disabled=false;});};results.append(more);}
+      searchStatus.textContent = foundCount ? foundCount + ' prenotazioni caricate.' : 'Nessuna prenotazione trovata nelle iniziative a cui hai accesso.';
     } catch (e) {
       if (ticket !== generation) return;
       searchStatus.textContent = 'Ricerca non riuscita. Premi Invio nel campo per riprovare. ' + (e.name === 'AbortError' ? 'Tempo di attesa esaurito.' : e.message);
@@ -86,12 +99,13 @@ document.addEventListener('DOMContentLoaded', () => {
       el('[data-total]').textContent = money(r.totale);
       el('[data-paid]').textContent = money(r.versato);
       el('[data-balance]').textContent = money(r.residuo);
+      showDeposit(r);
       form.reset(); fields.disabled = false; field('data').value = data.data; field('rata').value = 'NON_ASSEGNATO';
       showHistory(r.movimenti || []);
       save.hidden = false; save.disabled = false; save.textContent = 'Registra pagamento'; next.hidden = true;
       pending = null; error.textContent = ''; form.hidden = false;
       say('Saldo aggiornato. Compila il movimento e verifica i dati prima di registrare.');
-      field('importo').focus();
+      if(!root.dataset.registrationId)field('importo').focus();
     } catch (e) {
       if (ticket !== generation) return;
       say('Saldo non disponibile. ' + (e.name === 'AbortError' ? 'Tempo di attesa esaurito.' : e.message), true);
@@ -132,23 +146,27 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const data = await request('save', pending);
       if (!data.saved) {
-        pending = null; fields.disabled = false; searchFields.disabled = false;
+        pending = null; fields.disabled = false; searchFields.disabled = true;
         error.textContent = data.message; say('Movimento non registrato. Correggi i dati oppure seleziona di nuovo la prenotazione per aggiornare il saldo.', true);
         field('importo').focus(); return;
       }
       document.dispatchEvent(new Event('mi:operational-saved'));
-      pending = null; say(data.message); save.hidden = true;
-      try { const updated=await request('detail',{registration_id:selected.id});const r=updated.saldo;el('[data-total]').textContent=money(r.totale);el('[data-paid]').textContent=money(r.versato);el('[data-balance]').textContent=money(r.residuo);showHistory(r.movimenti||[]); } catch(e) { say(data.message+' Saldo e storico richiedono un aggiornamento.'); }
+      pending = null; unlock(); say(data.message); save.hidden = true;
+      try { const updated=await request('detail',{registration_id:selected.id});const r=updated.saldo;el('[data-total]').textContent=money(r.totale);el('[data-paid]').textContent=money(r.versato);el('[data-balance]').textContent=money(r.residuo);showHistory(r.movimenti||[]);showDeposit(r);root.dispatchEvent(new CustomEvent('mi:payment-updated',{bubbles:true,detail:r})); } catch(e) { say(data.message+' Saldo e storico richiedono un aggiornamento.');root.dispatchEvent(new CustomEvent('mi:payment-updated',{bubbles:true,detail:null})); }
        next.hidden = false; next.focus();
     } catch (e) {
       say('Esito non ricevuto. Mantieni aperta questa pagina e premi Riprova registrazione: lo stesso movimento non verrà duplicato. ' + (e.name === 'AbortError' ? 'Tempo di attesa esaurito.' : e.message), true);
       save.textContent = 'Riprova registrazione';
     } finally { busy = false; save.disabled = false; form.removeAttribute('aria-busy'); }
   });
-  if(root.dataset.initialOrder){search.value=root.dataset.initialOrder;find();}
+  if(root.dataset.registrationId){searchFields.hidden=true;choose({id:Number(root.dataset.registrationId),nome:root.dataset.buyer,codice:root.dataset.order});}else if(root.dataset.initialOrder){search.value=root.dataset.initialOrder;find();}
   next.addEventListener('click', () => {
+    if(root.dataset.registrationId){choose({id:Number(root.dataset.registrationId),nome:root.dataset.buyer,codice:root.dataset.order});return;}
     searchFields.disabled = false; fields.disabled = false; search.value = '';
     el('[data-clear]').hidden = true; invalidate(); form.reset();
     searchStatus.textContent = 'Digita almeno due caratteri.'; search.focus();
   });
-});
+}
+const scan=()=>document.querySelectorAll('[data-mi-payments]').forEach(init);
+document.addEventListener('DOMContentLoaded',()=>{scan();new MutationObserver(scan).observe(document.body,{childList:true,subtree:true});});
+})();
