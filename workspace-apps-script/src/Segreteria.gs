@@ -118,11 +118,12 @@ function generaElencoOperativo_(eventId, fields, options) {
   const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.OPERATIONAL_LIST); const event = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS)).find(function (row) { return String(row.id_evento) === String(eventId); }) || {};
   const registrations = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(function (row) { return String(row.id_evento) === String(eventId) && ['ANNULLATO', 'SCADUTO', 'CANCELLED', 'EXPIRED'].indexOf(String(row.stato).toUpperCase()) < 0; }); const byOrder = registrations.reduce(function (result, row) { result[String(row.codice_ordine)] = row; return result; }, {});
   const operational = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.OPERATIONAL_STATE)); const payments = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS)); const labels = campiElencoOperativo_().reduce(function (result, field) { result[field.key] = field.label; return result; }, {});
-  const rows = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).filter(function (row) { return !!byOrder[String(row.codice_ordine)] && String(row.stato_partecipante || 'ACTIVE').toUpperCase() !== 'CANCELLED'; }).map(function (participant) { const registration = byOrder[String(participant.codice_ordine)]; const data = decodificaOggetto_(participant.dati_aggiuntivi_json); operational.filter(function (state) { return String(state.codice_ordine) === String(participant.codice_ordine) && Number(state.numero_partecipante) === Number(participant.numero_partecipante); }).forEach(function (state) { data[String(state.chiave)] = state.valore; }); return fields.map(function (field) { return neutralizzaFormula_(valoreCampoElenco_(field, event, registration, participant, data, payments), 1000); }); });
+  const rows = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).filter(function (row) { return !!byOrder[String(row.codice_ordine)] && String(row.stato_partecipante || 'ACTIVE').toUpperCase() !== 'CANCELLED'; }).map(function (participant) { const registration = byOrder[String(participant.codice_ordine)]; const data = decodificaOggetto_(participant.dati_aggiuntivi_json); operational.filter(function (state) { return String(state.codice_ordine) === String(participant.codice_ordine) && Number(state.numero_partecipante) === Number(participant.numero_partecipante); }).forEach(function (state) { data[String(state.chiave)] = state.valore; }); if (!corrispondeFiltriReport_(options.filtri, registration, participant, data)) return null; const row = fields.map(function (field) { return neutralizzaFormula_(valoreCampoElenco_(field, event, registration, participant, data, payments), 1000); }); row._orderCode = String(participant.codice_ordine); return row; }).filter(Boolean);
 	const grouping = normalizzaScelteReport_(options.raggruppamenti, fields, 5).map(function (field) { return fields.indexOf(field); }).filter(function (index) { return index >= 0; });
 	const ordering = normalizzaScelteReport_(options.ordinamento, fields, 5).map(function (field) { return fields.indexOf(field); }).filter(function (index) { return index >= 0; });
 	const sortColumns = grouping.concat(ordering).filter(function (column, index, list) { return list.indexOf(column) === index; });
 	if (sortColumns.length) rows.sort(function (left, right) { for (let index = 0; index < sortColumns.length; index += 1) { const column = sortColumns[index]; const comparison = String(left[column] == null ? '' : left[column]).localeCompare(String(right[column] == null ? '' : right[column]), 'it', { numeric: true, sensitivity: 'base' }); if (comparison) return comparison; } return 0; });
+  limitaImportiAUnaRigaPerOrdine_(rows, fields);
   sheet.clear(); sheet.getRange(1, 1, 1, fields.length).merge().setValue('Elenco operativo — ' + String(event.titolo || eventId)).setBackground('#17224a').setFontColor('#ffffff').setFontWeight('bold').setFontSize(14); sheet.getRange(2, 1, 1, fields.length).setValues([fields.map(function (field) { return labels[field] || field; })]).setBackground('#1f4e78').setFontColor('#ffffff').setFontWeight('bold').setWrap(true);
   if (rows.length) sheet.getRange(3, 1, rows.length, fields.length).setValues(rows).setWrap(true).setVerticalAlignment('middle');
   if (grouping.length && rows.length) rows.forEach(function (row, index) { const previous = index ? rows[index - 1] : null; const startsGroup = !previous || grouping.some(function (column) { return String(row[column]) !== String(previous[column]); }); if (startsGroup) sheet.getRange(index + 3, 1, 1, fields.length).setBorder(true, null, null, null, null, null, '#17224a', SpreadsheetApp.BorderStyle.SOLID_MEDIUM); });
@@ -402,7 +403,7 @@ function campiElencoOperativo_(includiDinamici) {
 }
 
 function valoreCampoElenco_(field, event, registration, participant, data, payments) {
-  if (field === 'status') return etichettaStatoIscrizione_(participant.stato_partecipante || registration.stato);
+  if (field === 'status') return etichettaStatoIscrizione_(['CANCELLED', 'CANCELLED_PARTICIPANT'].indexOf(String(participant.stato_partecipante).toUpperCase()) >= 0 ? 'CANCELLED' : registration.stato);
   if (String(field).indexOf('option_')===0) {
     const option=decodificaElenco_(participant.opzioni_json).find(o=>'option_'+String(o.code)===field);
     return option ? Number(option.quantity)||0 : 0;
@@ -436,3 +437,16 @@ function aggiornaStatoOperativo_(orderCode, participantNumber, key, value, opera
 
 function decodificaOggetto_(value) { try { const parsed = JSON.parse(String(value || '{}')); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; } catch (error) { return {}; } }
 function decodificaElenco_(value) { try { const parsed = JSON.parse(String(value || '[]')); return Array.isArray(parsed) ? parsed : []; } catch (error) { return []; } }
+
+/** Economic columns belong to the order, even in a person-based report. */
+function limitaImportiAUnaRigaPerOrdine_(rows, fields) {
+  const monetary = ['total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance'];
+  const seen = Object.create(null);
+  rows.forEach(function (row) {
+    const code = row._orderCode;
+    if (!code) return;
+    if (seen[code]) fields.forEach(function (field, index) { if (monetary.indexOf(field) >= 0) row[index] = ''; });
+    seen[code] = true;
+  });
+  return rows;
+}

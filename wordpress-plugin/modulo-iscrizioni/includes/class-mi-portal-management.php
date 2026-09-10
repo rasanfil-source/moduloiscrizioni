@@ -10,16 +10,33 @@ final class MI_Portal_Management {
 		nocache_headers();
 		if ( ! self::allowed() || ! check_ajax_referer( 'mi_portal_management', 'nonce', false ) ) wp_send_json_error( array( 'message' => 'Accesso non consentito o sessione scaduta.' ), 403 );
 		$operation = sanitize_key( wp_unslash( $_POST['operation'] ?? '' ) );
+		if ( 'annual_report' === $operation ) {
+			$result = MI_Attendance_Report::read( absint( $_POST['group_id'] ?? 0 ), absint( $_POST['year'] ?? 0 ), absint( $_POST['minimum'] ?? 1 ) );
+			if ( is_wp_error( $result ) ) wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
+			wp_send_json_success( $result );
+		}
 		$event_id = absint( $_POST['event_id'] ?? 0 );
 		if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_send_json_error( array( 'message' => 'Evento non accessibile.' ), 403 );
-		if ( 'summary' === $operation ) {
+		if ( in_array( $operation, array( 'summary', 'list_page' ), true ) ) {
 			$result = MI_Management_Service::summary( $event_id );
+			if ( ! is_wp_error( $result ) ) $result['rooms_version'] = hash( 'sha256', wp_json_encode( $result['rooms'] ) );
+			if ( ! is_wp_error( $result ) ) {
+				if ( 'list_page' === $operation ) $result = MI_Management_List::page( $result, json_decode( wp_unslash( $_POST['context'] ?? '{}' ), true ), absint( $_POST['offset'] ?? 0 ), absint( $_POST['limit'] ?? 30 ) );
+				else $result = MI_Management_List::compact( $result );
+			}
+		} elseif ( in_array( $operation, array( 'accommodation_preview', 'change_accommodation' ), true ) ) {
+			$result = MI_Management_Service::change_accommodation( $event_id, json_decode( wp_unslash( $_POST['data'] ?? 'null' ), true ), 'change_accommodation' === $operation ? sanitize_text_field( wp_unslash( $_POST['preview_version'] ?? '' ) ) : null, 'wp_' . get_current_user_id() . '_' . sanitize_text_field( wp_unslash( $_POST['request_id'] ?? '' ) ) );
+		} elseif ( in_array( $operation, array( 'event_room_save', 'event_room_delete' ), true ) ) {
+			$result = MI_Management_Service::save_event_room( $event_id, 'event_room_save' === $operation ? 'room_save' : 'room_delete', json_decode( wp_unslash( $_POST['data'] ?? 'null' ), true ), sanitize_text_field( wp_unslash( $_POST['version'] ?? '' ) ), 'wp_' . get_current_user_id() . '_' . sanitize_text_field( wp_unslash( $_POST['request_id'] ?? '' ) ) );
+		} elseif ( 'identity_preview' === $operation ) {
+			try { $result = MI_Attendance_Report::target( $event_id, sanitize_text_field( wp_unslash( $_POST['target_order'] ?? '' ) ), absint( $_POST['target_number'] ?? 0 ) ); }
+			catch ( Throwable $error ) { wp_send_json_error( array( 'message' => $error->getMessage() ), 400 ); }
 		} elseif ( 'sheet_changes' === $operation ) {
 			$result = MI_Workspace_Client::request( 'LEGGI_MODIFICHE_FOGLIO', array( 'event_id' => (string) $event_id ) );
-		} elseif ( 'sheet_save' === $operation ) {
+		} elseif ( in_array( $operation, array( 'sheet_save', 'room_swap', 'room_assign' ), true ) ) {
 			$changes = json_decode( wp_unslash( $_POST['data'] ?? 'null' ), true );
 			$request_id = 'wp_' . get_current_user_id() . '_' . sanitize_text_field( wp_unslash( $_POST['request_id'] ?? '' ) );
-			$result = MI_Management_Service::save_sheet( $event_id, $changes, $request_id );
+			$result = MI_Management_Service::save_sheet( $event_id, $changes, $request_id, 'room_assign' === $operation ? 'ROOM_ASSIGN' : ( 'room_swap' === $operation ? 'ROOM_SWAP' : 'SHEET_SYNC' ) );
 		} else {
 			global $wpdb;
 			$code = sanitize_text_field( wp_unslash( $_POST['order_code'] ?? '' ) );
@@ -34,7 +51,7 @@ final class MI_Portal_Management {
 				if ( ! $belongs ) wp_send_json_error( array( 'message' => 'Partecipante non accessibile.' ), 403 );
 				$result = MI_Registration_Service::cancel_participant( $participant_id, 'WP#' . get_current_user_id() . ' · ' . wp_get_current_user()->display_name );
 				if ( ! is_wp_error( $result ) ) $result = array( 'ok' => true, 'saved' => true, 'message' => 'Partecipazione annullata. L’allineamento dei fogli può richiedere qualche istante.' );
-			} elseif ( in_array( $operation, array( 'participant', 'room_save', 'room_delete' ), true ) ) {
+			} elseif ( in_array( $operation, array( 'participant', 'room_save', 'room_delete', 'request_review', 'attendance', 'adjust_due', 'identity_link', 'change_options' ), true ) ) {
 				$request_id = sanitize_text_field( wp_unslash( $_POST['request_id'] ?? '' ) );
 				if ( ! preg_match( '/^[a-f0-9-]{36}$/i', $request_id ) ) wp_send_json_error( array( 'message' => 'Richiesta non valida.' ), 400 );
 				$data = json_decode( wp_unslash( $_POST['data'] ?? '{}' ), true );
@@ -45,6 +62,7 @@ final class MI_Portal_Management {
 		}
 		if ( is_wp_error( $result ) ) wp_send_json_error( array( 'message' => $result->get_error_message() ), 502 );
 		$result['sheet_url'] = esc_url_raw( (string) get_post_meta( $event_id, '_mi_operational_sheet_url', true ), array( 'https' ) );
+		$result['report_url'] = current_user_can( 'mi_view_registrations' ) || current_user_can( 'manage_options' ) ? add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-payments', 'payment_event_id' => $event_id ), admin_url( 'edit.php' ) ) : '';
 		wp_send_json_success( $result );
 	}
 	public static function render( $registration_id = 0 ) {
@@ -64,18 +82,22 @@ final class MI_Portal_Management {
 		$events = get_posts( $query );
 		$periods = array();
 		foreach ( $events as $event ) {
-			$end = get_post_meta( $event->ID, '_mi_registration_closes_at', true ) ?: get_post_meta( $event->ID, '_mi_event_starts_at', true );
+			$end = get_post_meta( $event->ID, '_mi_event_starts_at', true ) ?: get_post_meta( $event->ID, '_mi_registration_closes_at', true );
 			$periods[$event->ID] = get_post_meta( $event->ID, '_mi_event_archived_at', true ) || MI_Portal::is_past_event( $end ) ? 'past' : 'current';
 		}
 		$period = $periods[$event_id] ?? ( 'past' === ( $_GET['mi_portal_period'] ?? '' ) ? 'past' : 'current' );
 		?>
 		<section class="mi-management" data-mi-management data-endpoint="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'mi_portal_management' ) ); ?>" data-event="<?php echo esc_attr( $event_id ); ?>" data-order="<?php echo esc_attr( $order ); ?>">
-		<h2>Gestione e riepilogo evento</h2>
-		<label>Periodo<select data-period-select aria-label="Periodo"><option value="current" <?php selected( $period, 'current' ); ?>>Eventi attivi</option><option value="past" <?php selected( $period, 'past' ); ?>>Eventi passati</option></select></label>
+		<h2>Gestione iscrizioni</h2>
+		<details data-annual-report hidden><summary>Rapporto annuale delle presenze per gruppo</summary><p>Conta gli eventi con presenza effettiva registrata. I collegamenti fra iscrizioni della stessa persona devono essere confermati dal gestore nella scheda.</p>
+		<label>Gruppo<select data-annual-group><option value="">Scegli un gruppo</option><?php foreach ( get_posts( array( 'post_type' => MI_Event_Post_Type::ACTIVITY_TYPE, 'post_status' => array( 'publish', 'private', 'draft' ), 'numberposts' => -1 ) ) as $group ) if ( MI_Access::can_access_activity( $group->ID ) ) : ?><option value="<?php echo esc_attr( $group->ID ); ?>"><?php echo esc_html( $group->post_title ); ?></option><?php endif; ?></select></label>
+		<label>Anno<input data-annual-year type="number" min="2000" max="2200" value="<?php echo esc_attr( wp_date( 'Y' ) ); ?>"></label><label>Numero minimo di eventi frequentati<input data-annual-minimum type="number" min="1" max="1000" value="2"></label><button type="button" data-load-annual>Genera rapporto annuale</button><p data-annual-status role="status"></p><div data-annual-results></div></details>
+		<label><select data-period-select aria-label="Eventi attivi o passati"><option value="current" <?php selected( $period, 'current' ); ?>>Eventi attivi</option><option value="past" <?php selected( $period, 'past' ); ?>>Eventi passati</option></select></label>
 		<label>Evento<select data-event-select aria-label="Evento"><option value="">Scegli un evento</option><?php foreach ( $events as $event ) : ?><option data-period="<?php echo esc_attr( $periods[$event->ID] ); ?>" value="<?php echo esc_attr( $event->ID ); ?>" <?php selected( $event_id, $event->ID ); ?>><?php echo esc_html( $event->post_title ); ?></option><?php endforeach; ?></select></label>
-		<div class="mi-booking-detail__actions"><button type="button" data-refresh>Aggiorna riepilogo</button><button type="button" data-sheet-sync data-auto="<?php echo empty( $_GET['mi_sheet_sync'] ) ? '0' : '1'; ?>">Sincronizza foglio Google</button><button type="button" data-print>Stampa vista</button></div>
+		<div data-event-actions hidden><div class="mi-booking-detail__actions"><button type="button" data-refresh>Aggiorna riepilogo</button><button type="button" data-sheet-sync data-auto="<?php echo empty( $_GET['mi_sheet_sync'] ) ? '0' : '1'; ?>">Sincronizza foglio Google</button><button type="button" data-print>Stampa vista</button></div>
 		<p><a data-open-sheet hidden target="_blank" rel="noopener">Apri foglio Google ↗</a></p>
-		<p data-management-status role="status" aria-live="polite"></p><div data-management-content></div>
+		<p><a data-movements-report hidden>Report movimenti per periodo, metodo e tipo — esporta CSV</a></p>
+		<p data-management-status role="status" aria-live="polite"></p></div><div data-management-content></div>
 		</section>
 		<?php
 	}

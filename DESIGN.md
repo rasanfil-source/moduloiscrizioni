@@ -34,11 +34,13 @@ components:
 
 ## Overview
 
+La gestione camere mette in primo piano Tipo di sistemazione e una tabella delle persone raggruppate per codice. Prefissi operativi S, DM, DS, T e M; M identifica singole persone in camerate senza limite. Sezione sobria con bordo blu, intestazioni di gruppo e numeri modificabili, senza tessere cliccabili per i conteggi. Inventario e scambio camere restano funzioni secondarie.
+
 La Segreteria eventi è uno strumento di lavoro, non una pagina promozionale. Deve ricordare una segreteria ordinata: titoli netti, istruzioni brevi, azioni riconoscibili e identità del gruppo visibile senza sovrastare il contenuto. Il riferimento pubblico resta il sito della Parrocchia Sant’Eugenio; il portale mantiene però una densità maggiore, adatta al lavoro quotidiano.
 
 ## Colors
 
-Il blu notte identifica navigazione e azioni principali. Il verde indica soltanto esiti positivi realmente confermati. Bianco e grigio chiaro separano le aree operative; il rosso resta riservato alle azioni irreversibili o agli errori.
+Il blu notte identifica navigazione e azioni principali. Il verde indica esiti positivi confermati e, sulle tessere eventi, la dichiarazione esplicita «Evento totalmente gratuito» del gestore. Il badge «Gratuito» dipende da pricing_mode=ZERO, mai dagli importi o dal saldo; in assenza della dichiarazione non compare un badge alternativo. Bianco e grigio chiaro separano le aree operative; il rosso resta riservato alle azioni irreversibili o agli errori.
 
 ## Typography
 
@@ -61,6 +63,8 @@ Controlli con raggio di 10 px e schede con raggio di 14 px. Le forme circolari s
 ## Components
 
 I token runtime canonici sono --ink, --navy e --line in portal.css, corrispondenti a inchiostro, blu-notte e bordo. portal-management.css li consuma per testi, bordi e azioni. Select e date picker restano controlli nativi: popup e interazione appartengono al sistema operativo. Il contratto dei comportamenti è in UX-CONTRACT.md.
+
+Il badge «Gratuito» usa --success e --success-light, definiti in portal.css e corrispondenti a successo e successo-chiaro. Conservare tessere e apertura del dettaglio nella griglia; conservare wizard e modulo pubblico. Gli Sheet degli eventi restano disponibili con replica e correzioni sincronizzate.
 
 La riconciliazione 3.24.0 ritira deliberatamente le regole grafiche dei form Sheets, in accordo con la scelta di un solo sistema web. Resta invariata l’identità del portale; i pulsanti di salvataggio sono primari, gli annullamenti hanno tono di pericolo e conferma dedicata.
 

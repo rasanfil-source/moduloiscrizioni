@@ -105,3 +105,6 @@
 .mi-extra-service{align-items:end}.mi-extra-service>label{display:flex;flex-direction:column;justify-content:flex-end;align-self:stretch}.mi-extra-service>label>input,.mi-extra-service>label>select{margin-top:auto;min-height:44px}
 .mi-event-card-menu>div>a{display:block;padding:.55rem .7rem;border-radius:8px;font-weight:800;text-decoration:none;text-align:center;margin-top:.5rem}.mi-event-card-menu>div>form+form{margin-top:.5rem}.mi-portal-card:has([data-mi-delete-form]){max-width:760px;margin:1rem auto;padding:1.5rem;border:1px solid var(--line);border-radius:12px;background:#fff}.mi-portal-card dl{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem 1rem}.mi-portal-card dd{margin:0;font-weight:700}.mi-portal-card [data-mi-delete-form]>label{display:block;margin:1rem 0}.mi-portal-card [data-mi-delete-form] fieldset{margin:1rem 0}.mi-portal-card [data-mi-delete-form] input[name=confirm_title]{display:block;width:100%;margin-top:.5rem}
 
+
+/* Existing event cards: explicit free label, no badge for paid events. */
+.mi-portal{--success:#25745e;--success-light:#eaf5ef}.mi-event-card__identity .mi-event-free{display:inline-block;align-self:flex-start;width:fit-content;margin-top:4px;padding:2px 8px;border-radius:999px;background:var(--success-light);color:var(--success);font-size:.75rem;font-weight:750;line-height:1.4}

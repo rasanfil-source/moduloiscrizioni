@@ -315,6 +315,7 @@ final class MI_Registration_Service {
 
 		$wpdb->query( 'START TRANSACTION' );
 		try {
+			if ( class_exists( 'MI_Management_Service' ) ) MI_Management_Service::lock_room_event( $event_id );
 			$wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$counters_table} (event_id, confirmed_count, waitlisted_count, updated_at) VALUES (%d, 0, 0, %s)", $event_id, $now ) );
 			$counter = $wpdb->get_row( $wpdb->prepare( "SELECT confirmed_count, waitlisted_count FROM {$counters_table} WHERE event_id = %d FOR UPDATE", $event_id ), ARRAY_A );
 			if ( ! $counter ) {
@@ -423,6 +424,7 @@ final class MI_Registration_Service {
 				}
 				$participant_management[] = array( 'name' => trim( $participant['first_name'] . ' ' . $participant['last_name'] ), 'url' => MI_Portal::participant_cancel_url( (int) $wpdb->insert_id, $cancel_token ) );
 			}
+			if ( class_exists( 'MI_Management_Service' ) ) MI_Management_Service::auto_assign_rooms_locked( $registration_id );
 			$counter_updated = $wpdb->query( $wpdb->prepare( "UPDATE {$counters_table} SET {$counter_field} = {$counter_field} + %d, updated_at = %s WHERE event_id = %d", $selection['quantity'], $now, $event_id ) );
 			if ( 1 !== $counter_updated ) {
 				throw new RuntimeException( 'Contatore non aggiornato.' );
@@ -706,7 +708,7 @@ final class MI_Registration_Service {
 		$email = strtolower( sanitize_email( (string) $email ) );
 		$token = strtolower( sanitize_text_field( (string) $token ) );
 		if ( ! $order_code || ( ! $email && ! preg_match( '/^[a-f0-9]{64}$/', $token ) ) ) return new WP_Error( 'mi_status_not_found', 'Non è stato possibile verificare la prenotazione.' );
-		$registration = $wpdb->get_row( $wpdb->prepare( "SELECT id,event_id,order_code,status,buyer_email,total_cents,initial_due_cents,balance_cents,payment_deadline_at FROM {$wpdb->prefix}mi_registrations WHERE order_code=%s LIMIT 1", $order_code ), ARRAY_A );
+		$registration = $wpdb->get_row( $wpdb->prepare( "SELECT id,event_id,order_code,status,buyer_email,economic_mode,payment_methods_json,total_cents,initial_due_cents,balance_cents,payment_deadline_at FROM {$wpdb->prefix}mi_registrations WHERE order_code=%s LIMIT 1", $order_code ), ARRAY_A );
 		if ( ! $registration ) return new WP_Error( 'mi_status_not_found', 'Non è stato possibile verificare la prenotazione.' );
 		if ( $event_id && absint( $registration['event_id'] ) !== absint( $event_id ) ) return new WP_Error( 'mi_status_not_found', 'Non è stato possibile verificare la prenotazione per questo evento.' );
 		$valid = $email
@@ -714,16 +716,21 @@ final class MI_Registration_Service {
 			: hash_equals( self::public_status_token( $registration['id'], $registration['order_code'], $registration['buyer_email'] ), $token );
 		if ( ! $valid ) return new WP_Error( 'mi_status_not_found', 'Non è stato possibile verificare la prenotazione.' );
 		$paid = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(CASE WHEN transaction_kind='REFUND' THEN -amount_cents ELSE amount_cents END),0) FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d", $registration['id'] ) );
+		if ( $wpdb->last_error ) return new WP_Error( 'mi_status_unavailable', 'Saldo momentaneamente non disponibile. Riprova più tardi.' );
 		$total = max( 0, (int) $registration['total_cents'] );
 		$balance = max( 0, $total - $paid );
+		$managed = in_array( $registration['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
+		$collectible = $managed && in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true );
 		$status_labels = array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'Da pagare', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto', 'CANCELLED' => 'Annullata', 'EXPIRED' => 'Scaduta' );
 		if ( 'WAITLISTED' === $registration['status'] ) $payment_label = 'Nessun pagamento richiesto durante la lista d’attesa';
 		elseif ( 'WAITLIST_OFFERED' === $registration['status'] ) $payment_label = 'Nessun pagamento richiesto prima dell’accettazione';
+		elseif ( in_array( $registration['status'], array( 'CANCELLED', 'EXPIRED' ), true ) ) $payment_label = 'Prenotazione chiusa: contatta l’organizzazione per eventuali rimborsi';
+		elseif ( ! $managed ) $payment_label = 'Pagamento non gestito da questo portale';
 		elseif ( 0 === $total ) $payment_label = 'Nessun pagamento previsto';
 		elseif ( $paid >= $total ) $payment_label = 'Saldo completato';
 		elseif ( $paid >= (int) $registration['initial_due_cents'] && (int) $registration['initial_due_cents'] > 0 ) $payment_label = 'Caparra ricevuta, saldo ancora dovuto';
 		elseif ( $paid > 0 ) $payment_label = 'Versamento parziale ricevuto';
-		else $payment_label = (int) $registration['initial_due_cents'] > 0 ? 'Caparra ancora da versare' : 'Pagamento ancora da completare';
+		else $payment_label = 'DEPOSIT_BALANCE' === $registration['economic_mode'] && (int) $registration['initial_due_cents'] > 0 ? 'Caparra ancora da versare' : 'Pagamento ancora da completare';
 		return array(
 			'order_code'       => (string) $registration['order_code'],
 			'event_title'      => get_the_title( (int) $registration['event_id'] ),
@@ -732,7 +739,9 @@ final class MI_Registration_Service {
 			'paid_cents'       => max( 0, $paid ),
 			'balance_cents'    => $balance,
 			'total_cents'      => $total,
-			'payment_deadline' => (string) $registration['payment_deadline_at'],
+			'collectible'      => $collectible,
+			'payment_methods'  => $collectible ? array_values( array_intersect( array( 'BANK_TRANSFER', 'CARD', 'CASH' ), (array) json_decode( (string) $registration['payment_methods_json'], true ) ) ) : array(),
+			'payment_deadline' => $collectible ? (string) $registration['payment_deadline_at'] : '',
 		);
 	}
 
@@ -918,8 +927,10 @@ final class MI_Registration_Service {
 		$registration_id = absint( $registration_id );
 		$decision = strtoupper( sanitize_key( $decision ) );
 		if ( ! in_array( $decision, array( 'ACCEPT', 'DECLINE', 'EXPIRE' ), true ) ) return new WP_Error( 'mi_waitlist_decision_invalid', 'Scelta non valida.' );
+		$room_event_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$registrations} WHERE id=%d", $registration_id ) );
 		$wpdb->query( 'START TRANSACTION' );
 		try {
+			if ( class_exists( 'MI_Management_Service' ) ) MI_Management_Service::lock_room_event( $room_event_id );
 			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$registrations} WHERE id=%d FOR UPDATE", $registration_id ), ARRAY_A );
 			if ( ! $row || 'WAITLIST_OFFERED' !== $row['status'] ) throw new RuntimeException( 'Proposta non disponibile.' );
 			if ( ! $system_expiry && ( ! preg_match( '/^[a-f0-9]{64}$/', (string) $token ) || ! hash_equals( (string) $row['waitlist_offer_token_hash'], hash( 'sha256', (string) $token ) ) ) ) throw new RuntimeException( 'Collegamento non valido.' );
@@ -942,6 +953,7 @@ final class MI_Registration_Service {
 				}
 				$updated = $wpdb->update( $registrations, array( 'status' => $target, 'initial_due_cents' => $economic['initial_due_cents'], 'balance_cents' => $economic['balance_cents'], 'expires_at' => $payment_deadline, 'payment_deadline_at' => $payment_deadline, 'waitlist_offer_token_hash' => null, 'waitlist_offer_expires_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'waitlist_offer_accepted' ), array( 'id' => $registration_id, 'status' => 'WAITLIST_OFFERED' ), array( '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s' ), array( '%d', '%s' ) );
 				if ( 1 !== $updated || ! self::append_registration_event( $registration_id, 'WAITLIST_ACCEPTED', 'WAITLIST_OFFERED', $target, 'PUBLIC_LINK', array( 'payment_deadline_at' => $payment_deadline ) ) ) throw new RuntimeException( 'Accettazione non salvata.' );
+				if ( class_exists( 'MI_Management_Service' ) ) MI_Management_Service::auto_assign_rooms_locked( $registration_id );
 				self::mark_workspace_changed_locked( $registration_id );
 				$event['payment_deadline_at'] = $payment_deadline ? wp_date( 'Y-m-d\TH:i', strtotime( $payment_deadline . ' UTC' ), wp_timezone() ) : '';
 				self::queue_waitlist_acceptance_email_locked( $row, $event, $economic, $target, $items, $outbox, $participants, $now );
@@ -1117,7 +1129,7 @@ final class MI_Registration_Service {
 			if ( ! isset( $allowed[ $code ] ) ) {
 				return new WP_Error( 'mi_ticket_invalid', 'Tipologia di iscrizione non valida.', array( 'status' => 400 ) );
 			}
-			if ( ! is_int( $raw_quantity ) && ! ( is_string( $raw_quantity ) && preg_match( '/^\d+$/', $raw_quantity ) ) ) {
+			if ( ( is_int( $raw_quantity ) && $raw_quantity < 0 ) || ( ! is_int( $raw_quantity ) && ! ( is_string( $raw_quantity ) && preg_match( '/^\d+$/', $raw_quantity ) ) ) ) {
 				return new WP_Error( 'mi_ticket_quantity_invalid', 'La quantità deve essere un numero intero.', array( 'status' => 400 ) );
 			}
 			$item_quantity = absint( $raw_quantity );
@@ -1197,7 +1209,8 @@ final class MI_Registration_Service {
 		return $participants;
 	}
 
-	private static function validate_options( $raw, $definitions, $scope ) {
+	/** Shared pure validation for initial registration and reviewed service changes. */
+	public static function validate_options( $raw, $definitions, $scope ) {
 		$allowed = array();
 		foreach ( (array) $definitions as $definition ) {
 			if ( strtoupper( (string) ( $definition['scope'] ?? '' ) ) === $scope ) {
@@ -1211,7 +1224,7 @@ final class MI_Registration_Service {
 			if ( ! isset( $allowed[ $code ] ) ) {
 				return new WP_Error( 'mi_option_invalid', 'Opzione non valida.', array( 'status' => 400 ) );
 			}
-			if ( ! is_int( $raw_quantity ) && ! ( is_string( $raw_quantity ) && preg_match( '/^\d+$/', $raw_quantity ) ) ) {
+			if ( ( is_int( $raw_quantity ) && $raw_quantity < 0 ) || ( ! is_int( $raw_quantity ) && ! ( is_string( $raw_quantity ) && preg_match( '/^\d+$/', $raw_quantity ) ) ) ) {
 				return new WP_Error( 'mi_option_quantity_invalid', 'Quantità opzione non valida.', array( 'status' => 400 ) );
 			}
 			$quantity = absint( $raw_quantity );

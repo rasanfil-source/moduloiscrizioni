@@ -3,6 +3,27 @@ defined( 'ABSPATH' ) || exit;
 
 /** Registro autorevole MySQL. Nessuna richiesta Google nel percorso di lettura o salvataggio. */
 final class MI_Payment_Ledger {
+	/** Current amounts, distinct from the original installment plan. No database writes. */
+	public static function position( array $registration, $net_paid ) {
+		$total = max( 0, (int) $registration['total_cents'] );
+		$paid = max( 0, (int) $net_paid );
+		$managed = in_array( $registration['economic_mode'] ?? 'FULL_PAYMENT', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
+		$deposit = 'DEPOSIT_BALANCE' === ( $registration['economic_mode'] ?? '' );
+		$initial = $deposit ? min( $total, max( 0, (int) ( $registration['initial_due_cents'] ?? 0 ) ) ) : 0;
+		return array( 'total' => $total, 'paid' => $paid, 'balance' => max( 0, $total - $paid ), 'managed' => $managed, 'deposit_plan' => $deposit, 'deposit_due' => $initial, 'deposit_missing' => max( 0, $initial - $paid ), 'deposit_covered' => $deposit && $initial > 0 && $paid >= $initial );
+	}
+	/** Caller supplies already scoped registrations; one aggregate query for the whole list. */
+	public static function positions( array $registrations, $id_key = 'id' ) {
+		global $wpdb;
+		if ( ! $registrations ) return array();
+		$ids = array_values( array_unique( array_map( 'intval', array_column( $registrations, $id_key ) ) ) );
+		$rows = $wpdb->get_results( "SELECT registration_id,SUM(CASE WHEN transaction_kind='REFUND' THEN -amount_cents ELSE amount_cents END) AS paid FROM {$wpdb->prefix}mi_payments WHERE registration_id IN (" . implode( ',', $ids ) . ') GROUP BY registration_id', ARRAY_A );
+		if ( $wpdb->last_error ) throw new RuntimeException( 'Saldo non disponibile. Riprova.' );
+		$paid = array_column( $rows, 'paid', 'registration_id' );
+		$result = array();
+		foreach ( $registrations as $registration ) $result[$registration[$id_key]] = self::position( $registration, $paid[$registration[$id_key]] ?? 0 );
+		return $result;
+	}
 	public static function normalize( array $input ) {
 		$amount = trim( (string) ( $input['importo'] ?? '' ) );
 		if ( ! preg_match( '/^([0-9]{1,8})(?:[.,]([0-9]{1,2}))?$/D', $amount, $matches ) ) throw new InvalidArgumentException( 'Importo non valido.' );
@@ -47,7 +68,8 @@ final class MI_Payment_Ledger {
 			$amount = ( 'REFUND' === $p['transaction_kind'] ? -1 : 1 ) * (int) $p['amount_cents']; $paid += $amount;
 			$movements[] = array( 'id' => 'mysql_' . $p['id'], 'data' => gmdate( 'c', strtotime( $p['effective_at'] . ' UTC' ) ), 'tipo' => $p['movement_kind'] ?: ( $amount < 0 ? 'RIMBORSO' : 'INCASSO' ), 'importo' => $amount, 'metodo' => array( 'BANK_TRANSFER' => 'BONIFICO', 'CARD' => 'CARTA', 'CASH' => 'CONTANTE' )[ $p['payment_source'] ] ?? $p['payment_source'], 'riferimento' => $p['external_reference'], 'operatore' => $p['operator_label'], 'nota' => $p['administrative_note'] );
 		}
-		return array( 'ok' => true, 'data' => wp_date( 'Y-m-d' ), 'saldo' => array( 'codice' => $r['order_code'], 'referente' => trim( $r['buyer_first_name'] . ' ' . $r['buyer_last_name'] ), 'evento' => get_the_title( (int) $r['event_id'] ), 'totale' => (int) $r['total_cents'], 'versato' => max( 0, $paid ), 'residuo' => max( 0, (int) $r['total_cents'] - $paid ), 'movimenti' => $movements ) );
+		$position = self::position( $r, $paid );
+		return array( 'ok' => true, 'data' => wp_date( 'Y-m-d' ), 'saldo' => array( 'codice' => $r['order_code'], 'referente' => trim( $r['buyer_first_name'] . ' ' . $r['buyer_last_name'] ), 'evento' => get_the_title( (int) $r['event_id'] ), 'totale' => $position['total'], 'versato' => $position['paid'], 'residuo' => $position['balance'], 'deposit_plan' => $position['deposit_plan'], 'deposit_due' => $position['deposit_due'], 'deposit_missing' => $position['deposit_missing'], 'deposit_covered' => $position['deposit_covered'], 'movimenti' => $movements ) );
 	}
 	public static function save( $id, array $input ) {
 		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( MI_Event_Deletion::registration_event( $id ) ); if ( is_wp_error( $lease ) ) return $lease; }

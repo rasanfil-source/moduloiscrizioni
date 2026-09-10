@@ -46,7 +46,8 @@ function generaReportDaModello(form) {
   const allowed = campiElencoOperativo_().map(function (field) { return String(field.key); });
   const columns = normalizzaScelteReport_(model.colonne, allowed, 30);
   if (!columns.length) throw new Error('Il modello non contiene colonne disponibili per questo evento.');
-  const count = generaElencoOperativo_(eventId, columns, { ordinamento: model.ordinamento, raggruppamenti: model.raggruppamenti });
+  const filters = normalizzaFiltriEsecuzioneReport_(form.valori_filtri);
+  const count = generaElencoOperativo_(eventId, columns, { ordinamento: model.ordinamento, raggruppamenti: model.raggruppamenti, filtri: filters });
   aggiungiControllo_('GENERATE_REPORT', 'REPORT_TEMPLATE', id, 'SUCCESS', normalizzaTesto_(Session.getActiveUser().getEmail(), 120), eventId + ':' + count, 'WORKSPACE_UI');
   return { ok: true, count: count, nome: model.nome, print_url: creaUrlStampaElenco_(), message: 'Report generato con ' + count + ' partecipanti.' };
 }
@@ -58,6 +59,30 @@ function normalizzaScelteReport_(values, allowed, limit) {
     seen[value] = true;
     return true;
   }).slice(0, limit);
+}
+
+function normalizzaFiltriEsecuzioneReport_(raw) {
+  raw = raw || {};
+  if (typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Filtri report non validi.');
+  const allowed = ['query', 'status', 'room', 'transport'];
+  if (Object.keys(raw).some(function (key) { return allowed.indexOf(key) < 0; })) throw new Error('Filtro report non disponibile.');
+  const result = {};
+  allowed.forEach(function (key) { result[key] = normalizzaTesto_(raw[key] || '', 120); });
+  if (['', 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'WAITLIST_OFFERED'].indexOf(result.status) < 0) throw new Error('Stato report non valido.');
+  return result;
+}
+
+function corrispondeFiltriReport_(filters, registration, participant, data) {
+  filters = filters || {};
+  const aliases = { CONFERMATA: 'CONFIRMED', IN_ATTESA_PAGAMENTO: 'PENDING_PAYMENT' };
+  const status = String(registration.stato || '').toUpperCase();
+  if (filters.status && filters.status !== (aliases[status] || status)) return false;
+  const query = String(filters.query || '').trim().toLocaleLowerCase('it');
+  const name = [participant.nome, participant.cognome, participant.cognome, participant.nome, registration.codice_ordine, registration.email_referente].join(' ').toLocaleLowerCase('it');
+  if (query && name.indexOf(query) < 0) return false;
+  const room = data.room || data.camera || data.alloggio || '';
+  const transport = data.pullman || data.transport || '';
+  return (!filters.room || String(room).toLocaleLowerCase('it') === filters.room.toLocaleLowerCase('it')) && (!filters.transport || String(transport).toLocaleLowerCase('it') === filters.transport.toLocaleLowerCase('it'));
 }
 
 function decodificaConfigurazioneReport_(value) {

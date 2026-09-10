@@ -185,7 +185,7 @@ test('i fogli evento vengono verificati, ricreati, archiviati e ripuliti senza p
 	assert.match(fogli, /function organizzaFogliEventoDaWordPress_/);
 	assert.match(webApp, /ORGANIZZA_FOGLI_EVENTO/);
 	assert.match(portal, /ORGANIZZA_FOGLI_EVENTO/);
-	assert.match(portal, /\$archiviato \|\| \( ! \$annullato && self::is_past_event\( \$chiusura \?: \$inizio \) \)/);
+	assert.match(portal, /\$archiviato \|\| \( ! \$annullato && self::is_past_event\( \$inizio \?: \$chiusura \) \)/);
 	assert.match(fogli, /setTrashed\(true\)/);
 	assert.match(fogli, /registro\.getRange\(esistente\._row/);
 });
@@ -1257,7 +1257,7 @@ test('gli eventi passati sono separati dalla vista operativa ordinaria', async (
   assert.match(portal, /Torna agli eventi attuali/);
   assert.match(portal, /is_past_event/);
   assert.match(portal, /Eventi passati/);
-	assert.match(portal, /is_past_event\( \$closes_at \?: \$starts_at \)/);
+	assert.match(portal, /is_past_event\( \$starts_at \?: \$closes_at \)/);
 	assert.match(css, /\.mi-event-history-link/);
 	assert.match(css, /\.mi-event-card\.is-expired \.mi-event-card__status strong/);
 });
@@ -1277,7 +1277,8 @@ test('la scheda iscrizioni riprende la vista operativa con ricerca e filtri sicu
   assert.match(portal, /name="mi_portal_status"/);
   assert.match(portal, /\$wpdb->esc_like\( \$query \)/);
   assert.match(portal, /\$allowed_statuses/);
-  assert.match(portal, /LIMIT 30/);
+  assert.match(portal, /LIMIT 31 OFFSET/);
+  assert.match(portal, /mi_portal_page/);
   assert.match(portal, /class="mi-booking-card"/);
   assert.match(portal, /mi-status-pill/);
   assert.match(portal, />Tutti gli eventi<\/option>/);
@@ -1853,7 +1854,7 @@ test('il portale allinea Ricordami e affida la pulizia al servizio coordinato', 
 test('il controllo saldo può essere limitato all evento del pulsante', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const service = await read('includes/class-mi-registration-service.php');
-  assert.match(portal, /'mi_status' => '1', 'evento' => \$event_id/);
+  assert.match(portal, /'mi_status' => 'balance', 'evento' => \$event_id/);
   assert.match(service, /public_status\( \$order_code, \$email = '', \$token = '', \$event_id = 0 \)/);
   assert.match(service, /registration\['event_id'\].*\$event_id/);
 });
