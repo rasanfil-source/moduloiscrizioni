@@ -179,7 +179,7 @@ final class MI_Management_Service {
 	/** Preview and commit use the same server-calculated plan. No client-supplied prices. */
 	private static function accommodation_plan( $event_id, $data, $lock = false ) {
 		global $wpdb;
-		if ( ! is_array( $data ) || ! is_array( $data['people'] ?? null ) || ! count( $data['people'] ) || count( $data['people'] ) > 100 || ! is_string( $data['reason'] ?? null ) || ! trim( sanitize_textarea_field( $data['reason'] ) ) || mb_strlen( $data['reason'] ) > 500 ) throw new InvalidArgumentException( 'Seleziona le persone e indica il motivo del cambio (massimo 500 caratteri).' );
+		if ( ! is_array( $data ) || ! is_array( $data['people'] ?? null ) || ! count( $data['people'] ) || count( $data['people'] ) > 100 || ! is_string( $data['reason'] ?? '' ) || mb_strlen( $data['reason'] ?? '' ) > 500 ) throw new InvalidArgumentException( 'Seleziona le persone. Le annotazioni facoltative possono contenere al massimo 500 caratteri.' );
 		$type = self::room_types()[$data['type'] ?? ''] ?? null;
 		$number = $data['number'] ?? '';
 		if ( ! $type || ! is_string( $number ) || ( '' !== $number && ! preg_match( '/^[1-9][0-9]{0,5}$/', $number ) ) ) throw new InvalidArgumentException( 'Sistemazione o numero non valido.' );
@@ -193,7 +193,7 @@ final class MI_Management_Service {
 		ksort( $grouped ); $rooms = self::rooms( $event_id ); $inventory = array_column( $rooms, null, 'code' ); $next = 1;
 		foreach ( $rooms as $room ) if ( preg_match( '/^' . $type['prefix'] . '([1-9][0-9]*)$/', $room['code'], $match ) ) $next = max( $next, (int) $match[1] + 1 );
 		$shared = '' !== $number ? $type['prefix'] . $number : $type['prefix'] . $next;
-		$plan = array( 'reason' => sanitize_textarea_field( $data['reason'] ), 'people' => array(), 'orders' => array(), 'new_rooms' => array() );
+		$plan = array( 'reason' => sanitize_textarea_field( $data['reason'] ?? '' ), 'people' => array(), 'orders' => array(), 'new_rooms' => array() );
 		$fingerprint = array( $data, $rooms ); $occupancy = array_column( $rooms, 'occupied', 'code' );
 		foreach ( $grouped as $code => $numbers ) {
 			sort( $numbers );
