@@ -15,7 +15,7 @@ assert.equal(await page.locator('[data-deposit-filter]').isVisible(),false);
 assert.equal(await page.locator('.mi-management-summary tr:has-text("Da incassare")').isVisible(),false);
 assert.equal(await page.locator(".mi-management-summary tr:not(.mi-summary-section)").first().locator("td").innerText(),"65");assert.equal(await page.locator(".mi-management-summary button").count(),0);assert.equal(await page.locator('[data-list-view]').count(),0);assert.doesNotMatch(await page.locator('.mi-management-summary').innerText(),/prenotazion/i);
 assert.equal(await page.evaluate(()=>!!(document.querySelector('[data-event-actions]').compareDocumentPosition(document.querySelector('[data-new-registration]'))&Node.DOCUMENT_POSITION_FOLLOWING)),true);
-assert.equal(await page.evaluate(()=>document.querySelector('[data-annual-report]').nextElementSibling.hasAttribute('data-export-settings')),true);
+assert.equal(await page.evaluate(()=>document.querySelector('[data-mi-management]').lastElementChild.hasAttribute('data-annual-report')),true);
 await page.locator('[data-refresh]').click();await page.locator('[data-more]').waitFor();assert.equal(await page.locator('[data-refresh]').count(),1);assert.equal(await page.locator('[data-annual-report]').count(),1);
 for(const deposit of [false,true]){
 features={rooms:false,payments:true,deposit};await page.reload();await page.locator('[data-more]').waitFor();
