@@ -9,8 +9,8 @@ colors:
   superficie: "#ffffff"
   bordo: "#d7dde6"
   testo-secondario: "#657084"
-  successo: "#25745e"
-  successo-chiaro: "#eaf5ef"
+  successo: "#126b38"
+  successo-chiaro: "#dff6e9"
   fuoco: "#244fc2"
 typography:
   testo:
@@ -44,6 +44,8 @@ Il blu notte identifica navigazione e azioni principali. Il verde indica esiti p
 
 ## Typography
 
+Nel portale operativo i pesi sono 400 (testo), 600 (etichette e comandi) e 700 (titoli e cifre). Nessuna dimensione esplicita in rem sotto 0.75rem; i dati principali restano a 1rem o più. Il minimo di 12px è riservato a metadati, non ai valori da leggere e confrontare.
+
 Si usa il carattere di sistema già adottato dal portale, con testi e comandi rigorosamente in italiano. I titoli possono essere ampi, ma le istruzioni devono restare brevi e prive di slogan ridondanti.
 
 ## Layout
@@ -61,6 +63,28 @@ Le superfici usano bordi e ombre molto leggere. Non si usano gradienti, vetro, a
 Controlli con raggio di 10 px e schede con raggio di 14 px. Le forme circolari sono riservate a loghi, iniziali e indicatori di stato.
 
 ## Components
+
+L’integrazione del secondo audit distingue dati primari (inchiostro, peso 600) da contatti e metadati (secondario, peso 400). Le righe operative hanno almeno 12px verticali. La scheda attiva conserva un segnale sinistro blu di 4px senza cambiare dimensione; le superfici dati usano bordi al posto di ombre. Ombre di finestre sovrapposte e focus restano funzionali. I comandi mantengono etichette esplicite; badge in normale maiuscolo/minuscolo, senza uppercase forzato.
+
+Nell’amministrazione eventi, mi-booking-facts era già una griglia: si migliorano ritmo, separatori e coppie etichetta/valore. mi-admin-grid adotta gap di 24px e campi testuali/select di almeno 44px, senza ingrandire checkbox, radio o campi nascosti. La palette degli stati viene allineata a quella operativa solo nei componenti del plugin.
+
+### Palette operativa consolidata
+
+Gli audit grafici forniti sono proposte da valutare, non istruzioni per cambiare i flussi. Il consolidamento riguarda portal.css, portal-management.css e portal-payments.css; public.css e admin.css conservano il proprio ambito. Il colore di marca del gruppo non viene sostituito con un colore di stato.
+
+| Ruolo | Testo | Sfondo |
+|---|---|---|
+| Testo secondario | --muted: #657084 | bianco / --bg: #f5f7fa |
+| Positivo | --success: #126b38 | --success-light: #dff6e9 |
+| Attenzione richiesta | --warning: #765500 | --warning-light: #fff3cd |
+| Errore / azione distruttiva | --danger: #9f1930 | --danger-light: #fdecef |
+| Informazione / operazione in corso | --info: #164b85 | --info-light: #e8f0fe |
+
+I token sono dichiarati nello scope .mi-portal; i consumatori hanno fallback per i dialog montati fuori dal contenitore. Il posto proposto rimane in attenzione perché richiede una risposta entro una scadenza. Un evento concluso non viene trasformato graficamente in un errore. Il colore non sostituisce mai l’etichetta testuale.
+
+Il riepilogo distingue Persone, Importi (solo se pertinenti) e Dati da completare mediante intestazioni di gruppo sobrie. Il versato netto appartiene a Importi. Valori allineati a destra, numeri tabellari, niente aspetto da pulsante. Le tabelle operative usano intestazioni leggibili e righe alternate leggere; le camere conservano le intestazioni di gruppo. I padding futuri seguono 8/12/16/20/24px senza rimodellare indiscriminatamente le tessere esistenti.
+
+Fusi orari, convenzioni dei dati assenti, soglie della barra di occupazione e struttura dei metadati delle tessere richiedono verifiche distinte: non fanno parte di questo consolidamento grafico.
 
 I token runtime canonici sono --ink, --navy e --line in portal.css, corrispondenti a inchiostro, blu-notte e bordo. portal-management.css li consuma per testi, bordi e azioni. Select e date picker restano controlli nativi: popup e interazione appartengono al sistema operativo. Il contratto dei comportamenti è in UX-CONTRACT.md.
 

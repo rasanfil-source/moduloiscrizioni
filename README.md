@@ -12,7 +12,7 @@ La parrocchia è l'ente base. Ogni gruppo può avere logo, immagine, colori e co
 
 ## Stato
 
-Il repository contiene **3.26.4**, con l’evoluzione gestionale della Segreteria eventi e il comando unico Cambia sistemazione: anteprima per iscrizione e aggiornamento atomico di servizi, camera e dovuto. Pacchetto verificato localmente; l’installazione sul sito è un passaggio separato: [stato e istruzioni](docs/rilascio-3.26.4.md). Ogni operatore vede soltanto gli eventi autorizzati. Gli esiti del precedente passaggio a MySQL sono conservati in [esiti e dipendenze operative](docs/PASSAGGIO_MYSQL.md).
+Il repository contiene **3.26.5**, con l’evoluzione gestionale della Segreteria eventi e il comando unico Cambia sistemazione: anteprima per iscrizione e aggiornamento atomico di servizi, camera e dovuto. Pacchetto verificato localmente; l’installazione sul sito è un passaggio separato: [stato e istruzioni](docs/rilascio-3.26.5.md). Ogni operatore vede soltanto gli eventi autorizzati. Gli esiti del precedente passaggio a MySQL sono conservati in [esiti e dipendenze operative](docs/PASSAGGIO_MYSQL.md).
 
 Una bozza è una creazione interrotta: selezionandola da **Gestisci eventi** si riapre dal primo passaggio incompleto, già popolato con i dati salvati. Se la configurazione è completa, si apre direttamente **Attiva l’evento**, con gli indirizzi pronti per i pulsanti **Iscriviti** e, quando previsto, **Saldo**, oltre allo shortcode per WordPress e Divi. Workspace crea in modo idempotente un foglio operativo dedicato nella stessa cartella Drive di `DB_MODULI`, con nome `Evento ID - Titolo`, e ne restituisce il collegamento. La preparazione non pubblica l’evento e non invia email.
 

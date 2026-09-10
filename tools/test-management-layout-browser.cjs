@@ -13,7 +13,7 @@ assert.equal(await page.locator('.mi-management-summary tr:has-text("senza camer
 assert.equal(await page.locator('[data-room-inventory]').isVisible(),false);
 assert.equal(await page.locator('[data-deposit-filter]').isVisible(),false);
 assert.equal(await page.locator('.mi-management-summary tr:has-text("Da incassare")').isVisible(),false);
-assert.equal(await page.locator(".mi-management-summary tr").first().locator("td").innerText(),"65");assert.equal(await page.locator(".mi-management-summary button").count(),0);assert.equal(await page.locator('[data-list-view]').count(),0);assert.doesNotMatch(await page.locator('.mi-management-summary').innerText(),/prenotazion/i);
+assert.equal(await page.locator(".mi-management-summary tr:not(.mi-summary-section)").first().locator("td").innerText(),"65");assert.equal(await page.locator(".mi-management-summary button").count(),0);assert.equal(await page.locator('[data-list-view]').count(),0);assert.doesNotMatch(await page.locator('.mi-management-summary').innerText(),/prenotazion/i);
 assert.equal(await page.evaluate(()=>!!(document.querySelector('[data-event-actions]').compareDocumentPosition(document.querySelector('[data-new-registration]'))&Node.DOCUMENT_POSITION_FOLLOWING)),true);
 assert.equal(await page.evaluate(()=>document.querySelector('[data-annual-report]').nextElementSibling.hasAttribute('data-export-settings')),true);
 await page.locator('[data-refresh]').click();await page.locator('[data-more]').waitFor();assert.equal(await page.locator('[data-refresh]').count(),1);assert.equal(await page.locator('[data-annual-report]').count(),1);
@@ -21,6 +21,9 @@ for(const deposit of [false,true]){
 features={rooms:false,payments:true,deposit};await page.reload();await page.locator('[data-more]').waitFor();
 const state=page.locator('select[data-deposit-filter]');assert.match(await state.locator('..').innerText(),/^Stato/);assert.equal(await state.count(),1);assert.equal(await state.inputValue(),'');
 assert.deepEqual(await state.locator('option').allTextContents(),deposit?['Tutti gli iscritti','Nessun versamento','Caparra da completare','Caparra versata','Saldato']:['Tutti gli iscritti','Da saldare','Saldato']);
+assert.deepEqual(await page.locator('.mi-summary-section').allTextContents(),['Persone','Importi','Dati da completare']);
+assert.match(await page.locator('[data-net-paid]').innerText(),/10,00/);
+if(deposit){await page.locator('.mi-management-summary').screenshot({path:'.tmp/riepilogo-grafica-desktop.png'});await page.setViewportSize({width:390,height:844});await page.locator('.mi-management-summary').screenshot({path:'.tmp/riepilogo-grafica-mobile.png'});await page.setViewportSize({width:1280,height:900});}
 }
 features={rooms:false,payments:false,deposit:false};await page.reload();await page.locator('[data-more]').waitFor();assert.equal(await page.locator('select[data-deposit-filter]').isVisible(),false);
 await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(errors,[]);console.log('Evento senza pernottamento/incassi: elementi pertinenti, singolari, ordine comandi, rapporto annuale e refresh verificati.');}finally{await browser.close();server.close();}})().catch(e=>{console.error(e);server.close();process.exitCode=1;});

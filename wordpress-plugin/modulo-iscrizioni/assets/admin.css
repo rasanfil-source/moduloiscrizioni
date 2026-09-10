@@ -82,3 +82,19 @@
   .post-type-mi_event .mi-booking-modal__content { max-height: 100vh; padding: 1rem 1rem 5rem; }
   .post-type-mi_event .mi-booking-modal__close { position: sticky; float: right; top: .65rem; margin-bottom: -2.5rem; }
 }
+.post-type-mi_event .mi-admin-grid{gap:24px 20px}
+.post-type-mi_event .mi-admin-grid>p{margin:0}
+.post-type-mi_event .mi-admin-grid input:not([type=checkbox]):not([type=radio]):not([type=hidden]),.post-type-mi_event .mi-admin-grid select,.post-type-mi_event #mi-ticket-types input:not([type=checkbox]):not([type=radio]):not([type=hidden]){min-height:44px;box-sizing:border-box}
+.post-type-mi_event .mi-bookings-table{border:1px solid #d7dde6;border-radius:14px;box-shadow:none}
+.post-type-mi_event .mi-bookings-table td{padding:12px;line-height:1.5;color:#172033}
+.post-type-mi_event .mi-bookings-table td strong,.post-type-mi_event .mi-booking-code{font-weight:600;color:#172033}
+.post-type-mi_event .mi-bookings-table small,.post-type-mi_event .mi-booking-facts small{font-size:.8125rem;font-weight:400;color:#657084;line-height:1.5}
+.post-type-mi_event .mi-booking-facts{gap:24px;padding:24px;border:1px solid #d7dde6;border-radius:14px;background:#fff;box-shadow:none}
+.post-type-mi_event .mi-booking-facts>div{min-width:0;padding-bottom:12px;border-bottom:1px solid #d7dde6}
+.post-type-mi_event .mi-booking-facts span{color:#657084;font-size:.8125rem;font-weight:400;margin-bottom:6px}
+.post-type-mi_event .mi-booking-facts strong{color:#172033;font-size:1rem;font-weight:600;line-height:1.5}
+.post-type-mi_event .mi-status-pill{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:12px;font-weight:600;line-height:1.4}
+.post-type-mi_event .mi-status-confirmed{background:#dff6e9;color:#126b38}
+.post-type-mi_event .mi-status-pending_payment,.post-type-mi_event .mi-status-waitlist_offered{background:#fff3cd;color:#765500}
+.post-type-mi_event .mi-status-waitlisted{background:#e8f0fe;color:#164b85}
+.post-type-mi_event .mi-status-cancelled,.post-type-mi_event .mi-status-expired{background:#fdecef;color:#9f1930}

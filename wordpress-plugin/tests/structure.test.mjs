@@ -1374,7 +1374,7 @@ test('gli eventi annullati restano nella gestione come tessere compatte', async 
   assert.match(css, /\.mi-event-card\.is-cancelled/);
   assert.match(css, /\.mi-event-card\.is-cancelled\{height:150px;min-height:0;align-self:start/);
   assert.match(css, /\.mi-event-card\.is-cancelled \.mi-event-card__image/);
-  assert.match(css, /background:#fdecef;color:#9f1930/);
+  assert.match(css, /background:var\(--danger-light, #fdecef\);color:var\(--danger, #9f1930\)/);
 });
 
 test('il wizard crea una bozza completa e mostra collegamenti espliciti', async () => {
