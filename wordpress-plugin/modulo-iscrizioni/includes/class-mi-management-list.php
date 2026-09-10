@@ -66,10 +66,11 @@ final class MI_Management_List {
 			}
 			$rows[] = $row;
 		}
-		$sort = in_array( $context['sort'] ?? '', array( 'name', 'code', 'room' ), true ) ? $context['sort'] : 'name';
-		usort( $rows, static function ( $a, $b ) use ( $sort ) {
+		$sort = in_array( $context['sort'] ?? '', array( 'name', 'buyer', 'code', 'room' ), true ) ? $context['sort'] : 'name';
+		$direction = 'desc' === ( $context['direction'] ?? '' ) ? -1 : 1;
+		usort( $rows, static function ( $a, $b ) use ( $sort, $direction ) {
 			$result = strnatcasecmp( remove_accents( $a[$sort] ?? '' ), remove_accents( $b[$sort] ?? '' ) );
-			return $result ?: ( strcmp( $a['code'], $b['code'] ) ?: ( ( $a['id'] ?? 0 ) <=> ( $b['id'] ?? 0 ) ) );
+			return $direction * ( $result ?: ( strcmp( $a['code'], $b['code'] ) ?: ( ( $a['id'] ?? 0 ) <=> ( $b['id'] ?? 0 ) ) ) );
 		} );
 		$offset = max( 0, (int) $offset ); $limit = max( 1, min( 200, (int) $limit ) );
 		return array( 'rows' => array_slice( $rows, $offset, $limit ), 'total' => count( $rows ), 'offset' => $offset, 'limit' => $limit, 'fingerprint' => hash( 'sha256', wp_json_encode( $rows ) ) );
@@ -80,7 +81,7 @@ final class MI_Management_List {
 		$keys = array();
 		foreach ( $summary['people'] as &$person ) {
 			foreach ( array_keys( $person['fields'] ) as $key ) $keys[$key] = true;
-			$person = array_intersect_key( $person, array_flip( array( 'id', 'number', 'code', 'name', 'status', 'room', 'options' ) ) );
+			$person = array_intersect_key( $person, array_flip( array( 'id', 'number', 'code', 'name', 'status', 'room', 'options', 'attendance' ) ) );
 		}
 		unset( $person );
 		$summary['field_keys'] = array_keys( $keys );

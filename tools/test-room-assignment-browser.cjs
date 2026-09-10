@@ -15,20 +15,20 @@ if(lost){lost=false;res.statusCode=500;return res.end(JSON.stringify({success:fa
 const file=path.join(assets,path.basename(req.url));if(!fs.existsSync(file)){res.statusCode=404;return res.end();}res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':'text/css');res.end(fs.readFileSync(file));});
 (async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({channel:'msedge',headless:true});try{
 const page=await browser.newPage({viewport:{width:1280,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:'+server.address().port);
-const planner=page.locator('[data-room-planner]'),selector=planner.locator('[data-room-type]');await selector.waitFor();
-assert.equal(await page.evaluate(()=>document.querySelector('[data-new-registration]').nextElementSibling.hasAttribute('data-room-planner')),true);
+const planner=page.locator('[data-room-planner]'),selector=planner.locator('[data-room-type]');await page.locator('[data-room-section] > summary').click();await selector.waitFor();
+assert.equal(await page.evaluate(()=>document.querySelector('[data-participant-reports]').nextElementSibling.hasAttribute('data-room-section')),true);
 assert.equal(await selector.locator('option').count(),4);await selector.selectOption('alloggio-doppia-separati');assert.equal(await planner.locator('[data-room-person]').count(),2);
 const assignmentFilter=planner.locator('[data-room-assignment-filter]');assert.equal(await assignmentFilter.inputValue(),'unassigned');
 assert.deepEqual(await planner.locator('.mi-room-assignment-table thead th').allTextContents(),['Persona iscritta','Codice','Numero']);
 await assignmentFilter.selectOption('assigned');assert.equal(await planner.locator('[data-room-person]').count(),0);await assignmentFilter.selectOption('all');
 await planner.locator('[data-room-person="1"]').fill('3');await selector.selectOption('alloggio-tripla');assert.equal(await selector.inputValue(),'alloggio-doppia-separati');
 await assignmentFilter.selectOption('unassigned');assert.equal(await assignmentFilter.inputValue(),'all');assert.equal(await planner.locator('[data-room-person="1"]').inputValue(),'3');
-await planner.locator('[data-room-person="2"]').fill('3');await planner.getByRole('button',{name:'Salva assegnazioni',exact:true}).click();await page.getByRole('button',{name:'Riprova lo stesso salvataggio'}).click();await planner.getByText('DS3 — 2/2 posti',{exact:true}).waitFor();
+await planner.locator('[data-room-person="2"]').fill('3');await planner.getByRole('button',{name:'Salva assegnazioni',exact:true}).click();await page.getByRole('button',{name:'Riprova lo stesso salvataggio'}).click();await page.locator('[data-room-section] > summary').click();await planner.getByText('DS3 — 2/2 posti',{exact:true}).waitFor();
 assert.equal(requests.length,2);assert.equal(requests[0].request_id,requests[1].request_id);assert.equal(requests[0].data,requests[1].data);assert.equal(seen.size,1);
 await assignmentFilter.selectOption('unassigned');assert.equal(await planner.locator('[data-room-person]').count(),0);await assignmentFilter.selectOption('assigned');assert.equal(await planner.locator('[data-room-person]').count(),2);await assignmentFilter.selectOption('all');
 await selector.selectOption('alloggio-tripla');assert.equal(await planner.locator('[data-room-person]').count(),1);
 await selector.selectOption('alloggio-multipla');assert.equal(await planner.locator('[data-room-person]').count(),2);assert.equal(await planner.locator('[data-next-room]').count(),0);await planner.locator('[data-room-person="4"]').fill('1');await planner.locator('[data-room-person="5"]').fill('2');
-await planner.getByRole('button',{name:'Salva assegnazioni',exact:true}).click();await planner.getByText('M2 — codice individuale',{exact:true}).waitFor();assert.equal(await planner.locator('[data-room-person]').count(),2);assert.doesNotMatch(await planner.innerText(),/1\/1 posti/);
+await planner.getByRole('button',{name:'Salva assegnazioni',exact:true}).click();await page.locator('[data-room-section] > summary').click();await planner.getByText('M2 — codice individuale',{exact:true}).waitFor();assert.equal(await planner.locator('[data-room-person]').count(),2);assert.doesNotMatch(await planner.innerText(),/1\/1 posti/);
 await page.screenshot({path:'.tmp/room-planner-desktop.png',fullPage:true});await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.screenshot({path:'.tmp/room-planner-mobile.png',fullPage:true});assert.deepEqual(errors,[]);
 console.log('Camere UI: tipo principale, iscrizioni distinte, DS condivisa, M individuali, protezione bozza, retry e mobile verificati.');
 }finally{await browser.close();server.close();}})().catch(e=>{console.error(e);server.close();process.exitCode=1;});

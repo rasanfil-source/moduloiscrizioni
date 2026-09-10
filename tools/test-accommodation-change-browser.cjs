@@ -20,7 +20,7 @@ if(lost){lost=false;res.statusCode=500;return res.end(JSON.stringify({success:fa
 const file=path.join(assets,path.basename(req.url));if(!fs.existsSync(file)){res.statusCode=404;return res.end();}res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':'text/css');res.end(fs.readFileSync(file));});
 (async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({channel:'msedge',headless:true});try{
 const page=await browser.newPage({viewport:{width:1280,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:'+server.address().port);
-const planner=page.locator('[data-room-planner]'),selector=planner.locator('[data-room-type]');await selector.waitFor();
+const planner=page.locator('[data-room-planner]'),selector=planner.locator('[data-room-type]');await page.locator('[data-room-section] > summary').click();await selector.waitFor();
 
 const panel=page.locator('[data-accommodation-change]');await panel.locator(':scope > summary').click();
 assert.equal(await panel.locator('[name=reason]').isVisible(),false);
