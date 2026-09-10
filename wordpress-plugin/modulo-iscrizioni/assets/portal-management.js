@@ -223,7 +223,12 @@
         if(!features.rooms&&listContext.sort==='room')listContext.sort='name';
         const searchBar=document.createElement('div');searchBar.className='mi-management-search';searchBar.append(search.closest('label'),content.querySelector('[data-clear-query]'));content.querySelector('[data-list]').before(searchBar);
         const participantHeading=document.createElement('h3');participantHeading.textContent='Elenco partecipanti';
-        const firstFilter=content.querySelector('[data-critical-filter]').closest('label');firstFilter.before(participantHeading);participantHeading.after(searchBar);
+        const listHost=content.querySelector('[data-list]'),legend=content.querySelector('.mi-buyer-legend');
+        listHost.before(participantHeading);participantHeading.before(legend);
+        const filterSection=document.createElement('section');filterSection.dataset.participantFilters='';filterSection.innerHTML='<h3>Filtra</h3><div class="mi-participant-filters"></div>';listHost.after(filterSection);
+        const filterControls=filterSection.querySelector('div');filterControls.append(searchBar,depositFilter.closest('label'),criticalFilter.closest('label'),serviceFilter.closest('label'),requestFilter.closest('label'),deadlineFilter.closest('label'));
+        search.closest('label').firstChild.textContent='Cerca nome ';serviceFilter.closest('label').firstChild.textContent='Servizio scelto';
+        content.querySelector('[data-participant-reports]').before(newRegistration);
         if(features.rooms){
           const roomSection=document.createElement('details');roomSection.dataset.roomSection='';roomSection.innerHTML='<summary>Gestione camere</summary>';content.append(roomSection);
           const planner=content.querySelector('[data-room-planner]');if(planner){planner.querySelector('h3')?.remove();roomSection.append(planner);}
