@@ -1,8 +1,16 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-/** Annual attendance: only operator-confirmed links identify the same person. */
+/** Annual attendance: personal mobile numbers identify repeated registrations. */
 final class MI_Attendance_Report {
+	private static function mobile( $person ) {
+		$fields = json_decode( (string) ( $person['extra_json'] ?? '{}' ), true ) ?: array();
+		$value = $fields['participant_phone'] ?? $fields['phone'] ?? $fields['mobile'] ?? '';
+		$number = preg_replace( '/[^0-9]/', '', (string) $value );
+		if ( str_starts_with( $number, '00' ) ) $number = substr( $number, 2 );
+		if ( preg_match( '/^3[0-9]{9}$/', $number ) ) $number = '39' . $number;
+		return strlen( $number ) >= 8 && strlen( $number ) <= 15 ? $number : '';
+	}
 	public static function target( $source_event, $code, $number ) {
 		global $wpdb;
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id,event_id FROM {$wpdb->prefix}mi_registrations WHERE order_code=%s", $code ), ARRAY_A );
@@ -24,7 +32,14 @@ final class MI_Attendance_Report {
 			if ( 'MANAGEMENT_identity_link' === $row['event_type'] ) $links[$id] = (int) ( $detail['target_id'] ?? 0 );
 		}
 		$root = static function ( $id ) use ( &$parents ) { while ( $parents[$id] !== $id ) $id = $parents[$id]; return $id; };
-		foreach ( $links as $id => $target ) if ( $target && isset( $parents[$target] ) ) { $left = $root( $id ); $right = $root( $target ); if ( $left !== $right ) $parents[max( $left, $right )] = min( $left, $right ); }
+		$mobiles = array(); $by_mobile = array();
+		foreach ( $people as $person ) {
+			$id = (int) $person['id']; $mobile = self::mobile( $person ); $mobiles[$id] = $mobile;
+			if ( ! $mobile ) continue;
+			if ( isset( $by_mobile[$mobile] ) ) $parents[$id] = $root( $by_mobile[$mobile] ); else $by_mobile[$mobile] = $id;
+		}
+		// Retain historical confirmed links only where neither record has a personal mobile.
+		foreach ( $links as $id => $target ) if ( $target && isset( $parents[$target] ) && empty( $mobiles[$id] ) && empty( $mobiles[$target] ) ) { $left = $root( $id ); $right = $root( $target ); if ( $left !== $right ) $parents[max( $left, $right )] = min( $left, $right ); }
 		$groups = array(); $unrecorded = 0;
 		foreach ( $people as $person ) {
 			$event = $events[(int) $person['event_id']] ?? null; if ( ! $event || (int) substr( $event['date'], 0, 4 ) !== $year ) continue;
@@ -47,7 +62,7 @@ final class MI_Attendance_Report {
 		$events = array(); foreach ( $posts as $post ) if ( MI_Access::can_access_event( $post->ID ) ) $events[$post->ID] = array( 'title' => $post->post_title, 'date' => (string) get_post_meta( $post->ID, '_mi_event_starts_at', true ) );
 		if ( ! $events ) return self::aggregate( array(), array(), array(), $year, $minimum );
 		$ids = implode( ',', array_map( 'intval', array_keys( $events ) ) );
-		$people = $wpdb->get_results( "SELECT p.id,p.registration_id,p.first_name,p.last_name,r.event_id,r.order_code FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id IN ({$ids}) ORDER BY p.id", ARRAY_A );
+		$people = $wpdb->get_results( "SELECT p.id,p.registration_id,p.first_name,p.last_name,p.extra_json,r.event_id,r.order_code FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id IN ({$ids}) ORDER BY p.id", ARRAY_A );
 		if ( $wpdb->last_error ) return new WP_Error( 'mi_report_read', 'Presenze non disponibili.' );
 		$audit = $wpdb->get_results( "SELECT a.registration_id,a.event_type,a.detail_json FROM {$wpdb->prefix}mi_registration_events a JOIN {$wpdb->prefix}mi_registrations r ON r.id=a.registration_id WHERE r.event_id IN ({$ids}) AND a.event_type IN ('MANAGEMENT_attendance','MANAGEMENT_identity_link') ORDER BY a.id", ARRAY_A );
 		if ( $wpdb->last_error ) return new WP_Error( 'mi_report_read', 'Storico presenze non disponibile.' );

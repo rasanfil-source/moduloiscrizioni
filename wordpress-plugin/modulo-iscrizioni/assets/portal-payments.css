@@ -5,3 +5,4 @@
 .mi-payments .mi-payment-summary{border-radius:14px;box-shadow:none}
 .mi-payments .mi-payment-totals p{color:var(--muted,#657084);font-size:.875rem}
 .mi-payments .mi-payment-totals strong{color:var(--ink,#172033);font-weight:var(--fw-medium,600);margin-top:4px}
+@keyframes mi-amount-glow{0%,100%{box-shadow:0 0 0 2px #337ab733}50%{box-shadow:0 0 0 6px #337ab755}}.mi-payments .mi-amount-highlight{border-color:#337ab7;animation:mi-amount-glow 1.4s ease-in-out 2}@media(prefers-reduced-motion:reduce){.mi-payments .mi-amount-highlight{animation:none;box-shadow:0 0 0 2px #337ab733}}

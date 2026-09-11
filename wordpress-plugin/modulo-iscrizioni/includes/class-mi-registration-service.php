@@ -702,6 +702,23 @@ final class MI_Registration_Service {
 		return hash_hmac( 'sha256', $message, wp_salt( 'auth' ) );
 	}
 
+	public static function public_status_by_name( $event_id, $first_name, $last_name ) {
+		global $wpdb;
+		$event_id = absint( $event_id );
+		$first_name = trim( sanitize_text_field( (string) $first_name ) );
+		$last_name = trim( sanitize_text_field( (string) $last_name ) );
+		if ( ! $event_id || 'publish' !== get_post_status( $event_id ) || ! $last_name ) return new WP_Error( 'mi_status_not_found', 'Indica il cognome nella pagina dell’evento.' );
+		$sql = "SELECT p.id,r.id registration_id,r.order_code,r.buyer_email FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d AND p.last_name=%s AND p.status <> 'CANCELLED' AND r.status NOT IN ('CANCELLED','EXPIRED')";
+		$args = array( $event_id, $last_name );
+		if ( $first_name ) { $sql .= ' AND p.first_name=%s'; $args[] = $first_name; }
+		$matches = $wpdb->get_results( $wpdb->prepare( $sql . ' LIMIT 2', $args ), ARRAY_A );
+		if ( $wpdb->last_error ) return new WP_Error( 'mi_status_unavailable', 'Consultazione momentaneamente non disponibile. Riprova più tardi.' );
+		if ( ! $matches ) return new WP_Error( 'mi_status_not_found', 'Nessuna iscrizione trovata per questo evento. Controlla cognome e nome.' );
+		if ( count( $matches ) > 1 ) return new WP_Error( 'mi_status_ambiguous', $first_name ? 'Sono presenti più persone con questo nome e cognome. Contatta la segreteria.' : 'Sono presenti più persone con questo cognome. Inserisci anche il nome.' );
+		$row = $matches[0];
+		return self::public_status( $row['order_code'], '', self::public_status_token( $row['registration_id'], $row['order_code'], $row['buyer_email'] ), $event_id );
+	}
+
 	public static function public_status( $order_code, $email = '', $token = '', $event_id = 0 ) {
 		global $wpdb;
 		$order_code = strtoupper( substr( sanitize_text_field( (string) $order_code ), 0, 32 ) );

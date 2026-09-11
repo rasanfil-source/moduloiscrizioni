@@ -7,6 +7,15 @@ function init(root) {
   const form = el('[data-payment-form]'), fields = el('[data-payment-fields]');
   const save = el('[data-save]'), next = el('[data-new]'), error = el('#mi-payment-error');
   const searchFields = el('[data-search-fields]'), retryDetail = el('[data-retry-detail]');
+  const embedded=!!root.closest('[data-mi-management]');
+  if(embedded){
+    root.querySelectorAll(':scope > h2,:scope > p:not([data-status])').forEach(node=>node.remove());
+    const heading=document.createElement('h3');heading.textContent='Inserisci un pagamento';fields.before(heading);
+    const amount=form.elements.namedItem('importo');
+    const highlight=()=>{amount.classList.remove('mi-amount-highlight');void amount.offsetWidth;amount.classList.add('mi-amount-highlight');};
+    root.closest('details')?.addEventListener('toggle',e=>{if(e.target.open)highlight();});
+    amount.classList.add('mi-amount-highlight');
+  }
   const ids=new Map();root.querySelectorAll('[id]').forEach(element=>{const previous=element.id;const next=previous+'-'+crypto.randomUUID();ids.set(previous,next);element.id=next;});
   root.querySelectorAll('[for],[aria-describedby],[aria-labelledby]').forEach(element=>{for(const attribute of ['for','aria-describedby','aria-labelledby'])if(element.hasAttribute(attribute))element.setAttribute(attribute,element.getAttribute(attribute).split(/\s+/).map(id=>ids.get(id)||id).join(' '));});
   let generation = 0, timer, controller, selected = null, pending = null, busy = false, foundCount=0;
@@ -46,6 +55,7 @@ function init(root) {
   }
   function showHistory(movements) {
     const host=el('[data-payment-history]');host.replaceChildren();
+    if(embedded){host.hidden=true;return;}
     const title=document.createElement('h3');title.textContent='Movimenti registrati';host.append(title);
     if(!movements.length){const p=document.createElement('p');p.textContent='Nessun movimento registrato.';host.append(p);return;}
     const table=document.createElement('table'),head=table.createTHead().insertRow();
@@ -104,7 +114,7 @@ function init(root) {
       showHistory(r.movimenti || []);
       save.hidden = false; save.disabled = false; save.textContent = 'Registra pagamento'; next.hidden = true;
       pending = null; error.textContent = ''; form.hidden = false;
-      say('Saldo aggiornato. Compila il movimento e verifica i dati prima di registrare.');
+      say(embedded?'':'Saldo aggiornato. Compila il movimento e verifica i dati prima di registrare.');
       if(!root.dataset.registrationId)field('importo').focus();
     } catch (e) {
       if (ticket !== generation) return;

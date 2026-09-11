@@ -53,6 +53,7 @@ final class MI_Management_List {
 		foreach ( $individual ? $summary['people'] : $summary['items'] as $row ) {
 			if ( ! $common( $row ) ) continue;
 			$open = ! in_array( $row['status'], array( 'CANCELLED', 'EXPIRED' ), true );
+			if ( ! $open && empty( $context['includeClosed'] ) ) continue;
 			if ( $individual ) {
 				if ( ! $logistics( $row ) || ! $matches( $row ) ) continue;
 				$excluded = 'balance' === $filter ? empty( $row['collectible'] ) : ( 'missing' === $filter ? empty( $row['missing'] ) : empty( $row['unassigned'] ) );
@@ -69,6 +70,8 @@ final class MI_Management_List {
 		$sort = in_array( $context['sort'] ?? '', array( 'name', 'buyer', 'code', 'room' ), true ) ? $context['sort'] : 'name';
 		$direction = 'desc' === ( $context['direction'] ?? '' ) ? -1 : 1;
 		usort( $rows, static function ( $a, $b ) use ( $sort, $direction ) {
+			$closed = (int) in_array( $a['status'], array( 'CANCELLED', 'EXPIRED' ), true ) <=> (int) in_array( $b['status'], array( 'CANCELLED', 'EXPIRED' ), true );
+			if ( $closed ) return $closed;
 			$result = strnatcasecmp( remove_accents( $a[$sort] ?? '' ), remove_accents( $b[$sort] ?? '' ) );
 			return $direction * ( $result ?: ( strcmp( $a['code'], $b['code'] ) ?: ( ( $a['id'] ?? 0 ) <=> ( $b['id'] ?? 0 ) ) ) );
 		} );

@@ -16,6 +16,15 @@ check_report(count(MI_Attendance_Report::aggregate($people,$audit,$events,2026,1
 $audit[]=['registration_id'=>1,'event_type'=>'MANAGEMENT_identity_link','detail_json'=>json_encode(['participant_id'=>2,'target_id'=>1])];
 check_report(count(MI_Attendance_Report::aggregate($people,$audit,$events,2026,2)['items'])===0,'Audit riferito a un’altra prenotazione accettato');
 echo "Rapporto annuale: omonimi separati, collegamenti confermati, rimozioni, anno, presenza effettiva ed eventi unici verificati.\n";
+$mobile_people=$people;
+$mobile_people[0]['extra_json']=json_encode(['participant_phone'=>'+39 312 345 6789']);
+$mobile_people[1]['extra_json']=json_encode(['participant_phone'=>'0039 3123456789']);
+$mobile_people[2]['extra_json']=json_encode(['participant_phone'=>'3123456789']);
+$mobile_audit=[];foreach([1,2,3] as $id)$mobile_audit[]=['registration_id'=>$id,'event_type'=>'MANAGEMENT_attendance','detail_json'=>json_encode(['participant_id'=>$id,'attendance'=>'PRESENT'])];
+$mobile_report=MI_Attendance_Report::aggregate($mobile_people,$mobile_audit,$events,2026,2);
+check_report(count($mobile_report['items'])===1&&$mobile_report['items'][0]['count']===2,'Cellulare normalizzato o deduplica evento errati');
+$mobile_people[1]['extra_json']=json_encode(['participant_phone'=>'3123456780']);$mobile_people[2]['extra_json']='{}';
+check_report(count(MI_Attendance_Report::aggregate($mobile_people,$mobile_audit,$events,2026,2)['items'])===0,'Cellulari diversi o assenti uniti');
 define('ARRAY_A','ARRAY_A');
 class WP_Error { function __construct(public $code,public $message){} }
 class MI_Portal_Management {static function allowed(){return true;}}

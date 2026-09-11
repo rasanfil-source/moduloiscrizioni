@@ -17,6 +17,10 @@ jobs:
           node-version: '22'
       - name: Verify Workspace and WordPress behavior
         run: node --test workspace-apps-script/tests/*.test.mjs wordpress-plugin/tests/*.test.mjs
+      - name: Verify public balance workflow and actual payments
+        run: |
+          php wordpress-plugin/tests/public-balance.php
+          php wordpress-plugin/tests/public-balance-model.php
 
   sanitization:
     runs-on: ubuntu-latest

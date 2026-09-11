@@ -120,3 +120,5 @@
 .mi-portal .mi-event-card:hover,.mi-portal .mi-booking-card:hover{box-shadow:none;transform:none;border-color:var(--navy,#17224a)}
 .mi-portal .mi-event-card-shell.is-selected>.mi-event-card{border-color:var(--navy,#17224a);box-shadow:inset 4px 0 0 var(--navy,#17224a);background:var(--bg,#f5f7fa)}
 .mi-portal .mi-status-pill{font-family:inherit;font-size:.75rem;line-height:1.4;font-weight:var(--fw-medium,600);letter-spacing:.01em}
+.mi-bus-routes__heading{display:flex;align-items:center;flex-wrap:wrap;gap:16px}.mi-bus-routes__heading small{margin-top:4px}
+.mi-bus-routes__heading .mi-bus-title{margin:0}.mi-bus-routes__heading [data-mi-add-bus-route]{white-space:nowrap;flex-shrink:0}.mi-bus-routes__heading>.mi-check{flex-basis:100%;margin:0}

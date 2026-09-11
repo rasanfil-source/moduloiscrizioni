@@ -233,6 +233,13 @@ final class MI_Event_Deletion {
 			if ( ! $job ) {
 				try {
 					$data = self::preview( $id );
+					global $wpdb;
+					$active = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status NOT IN ('CANCELLED','EXPIRED')", $id ) );
+					if ( $wpdb->last_error ) throw new RuntimeException( 'Verifica delle iscrizioni attive non disponibile. Riprova.' );
+					if ( $active ) {
+						$communications = add_query_arg( array( 'mi_portal' => 1, 'mi_portal_view' => 'communications', 'mi_portal_event' => $id ), home_url( '/' ) );
+						echo '<aside class="mi-portal-notice"><p><strong>Prima di eliminare l’evento, avvisa gli iscritti e verifica eventuali rimborsi.</strong></p><p>L’eliminazione rimuove anche i contatti e le comunicazioni in coda: non invia avvisi e non esegue rimborsi.</p><p><a href="' . esc_url( $communications ) . '">Avvisa gli iscritti</a></p></aside>';
+					}
 					echo '<h3>' . esc_html( $data['title'] ) . '</h3><dl>';
 					foreach ( $data['counts'] as $label => $count ) echo '<dt>' . esc_html( $label ) . '</dt><dd>' . esc_html( $count ) . '</dd>';
 					echo '</dl><p>Questi dati saranno eliminati definitivamente, insieme a contatori, revisioni e repliche centrali. Gruppi, utenti e immagini condivise rimarranno.</p>';

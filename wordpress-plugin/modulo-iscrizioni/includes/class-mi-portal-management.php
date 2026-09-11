@@ -11,6 +11,9 @@ final class MI_Portal_Management {
 		if ( ! self::allowed() || ! check_ajax_referer( 'mi_portal_management', 'nonce', false ) ) wp_send_json_error( array( 'message' => 'Accesso non consentito o sessione scaduta.' ), 403 );
 		$operation = sanitize_key( wp_unslash( $_POST['operation'] ?? '' ) );
 		if ( 'annual_report' === $operation ) {
+			$report_event = absint( $_POST['event_id'] ?? 0 );
+			$report_group = absint( get_post_meta( $report_event, '_mi_activity_id', true ) );
+			if ( ! $report_event || ! MI_Access::can_access_event( $report_event ) || ! $report_group || $report_group !== absint( $_POST['group_id'] ?? 0 ) || '1' !== get_post_meta( $report_group, '_mi_annual_attendance_report', true ) ) wp_send_json_error( array( 'message' => 'Rapporto annuale non attivo per il gruppo di questo evento.' ), 403 );
 			$result = MI_Attendance_Report::read( absint( $_POST['group_id'] ?? 0 ), absint( $_POST['year'] ?? 0 ), absint( $_POST['minimum'] ?? 1 ) );
 			if ( is_wp_error( $result ) ) wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
 			wp_send_json_success( $result );
@@ -22,7 +25,11 @@ final class MI_Portal_Management {
 			if ( ! is_wp_error( $result ) ) $result['rooms_version'] = hash( 'sha256', wp_json_encode( $result['rooms'] ) );
 			if ( ! is_wp_error( $result ) ) {
 				if ( 'list_page' === $operation ) $result = MI_Management_List::page( $result, json_decode( wp_unslash( $_POST['context'] ?? '{}' ), true ), absint( $_POST['offset'] ?? 0 ), absint( $_POST['limit'] ?? 30 ) );
-				else $result = MI_Management_List::compact( $result );
+				else {
+					$result = MI_Management_List::compact( $result );
+					$group_id = absint( get_post_meta( $event_id, '_mi_activity_id', true ) );
+					$result['annual_report_group'] = $group_id && '1' === get_post_meta( $group_id, '_mi_annual_attendance_report', true ) && MI_Access::can_access_activity( $group_id ) ? array( 'id' => $group_id, 'name' => get_the_title( $group_id ) ) : null;
+				}
 			}
 		} elseif ( in_array( $operation, array( 'accommodation_preview', 'change_accommodation' ), true ) ) {
 			$result = MI_Management_Service::change_accommodation( $event_id, json_decode( wp_unslash( $_POST['data'] ?? 'null' ), true ), 'change_accommodation' === $operation ? sanitize_text_field( wp_unslash( $_POST['preview_version'] ?? '' ) ) : null, 'wp_' . get_current_user_id() . '_' . sanitize_text_field( wp_unslash( $_POST['request_id'] ?? '' ) ) );
@@ -89,7 +96,7 @@ final class MI_Portal_Management {
 		?>
 		<section class="mi-management" data-mi-management data-endpoint="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'mi_portal_management' ) ); ?>" data-event="<?php echo esc_attr( $event_id ); ?>" data-order="<?php echo esc_attr( $order ); ?>">
 		<h2>Gestione iscrizioni</h2>
-		<details data-annual-report hidden><summary>Rapporto annuale delle presenze per gruppo</summary><p>Conta gli eventi con presenza effettiva registrata. I collegamenti fra iscrizioni della stessa persona devono essere confermati dal gestore nella scheda.</p>
+		<details data-annual-report hidden><summary>Rapporto annuale delle presenze per gruppo</summary><p>Conta gli eventi con presenza effettiva registrata, riconoscendo la persona dal cellulare personale fornito. Il numero condiviso del referente non identifica i singoli iscritti di una prenotazione multipla.</p>
 		<label>Gruppo<select data-annual-group><option value="">Scegli un gruppo</option><?php foreach ( get_posts( array( 'post_type' => MI_Event_Post_Type::ACTIVITY_TYPE, 'post_status' => array( 'publish', 'private', 'draft' ), 'numberposts' => -1 ) ) as $group ) if ( MI_Access::can_access_activity( $group->ID ) ) : ?><option value="<?php echo esc_attr( $group->ID ); ?>"><?php echo esc_html( $group->post_title ); ?></option><?php endif; ?></select></label>
 		<label>Anno<input data-annual-year type="number" min="2000" max="2200" value="<?php echo esc_attr( wp_date( 'Y' ) ); ?>"></label><label>Numero minimo di eventi frequentati<input data-annual-minimum type="number" min="1" max="1000" value="2"></label><button type="button" data-load-annual>Genera rapporto annuale</button><p data-annual-status role="status"></p><div data-annual-results></div></details>
 		<label><select data-period-select aria-label="Eventi attivi o passati"><option value="current" <?php selected( $period, 'current' ); ?>>Eventi attivi</option><option value="past" <?php selected( $period, 'past' ); ?>>Eventi passati</option></select></label>
