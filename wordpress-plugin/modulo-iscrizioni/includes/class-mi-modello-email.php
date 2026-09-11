@@ -283,6 +283,7 @@ final class MI_Modello_Email {
 	}
 
 	public static function componi_html( $istantanea, $codice_html = '' ) {
+		if ( 'PUBLIC_BALANCE' === ( $istantanea['layout'] ?? '' ) ) return (string) ( $istantanea['html'] ?? '' );
 		$identity = isset( $istantanea['identita'] ) && is_array( $istantanea['identita'] ) ? $istantanea['identita'] : array();
 		$email_identity = isset( $istantanea['identita_email'] ) && is_array( $istantanea['identita_email'] ) ? $istantanea['identita_email'] : array();
 		$event = isset( $istantanea['evento'] ) && is_array( $istantanea['evento'] ) ? $istantanea['evento'] : array();

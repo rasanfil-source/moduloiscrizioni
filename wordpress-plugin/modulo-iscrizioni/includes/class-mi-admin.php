@@ -96,9 +96,10 @@ final class MI_Admin {
 		for ( $index = 0; $index < $count; $index++ ) {
 			$name = $names[ $index ];
 			$email = strtolower( sanitize_title( $name[0] . '.' . $name[1] ) ) . '.' . $event_id . '@example.invalid';
-			$phone = '+39 320 000 ' . str_pad( (string) ( $event_id % 1000 * 10 + $index ), 4, '0', STR_PAD_LEFT );
+			$phone = '+39 320 000 ' . str_pad( (string) $index, 4, '0', STR_PAD_LEFT );
 			$fields = self::demo_participant_fields( (array) $event['participant_fields'], $index, $email, $phone );
 			$payload = array( 'started_at' => time() - 5, 'tickets' => array( sanitize_key( $ticket['code'] ) => 1 ), 'order_options' => array(), 'participants' => array( array( 'ticket_type_code' => sanitize_key( $ticket['code'] ), 'ticket_index' => 1, 'first_name' => $name[0], 'last_name' => $name[1], 'fields' => $fields, 'options' => array() ) ), 'buyer' => array( 'first_name' => $name[0], 'last_name' => $name[1], 'email' => $email, 'phone' => $phone ), 'special_requests' => 'Iscrizione dimostrativa generata dal pannello amministrativo.', 'privacy_accepted' => true, 'marketing_accepted' => false );
+			$payload = self::demo_services_payload( $event, $payload, $index );
 			$key = 'admin-demo-' . $event_id . '-' . gmdate( 'YmdHis' ) . '-' . $index . '-' . wp_generate_password( 8, false, false );
 			$result = MI_Registration_Service::create( $event_id, $payload, $key, true, 'ADMIN_DEMO' );
 			if ( is_wp_error( $result ) ) $errors[] = $result->get_error_message(); else $created++;
@@ -108,6 +109,45 @@ final class MI_Admin {
 		wp_safe_redirect( $url ); exit;
 	}
 
+	public static function demo_services_payload( $event, $payload, $index ) {
+		$rooms = array(); $services = array();
+		foreach ( $event['options'] ?? array() as $option ) {
+			if ( isset( MI_Management_Service::room_types()[$option['code']] ) && 'TICKET' === $option['scope'] ) $rooms[] = $option;
+			else $services[] = $option;
+		}
+		$selected = $rooms ? $rooms[$index % count( $rooms )] : null;
+		$type = $selected ? MI_Management_Service::room_types()[$selected['code']] : null;
+		$ticket = reset( $event['ticket_types'] );
+		$count = $type && empty( $type['individual'] ) ? (int) $type['capacity'] : 1;
+		// Separated registrations exercise the manual assignment of twins and triples.
+		if ( $selected && in_array( $selected['code'], array( 'alloggio-doppia-separati', 'alloggio-tripla' ), true ) && 0 === $index % 2 ) $count = 1;
+		$count = min( $count, max( 1, (int) $ticket['max_per_order'] ) );
+		$payload['tickets'][$ticket['code']] = $count;
+		$base = $payload['participants'][0]; $payload['participants'] = array();
+		for ( $i = 0; $i < $count; $i++ ) {
+			$person = $base; $person['ticket_index'] = $i + 1;
+			if ( $i ) { $person['first_name'] = 'Compagno ' . $i; $person['last_name'] = $base['last_name']; }
+			$phone = '+39 320 000 ' . str_pad( (string) ( $index * 10 + $i ), 4, '0', STR_PAD_LEFT );
+			$person['fields'] = self::demo_participant_fields( $event['participant_fields'], $index, 'demo-' . $index . '-' . $i . '@example.invalid', $phone );
+			$person['options'] = $selected ? array( $selected['code'] => 1 ) : array();
+			$groups = $selected ? array( 'alloggio' => true ) : array();
+			foreach ( $services as $n => $service ) {
+				$group = $service['choice_group'] ?? '';
+				if ( 'TICKET' !== $service['scope'] || ( $n + $index ) % 2 || ( $group && isset( $groups[$group] ) ) ) continue;
+				$person['options'][$service['code']] = 1; if ( $group ) $groups[$group] = true;
+			}
+			if ( $i && 'ALL' !== ( $event['participant_extra_scope'] ?? 'ONE' ) ) { $person['fields'] = array(); $person['options'] = array(); }
+			$payload['participants'][] = $person;
+		}
+		$groups = array();
+		foreach ( $services as $n => $service ) {
+			$group = $service['choice_group'] ?? '';
+			if ( 'ORDER' !== $service['scope'] || ( $n + $index ) % 2 || ( $group && isset( $groups[$group] ) ) ) continue;
+			$payload['order_options'][$service['code']] = 1; if ( $group ) $groups[$group] = true;
+		}
+		$payload['buyer']['phone'] = '+39 320 000 ' . str_pad( (string) ( $index * 10 ), 4, '0', STR_PAD_LEFT );
+		return $payload;
+	}
 	private static function demo_participant_fields( $definitions, $index, $email, $phone ) {
 		$result = array();
 		foreach ( $definitions as $field ) {

@@ -16,7 +16,7 @@ const file=path.join(assets,path.basename(req.url));if(!fs.existsSync(file)){res
 (async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({channel:'msedge',headless:true});try{
 const page=await browser.newPage({viewport:{width:1280,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:'+server.address().port);
 const planner=page.locator('[data-room-planner]'),selector=planner.locator('[data-room-type]');await page.locator('[data-room-section] > summary').click();await selector.waitFor();
-assert.equal(await page.evaluate(()=>document.querySelector('[data-participant-reports]').nextElementSibling.hasAttribute('data-room-section')),true);
+assert.equal(await page.evaluate(()=>document.querySelector('[data-room-section]').nextElementSibling.hasAttribute('data-new-registration')),true);
 assert.equal(await selector.locator('option').count(),4);await selector.selectOption('alloggio-doppia-separati');assert.equal(await planner.locator('[data-room-person]').count(),2);
 const assignmentFilter=planner.locator('[data-room-assignment-filter]');assert.equal(await assignmentFilter.inputValue(),'unassigned');
 assert.deepEqual(await planner.locator('.mi-room-assignment-table thead th').allTextContents(),['Persona iscritta','Codice','Numero']);

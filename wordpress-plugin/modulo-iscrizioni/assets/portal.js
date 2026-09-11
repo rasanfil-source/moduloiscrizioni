@@ -876,7 +876,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Preserve the explicit deletion choice and prevent repeated submissions.
-document.addEventListener('submit',function(event){const form=event.target.closest('[data-mi-delete-form]');if(!form)return;if(form.dataset.busy){event.preventDefault();return;}form.dataset.busy='1';form.setAttribute('aria-busy','true');const button=form.querySelector('button[type="submit"]');if(button)button.disabled=true;});
+document.addEventListener('submit',function(event){const form=event.target.closest('[data-mi-delete-form]');if(!form)return;if(form.dataset.busy){event.preventDefault();return;}form.dataset.busy='1';form.setAttribute('aria-busy','true');const button=form.querySelector('button[type="submit"]');if(button){button.disabled=true;button.textContent='Attendere prego…';}const status=document.createElement('p');status.setAttribute('role','status');status.setAttribute('aria-live','polite');status.textContent='Attendere prego… Eliminazione in corso.';form.after(status);});
 
 const miDeletionContinuation=document.querySelector('[data-mi-delete-continue]');if(miDeletionContinuation)setTimeout(()=>miDeletionContinuation.requestSubmit(),2000);
 // Event selection is updated inline: keep navigation aligned with the current URL.

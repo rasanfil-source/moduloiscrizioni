@@ -88,7 +88,7 @@ final class MI_Portal_Payments {
 		<label>Movimento<select name="tipo"><option value="INCASSO">Incasso</option><option value="RIMBORSO">Rimborso</option><option value="STORNO">Storno</option></select></label>
 		<input type="hidden" name="rata" value="NON_ASSEGNATO">
 		<label>Riferimento<input name="riferimento" maxlength="120" placeholder="Bonifico o ricevuta"></label>
-		<label class="mi-payment-wide">Nota amministrativa<textarea name="nota" rows="3" maxlength="500"></textarea></label>
+		<details class="mi-payment-wide"><summary>Nota amministrativa</summary><textarea name="nota" aria-label="Nota amministrativa" rows="3" maxlength="500"></textarea></details>
 		</div><label class="mi-check"><input type="checkbox" name="conferma" required aria-describedby="mi-payment-error"> Ho verificato prenotazione, importo, tipo e data del movimento.</label></fieldset>
 		<p id="mi-payment-error" role="alert"></p><div class="mi-payment-actions"><button type="submit" class="mi-primary" data-save>Registra pagamento</button><button type="button" class="mi-secondary" data-new hidden>Inserisci un altro pagamento</button></div>
 		</form><noscript>Per cercare e registrare un pagamento è necessario attivare JavaScript.</noscript></section>

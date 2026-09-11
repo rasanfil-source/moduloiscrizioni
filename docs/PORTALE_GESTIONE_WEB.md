@@ -66,7 +66,7 @@ L'apertura mostra una pagina di conferma; l'annullamento avviene soltanto con un
 
 ## Consultazione del referente
 
-La consultazione dello stato è distinta dal portale degli operatori. Il referente usa codice prenotazione ed email oppure il collegamento firmato ricevuto nella conferma. Vede soltanto titolo dell'evento, stato della prenotazione, stato economico, importo registrato, saldo e scadenza. Non vengono mostrati nomi dei partecipanti, indirizzi, contatti, note o richieste particolari. La pagina applica limite ai tentativi, `noindex` e `no-referrer`.
+La pagina pubblica Stato e saldo dell’evento riprende il modello Cammino: ricerca per cognome, scelta del nome in caso di omonimia, schede delle persone, servizi confermati bloccati e transfer modificabili. Non richiede account, codice prenotazione o email per la ricerca. L’email viene proposta per il riepilogo. Caparra e saldo sono calcolati usando pagamenti e rimborsi registrati. Le modifiche passano da anteprima, conferma e salvataggio atomico con controllo versione; restano privati note e dati amministrativi. I collegamenti firmati precedenti restano compatibili. La pagina applica limite ai tentativi, `noindex` e `no-referrer`.
 
 ## Rapporto con Sheets
 

@@ -26,7 +26,9 @@ final class MI_Management_Service {
 			if ( ! preg_match( '/^[a-z][a-z0-9_]{0,79}$/', $key ) || in_array( $key, array( 'constructor','prototype','room','camera','alloggio','first_name','last_name' ), true ) ) continue;
 			$fields[$key] = array( 'key' => $key, 'label' => $field['label'] ?? $key, 'type' => $field['type'] ?? 'text', 'required' => ! empty( $field['required'] ), 'options' => (array) ( $field['options'] ?? array() ) );
 		}
-		if ( ! isset( $fields['pullman'] ) ) $fields['pullman'] = array( 'key' => 'pullman', 'label' => 'Assegnazione pullman (sigla)', 'type' => 'text', 'required' => false );
+		if ( '1' === get_post_meta( $registration['event_id'], '_mi_bus_assignment_enabled', true ) ) {
+			if ( ! isset( $fields['pullman'] ) ) $fields['pullman'] = array( 'key' => 'pullman', 'label' => 'Assegnato al Pullmann…', 'type' => 'text', 'required' => false );
+		} else unset( $fields['pullman'] );
 		return $fields;
 	}
 	private static function rooms( $event_id ) {
@@ -78,6 +80,8 @@ final class MI_Management_Service {
 	public static function detail( $id ) {
 		try {
 			$booking = self::booking( self::registration( $id ) );
+			$booking['bus_assignment_enabled'] = '1' === get_post_meta( $booking['event_id'], '_mi_bus_assignment_enabled', true );
+			$booking['room_types'] = self::room_types();
 			$economic = MI_Payment_Ledger::detail( $id );
 			if ( is_wp_error( $economic ) ) return $economic;
 			$booking['total_cents'] = $economic['saldo']['totale'];
@@ -375,6 +379,7 @@ final class MI_Management_Service {
 					$person = array_column( $booking['participants'], null, 'id' )[$data['participant_id']] ?? null;
 					if ( ! $person || 'ACTIVE' !== $person['status'] || ( 'ONE' === ( $snapshot['event']['participant_extra_scope'] ?? 'ONE' ) && 1 !== $person['number'] ) ) throw new InvalidArgumentException( 'Servizi individuali non modificabili per questa persona.' );
 				}
+				if ( $person ) foreach ( $data['options'] as $quantity ) if ( ! in_array( $quantity, array( 0, 1 ), true ) ) throw new InvalidArgumentException( 'Ogni servizio individuale può essere selezionato una sola volta.' );
 				$options = MI_Registration_Service::validate_options( $data['options'], $snapshot['event']['options'] ?? array(), $person ? 'TICKET' : 'ORDER' );
 				if ( is_wp_error( $options ) ) throw new InvalidArgumentException( $options->get_error_message() );
 				$option_change = array( 'participant_id' => $person ? $person['id'] : 0, 'before_options' => $person ? $person['options'] : self::decode( $locked['order_options_json'] ), 'after_options' => $options, 'reason' => sanitize_textarea_field( $data['reason'] ) );
