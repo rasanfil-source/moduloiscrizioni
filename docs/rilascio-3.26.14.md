@@ -8,7 +8,9 @@ Il server verifica evento, persona, servizi consentiti, prezzi, versione dei dat
 
 Include inoltre gli aggiornamenti gestionali delle versioni locali 3.26.10–13, le colonne condizionali, le iscrizioni chiuse in fondo quando richieste, le avvertenze di eliminazione, il primo passaggio per gli eventi duplicati e l’allineamento dei pulsanti nel passaggio conclusivo.
 
-Il pacchetto destinato al sito include `public-balance-config.json`, con le coordinate pubbliche di pagamento del modello fornito. Al primo utilizzo vengono conservate nell’opzione WordPress `mi_public_balance_payment`; i metadati evento `_mi_balance_iban`, `_mi_balance_holder`, `_mi_balance_card_url` e `_mi_balance_contact` consentono sostituzioni. Questi valori operativi non sono incorporati nei sorgenti del repository. Restano disponibili solo i metodi di pagamento abilitati per l’evento.
+Lo ZIP allegato alla release include `public-balance-config.json`, con la configurazione di pagamento del modello fornito, pubblicata su esplicita autorizzazione del gestore. Al primo utilizzo i valori vengono conservati nell’opzione WordPress `mi_public_balance_payment`; i metadati evento `_mi_balance_iban`, `_mi_balance_holder`, `_mi_balance_card_url` e `_mi_balance_contact` consentono sostituzioni. Restano disponibili solo i metodi di pagamento abilitati per l’evento.
+
+I sorgenti del repository contengono un esempio di configurazione vuoto. Per un’installazione diversa dal sito destinatario, compilare la propria configurazione o impostare l’opzione WordPress sopra indicata. Non occorre reinserire i valori se già conservati in WordPress.
 
 Verifiche: suite Node WordPress/Workspace; test PHP su ricerca, omonimi, caparra, rimborsi, salvataggio e retry; prove browser su desktop e mobile per saldo, gestione iscrizioni e camere; controllo sintassi e sanitizzazione. Apps Script invariato.
 
