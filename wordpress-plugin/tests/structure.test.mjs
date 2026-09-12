@@ -23,6 +23,15 @@ test('il contenitore tecnico storico è presentato come Gruppi', async () => {
   assert.match(source, /<strong>Gruppo<\/strong>/);
 });
 
+test('il rapporto annuale si configura nel portale dei gruppi e si mostra soltanto quando attivo', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const management = await read('includes/class-mi-portal-management.php');
+  assert.match(portal, /name="mi_annual_attendance_report" value="1"> Attiva il rapporto annuale/);
+  assert.match(portal, /update_post_meta\( \$group_id, '_mi_annual_attendance_report', \$annual_attendance_report \)/);
+  assert.match(management, /'1' !== get_post_meta\( \$report_group, '_mi_annual_attendance_report', true \)/);
+  assert.match(management, /\$result\['annual_report_group'\]/);
+});
+
 test('il modello operativo dell evento è scelto in WordPress e consegnato a Workspace', async () => {
   const schema = await read('includes/class-mi-field-schema.php');
   const eventType = await read('includes/class-mi-event-post-type.php');
@@ -542,9 +551,10 @@ test('i documenti sono raccolti solo come dati testuali e mai come foto o scansi
   const eventType = await read('includes/class-mi-event-post-type.php');
   const adminScript = await read('assets/admin.js');
   const service = await read('includes/class-mi-registration-service.php');
-  for (const key of ['document_type', 'document_number', 'document_country', 'document_expiry']) {
+  for (const key of ['document_type', 'document_number', 'document_issue_date', 'document_country', 'document_expiry']) {
     assert.match(schema, new RegExp(`'${key}'`));
   }
+  assert.match(schema, /Data di rilascio del documento d’identità/);
   assert.match(schema, /Non caricare fotografie o scansioni/);
   assert.match(schema, /'retention'\s*=>\s*'SHEETS_ONLY'/);
   assert.doesNotMatch(service, /scrub_relay_only_fields/);
@@ -791,6 +801,13 @@ test('la gratuità è visibile e compatibile soltanto con la sola iscrizione', a
   assert.match(admin, /array\(\s*'NONE',\s*'ZERO'\s*\)/);
 	assert.match(admin, /“Gratuito” richiede “Nessun pagamento previsto”/);
   assert.match(script, /\['NONE', 'ZERO'\]\.includes/);
+});
+
+test('il modulo indica quando apriranno le iscrizioni future', async () => {
+  const shortcode = await read('includes/class-mi-shortcode.php');
+  assert.match(shortcode, /\$formatted_opens = self::formatted_event_date/);
+  assert.match(shortcode, /state_message\( \$config\['state'\], \$formatted_opens \)/);
+  assert.match(shortcode, /Le iscrizioni apriranno/);
 });
 
 test('il prezzo supporta una quota di partecipazione uguale per tutti', async () => {
@@ -1264,7 +1281,7 @@ test('gli eventi passati sono separati dalla vista operativa ordinaria', async (
 
 test('l’elenco iscrizioni indica l’evento selezionato', async () => {
   const portal = await read('includes/class-mi-portal.php');
-  assert.match(portal, /\$list_title = 'Prenotazioni'/);
+  assert.match(portal, /\$list_title = 'Iscrizioni'/);
   assert.match(portal, /\$list_title \.= ' — ' \. \$event_title/);
   assert.match(portal, /esc_html\( \$list_title \)/);
 });
@@ -1722,6 +1739,39 @@ test('il wizard mostra soltanto i costi coerenti con il tipo di evento', async (
   assert.match(script, /servicePricingNodes\.forEach\(\(node\) => \{ node\.hidden = pricing\.value !== 'NONE'; \}\)/);
   assert.match(script, /economicLabel\.hidden = !paidEvent/);
 });
+
+test('la tessera evento mostra il logo del gruppo quando disponibile', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const css = await read('assets/portal.css');
+  assert.match(portal, /group_logo_url\( \$activity_id, 'thumbnail' \)/);
+  assert.match(portal, /mi-event-card__group-logo/);
+  assert.match(portal, /mi-event-card__date[\s\S]*mi-event-card__group-logo/);
+  assert.match(css, /\.mi-event-card__date \.mi-event-card__group-logo\{position:absolute;bottom:10px/);
+});
+
+test('la copertina della tessera riempie il riquadro senza deformarsi', async () => {
+  const css = await read('assets/portal.css');
+  assert.match(css, /\.mi-event-card__image\{position:relative;align-self:stretch;flex:0 0 105px;line-height:0;scrollbar-gutter:auto\}/);
+  assert.match(css, /\.mi-event-card__image>img:not\(\.mi-event-card__group-logo\)\{position:absolute;inset:0/);
+  assert.match(css, /object-fit:cover;object-position:center/);
+});
+
+test('gli eventi gratuiti non mostrano riferimenti economici nella conferma', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  const model = await read('includes/class-mi-modello-email.php');
+  assert.match(portal, /data-mi-email-free-placeholders/);
+  assert.match(portal, /data-mi-email-paid-placeholders/);
+  assert.match(script, /removeFreePaymentEmailReferences/);
+  assert.match(script, /paymentEmailPlaceholders/);
+  assert.match(script, /freeEvent = pricing\.value === 'ZERO'/);
+  assert.match(model, /rimuovi_riferimenti_pagamento_gratuito/);
+  assert.match(model, /'_mi_pricing_mode'/);
+  for (const placeholder of ['{{ordine.riepilogo_economico}}', '{{pagamento.istruzioni}}', '{{pagamento.scadenza}}', '{{pagamento.causale}}']) {
+    assert.match(model, new RegExp(placeholder.replace(/[{}]/g, '\\$&')));
+  }
+});
+
 test('il wizard distingue salvataggio, anteprima e pubblicazione', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const shortcode = await read('includes/class-mi-shortcode.php');
@@ -1868,6 +1918,9 @@ test('la coerenza temporale impedisce nuove scadenze passate e segnala quelle gi
   assert.match(portal, /dal /);
   assert.match(portal, /current_time\( 'Y-m-d\\TH:i' \)/);
 	assert.match(portalScript, /validateWizardRelations = updateDateLimits/);
+	assert.match(portalScript, /const formatItalianDateInput = \(field\) =>/);
+	assert.match(portalScript, /field\.value\.replace\(\/\\D\/g, ''\)\.slice\(0, 12\)/);
+	assert.match(portalScript, /formatItalianDateInput\(field\); enforceFourDigitYear\(field\); updateDateLimits\(\)/);
 	assert.match(portalScript, /dateFields\.forEach[\s\S]*field\.addEventListener\('input',[\s\S]*updateDateLimits\(\)/);
 	assert.match(portalScript, /form\.addEventListener\('submit',[\s\S]*validateWizardRelations\(\)/);
 });

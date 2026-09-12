@@ -122,3 +122,11 @@
 .mi-portal .mi-status-pill{font-family:inherit;font-size:.75rem;line-height:1.4;font-weight:var(--fw-medium,600);letter-spacing:.01em}
 .mi-bus-routes__heading{display:flex;align-items:center;flex-wrap:wrap;gap:16px}.mi-bus-routes__heading small{margin-top:4px}
 .mi-bus-routes__heading .mi-bus-title{margin:0}.mi-bus-routes__heading [data-mi-add-bus-route]{white-space:nowrap;flex-shrink:0}.mi-bus-routes__heading>.mi-check{flex-basis:100%;margin:0}
+
+/* Identità discreta del gruppo nella fascia data, senza coprire la foto. */
+.mi-event-card__date{position:relative}.mi-event-card__date .mi-event-card__group-logo{position:absolute;bottom:10px;left:50%;width:32px;height:32px;padding:2px;border:1px solid #ffffff80;border-radius:50%;background:#fff;object-fit:contain;box-shadow:0 2px 8px #1720332b;transform:translateX(-50%)}.mi-event-card.is-cancelled .mi-event-card__group-logo{display:none}
+
+/* La foto riempie sempre il riquadro; cover ritaglia solo l'eccedenza, senza deformarla. */
+.mi-event-card__image{position:relative;align-self:stretch;flex:0 0 105px;line-height:0;scrollbar-gutter:auto}.mi-event-card__image>img:not(.mi-event-card__group-logo){position:absolute;inset:0;display:block;width:100%!important;height:100%!important;max-width:none;object-fit:cover;object-position:center}
+.mi-event-card__date .mi-event-card__group-logo{bottom:12px;z-index:1;width:30px;height:30px}
+.mi-accommodation-management{margin:1rem 0;padding:.75rem 1rem;border:1px solid var(--line,#d7dde6);border-radius:10px}.mi-accommodation-management .mi-check{display:grid;grid-template-columns:auto 1fr;column-gap:.55rem;margin:.65rem 0}.mi-accommodation-management strong,.mi-accommodation-management small{grid-column:2}.mi-accommodation-management small{color:var(--muted,#657084)}

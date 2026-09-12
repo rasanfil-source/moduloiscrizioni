@@ -104,6 +104,10 @@ final class MI_Modello_Email {
 
 	public static function crea_istantanea( $event_id, $values ) {
 		$settings = self::impostazioni( $event_id );
+		if ( 'ZERO' === strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ) ) {
+			$settings['html'] = self::rimuovi_riferimenti_pagamento_gratuito( $settings['html'], true );
+			$settings['text'] = self::rimuovi_riferimenti_pagamento_gratuito( $settings['text'] );
+		}
 		$participant_management = isset( $values['_participant_management'] ) && is_array( $values['_participant_management'] ) ? $values['_participant_management'] : array();
 		unset( $values['_participant_management'] );
 		$snapshot = array( 'attivo' => '1' === $settings['enabled'] );
@@ -432,6 +436,7 @@ final class MI_Modello_Email {
 		$settings['enabled'] = '1';
 		$settings['subject'] = self::pulisci_riga( $subject, 180 );
 		$settings['text'] = mb_substr( sanitize_textarea_field( wp_unslash( $text ) ), 0, 5000 );
+		if ( 'ZERO' === strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ) ) $settings['text'] = self::rimuovi_riferimenti_pagamento_gratuito( $settings['text'] );
 		$settings['html'] = self::sanitizza_html_email( wpautop( esc_html( $settings['text'] ) ) );
 		if ( ! $settings['subject'] || ! $settings['text'] ) return new WP_Error( 'mi_email_vuota', 'Oggetto e testo dell’email non possono essere vuoti.' );
 		$settings = self::aggiorna_segnaposto( $settings );
@@ -439,6 +444,24 @@ final class MI_Modello_Email {
 		if ( $unknown ) return new WP_Error( 'mi_email_segnaposto', 'Elimina i segnaposto non riconosciuti: ' . implode( ', ', $unknown ) . '.' );
 		update_post_meta( $event_id, '_mi_email_template', $settings );
 		return true;
+	}
+
+	/** Nei gratuiti i blocchi economici non devono raggiungere né l’email né la sua anteprima. */
+	public static function rimuovi_riferimenti_pagamento_gratuito( $template, $html = false ) {
+		$placeholders = array( '{{ordine.riepilogo_economico}}', '{{pagamento.istruzioni}}', '{{pagamento.scadenza}}', '{{pagamento.causale}}' );
+		$template = (string) $template;
+		if ( $html ) {
+			return (string) preg_replace_callback( '#<p\\b[^>]*>.*?</p>#is', static function ( $match ) use ( $placeholders ) {
+				foreach ( $placeholders as $placeholder ) if ( false !== strpos( $match[0], $placeholder ) ) return '';
+				return $match[0];
+			}, $template );
+		}
+		$lines = preg_split( '/\\r?\\n/', $template );
+		$lines = array_filter( $lines, static function ( $line ) use ( $placeholders ) {
+			foreach ( $placeholders as $placeholder ) if ( false !== strpos( $line, $placeholder ) ) return false;
+			return true;
+		} );
+		return trim( preg_replace( "/\\n{3,}/", "\\n\\n", implode( "\\n", $lines ) ) );
 	}
 
 	public static function mostra_avviso() {

@@ -63,7 +63,7 @@ final class MI_Management_Service {
 		}
 		$rooms = self::rooms( (int) $registration['event_id'] );
 		$review = self::request_review( $registration );
-		return array( 'ok' => true, 'registration_id' => (int) $registration['id'], 'event_id' => (int) $registration['event_id'], 'order_code' => $registration['order_code'], 'status' => $registration['status'], 'buyer' => array( 'first_name' => $registration['buyer_first_name'], 'last_name' => $registration['buyer_last_name'], 'email' => $registration['buyer_email'] ?? '', 'phone' => $registration['buyer_phone'] ?? '' ), 'special_requests' => $registration['special_requests'] ?? '', 'order_options' => self::decode( $registration['order_options_json'] ?? '' ), 'workspace_status' => $registration['workspace_status'] ?? '', 'workspace_synced_at' => $registration['workspace_synced_at'] ?? '', 'offer_expires_at' => $registration['waitlist_offer_expires_at'] ?? '', 'participants' => $participants, 'accommodations' => $rooms, 'request_review' => $review, 'fields' => array_values( self::definitions( $registration ) ), 'version' => hash( 'sha256', wp_json_encode( array( $registration['status'], $participants, $rooms, $review, $registration['special_requests'] ?? '', $registration['total_cents'] ?? 0, $registration['initial_due_cents'] ?? 0, $registration['order_options_json'] ?? '' ) ) ) );
+		return array( 'ok' => true, 'registration_id' => (int) $registration['id'], 'event_id' => (int) $registration['event_id'], 'order_code' => $registration['order_code'], 'status' => $registration['status'], 'buyer' => array( 'first_name' => $registration['buyer_first_name'], 'last_name' => $registration['buyer_last_name'], 'email' => $registration['buyer_email'] ?? '', 'phone' => $registration['buyer_phone'] ?? '' ), 'special_requests' => $registration['special_requests'] ?? '', 'order_options' => self::decode( $registration['order_options_json'] ?? '' ), 'workspace_status' => $registration['workspace_status'] ?? '', 'workspace_synced_at' => $registration['workspace_synced_at'] ?? '', 'offer_expires_at' => $registration['waitlist_offer_expires_at'] ?? '', 'participants' => $participants, 'accommodations' => $rooms, 'features' => array( 'rooms' => '1' === get_post_meta( (int) $registration['event_id'], '_mi_overnight', true ) ), 'request_review' => $review, 'fields' => array_values( self::definitions( $registration ) ), 'version' => hash( 'sha256', wp_json_encode( array( $registration['status'], $participants, $rooms, $review, $registration['special_requests'] ?? '', $registration['total_cents'] ?? 0, $registration['initial_due_cents'] ?? 0, $registration['order_options_json'] ?? '' ) ) ) );
 	}
 	private static function attendance_map( $rows ) {
 		$map = array();
@@ -151,13 +151,13 @@ final class MI_Management_Service {
 				foreach ( $all_participants as $number => $person ) {
 					$fields = self::decode( $person['extra_json'] ); $missing_fields = array();
 					if ( (int) $person['id'] === $first_person_id || 'ALL' === ( $snapshot['event']['participant_extra_scope'] ?? '' ) ) foreach ( $definitions as $f ) if ( $f['required'] && '' === trim( (string) ( $fields[$f['key']] ?? '' ) ) ) $missing_fields[] = $f['label'];
-					$individuals[] = $deposit + array( 'is_buyer' => (int) $person['id'] === $buyer_participant_id, 'id' => (int) $person['id'], 'number' => $number + 1, 'attendance' => $attendance[$person['id']]['state'] ?? 'UNRECORDED', 'code' => $order['order_code'], 'name' => trim( ( $person['first_name'] ?? '' ) . ' ' . ( $person['last_name'] ?? '' ) ), 'buyer' => trim( $order['buyer_first_name'] . ' ' . $order['buyer_last_name'] ), 'email' => $order['buyer_email'] ?? '', 'phone' => $order['buyer_phone'] ?? '', 'status' => 'CANCELLED' === $person['status'] ? 'CANCELLED' : $order['status'], 'room' => $person['room_code'], 'fields' => $fields, 'missing' => $missing_fields, 'unassigned' => $needs_room( $person ) && ! $person['room_code'], 'collectible' => $collectible && $position['balance'] > 0, 'requests' => $order['special_requests'] ?? '', 'requests_reviewed' => $request_review['reviewed'], 'offer_expires_at' => $order['waitlist_offer_expires_at'] ?? '', 'options' => self::decode( $person['options_json'] ?? '' ) );
+					$individuals[] = $deposit + array( 'is_buyer' => (int) $person['id'] === $buyer_participant_id, 'id' => (int) $person['id'], 'number' => $number + 1, 'attendance' => $attendance[$person['id']]['state'] ?? 'UNRECORDED', 'code' => $order['order_code'], 'name' => trim( ( $person['first_name'] ?? '' ) . ' ' . ( $person['last_name'] ?? '' ) ), 'buyer' => trim( $order['buyer_first_name'] . ' ' . $order['buyer_last_name'] ), 'email' => self::participant_contact( $fields, $definitions, 'email', $order['buyer_email'] ?? '' ), 'phone' => self::participant_contact( $fields, $definitions, 'phone', $order['buyer_phone'] ?? '' ), 'status' => 'CANCELLED' === $person['status'] ? 'CANCELLED' : $order['status'], 'room' => $person['room_code'], 'fields' => $fields, 'missing' => $missing_fields, 'unassigned' => $needs_room( $person ) && ! $person['room_code'], 'collectible' => $collectible && $position['balance'] > 0, 'requests' => $order['special_requests'] ?? '', 'requests_reviewed' => $request_review['reviewed'], 'offer_expires_at' => $order['waitlist_offer_expires_at'] ?? '', 'options' => self::decode( $person['options_json'] ?? '' ) );
 				}
 				$items[] = $deposit + array( 'code' => $order['order_code'], 'name' => trim( $order['buyer_first_name'] . ' ' . $order['buyer_last_name'] ), 'status' => $order['status'], 'active' => ! in_array( $order['status'], array( 'CANCELLED','EXPIRED' ), true ), 'participants' => count( $participants ), 'total' => (int) $order['total_cents'], 'paid' => $sum, 'balance' => $position['balance'], 'collectible' => $collectible, 'missing' => $missing, 'unassigned' => $unassigned, 'requests' => $order['special_requests'] ?? '', 'requests_reviewed' => $request_review['reviewed'], 'offer_expires_at' => $order['waitlist_offer_expires_at'] ?? '', 'order_options' => self::decode( $order['order_options_json'] ?? '' ) );
 			}
 			$options = function_exists( 'get_post_meta' ) ? (array) get_post_meta( $event_id, '_mi_options', true ) : array();
 			$mode = function_exists( 'get_post_meta' ) ? get_post_meta( $event_id, '_mi_economic_mode', true ) : '';
-			$features = array( 'rooms' => $has_rooms, 'payments' => in_array( $mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ), 'deposit' => 'DEPOSIT_BALANCE' === $mode );
+			$features = array( 'rooms' => $has_rooms, 'room_inventory' => 'ON_DEMAND' !== get_post_meta( $event_id, '_mi_accommodation_management', true ), 'payments' => in_array( $mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ), 'deposit' => 'DEPOSIT_BALANCE' === $mode );
 			foreach ( $orders as $order ) {
 				$snapshot = self::decode( $order['snapshot_json'] );
 				$options = array_merge( $options, (array) ( $snapshot['event']['options'] ?? array() ) );
@@ -169,8 +169,20 @@ final class MI_Management_Service {
 			$room_types = array(); $known_types = self::room_types();
 			foreach ( $individuals as $person ) $options = array_merge( $options, $person['options'] );
 			foreach ( $options as $option ) if ( isset( $known_types[$option['code'] ?? ''] ) ) $room_types[$option['code']] = $known_types[$option['code']];
-			return array( 'ok' => true, 'features' => $features, 'room_types' => $room_types, 'items' => $items, 'people' => $individuals, 'field_labels' => $field_labels, 'rooms' => self::rooms( $event_id ), 'updated_at' => gmdate( 'c' ), 'registration_url' => MI_Shortcode::url_iscrizione( $event_id ) );
+			return array( 'ok' => true, 'features' => $features, 'room_types' => $room_types, 'option_definitions' => array_values( array_filter( $options, 'is_array' ) ), 'items' => $items, 'people' => $individuals, 'field_labels' => $field_labels, 'rooms' => self::rooms( $event_id ), 'updated_at' => gmdate( 'c' ), 'registration_url' => MI_Shortcode::url_iscrizione( $event_id ) );
 		} catch ( Throwable $error ) { return new WP_Error( 'mi_management_read', $error->getMessage() ); }
+	}
+	/** Usa il contatto personale quando il modulo lo prevede; altrimenti conserva il recapito del referente. */
+	private static function participant_contact( $fields, $definitions, $kind, $fallback ) {
+		$aliases = 'email' === $kind ? array( 'email', 'participant_email' ) : array( 'phone', 'participant_phone', 'mobile' );
+		$type = 'email' === $kind ? 'email' : 'tel';
+		foreach ( $definitions as $definition ) {
+			$key = (string) ( $definition['key'] ?? '' );
+			if ( $type !== ( $definition['type'] ?? '' ) && ! in_array( $key, $aliases, true ) ) continue;
+			$value = trim( (string) ( $fields[$key] ?? '' ) );
+			if ( '' !== $value ) return $value;
+		}
+		return (string) $fallback;
 	}
 	/** Canonical codes generated by the event creation form. */
 	public static function room_types() {
@@ -292,16 +304,21 @@ final class MI_Management_Service {
 		global $wpdb;
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_registrations WHERE id=%d FOR UPDATE", $registration_id ), ARRAY_A ); self::check_database();
 		if ( ! $row || ! in_array( $row['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ) return;
-		$event_id = (int) $row['event_id']; $booking = self::booking( $row ); $all = $booking['participants']; $groups = array();
+		$event_id = (int) $row['event_id']; $booking = self::booking( $row ); $all = $booking['participants']; $rooms = self::rooms( $event_id ); $groups = array();
 		foreach ( self::room_types() as $code => $type ) {
 			$selected = array_values( array_filter( $all, static function ( $person ) use ( $code ) {
 				return 'ACTIVE' === $person['status'] && ! $person['room'] && array_filter( $person['options'], static function ( $option ) use ( $code ) { return ( $option['code'] ?? '' ) === $code && (int) ( $option['quantity'] ?? 0 ) > 0; } );
 			} ) );
 			if ( 1 === $type['capacity'] ) { foreach ( $selected as $person ) $groups[] = array( $type, array( $person ) ); }
 			elseif ( count( $all ) === $type['capacity'] && count( $selected ) === count( $all ) ) $groups[] = array( $type, $selected );
+			elseif ( $selected ) {
+				$has_open_room = false;
+				foreach ( $rooms as $room ) if ( preg_match( '/^' . $type['prefix'] . '[1-9][0-9]*$/', $room['code'] ) && $room['available'] > 0 ) { $has_open_room = true; break; }
+				if ( ! $has_open_room ) $groups[] = array( $type, array( $selected[0] ) );
+			}
 		}
 		if ( ! $groups ) return;
-		$rooms = self::rooms( $event_id ); $next = array(); $assignments = array();
+		$next = array(); $assignments = array();
 		foreach ( $groups as list( $type, $persons ) ) {
 			$prefix = $type['prefix'];
 			if ( ! isset( $next[$prefix] ) ) {

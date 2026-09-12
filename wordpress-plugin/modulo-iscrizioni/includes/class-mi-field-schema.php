@@ -45,6 +45,10 @@ final class MI_Field_Schema {
 				'key' => 'document_number', 'label' => 'Numero del documento', 'type' => 'text', 'max_length' => 80,
 				'help' => 'Disponibile ai gestori autorizzati nel registro e nel foglio evento.', 'high_impact' => true, 'retention' => 'SHEETS_ONLY',
 			),
+			'document_issue_date' => array(
+				'key' => 'document_issue_date', 'label' => 'Data di rilascio del documento d’identità', 'type' => 'date',
+				'help' => 'Disponibile ai gestori autorizzati nel registro e nel foglio evento.', 'high_impact' => true, 'retention' => 'SHEETS_ONLY',
+			),
 			'document_country' => array(
 				'key' => 'document_country', 'label' => 'Paese di rilascio del documento', 'type' => 'text', 'max_length' => 80,
 				'help' => 'Disponibile ai gestori autorizzati nel registro e nel foglio evento.', 'high_impact' => true, 'retention' => 'SHEETS_ONLY',

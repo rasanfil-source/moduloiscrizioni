@@ -359,7 +359,7 @@ function determinaProfiloVistaOperativa_(iscrizioni, partecipanti) {
   partecipanti.forEach(function (riga) {
     const dati = decodificaOggetto_(riga.dati_aggiuntivi_json);
     const opzioni = JSON.stringify(decodificaElenco_(riga.opzioni_json)).toLowerCase();
-    if (dati.document_number || dati.numero_documento || dati.document_expiry_date || dati.scadenza_documento || dati.room || dati.camera || dati.alloggio) haDocumenti = true;
+    if (dati.document_number || dati.numero_documento || dati.document_issue_date || dati.data_rilascio_documento || dati.document_expiry_date || dati.scadenza_documento || dati.room || dati.camera || dati.alloggio) haDocumenti = true;
     if (dati.transport || dati.pullman || dati.lunch || dati.pranzo || /pullman|pranzo|colazione|cena/.test(opzioni)) haServizi = true;
   });
   const profili = {
@@ -385,7 +385,7 @@ function gruppoCampoVistaOperativa_(chiave) {
 function campiElencoOperativo_(includiDinamici) {
   const fields = [
     { key: 'event', label: 'Evento' }, { key: 'order_code', label: 'Codice prenotazione' }, { key: 'participant_number', label: 'N.' }, { key: 'first_name', label: 'Nome' }, { key: 'last_name', label: 'Cognome' }, { key: 'status', label: 'Stato' },
-    { key: 'email', label: 'Email' }, { key: 'phone', label: 'Cellulare' }, { key: 'birth_date', label: 'Data di nascita' }, { key: 'document_type', label: 'Tipo documento' }, { key: 'document_number', label: 'Numero documento' }, { key: 'document_issue_date', label: 'Data emissione documento' }, { key: 'document_expiry_date', label: 'Scadenza documento' }, { key: 'nationality', label: 'Nazionalità' }, { key: 'room', label: 'Alloggio' }, { key: 'transport', label: 'Pullman/trasporto' }, { key: 'breakfast', label: 'Colazione' },
+    { key: 'email', label: 'Email' }, { key: 'phone', label: 'Cellulare' }, { key: 'birth_date', label: 'Data di nascita' }, { key: 'document_type', label: 'Tipo documento' }, { key: 'document_number', label: 'Numero documento' }, { key: 'document_issue_date', label: 'Data di rilascio del documento' }, { key: 'document_expiry_date', label: 'Scadenza documento' }, { key: 'nationality', label: 'Nazionalità' }, { key: 'room', label: 'Alloggio' }, { key: 'transport', label: 'Pullman/trasporto' }, { key: 'breakfast', label: 'Colazione' },
     { key: 'lunch', label: 'Pranzo' }, { key: 'insurance', label: 'Assicurazione' }, { key: 'emergency_contact', label: 'Contatto di emergenza' }, { key: 'options', label: 'Altre opzioni' }, { key: 'total', label: 'Totale' }, { key: 'paid', label: 'Incassato' }, { key: 'paid_cash', label: 'Contanti' }, { key: 'paid_transfer', label: 'Bonifico' }, { key: 'paid_card', label: 'Carta/PayPal' }, { key: 'balance', label: 'Da incassare' }, { key: 'special_requests', label: 'Richieste particolari' }
   ];
 	if (includiDinamici === false) return fields;
@@ -408,7 +408,7 @@ function valoreCampoElenco_(field, event, registration, participant, data, payme
     const option=decodificaElenco_(participant.opzioni_json).find(o=>'option_'+String(o.code)===field);
     return option ? Number(option.quantity)||0 : 0;
   }
-  const aliases = { email: ['participant_email', 'email'], phone: ['participant_phone', 'phone', 'mobile'], birth_date: ['birth_date', 'data_nascita'], document_type: ['document_type', 'tipo_documento'], document_number: ['document_number', 'numero_documento'], document_issue_date: ['document_issue_date', 'data_emissione_documento'], document_expiry_date: ['document_expiry_date', 'document_expiry', 'scadenza_documento'], nationality: ['nationality', 'nazionalita'], room: ['room', 'camera', 'alloggio'], transport: ['pullman', 'transport'], breakfast: ['colazione', 'breakfast'], lunch: ['pranzo', 'lunch'], insurance: ['assicurazione', 'insurance'], emergency_contact: ['emergency_contact', 'emergency_phone', 'contatto_emergenza', 'telefono_emergenza'] };
+  const aliases = { email: ['participant_email', 'email'], phone: ['participant_phone', 'phone', 'mobile'], birth_date: ['birth_date', 'data_nascita'], document_type: ['document_type', 'tipo_documento'], document_number: ['document_number', 'numero_documento'], document_issue_date: ['document_issue_date', 'data_rilascio_documento', 'data_emissione_documento'], document_expiry_date: ['document_expiry_date', 'document_expiry', 'scadenza_documento'], nationality: ['nationality', 'nazionalita'], room: ['room', 'camera', 'alloggio'], transport: ['pullman', 'transport'], breakfast: ['colazione', 'breakfast'], lunch: ['pranzo', 'lunch'], insurance: ['assicurazione', 'insurance'], emergency_contact: ['emergency_contact', 'emergency_phone', 'contatto_emergenza', 'telefono_emergenza'] };
   const direct = { event: event.titolo || registration.id_evento, order_code: registration.codice_ordine, participant_number: participant.numero_partecipante, first_name: participant.nome, last_name: participant.cognome, status: participant.stato_partecipante || registration.stato, special_requests: registration.richieste_particolari || '' };
   if (Object.prototype.hasOwnProperty.call(direct, field)) return direct[field];
   if (field === 'options') return decodificaElenco_(participant.opzioni_json).map(function (option) { return option.name || option.label || option.code || ''; }).filter(Boolean).join(', ');

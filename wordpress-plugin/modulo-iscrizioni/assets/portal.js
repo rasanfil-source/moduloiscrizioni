@@ -135,6 +135,13 @@ document.addEventListener('DOMContentLoaded', () => {
 	  subjectPreview.textContent = fill(subjectInput.value);
 	  textPreview.textContent = fill(textInput.value);
 	};
+	const paymentEmailPlaceholders = ['{{ordine.riepilogo_economico}}', '{{pagamento.istruzioni}}', '{{pagamento.scadenza}}', '{{pagamento.causale}}'];
+	const removeFreePaymentEmailReferences = (text) => text
+	  .split(/\r?\n/)
+	  .filter((line) => !paymentEmailPlaceholders.some((placeholder) => line.includes(placeholder)))
+	  .join('\n')
+	  .replace(/\n{3,}/g, '\n\n')
+	  .trim();
     const show = () => {
       steps.forEach((step, stepIndex) => step.classList.toggle('is-active', stepIndex === index));
 	  back.disabled = index === 0 && !backUrl;
@@ -218,6 +225,13 @@ document.addEventListener('DOMContentLoaded', () => {
 	updateBookingLimit();
     const overnight = form.querySelector('[data-mi-overnight]');
     const rooms = form.querySelector('[data-mi-accommodations]');
+    if (rooms && !rooms.querySelector('[data-mi-accommodation-management]')) {
+      const management = document.createElement('fieldset');
+      management.className = 'mi-accommodation-management';
+      management.dataset.miAccommodationManagement = '';
+      management.innerHTML = '<legend>Come gestirete gli alloggi?</legend><label class="mi-check"><input type="radio" name="accommodation_management" value="PREBOOKED"> <strong>Prenotando camere e riempendole</strong><small>Prenoterete un numero definito di camere e assegnerete le persone rispettando i posti disponibili.</small></label><label class="mi-check"><input type="radio" name="accommodation_management" value="ON_DEMAND" checked> <strong>Sistemazione da cercare</strong><small>Raccoglierete le preferenze; il riepilogo indicherà quante camere cercare per ciascuna tipologia.</small></label>';
+      rooms.prepend(management);
+    }
     const updateOvernight = () => {
 	  const servicePricing = pricing?.value === 'NONE';
       rooms.hidden = !servicePricing || !overnight.checked;
@@ -344,6 +358,17 @@ document.addEventListener('DOMContentLoaded', () => {
 	  serviceUpdaters.forEach((updateService) => updateService());
 	  updateBusRoutes();
 	  updateEconomic();
+	  const freeEvent = pricing.value === 'ZERO';
+	  const confirmationText = form.querySelector('[name="confirmation_email_text"]');
+	  const freePlaceholders = form.querySelector('[data-mi-email-free-placeholders]');
+	  const paidPlaceholders = form.querySelector('[data-mi-email-paid-placeholders]');
+	  if (freeEvent && confirmationText) {
+		const cleanedText = removeFreePaymentEmailReferences(confirmationText.value);
+		if (cleanedText !== confirmationText.value) confirmationText.value = cleanedText;
+	  }
+	  if (freePlaceholders) freePlaceholders.hidden = !freeEvent;
+	  if (paidPlaceholders) paidPlaceholders.hidden = freeEvent;
+	  renderConfirmationPreview();
 	};
     pricing?.addEventListener('change', updatePricing);
     economic?.addEventListener('change', updateEconomic);
@@ -353,6 +378,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const closesAt = form.querySelector('[data-mi-closes]');
     const startsAt = form.querySelector('[data-mi-starts]');
     const dateFields = [opensAt, closesAt, startsAt].filter(Boolean);
+    const formatItalianDateInput = (field) => {
+      const cursor = field.selectionStart ?? field.value.length;
+      const digitsBeforeCursor = field.value.slice(0, cursor).replace(/\D/g, '').length;
+      const digits = field.value.replace(/\D/g, '').slice(0, 12);
+      const chunks = [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 8), digits.slice(8, 10), digits.slice(10, 12)].filter(Boolean);
+      const formatted = chunks.reduce((value, chunk, chunkIndex) => {
+        if (!value) return chunk;
+        return value + (chunkIndex === 2 ? '/' : (chunkIndex === 3 ? ' ' : (chunkIndex === 4 ? ':' : '/'))) + chunk;
+      }, '');
+      if (field.value === formatted) return;
+      field.value = formatted;
+      let selection = 0;
+      let remainingDigits = digitsBeforeCursor;
+      while (selection < formatted.length && remainingDigits > 0) {
+        if (/\d/.test(formatted[selection])) remainingDigits -= 1;
+        selection += 1;
+      }
+      field.setSelectionRange(selection, selection);
+    };
     const enforceFourDigitYear = (field) => {
       const match = field.value.match(/^(\d{2}\/\d{2}\/)(\d{5,})(.*)$/);
       if (!match) return;
@@ -386,7 +430,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 	validateWizardRelations = updateDateLimits;
 	dateFields.forEach((field) => {
-	  field.addEventListener('input', () => { enforceFourDigitYear(field); updateDateLimits(); });
+	  field.addEventListener('input', () => { formatItalianDateInput(field); enforceFourDigitYear(field); updateDateLimits(); });
 	  field.addEventListener('change', updateDateLimits);
 	});
     updateDateLimits();
