@@ -3,6 +3,67 @@
 defined( 'ABSPATH' ) || exit;
 
 final class MI_Modello_Email {
+	const OPZIONE_STILE_DEFAULT = 'mi_email_stile_default';
+
+	/** Token sempre disponibili: le configurazioni di gruppo ed evento contengono solo override. */
+	public static function stile_default() {
+		$defaults = array(
+			'identity_name'   => get_bloginfo( 'name' ) ?: 'Parrocchia Sant’Eugenio',
+			'identity_detail' => 'Viale delle Belle Arti 10, Roma',
+			'contact_email'   => sanitize_email( get_option( 'admin_email', '' ) ),
+			'logo_url'        => '',
+			'logo_enabled'    => false,
+			'banner_url'      => defined( 'MI_PLUGIN_URL' ) ? MI_PLUGIN_URL . 'assets/email-banner-default.svg' : '',
+			'primary_color'   => '#151b38',
+			'secondary_color' => '#337ab7',
+			'signature'       => 'Segreteria parrocchiale',
+		);
+		$saved = get_option( self::OPZIONE_STILE_DEFAULT, array() );
+		return self::sanitizza_stile( array_merge( $defaults, is_array( $saved ) ? $saved : array() ), false );
+	}
+
+	public static function sanitizza_stile( $style, $overrides_only = true ) {
+		$style = is_array( $style ) ? $style : array();
+		$clean = array();
+		foreach ( array( 'identity_name' => 120, 'identity_detail' => 180, 'signature' => 240 ) as $key => $limit ) {
+			$value = self::pulisci_riga( $style[ $key ] ?? '', $limit );
+			if ( ! $overrides_only || '' !== $value ) $clean[ $key ] = $value;
+		}
+		$email = sanitize_email( $style['contact_email'] ?? '' );
+		if ( ! $overrides_only || $email ) $clean['contact_email'] = $email;
+		foreach ( array( 'logo_url', 'banner_url' ) as $key ) {
+			$url = esc_url_raw( (string) ( $style[ $key ] ?? '' ), array( 'https' ) );
+			if ( ! $overrides_only || $url ) $clean[ $key ] = $url;
+		}
+		foreach ( array( 'primary_color', 'secondary_color' ) as $key ) {
+			$color = sanitize_hex_color( $style[ $key ] ?? '' );
+			if ( ! $overrides_only || $color ) $clean[ $key ] = $color;
+		}
+		if ( ! empty( $style['logo_enabled'] ) ) $clean['logo_enabled'] = true;
+		elseif ( ! $overrides_only ) $clean['logo_enabled'] = false;
+		return $clean;
+	}
+
+	public static function stile_risolto( $event_id ) {
+		$event_id = absint( $event_id );
+		$group_id = $event_id ? absint( get_post_meta( $event_id, '_mi_activity_id', true ) ) : 0;
+		$group = $group_id ? self::sanitizza_stile( get_post_meta( $group_id, '_mi_email_style', true ) ) : array();
+		$event = $event_id ? self::sanitizza_stile( get_post_meta( $event_id, '_mi_email_style', true ) ) : array();
+		$style = array_merge( self::stile_default(), $group, $event );
+		$group_logo_id = $group_id ? get_post_thumbnail_id( $group_id ) : 0;
+		$group_cover_id = $group_id ? absint( get_post_meta( $group_id, '_mi_group_cover_image_id', true ) ) : 0;
+		$event_image = $event_id ? (string) get_the_post_thumbnail_url( $event_id, 'large' ) : '';
+		$group_banner = $group_cover_id ? (string) wp_get_attachment_image_url( $group_cover_id, 'large' ) : (string) get_post_meta( $group_id, '_mi_group_cover_image_url', true );
+		$group_logo = $group_logo_id ? (string) wp_get_attachment_image_url( $group_logo_id, 'medium' ) : (string) get_post_meta( $group_id, '_mi_group_logo_url', true );
+		if ( empty( $event['logo_url'] ) && empty( $group['logo_url'] ) && $group_logo ) $style['logo_url'] = esc_url_raw( $group_logo, array( 'https' ) );
+		if ( $group_logo && ! array_key_exists( 'logo_enabled', $event ) && ! array_key_exists( 'logo_enabled', $group ) ) $style['logo_enabled'] = true;
+		if ( empty( $style['logo_enabled'] ) ) $style['logo_url'] = '';
+		// Un override esplicito resta possibile; altrimenti l'immagine evento è automatica.
+		if ( empty( $event['banner_url'] ) ) $style['banner_url'] = $event_image ?: ( ! empty( $group['banner_url'] ) ? $group['banner_url'] : ( $group_banner ?: $style['banner_url'] ) );
+		$style['source'] = ( $event || $event_image ) ? 'event' : ( ( $group || $group_logo || $group_banner ) ? 'group' : 'default' );
+		$style['group_id'] = $group_id;
+		return $style;
+	}
 	public static function avvia() {
 		add_action( 'add_meta_boxes', array( __CLASS__, 'aggiungi_riquadro' ) );
 		add_action( 'save_post_' . MI_Event_Post_Type::EVENT_TYPE, array( __CLASS__, 'salva' ), 20, 2 );
@@ -61,6 +122,10 @@ final class MI_Modello_Email {
 
 	public static function mostra_riquadro( $post ) {
 		$settings = self::impostazioni( $post->ID );
+		$email_style = (array) get_post_meta( $post->ID, '_mi_email_style', true );
+		$resolved_style = self::stile_risolto( $post->ID );
+		$identity_override = ! empty( array_intersect_key( $email_style, array_flip( array( 'identity_name', 'identity_detail', 'contact_email', 'signature' ) ) ) );
+		$color_override = ! empty( array_intersect_key( $email_style, array_flip( array( 'primary_color', 'secondary_color' ) ) ) );
 		wp_nonce_field( 'mi_salva_modello_email', 'mi_modello_email_nonce' );
 		$example = array(
 			'{{evento.titolo}}'           => $post->post_title ?: 'Evento dimostrativo',
@@ -84,6 +149,14 @@ final class MI_Modello_Email {
 		);
 		$synthetic_snapshot = self::crea_istantanea( $post->ID, $example );
 		?>
+		<h3>Aspetto email</h3>
+		<p><strong><?php echo $email_style ? 'Override evento attivi' : 'Usa lo stile ereditato'; ?></strong> · <?php echo esc_html( 'group' === $resolved_style['source'] ? 'Gruppo: ' . get_the_title( $resolved_style['group_id'] ) : ( 'event' === $resolved_style['source'] ? 'Evento' : 'Default parrocchia' ) ); ?></p>
+		<p class="description"><?php echo get_post_thumbnail_id( $post->ID ) ? 'Banner email: immagine dell’evento.' : 'Banner email: gruppo/default, salvo override esplicito.'; ?></p>
+		<p><label><input type="checkbox" name="mi_email_event_identity_enabled" value="1" <?php checked( $identity_override ); ?>> Personalizza identità e firma</label></p>
+		<div class="mi-admin-grid"><p><label>Nome visualizzato<input class="widefat" name="mi_email_event_identity_name" maxlength="120" value="<?php echo esc_attr( $email_style['identity_name'] ?? '' ); ?>"></label></p><p><label>Dettaglio istituzionale<input class="widefat" name="mi_email_event_identity_detail" maxlength="180" value="<?php echo esc_attr( $email_style['identity_detail'] ?? '' ); ?>"></label></p><p><label>Email di contatto<input class="widefat" type="email" name="mi_email_event_contact" value="<?php echo esc_attr( $email_style['contact_email'] ?? '' ); ?>"></label></p><p><label>Firma<input class="widefat" name="mi_email_event_signature" maxlength="240" value="<?php echo esc_attr( $email_style['signature'] ?? '' ); ?>"></label></p></div>
+		<p><label><input type="checkbox" name="mi_email_event_colors_enabled" value="1" <?php checked( $color_override ); ?>> Personalizza colori</label></p>
+		<div class="mi-admin-grid"><p><label>Colore principale<input type="color" name="mi_email_event_primary" value="<?php echo esc_attr( $email_style['primary_color'] ?? $resolved_style['primary_color'] ); ?>"></label></p><p><label>Colore CTA<input type="color" name="mi_email_event_secondary" value="<?php echo esc_attr( $email_style['secondary_color'] ?? $resolved_style['secondary_color'] ); ?>"></label></p></div>
+		<p><label><input type="checkbox" name="mi_email_event_banner_enabled" value="1" <?php checked( ! empty( $email_style['banner_url'] ) ); ?>> Sostituisci solo il banner</label><br><input class="widefat" type="url" name="mi_email_event_banner" value="<?php echo esc_attr( $email_style['banner_url'] ?? '' ); ?>" placeholder="https://…"></p><hr>
 		<p><label><input type="checkbox" name="mi_email_enabled" value="1" <?php checked( '1', $settings['enabled'] ); ?>> Modello attivo per l’email di conferma</label></p>
 		<div class="mi-admin-grid">
 		<p><label for="mi_email_sender_name"><strong>Nome visualizzato del mittente</strong></label><br><input class="widefat" id="mi_email_sender_name" name="mi_email_sender_name" maxlength="120" value="<?php echo esc_attr( $settings['sender_name'] ); ?>" placeholder="Lascia vuoto per usare il valore organizzativo"></p>
@@ -115,25 +188,25 @@ final class MI_Modello_Email {
 			$snapshot[ $destination ] = 'html' === $source ? self::renderizza_html( $settings[ $source ], $values ) : self::renderizza( $settings[ $source ], $values );
 		}
 		$activity_id = absint( get_post_meta( $event_id, '_mi_activity_id', true ) );
-		$thumbnail_id = $activity_id ? get_post_thumbnail_id( $activity_id ) : 0;
-		$legacy_color = $activity_id ? sanitize_hex_color( get_post_meta( $activity_id, '_mi_accent_color', true ) ) : '';
-		$primary_color = $activity_id ? sanitize_hex_color( get_post_meta( $activity_id, '_mi_primary_color', true ) ) : '';
-		$secondary_color = $activity_id ? sanitize_hex_color( get_post_meta( $activity_id, '_mi_secondary_color', true ) ) : '';
-		$primary_color = $primary_color ?: ( $legacy_color ?: '#151b38' );
-		$secondary_color = $secondary_color ?: '#337ab7';
+		$style = self::stile_risolto( $event_id );
 		$snapshot['identita'] = array(
 			'nome_attivita' => $activity_id ? get_the_title( $activity_id ) : '',
-			'logo_url'      => $thumbnail_id ? (string) wp_get_attachment_image_url( $thumbnail_id, 'medium' ) : esc_url_raw( get_post_meta( $activity_id, '_mi_group_logo_url', true ), array( 'https' ) ),
-			'logo_alt'      => $thumbnail_id ? (string) get_post_meta( $thumbnail_id, '_wp_attachment_image_alt', true ) : '',
-			'primary_color' => $primary_color,
-			'secondary_color' => $secondary_color,
-			'primary_text_color' => self::colore_testo_contrasto( $primary_color ),
-			'secondary_text_color' => self::colore_testo_contrasto( $secondary_color ),
+			'nome'          => $style['identity_name'],
+			'dettaglio'     => $style['identity_detail'],
+			'contatto'      => $style['contact_email'],
+			'firma'         => $style['signature'],
+			'logo_url'      => $style['logo_url'],
+			'logo_alt'      => $style['identity_name'],
+			'primary_color' => $style['primary_color'],
+			'secondary_color' => $style['secondary_color'],
+			'primary_text_color' => self::colore_testo_contrasto( $style['primary_color'] ),
+			'secondary_text_color' => self::colore_testo_contrasto( $style['secondary_color'] ),
+			'origine_stile' => $style['source'],
 		);
 		$snapshot['evento'] = array(
 			'titolo' => sanitize_text_field( (string) ( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) ) ),
 			'url'     => self::url_pubblica_evento( $event_id ),
-			'cover_url' => esc_url_raw( (string) get_the_post_thumbnail_url( $event_id, 'large' ) ),
+			'cover_url' => esc_url_raw( (string) $style['banner_url'], array( 'https' ) ),
 		);
 		$snapshot['identita_email'] = array(
 			'nome_mittente'        => $settings['sender_name'],
@@ -202,19 +275,54 @@ final class MI_Modello_Email {
 			$snapshot['preheader'] = 'Comunicazione importante relativa alla tua iscrizione.';
 			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ti informiamo che <strong>' . esc_html( $event_title ) . '</strong> è stato annullato.</p>' . ( $clean_message ? '<p><strong>Motivo comunicato:</strong><br>' . nl2br( esc_html( $clean_message ) ) . '</p>' : '' ) . '<p>La segreteria ti contatterà separatamente se sono necessari rimborsi o altri adempimenti.</p>';
 			$snapshot['testo'] = "Gentile {$buyer_name},\n\nl’evento {$event_title} è stato annullato." . ( $clean_message ? "\n\nMotivo comunicato:\n{$clean_message}" : '' ) . "\n\nLa segreteria ti contatterà separatamente se sono necessari rimborsi o altri adempimenti.";
-		} elseif ( 'BALANCE_REMINDER' === $template_type ) {
-			$snapshot['oggetto'] = 'Promemoria saldo — ' . $event_title;
-			$snapshot['preheader'] = 'Controlla il saldo ancora da versare.';
-			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ti ricordiamo che per <strong>' . esc_html( $event_title ) . '</strong> risulta ancora un saldo da completare.</p><p><strong>Saldo residuo:</strong> ' . esc_html( (string) ( $values['{{pagamento.saldo}}'] ?? '' ) ) . '<br><strong>Scadenza:</strong> ' . esc_html( (string) ( $values['{{pagamento.scadenza}}'] ?? '' ) ) . '<br><strong>Causale:</strong> ' . esc_html( (string) ( $values['{{pagamento.causale}}'] ?? '' ) ) . '</p>';
-			$snapshot['testo'] = "Gentile {$buyer_name},\n\nper {$event_title} risulta ancora un saldo da completare.\nSaldo residuo: " . (string) ( $values['{{pagamento.saldo}}'] ?? '' ) . "\nScadenza: " . (string) ( $values['{{pagamento.scadenza}}'] ?? '' ) . "\nCausale: " . (string) ( $values['{{pagamento.causale}}'] ?? '' );
+			$snapshot['titolo'] = 'Evento annullato';
+			$snapshot['status_url'] = '';
+		} elseif ( in_array( $template_type, array( 'DEPOSIT_REMINDER', 'BALANCE_REMINDER' ), true ) ) {
+			$is_deposit = 'DEPOSIT_REMINDER' === $template_type;
+			$amount = (string) ( $values[ $is_deposit ? '{{pagamento.importo_dovuto}}' : '{{pagamento.saldo}}' ] ?? '' );
+			$label = $is_deposit ? 'caparra' : 'saldo';
+			$snapshot['oggetto'] = 'Promemoria ' . $label . ' — ' . $event_title;
+			$snapshot['titolo'] = 'Promemoria ' . $label;
+			$snapshot['preheader'] = 'Controlla l’importo e la scadenza.';
+			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ti ricordiamo la scadenza relativa a <strong>' . esc_html( $event_title ) . '</strong>.</p><p><strong>' . esc_html( ucfirst( $label ) ) . ' da versare:</strong> ' . esc_html( $amount ) . '<br><strong>Scadenza:</strong> ' . esc_html( (string) ( $values['{{pagamento.scadenza}}'] ?? '' ) ) . '<br><strong>Causale:</strong> ' . esc_html( (string) ( $values['{{pagamento.causale}}'] ?? '' ) ) . '</p>';
+			$snapshot['testo'] = "Gentile {$buyer_name},\n\nper {$event_title}: {$label} da versare {$amount}.\nScadenza: " . (string) ( $values['{{pagamento.scadenza}}'] ?? '' ) . "\nCausale: " . (string) ( $values['{{pagamento.causale}}'] ?? '' );
+		} elseif ( 'REGISTRATION_CANCELLATION' === $template_type ) {
+			$snapshot['oggetto'] = 'Iscrizione cancellata — ' . $event_title; $snapshot['titolo'] = 'Iscrizione cancellata';
+			$snapshot['preheader'] = 'La cancellazione è stata registrata.';
+			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>la cancellazione dell’iscrizione a <strong>' . esc_html( $event_title ) . '</strong> è stata registrata.</p>';
+			$snapshot['testo'] = "Gentile {$buyer_name},\n\nla cancellazione dell’iscrizione a {$event_title} è stata registrata.";
+			$snapshot['status_url'] = '';
 		} else {
 			$clean_message = sanitize_textarea_field( (string) $message );
-			$snapshot['oggetto'] = 'Informazioni utili — ' . $event_title;
+			$snapshot['oggetto'] = ( 'MATERIAL_DELIVERY' === $template_type ? 'Materiale' : 'Informazioni utili' ) . ' — ' . $event_title;
+			$snapshot['titolo'] = 'MATERIAL_DELIVERY' === $template_type ? 'Materiale per l’evento' : 'Comunicazione';
 			$snapshot['preheader'] = 'Indicazioni operative prima dell’evento.';
 			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ecco le informazioni aggiornate per <strong>' . esc_html( $event_title ) . '</strong>.</p><p>' . nl2br( esc_html( $clean_message ) ) . '</p>';
 			$snapshot['testo'] = "Gentile {$buyer_name},\n\necco le informazioni aggiornate per {$event_title}.\n\n{$clean_message}";
 		}
 		return $snapshot;
+	}
+
+	/** Le notifiche alla parrocchia non devono mai ereditare asset o colori dell'evento. */
+	public static function crea_istantanea_istituzionale( $event_id, $subject, $preheader, $body_html, $body_text, $actions = array() ) {
+		$event_title = sanitize_text_field( get_the_title( absint( $event_id ) ) );
+		return array(
+			'attivo' => true,
+			'layout' => 'INSTITUTIONAL',
+			'oggetto' => sanitize_text_field( $subject ),
+			'titolo' => sanitize_text_field( $subject ),
+			'preheader' => sanitize_text_field( $preheader ),
+			'html' => self::sanitizza_html_email( $body_html ),
+			'testo' => sanitize_textarea_field( $body_text ),
+			'evento' => array( 'titolo' => $event_title ),
+			'azioni' => array_values( array_filter( array_map( static function ( $action ) {
+				$url = esc_url_raw( (string) ( $action['url'] ?? '' ), array( 'https' ) );
+				$label = sanitize_text_field( (string) ( $action['label'] ?? '' ) );
+				return $url && $label ? array( 'url' => $url, 'label' => $label ) : null;
+			}, (array) $actions ) ) ),
+			'identita_email' => array(),
+			'identificativo' => array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' ),
+		);
 	}
 
 	public static function valori_ordine( $event, $order_code, $status_label, $quantity, $buyer_name, $economic_summary, $items = array() ) {
@@ -288,6 +396,7 @@ final class MI_Modello_Email {
 
 	public static function componi_html( $istantanea, $codice_html = '' ) {
 		if ( 'PUBLIC_BALANCE' === ( $istantanea['layout'] ?? '' ) ) return (string) ( $istantanea['html'] ?? '' );
+		if ( 'INSTITUTIONAL' === ( $istantanea['layout'] ?? '' ) ) return self::componi_html_istituzionale( $istantanea );
 		$identity = isset( $istantanea['identita'] ) && is_array( $istantanea['identita'] ) ? $istantanea['identita'] : array();
 		$email_identity = isset( $istantanea['identita_email'] ) && is_array( $istantanea['identita_email'] ) ? $istantanea['identita_email'] : array();
 		$event = isset( $istantanea['evento'] ) && is_array( $istantanea['evento'] ) ? $istantanea['evento'] : array();
@@ -296,12 +405,13 @@ final class MI_Modello_Email {
 		$primary_text = in_array( $identity['primary_text_color'] ?? '', array( '#ffffff', '#000000' ), true ) ? $identity['primary_text_color'] : self::colore_testo_contrasto( $primary );
 		$secondary_text = in_array( $identity['secondary_text_color'] ?? '', array( '#ffffff', '#000000' ), true ) ? $identity['secondary_text_color'] : self::colore_testo_contrasto( $secondary );
 		$title = sanitize_text_field( (string) ( $event['titolo'] ?? '' ) );
+		$communication_title = sanitize_text_field( (string) ( $istantanea['titolo'] ?? $istantanea['oggetto'] ?? $title ) );
 		$preheader = ! empty( $istantanea['preheader'] ) ? '<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">' . esc_html( $istantanea['preheader'] ) . '</div>' : '';
 		$logo = '';
 		if ( ! empty( $identity['logo_url'] ) ) {
-			$logo = '<tr><td align="center" style="padding:18px 20px;background:#ffffff;"><img src="' . esc_url( $identity['logo_url'] ) . '" alt="' . esc_attr( $identity['logo_alt'] ?: ( $identity['nome_attivita'] ?? '' ) ) . '" width="160" style="display:block;width:auto;max-width:160px;max-height:88px;height:auto;border:0;"></td></tr>';
+			$logo = '<img src="' . esc_url( $identity['logo_url'] ) . '" alt="' . esc_attr( $identity['logo_alt'] ?: ( $identity['nome_attivita'] ?? '' ) ) . '" width="54" height="54" style="display:block;width:54px;height:54px;border:3px solid #ffffff;border-radius:50%;object-fit:cover;background:#ffffff;box-shadow:0 1px 4px rgba(0,0,0,.22);">';
 		}
-		$event_banner = ! empty( $event['cover_url'] ) ? '<tr><td><img src="' . esc_url( $event['cover_url'] ) . '" alt="' . esc_attr( $title ?: 'Immagine dell’evento' ) . '" width="600" style="display:block;width:100%;max-width:600px;height:auto;border:0;"></td></tr>' : '';
+		$event_banner = ! empty( $event['cover_url'] ) ? '<tr><td background="' . esc_url( $event['cover_url'] ) . '" valign="top" style="height:210px;padding:16px;background-color:' . esc_attr( $primary ) . ';background-image:url(\'' . esc_url( $event['cover_url'] ) . '\');background-position:center;background-size:cover;background-repeat:no-repeat;">' . $logo . '</td></tr>' : ( $logo ? '<tr><td bgcolor="' . esc_attr( $primary ) . '" style="padding:16px;">' . $logo . '</td></tr>' : '' );
 		$event_url = ! empty( $event['url'] ) ? esc_url( $event['url'] ) : '';
 		$cta = $event_url ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;margin-bottom:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . $event_url . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">Consulta la pagina dell’evento</a></td></tr></table>' : '';
 		$reply_to = ! empty( $email_identity['indirizzo_risposte'] ) && is_email( $email_identity['indirizzo_risposte'] ) ? sanitize_email( $email_identity['indirizzo_risposte'] ) : '';
@@ -324,19 +434,41 @@ final class MI_Modello_Email {
 		return '<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' . esc_html( $title ?: 'Comunicazione iscrizione' ) . '</title></head><body style="margin:0;padding:0;background:#f6f8fc;">' . $preheader
 			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#f6f8fc" style="width:100%;background:#f6f8fc;"><tr><td align="center" style="padding:24px 12px;">'
 			. '<table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" bgcolor="#ffffff" style="width:100%;max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e4e8ef;">'
-			. $logo . $event_banner . '<tr><td bgcolor="' . esc_attr( $primary ) . '" style="background:' . esc_attr( $primary ) . ';padding:20px;color:' . esc_attr( $primary_text ) . ';font-family:Arial,Helvetica,sans-serif;">'
-			. '<div style="font-size:22px;font-weight:700;line-height:1.3;">' . esc_html( $title ?: 'Comunicazione iscrizione' ) . '</div>'
+			. $event_banner . '<tr><td bgcolor="' . esc_attr( $primary ) . '" style="background:' . esc_attr( $primary ) . ';padding:20px;color:' . esc_attr( $primary_text ) . ';font-family:Arial,Helvetica,sans-serif;">'
+			. '<div style="font-size:13px;line-height:1.4;opacity:0.9;">' . esc_html( $title ) . '</div>'
+			. '<div style="font-size:24px;font-weight:700;line-height:1.3;margin-top:5px;">' . esc_html( $communication_title ?: 'Comunicazione iscrizione' ) . '</div>'
 			. ( $activity_name ? '<div style="font-size:13px;line-height:1.4;margin-top:5px;opacity:0.9;">' . esc_html( $activity_name ) . '</div>' : '' )
-			. '</td></tr><tr><td style="padding:26px 22px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:18px;line-height:1.65;">'
+			. '</td></tr><tr><td style="padding:26px 22px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:16px;line-height:1.65;">'
 			. $body . $code . $action_html . $cta . $status_html . $management_html
-			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#eef2ff" style="width:100%;margin-top:20px;background:#eef2ff;border-radius:14px;"><tr><td style="padding:16px 20px;font-family:Arial,Helvetica,sans-serif;color:#333333;"><div style="font-size:15px;font-weight:700;margin-bottom:8px;">Assistenza</div><div style="font-size:14px;line-height:1.7;">' . $assistance . '</div></td></tr></table>'
-			. '<div style="font-family:Arial,Helvetica,sans-serif;color:' . esc_attr( $secondary ) . ';font-size:14px;font-style:italic;font-weight:700;margin-top:18px;text-align:right;">' . $footer . '</div>'
+			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#eef2ff" style="width:100%;margin-top:20px;background:#eef2ff;border-radius:14px;"><tr><td style="padding:16px 20px;font-family:Arial,Helvetica,sans-serif;color:#333333;"><div style="font-size:15px;font-weight:700;margin-bottom:8px;">Assistenza</div><div style="font-size:15px;line-height:1.7;">' . $assistance . '</div></td></tr></table>'
+			. '<div style="font-family:Arial,Helvetica,sans-serif;color:' . esc_attr( $secondary ) . ';font-size:14px;font-style:italic;font-weight:700;margin-top:18px;text-align:right;">' . ( $footer ?: esc_html( $identity['firma'] ?? '' ) ) . '</div>'
 			. '</td></tr></table>'
 			. ( $event_url ? '<div style="font-family:Arial,Helvetica,sans-serif;color:#666666;font-size:12px;line-height:1.4;margin-top:12px;text-align:center;">Se il pulsante non funziona, apri: <a href="' . $event_url . '" style="color:' . esc_attr( $secondary ) . ';">' . esc_html( $event_url ) . '</a></div>' : '' )
+			. '<div style="font-family:Arial,Helvetica,sans-serif;color:#6B7280;font-size:12px;line-height:1.6;margin-top:16px;text-align:center;">' . esc_html( $identity['nome'] ?? '' ) . ( ! empty( $identity['dettaglio'] ) ? '<br>' . esc_html( $identity['dettaglio'] ) : '' ) . ( ! empty( $identity['contatto'] ) ? '<br><a href="mailto:' . esc_attr( $identity['contatto'] ) . '" style="color:' . esc_attr( $primary ) . ';">' . esc_html( $identity['contatto'] ) . '</a>' : '' ) . '</div>'
 			. '</td></tr></table></body></html>';
 	}
 
+	private static function componi_html_istituzionale( $snapshot ) {
+		$title = sanitize_text_field( (string) ( $snapshot['titolo'] ?? $snapshot['oggetto'] ?? 'Comunicazione di segreteria' ) );
+		$event = sanitize_text_field( (string) ( $snapshot['evento']['titolo'] ?? '' ) );
+		$body = self::sanitizza_html_email( $snapshot['html'] ?? '' );
+		$actions = '';
+		foreach ( (array) ( $snapshot['azioni'] ?? array() ) as $action ) {
+			$url = esc_url( $action['url'] ?? '' ); $label = sanitize_text_field( $action['label'] ?? '' );
+			if ( $url && $label ) $actions .= '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:14px;"><tr><td bgcolor="#111827" style="border-radius:7px;"><a href="' . $url . '" style="display:inline-block;padding:12px 17px;font-family:Arial,Helvetica,sans-serif;color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:700;">' . esc_html( $label ) . '</a></td></tr></table>';
+		}
+		$preheader = sanitize_text_field( (string) ( $snapshot['preheader'] ?? '' ) );
+		return '<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' . esc_html( $title ) . '</title></head><body style="margin:0;padding:0;background:#F3F4F6;">'
+			. ( $preheader ? '<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">' . esc_html( $preheader ) . '</div>' : '' )
+			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#F3F4F6;"><tr><td align="center" style="padding:24px 12px;"><table role="presentation" width="680" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:680px;background:#FFFFFF;border:1px solid #D1D5DB;border-radius:10px;overflow:hidden;"><tr><td bgcolor="#E5E7EB" style="padding:22px 24px;border-bottom:1px solid #D1D5DB;"><div style="font-family:Arial,Helvetica,sans-serif;color:#374151;font-size:12px;line-height:1.4;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;">Segreteria parrocchiale · Portale eventi</div><h1 style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:23px;line-height:1.3;margin:7px 0 0;font-weight:700;">' . esc_html( $title ) . '</h1>' . ( $event ? '<div style="font-family:Arial,Helvetica,sans-serif;color:#4B5563;font-size:14px;line-height:1.5;margin-top:7px;">Evento: ' . esc_html( $event ) . '</div>' : '' ) . '</td></tr><tr><td style="padding:24px;font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:15px;line-height:1.6;">' . $body . $actions . '</td></tr></table><div style="font-family:Arial,Helvetica,sans-serif;color:#6B7280;font-size:12px;line-height:1.6;margin-top:14px;text-align:center;">Parrocchia di S. Eugenio · Viale delle Belle Arti 10, Roma</div></td></tr></table></body></html>';
+	}
+
 	public static function componi_testo( $istantanea ) {
+		if ( 'INSTITUTIONAL' === ( $istantanea['layout'] ?? '' ) ) {
+			$parts = array( sanitize_text_field( $istantanea['oggetto'] ?? '' ), ! empty( $istantanea['evento']['titolo'] ) ? 'Evento: ' . sanitize_text_field( $istantanea['evento']['titolo'] ) : '', sanitize_textarea_field( $istantanea['testo'] ?? '' ) );
+			foreach ( (array) ( $istantanea['azioni'] ?? array() ) as $action ) if ( ! empty( $action['label'] ) && ! empty( $action['url'] ) ) $parts[] = sanitize_text_field( $action['label'] ) . ': ' . esc_url_raw( $action['url'] );
+			return implode( "\n\n", array_filter( $parts ) );
+		}
 		$identity = isset( $istantanea['identita'] ) && is_array( $istantanea['identita'] ) ? $istantanea['identita'] : array();
 		$email_identity = isset( $istantanea['identita_email'] ) && is_array( $istantanea['identita_email'] ) ? $istantanea['identita_email'] : array();
 		$event = isset( $istantanea['evento'] ) && is_array( $istantanea['evento'] ) ? $istantanea['evento'] : array();
@@ -421,6 +553,12 @@ final class MI_Modello_Email {
 			'text'      => sanitize_textarea_field( wp_unslash( $_POST['mi_email_text'] ?? '' ) ),
 			'footer'    => sanitize_textarea_field( wp_unslash( $_POST['mi_email_footer'] ?? '' ) ),
 		);
+		$email_style = array();
+		if ( ! empty( $_POST['mi_email_event_identity_enabled'] ) ) $email_style = array( 'identity_name' => $_POST['mi_email_event_identity_name'] ?? '', 'identity_detail' => $_POST['mi_email_event_identity_detail'] ?? '', 'contact_email' => $_POST['mi_email_event_contact'] ?? '', 'signature' => $_POST['mi_email_event_signature'] ?? '' );
+		if ( ! empty( $_POST['mi_email_event_colors_enabled'] ) ) $email_style = array_merge( $email_style, array( 'primary_color' => $_POST['mi_email_event_primary'] ?? '', 'secondary_color' => $_POST['mi_email_event_secondary'] ?? '' ) );
+		if ( ! empty( $_POST['mi_email_event_banner_enabled'] ) ) $email_style['banner_url'] = $_POST['mi_email_event_banner'] ?? '';
+		$email_style = self::sanitizza_stile( wp_unslash( $email_style ) );
+		if ( $email_style ) update_post_meta( $post_id, '_mi_email_style', $email_style ); else delete_post_meta( $post_id, '_mi_email_style' );
 		$settings = self::aggiorna_segnaposto( $settings );
 		$unknown = self::trova_segnaposto_non_ammessi( $settings );
 		if ( $unknown ) {

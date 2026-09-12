@@ -16,7 +16,7 @@
   function init(root) {
     if(root.dataset.ready)return;root.dataset.ready='1';
     const content=root.querySelector('[data-management-content]'),status=root.querySelector('[data-management-status]'),select=root.querySelector('[data-event-select]');
-    let event=Number(root.dataset.event)>0?root.dataset.event:'',order=root.dataset.order,booking=null,busy=false,generation=0,pending=null,dirty=false;
+    let event=Number(root.dataset.event)>0?root.dataset.event:'',order=root.dataset.order,booking=null,busy=false,generation=0,pending=null,dirty=false,dirtyForm=null;
     const periodSelect=root.querySelector('[data-period-select]'),eventOptions=[...select.options].map(option=>option.cloneNode(true));
     let period=periodSelect?.value||'current';
     let printList=null,listResize=null;
@@ -48,24 +48,24 @@
       annualButton.disabled=true;annualStatus.textContent='Caricamento delle presenze registrate…';
       try{const result=await request('annual_report',{group_id:group,year:year.value,minimum:minimum.value});host.innerHTML='<table><thead><tr><th>Persona (nomi nelle iscrizioni collegate)</th><th>Eventi frequentati</th><th>Eventi</th><th>Iscrizioni di riferimento</th></tr></thead><tbody>'+result.items.map(person=>'<tr><td>'+esc(person.names.join(' / '))+'</td><td>'+person.count+'</td><td>'+person.events.map(esc).join('<br>')+'</td><td>'+person.records.map(record=>esc(record.code)+' · '+esc(record.name)+' (#'+record.id+')').join('<br>')+'</td></tr>').join('')+'</tbody></table>';annualStatus.textContent=result.items.length+' persone con almeno '+result.minimum+' eventi nel '+result.year+'. '+result.unrecorded+' iscrizioni individuali senza presenza rilevata. Le presenze sono riunite in base al cellulare personale.';const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent='Esporta rapporto annuale CSV';exportButton.onclick=()=>downloadCsv('presenze-'+result.year+'-gruppo-'+group+'.csv',[['Persona','Eventi frequentati','Eventi','Riferimenti'],...result.items.map(person=>[person.names.join(' / '),person.count,person.events.join(' · '),person.records.map(record=>record.code+' #'+record.id).join(' · ')])]);host.append(exportButton);}catch(error){host.replaceChildren();annualStatus.textContent='Rapporto non disponibile. '+error.message;}finally{annualButton.disabled=false;}
     };
+    const resolveDraft=()=>new Promise(resolve=>{const dialog=document.createElement('dialog');dialog.className='mi-management-confirm';dialog.innerHTML='<form method="dialog" novalidate><h2>Modifiche non salvate</h2><p>Vuoi salvare le modifiche prima di proseguire?</p><button value="stay" autofocus>Continua a modificare</button> <button value="discard">Annulla modifiche</button> <button value="save">Salva</button></form>';dialog.addEventListener('close',()=>{const choice=dialog.returnValue||'stay';dialog.remove();resolve(choice);});document.body.append(dialog);dialog.showModal();});
     const trackEdit=e=>{
       if(e.target.closest('[data-mi-payments]'))return;
-      e.target.removeAttribute('aria-invalid');const edited=e.target.closest('form');if(!edited)return;dirty=true;
-      content.querySelectorAll('form').forEach(form=>{if(form!==edited)form.querySelectorAll('input,select,textarea,button').forEach(control=>{if(!control.disabled){control.dataset.draftLocked='1';control.disabled=true;}});});
-      say('Modifiche non salvate. Salva questo modulo prima di modificare un’altra persona o una camera. Per scartarle usa Aggiorna riepilogo.');
+      e.target.removeAttribute('aria-invalid');const edited=e.target.closest('form');if(!edited)return;dirty=true;dirtyForm=edited;
+      say('Modifiche non salvate. Salva il modulo quando hai concluso.');
     };
     content.addEventListener('mi:payment-updated',e=>{const summary=content.querySelector('[data-booking-economics]');if(summary)summary.textContent=e.detail?'Totale '+money(e.detail.totale)+' · Versato '+money(e.detail.versato)+' · Residuo '+money(e.detail.residuo):'Movimento registrato. Aggiorna la scheda per verificare il saldo.';const history=content.querySelector('[data-booking-history]');if(history)history.remove();const deposit=content.querySelector('[data-booking-deposit]');if(deposit&&e.detail)deposit.textContent=depositText({...e.detail,balance:e.detail.residuo});});
     content.addEventListener('input',trackEdit);content.addEventListener('change',trackEdit);
     window.addEventListener('beforeunload',e=>{if(root.isConnected&&(dirty||pending||busy)){e.preventDefault();e.returnValue='';}});
-    document.addEventListener('click',e=>{
+    document.addEventListener('click',async e=>{
       if(!root.isConnected||(!dirty&&!pending&&!busy&&!paymentDraft()))return;
-      const target=e.target.closest('a,[data-mi-portal-booking-close],[data-mi-portal-booking-next],[data-mi-portal-booking-previous]');
+      const target=e.target.closest('a,[data-mi-portal-booking-close],[data-mi-portal-booking-next],[data-mi-portal-booking-previous],[data-open],[data-edit-inventory]');
       if(!target)return;e.preventDefault();e.stopImmediatePropagation();
       if(busy||pending||paymentDraft()){say('Completa o verifica il salvataggio prima di uscire.');return;}
-      ask('Le modifiche non salvate verranno perse.','Esci senza salvare').then(ok=>{if(ok){dirty=false;target.click();}});
+      const choice=await resolveDraft();if(choice==='save'){dirtyForm?.requestSubmit();return;}if(choice==='discard'){dirty=false;dirtyForm=null;target.click();}
     },true);
     document.addEventListener('keydown',e=>{if(root.isConnected&&(dirty||pending||busy||paymentDraft())&&(e.key==='Escape'||(['ArrowLeft','ArrowRight'].includes(e.key)&&!e.target.matches('input,textarea,select')))&&!document.querySelector('dialog[open]')){e.preventDefault();e.stopImmediatePropagation();say('Salva le modifiche oppure usa il comando di chiusura.');}},true);
-    async function canLeave(){if(paymentDraft()){say('Completa il movimento in corso prima di uscire dalla scheda.');return false;}if(pending||busy){say('Completa o verifica il salvataggio prima di cambiare pagina.');return false;}if(dirty&&!await ask('Le modifiche non salvate verranno perse.','Esci senza salvare'))return false;dirty=false;return true;}
+    async function canLeave(){if(paymentDraft()){say('Completa il movimento in corso prima di uscire dalla scheda.');return false;}if(pending||busy){say('Completa o verifica il salvataggio prima di cambiare pagina.');return false;}if(dirty){const choice=await resolveDraft();if(choice==='save'){dirtyForm?.requestSubmit();return false;}if(choice!=='discard')return false;}dirty=false;dirtyForm=null;return true;}
     async function summary(){
       if(!await canLeave())return;const ticket=++generation;order='';booking=null;printList=null;parkPanels();content.replaceChildren();const sheetLink=root.querySelector('[data-open-sheet]');if(sheetLink){sheetLink.hidden=true;sheetLink.removeAttribute('href');}if(!event){say('Scegli un evento.');return;}say('Caricamento riepilogo…');
       try{const data=await request('summary');if(ticket!==generation)return;
@@ -86,9 +86,9 @@
         const economicRows=features.payments?summaryGroup('Importi',summaryRow('Da incassare',money(receivable),receivable>0)+'<tr data-net-paid><th scope="row">Versato netto<small>Esclusi rimborsi effettuati</small></th><td>'+money(netPaid)+'</td></tr>'):'';
         const qualityRows=(sum('missing')>0?summaryRow('Partecipanti con dati mancanti',sum('missing'),true):'')+(features.rooms?summaryRow('Partecipanti senza camera',sum('unassigned'),sum('unassigned')>0):'');
         const summaryCards=[summaryCard('Persone iscritte',registeredPeople,features.deposit?'Caparra versata: '+people('CONFIRMED'):'Persone confermate: '+people('CONFIRMED')),features.payments?summaryCard('Da incassare',money(receivable),'Versato netto: '+money(netPaid),receivable>0):'',features.rooms?summaryCard('Senza camera',sum('unassigned'),sum('unassigned')?'Da assegnare':'Nessuna persona',sum('unassigned')>0):'',summaryCard('Dati mancanti',sum('missing'),sum('missing')?'Da completare':'Nessuna azione',sum('missing')>0),waitlistRows?summaryCard('Lista d’attesa',people('WAITLISTED')+people('WAITLIST_OFFERED'),people('WAITLIST_OFFERED')?'Posti proposti: '+people('WAITLIST_OFFERED'):'Nessuna persona'):'' ].filter(Boolean).join('');
-        content.innerHTML=`<section class="mi-management-summary-cards" aria-label="Riepilogo evento">${summaryCards}</section><p data-new-registration><a class="mi-primary mi-new-registration" href="${esc(data.registration_url||'#')}" target="_blank" rel="noopener">Inserisci una nuova iscrizione</a></p><label>Cerca nome o codice <input type="search" data-query></label><button data-clear-query>Cancella ricerca</button><div data-list></div>`;
+        content.innerHTML=`<section class="mi-management-summary" aria-label="Riepilogo evento"><h3>Riepilogo</h3><div class="mi-management-summary-cards">${summaryCards}</div></section><p data-new-registration><a class="mi-primary mi-new-registration" href="${esc(data.registration_url||'#')}" target="_blank" rel="noopener">Inserisci una nuova iscrizione</a></p><label>Cerca nome o codice <input type="search" data-query></label><button data-clear-query>Cancella ricerca</button><div data-list></div>`;
         const newRegistration=content.querySelector('[data-new-registration]');
-        if(eventActions){eventActions.hidden=false;newRegistration.before(eventActions);}
+        if(eventActions){eventActions.hidden=false;const actionBar=document.createElement('div');actionBar.className='mi-management-actionbar';newRegistration.before(actionBar);actionBar.append(eventActions,newRegistration);}
         if(!features.payments)content.querySelector('[data-net-paid]')?.setAttribute('hidden','');
 
         if(listEvent!==event){listContext={query:'',filter:'all',state:'',requests:'',deadline:'',room:'',service:'',sort:'name',view:'people',shown:30};listEvent=event;}
@@ -159,7 +159,7 @@
             const form=host.querySelector('form');
             const validateNumber=el=>{const type=types[el.dataset.roomType],number=el.value,target=number?type.prefix+Number(number):'',person=persons.find(p=>String(p.id)===el.dataset.roomPerson),room=rooms.find(r=>r.code===target),proposed=[...form.querySelectorAll('[data-room-person]')].filter(other=>{const otherPerson=persons.find(p=>String(p.id)===other.dataset.roomPerson);return other!==el&&other.dataset.roomType===el.dataset.roomType&&other.value===number&&otherPerson.room!==target;}).length,already=(room?admitted.filter(p=>p.room===target&&p.id!==person.id).length:0);el.setCustomValidity(number&&((type.individual&&already+proposed>0)||(!type.individual&&already+proposed>=Number(type.capacity)))?'Questo numero corrisponde a una camera già completa.':'');};
             form.onchange=e=>{if(!e.target.matches('[data-room-person]'))return;const input=e.target,type=types[input.dataset.roomType];validateNumber(input);input.closest('tr').querySelector('[data-room-preview]').textContent=input.value?type.prefix+input.value:'Da assegnare';};
-            form.querySelector('[data-discard-room-assignments]').onclick=()=>{if(busy||pending)return;dirty=false;content.querySelectorAll('[data-draft-locked]').forEach(el=>{el.disabled=false;delete el.dataset.draftLocked;});renderAssignments();say('Assegnazioni ripristinate. Nessuna modifica registrata.');};
+            form.querySelector('[data-discard-room-assignments]').onclick=()=>{if(busy||pending)return;dirty=false;dirtyForm=null;content.querySelectorAll('[data-draft-locked]').forEach(el=>{el.disabled=false;delete el.dataset.draftLocked;});renderAssignments();say('Assegnazioni ripristinate. Nessuna modifica registrata.');};
             form.onsubmit=e=>{
               e.preventDefault();e.stopPropagation();if(busy||pending)return;
               form.querySelectorAll('[data-room-person]').forEach(validateNumber);const invalid=[...form.querySelectorAll('[data-room-person]')].find(el=>!el.checkValidity());if(invalid){invalid.reportValidity();return;}
@@ -167,7 +167,7 @@
                 if(el.value===el.dataset.initial)continue;const person=persons.find(p=>String(p.id)===el.dataset.roomPerson);
                 const type=types[el.dataset.roomType];changes.push({order_code:person.code,number:person.number,key:'room',before:person.room||'',after:el.value?type.prefix+Number(el.value):'',type:el.dataset.roomType});
               }
-              if(!changes.length){dirty=false;content.querySelectorAll('[data-draft-locked]').forEach(el=>{el.disabled=false;delete el.dataset.draftLocked;});say('Nessuna assegnazione da modificare.');return;}
+              if(!changes.length){dirty=false;dirtyForm=null;content.querySelectorAll('[data-draft-locked]').forEach(el=>{el.disabled=false;delete el.dataset.draftLocked;});say('Nessuna assegnazione da modificare.');return;}
               if(changes.length>500){say('Salva al massimo 500 assegnazioni alla volta.');return;}
               mutate('room_assign',changes);
             };
@@ -184,18 +184,19 @@
             const person=admitted.find(p=>String(p.id)===label.querySelector('input').value);
             const option=(person.options||[]).find(o=>types[o.code]&&Number(o.quantity)>0);
             const assigned=person.room&&Object.entries(types).find(([,type])=>new RegExp('^'+type.prefix+'[1-9][0-9]{0,5}$').test(person.room));
-            const title=(assigned?assigned[1].name:(option?types[option.code].name:'Altra sistemazione'))+' · '+(person.room||'Camera da assegnare');
+            const typeCode=assigned?.[0]||option?.code,title=types[typeCode]?.name||'Altra sistemazione',code=person.room||((types[typeCode]?.prefix||'')+'—');
+            label.innerHTML='<input type="checkbox" name="person" value="'+person.id+'"><span class="mi-accommodation-person-code">'+esc(code)+'</span><span>'+esc(person.name)+'</span>';
             if(!personGroups.has(title))personGroups.set(title,[]);personGroups.get(title).push(label);
           }
           const peopleBox=changeForm.querySelector('fieldset');
           for(const [title,labels] of [...personGroups].sort(([a],[b])=>a.localeCompare(b,'it',{numeric:true}))){const heading=document.createElement('h4');heading.textContent=title;labels.forEach(label=>label.dataset.accommodationGroup=title);peopleBox.append(heading,...labels.sort((a,b)=>a.textContent.localeCompare(b.textContent,'it')));}
           const accommodationSearch=changeForm.querySelector('[data-accommodation-search]');accommodationSearch.oninput=()=>{const query=accommodationSearch.value.trim().toLocaleLowerCase('it');for(const label of peopleBox.querySelectorAll('.mi-accommodation-person'))label.hidden=!!query&&!((label.textContent+' '+label.dataset.accommodationGroup).toLocaleLowerCase('it').includes(query));for(const heading of peopleBox.querySelectorAll('h4')){let node=heading.nextElementSibling,visible=false;while(node&&!node.matches('h4')){if(!node.hidden)visible=true;node=node.nextElementSibling;}heading.hidden=!visible;}};
           const oldNumber=changeForm.elements.namedItem('number'),destination=document.createElement('select');destination.name='number';oldNumber.closest('label').firstChild.textContent='Camera di destinazione';oldNumber.replaceWith(destination);
-          destination.closest('label').nextElementSibling.textContent='Scegli una camera consultando occupanti e posti disponibili, oppure crea una nuova camera.';
+          destination.closest('label').nextElementSibling.textContent='Scegli una camera consultando occupanti e posti disponibili, oppure crea una nuova camera con numero automatico.';
           const refreshDestinations=()=>{
             const previous=destination.value,type=types[changeForm.elements.namedItem('type').value];
             const selected=new Set([...changeForm.querySelectorAll('[name=person]:checked')].map(el=>el.value));
-            destination.replaceChildren(new Option('Crea una nuova camera',''));
+            destination.replaceChildren(new Option('Crea nuova camera (numero automatico)',''));
             for(const room of rooms){
               const match=room.code.match(new RegExp('^'+type.prefix+'([1-9][0-9]{0,5})$'));if(!match)continue;
               const occupants=admitted.filter(p=>p.room===room.code),leaving=occupants.filter(p=>selected.has(String(p.id))).length;
@@ -207,7 +208,7 @@
           };
           changeForm.addEventListener('change',e=>{if(e.target.name==='type'||e.target.name==='person')refreshDestinations();});refreshDestinations();
           const invalidate=()=>{changePreview=null;previewHost.replaceChildren();};changeForm.addEventListener('input',invalidate);changeForm.addEventListener('change',invalidate);
-          changeForm.querySelector('[data-discard-accommodation]').onclick=()=>{if(busy||pending)return;changeForm.reset();refreshDestinations();invalidate();dirty=false;content.querySelectorAll('[data-draft-locked]').forEach(el=>{el.disabled=false;delete el.dataset.draftLocked;});say('Cambio annullato. Nessuna modifica registrata.');};
+          changeForm.querySelector('[data-discard-accommodation]').onclick=()=>{if(busy||pending)return;changeForm.reset();refreshDestinations();invalidate();dirty=false;dirtyForm=null;content.querySelectorAll('[data-draft-locked]').forEach(el=>{el.disabled=false;delete el.dataset.draftLocked;});say('Cambio annullato. Nessuna modifica registrata.');};
           changeForm.onsubmit=async e=>{
             e.preventDefault();e.stopPropagation();if(busy||pending)return;
             if(!changeForm.reportValidity())return;
@@ -255,8 +256,8 @@
         if(data.items.some(row=>String(row.requests||'').trim()))columns.push(['requests','Richieste particolari']);
         if(offers.length)columns.push(['offer_expires_at','Scadenza posto proposto (ora locale)']);
         if((data.people||[]).some(row=>['PRESENT','ABSENT'].includes(row.attendance?.state)))columns.push(['attendance','Presenza effettiva']);
-        const extraKeys=new Set(data.field_keys||(data.people||[]).flatMap(p=>Object.keys(p.fields||{})));for(const key of extraKeys)if(/^[a-z][a-z0-9_]{0,79}$/.test(key)&&data.field_labels?.[key])columns.push(['field:'+key,data.field_labels[key]]);
-        content.querySelector('[data-list]').insertAdjacentHTML('afterend','<section data-participant-reports><h3>Elenchi partecipanti</h3><details data-export-settings><summary>Scegli i dati per il tuo report</summary>'+columns.map(([key,label])=>'<label><input type="checkbox" data-export-column="'+esc(key)+'" checked> '+esc(label)+'</label>').join('')+'</details><div class="mi-booking-detail__actions" data-report-actions><button data-export>Esporta il tuo report (CSV)</button></div></section>');
+        const extraKeys=new Set(data.field_keys||(data.people||[]).flatMap(p=>Object.keys(p.fields||{})));for(const key of extraKeys){const label=data.field_labels?.[key]||'',contactField=/\b(e-?mail|posta elettronica|telefono|cellulare|cell\.)\b/i.test(label)||/^(participant_)?(e?mail|phone|mobile|telefono|cellulare)/i.test(key);if(/^[a-z][a-z0-9_]{0,79}$/.test(key)&&label&&!contactField)columns.push(['field:'+key,label]);}
+        content.querySelector('[data-list]').insertAdjacentHTML('afterend','<section data-participant-reports><header class="mi-report-heading"><h3>Elenchi partecipanti</h3><div class="mi-booking-detail__actions" data-report-actions><button data-export>Esporta CSV</button></div></header><details data-export-settings><summary>Scegli i dati del report</summary><div class="mi-report-columns">'+columns.map(([key,label])=>'<label><input type="checkbox" data-export-column="'+esc(key)+'" checked> '+esc(label)+'</label>').join('')+'</div></details></section>');
         if(printButton){printButton.textContent='Stampa';content.querySelector('[data-report-actions]').prepend(printButton);}
         if(annualPanel){
           annualPanel.hidden=!data.annual_report_group;annualPanel.open=false;root.append(annualPanel);
@@ -279,14 +280,13 @@
         const clearSearch=content.querySelector('[data-clear-query]');clearSearch.type='button';clearSearch.textContent='×';clearSearch.setAttribute('aria-label','Cancella ricerca');clearSearch.title='Cancella ricerca';
         const searchInputWrap=document.createElement('span');searchInputWrap.className='mi-search-input';search.before(searchInputWrap);searchInputWrap.append(search,clearSearch);
         const searchStatus=document.createElement('span');searchStatus.setAttribute('role','status');searchStatus.setAttribute('aria-live','polite');filterSection.querySelector('header').append(searchStatus);
-        content.querySelector('[data-participant-reports]').before(newRegistration);
         if(features.rooms){
-          const roomSection=document.createElement('details');roomSection.dataset.roomSection='';roomSection.innerHTML='<summary>Gestione camere</summary>';newRegistration.before(roomSection);
+          const roomSection=document.createElement('details');roomSection.dataset.roomSection='';roomSection.innerHTML='<summary>Gestione camere</summary>';listHost.after(roomSection);
           const planner=content.querySelector('[data-room-planner]');if(planner){planner.querySelector('h3')?.remove();roomSection.append(planner);}
           for(const selector of ['[data-room-inventory]','[data-room-occupants]']){const panel=content.querySelector(selector);if(panel&&!panel.hidden)roomSection.append(panel);}
         }
         const servicePanels=[...content.querySelectorAll('[data-person-services],[data-order-services]')];
-        if(servicePanels.length){const serviceSection=document.createElement('details');serviceSection.dataset.serviceSummary='';serviceSection.innerHTML='<summary>Riepilogo servizi richiesti</summary>';content.append(serviceSection);servicePanels.forEach(panel=>serviceSection.append(panel));}
+        if(servicePanels.length){const serviceSection=document.createElement('details');serviceSection.dataset.serviceSummary='';serviceSection.innerHTML='<summary>Riepilogo servizi richiesti</summary>';content.querySelector('[data-participant-reports]').append(serviceSection);servicePanels.forEach(panel=>serviceSection.append(panel));}
         let exportRows=[],pageRows=[],pageTotal=0,pageFingerprint='',listGeneration=0;
         const readAll=async()=>{
           if(!data.server_paging)return exportRows;
@@ -504,7 +504,7 @@
       if(busy)return;busy=true;
       root.querySelectorAll('button,input,select,textarea').forEach(el=>{el.dataset.wasDisabled=el.disabled?'1':'0';el.disabled=true;});
       pending=pending||{operation,data:JSON.stringify(data),version:booking.version,request_id:crypto.randomUUID()};say('Salvataggio…');
-      try{const result=await request(pending.operation,pending);if(result.saved===false){if(result.rejected){pending=null;say(result.message);return;}throw new Error(result.message);}pending=null;dirty=false;busy=false;if(order)await detail(order);else await summary();say(result.message||'Modifica salvata.');}
+      try{const result=await request(pending.operation,pending);if(result.saved===false){if(result.rejected){pending=null;say(result.message);return;}throw new Error(result.message);}pending=null;dirty=false;dirtyForm=null;busy=false;if(order)await detail(order);else await summary();say(result.message||'Modifica salvata.');}
       catch(e){say('Salvataggio non confermato: '+e.message);const retry=document.createElement('button');retry.textContent='Riprova lo stesso salvataggio';retry.onclick=()=>mutate(operation,data);status.append(' ',retry);const reload=document.createElement('button');reload.textContent='Ricarica la scheda';reload.onclick=async()=>{if(!await ask('Ricaricare i dati? Le modifiche non salvate verranno perse.','Ricarica la scheda'))return;pending=null;dirty=false;if(order)detail(order);else summary();};status.append(' ',reload);}
       finally{busy=false;select.disabled=false;root.querySelectorAll('[data-was-disabled]').forEach(el=>{el.disabled=el.dataset.wasDisabled==='1';delete el.dataset.wasDisabled;});}
     }

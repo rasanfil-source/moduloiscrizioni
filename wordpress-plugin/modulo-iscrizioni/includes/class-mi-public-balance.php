@@ -128,7 +128,7 @@ final class MI_Public_Balance {
 		foreach ( $receipt['people'] as $person ) if ( ! empty( $person['missing'] ) ) $text .= "\n\nPrima dell’evento — " . $person['name'] . ': ' . implode( ', ', $person['missing'] ) . '. Rispondi a questa email con le informazioni richieste.';
 		$snapshot = MI_Modello_Email::crea_istantanea( $event, array() );
 		$snapshot['attivo'] = true; $snapshot['oggetto'] = 'Ecco il tuo saldo e le istruzioni di pagamento — ' . get_the_title( $event ); $snapshot['testo'] = $text;
-		$snapshot['layout'] = 'PUBLIC_BALANCE'; $snapshot['html'] = self::email_html( $event, $receipt, $payment );
+		$snapshot['titolo'] = 'Riepilogo della prenotazione'; $snapshot['preheader'] = 'Importi, scadenze e indicazioni aggiornate.'; $snapshot['html'] = self::email_body( $event, $receipt, $payment );
 		$snapshot['identita_email']['indirizzo_risposte'] = $payment['contact'];
 		$snapshot['identificativo'] = array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' );
 		$status = MI_Spedizione_Email::stato_nuova_email( $snapshot );
@@ -136,7 +136,7 @@ final class MI_Public_Balance {
 		if ( false === $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->prefix}mi_email_outbox (registration_id,recipient,template_type,origin_key,payload_json,status,created_at) VALUES (%d,%s,'PUBLIC_BALANCE',%s,%s,%s,%s)", $registration, $receipt['email'], $key, $payload, $status, current_time( 'mysql', true ) ) ) ) throw new RuntimeException( 'Riepilogo non archiviato. Riprova.' );
 		return 'PENDING' === $status;
 	}
-	public static function email_html( $event, $receipt, $payment ) {
+	private static function email_body( $event, $receipt, $payment ) {
 		$money = static function ( $c ) { return number_format( $c / 100, 2, ',', '.' ) . ' €'; };
 		$rows = ''; $missing = ''; $deadlines = array();
 		foreach ( $receipt['people'] as $person ) {
@@ -150,11 +150,16 @@ final class MI_Public_Balance {
 		if ( $receipt['deposit'] ) $costs += array( 'Caparra versata' => $receipt['depositPaid'], 'Caparra da versare' => $receipt['depositDue'], 'Saldo da versare' => $receipt['saldoDue'] );
 		$costs += array( 'Versato (esclusi rimborsi effettuati)' => $receipt['paid'], 'Totale da versare' => $receipt['balance'] );
 		$cost_html = ''; foreach ( $costs as $label => $value ) $cost_html .= '<tr><td style="padding:8px 0;color:#4a5568">' . esc_html( $label ) . '</td><td style="padding:8px 0;text-align:right;font-weight:600">' . esc_html( $money( $value ) ) . '</td></tr>';
-		$html = '<!doctype html><html><head><meta charset="utf-8"></head><body style="font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;background:#f5f5f5;margin:0;padding:20px"><div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px #0002"><div style="background:linear-gradient(135deg,#1a365d,#2c5282);color:#fff;padding:30px;text-align:center"><h1 style="margin:0;font-size:24px">' . esc_html( get_the_title( $event ) ) . '</h1><p>Riepilogo della tua prenotazione</p><p style="font-size:12px">Emesso il ' . esc_html( current_time( 'd/m/Y H:i' ) ) . '</p></div><div style="padding:30px"><h2 style="color:#1a365d;font-size:18px">Partecipanti</h2><table style="width:100%;border-collapse:collapse;margin-bottom:25px">' . $rows . '</table><div style="background:#f7fafc;border-radius:8px;padding:20px;margin-bottom:25px"><table style="width:100%">' . $cost_html . '</table></div>';
+		$html = '<p style="color:#64748B;font-size:13px">Emesso il ' . esc_html( current_time( 'd/m/Y H:i' ) ) . '</p><h2 style="font-size:18px">Partecipanti</h2><table style="width:100%;border-collapse:collapse;margin-bottom:25px">' . $rows . '</table><div style="background:#f7fafc;border-radius:8px;padding:20px;margin-bottom:25px"><table style="width:100%">' . $cost_html . '</table></div>';
 		if ( $deadlines && $receipt['balance'] > 0 ) $html .= '<div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:15px;border-radius:0 8px 8px 0;margin-bottom:25px"><strong>Scadenza indicata:</strong> ' . esc_html( implode( ' · ', array_unique( $deadlines ) ) ) . '</div>';
 		if ( $receipt['balance'] > 0 && in_array( 'BANK_TRANSFER', $payment['methods'], true ) ) $html .= '<h2 style="color:#1a365d;font-size:18px">Coordinate per il bonifico</h2><div style="background:#ebf8ff;border-radius:8px;padding:20px"><p><strong>Intestatario:</strong> ' . esc_html( $payment['holder'] ) . '</p><p><strong>IBAN:</strong> <code style="background:#fff;padding:4px 11px;border-radius:4px;font-size:16px;user-select:all">' . esc_html( $payment['iban'] ) . '</code></p><p><strong>Causale:</strong> ' . esc_html( $receipt['causale'] ) . '</p></div>';
 		if ( $missing ) $html .= '<div style="background:#f9fafb;border-left:6px solid #f59e0b;border-radius:10px;padding:20px 22px;margin-top:32px"><h3>📍 Prima dell’evento…</h3><p>Per completare al meglio l’organizzazione, ci manca ancora qualche informazione:</p>' . $missing . '<p>È sufficiente rispondere a questa email con le informazioni richieste.<br>Grazie per la collaborazione 💛</p></div>';
-		return $html . '</div><div style="background:#f7fafc;padding:20px;text-align:center;border-top:1px solid #e2e8f0"><p>Grazie!</p><a href="mailto:' . esc_html( $payment['contact'] ) . '">' . esc_html( $payment['contact'] ) . '</a></div></div></body></html>';
+		return $html;
+	}
+	public static function email_html( $event, $receipt, $payment ) {
+		$snapshot = MI_Modello_Email::crea_istantanea( $event, array() );
+		$snapshot['attivo'] = true; $snapshot['oggetto'] = 'Riepilogo — ' . get_the_title( $event ); $snapshot['titolo'] = 'Riepilogo della prenotazione'; $snapshot['html'] = self::email_body( $event, $receipt, $payment );
+		return MI_Modello_Email::componi_html( $snapshot );
 	}
 	public static function save( $event, $data, $preview = false ) {
 		global $wpdb;
