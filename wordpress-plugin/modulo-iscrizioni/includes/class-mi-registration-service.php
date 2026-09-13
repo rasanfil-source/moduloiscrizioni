@@ -1118,6 +1118,8 @@ final class MI_Registration_Service {
 	}
 
 	private static function sync_workspace_safely( $registration_id ) {
+		$retry_key = 'mi_workspace_retry_' . absint( $registration_id );
+		if ( get_transient( $retry_key ) ) return 'PENDING';
 		static $started = null;
 		if ( null === $started ) $started = microtime( true );
 		// Un cron può contenere molte richieste arretrate: non concatenare chiamate
@@ -1127,10 +1129,19 @@ final class MI_Registration_Service {
 			return 'PENDING';
 		}
 		try {
-			return self::sync_workspace( $registration_id );
+			$result = self::sync_workspace( $registration_id );
 		} catch ( Throwable $sync_error ) {
-			return 'PENDING';
+			$result = 'PENDING';
 		}
+		if ( 'PENDING' === $result ) {
+			global $wpdb;
+			$attempts = absint( $wpdb->get_var( $wpdb->prepare( "SELECT workspace_attempts FROM {$wpdb->prefix}mi_registrations WHERE id = %d", $registration_id ) ) );
+			$delay = min( 3600, 30 * ( 2 ** min( $attempts, 7 ) ) );
+			set_transient( $retry_key, 1, $delay );
+			$args = array( absint( $registration_id ) );
+			if ( ! wp_next_scheduled( 'mi_sync_workspace_registration', $args ) ) wp_schedule_single_event( time() + $delay, 'mi_sync_workspace_registration', $args );
+		} else delete_transient( $retry_key );
+		return $result;
 	}
 
 	private static function validate_selection( $event, $raw_tickets ) {

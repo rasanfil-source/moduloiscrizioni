@@ -1587,7 +1587,7 @@ test('la pubblicazione inizializza rapidamente il foglio e recupera un 404 trans
   const fogli = await readFile(new URL('../../workspace-apps-script/src/FogliOperativi.gs', import.meta.url), 'utf8');
   const segreteria = await readFile(new URL('../../workspace-apps-script/src/Segreteria.gs', import.meta.url), 'utf8');
   assert.match(portal, /'profilo_operativo'/);
-  assert.match(client, /404 === \$http_status[\s\S]*PREPARA_PRODUZIONI_EVENTO[\s\S]*self::request\( \$action, \$payload, 1 \)/);
+  assert.match(client, /404 === \$http_status[\s\S]*PREPARA_PRODUZIONI_EVENTO[\s\S]*self::request_unlocked\( \$action, \$payload, 1 \)/);
   assert.match(client, /PREPARA_PRODUZIONI_EVENTO' === \$action \? 240/);
   assert.match(portal, /VERIFICA_FOGLIO_EVENTO[\s\S]*'recuperato'\s*=>\s*true[\s\S]*PREPARA_PRODUZIONI_EVENTO/);
   assert.match(fogli, /generaVistaOperativaIniziale_/);

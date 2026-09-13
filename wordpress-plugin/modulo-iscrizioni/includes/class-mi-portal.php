@@ -18,6 +18,7 @@ final class MI_Portal {
 		add_action( 'send_headers', array( __CLASS__, 'secure_cancellation_headers' ) );
 		add_action( 'mi_pulisci_bozze_cestinate', array( __CLASS__, 'purge_trashed_drafts' ) );
 		add_action( 'mi_pulisci_bozze_cestinate', array( __CLASS__, 'archive_completed_event_sheets' ), 20 );
+		add_action( 'mi_sync_workspace_event', array( __CLASS__, 'sincronizza_evento_in_coda' ) );
 	}
 
 	/** Il portale autonomo non usa gli articoli della home; le query delle schede restano normali. */
@@ -304,8 +305,8 @@ final class MI_Portal {
 		if ( $is_published_edit ) {
 			$revision = MI_Registration_Service::ensure_published_revision( $event_id, true );
 			if ( ! $revision ) return self::redirect_result( 'Le modifiche sono state salvate, ma non è stato possibile aggiornare la configurazione pubblica. Riprova.', true, $event_id );
-			$workspace = self::prepara_produzioni_workspace( $event_id, 'PUBBLICATO' );
-			if ( is_wp_error( $workspace ) ) return self::redirect_result( 'Le modifiche sono state salvate in WordPress; il foglio Google non è ancora allineato: ' . $workspace->get_error_message(), true, $event_id );
+			self::accoda_evento_workspace( $event_id );
+			$success_message = 'Salvato in WordPress · sincronizzazione Google in attesa.';
 		}
 		self::redirect_result( $upload_warning ? $success_message . ' Immagine non caricata: ' . $upload_warning : $success_message, false, $event_id, ! $is_published_edit );
 	}
@@ -337,6 +338,40 @@ final class MI_Portal {
 	}
 
 	/** Crea o riallinea il foglio operativo e conserva tutti i collegamenti restituiti. */
+	private static function accoda_evento_workspace( $event_id ) {
+		update_post_meta( $event_id, '_mi_workspace_event_pending', wp_generate_uuid4() );
+		update_post_meta( $event_id, '_mi_workspace_event_attempts', 0 );
+		delete_post_meta( $event_id, '_mi_workspace_event_error' );
+		self::pianifica_evento_workspace( $event_id, 30 );
+	}
+
+	private static function pianifica_evento_workspace( $event_id, $delay ) {
+		$args = array( absint( $event_id ) );
+		if ( ! wp_next_scheduled( 'mi_sync_workspace_event', $args ) ) wp_schedule_single_event( time() + $delay, 'mi_sync_workspace_event', $args );
+	}
+
+	public static function sincronizza_evento_in_coda( $event_id ) {
+		$event_id = absint( $event_id );
+		$token = (string) get_post_meta( $event_id, '_mi_workspace_event_pending', true );
+		if ( ! $token || 'publish' !== get_post_status( $event_id ) ) return;
+		// Legge sempre la configurazione corrente, accorpando i salvataggi ravvicinati.
+		$result = self::prepara_produzioni_workspace( $event_id, 'PUBBLICATO' );
+		if ( $token !== (string) get_post_meta( $event_id, '_mi_workspace_event_pending', true ) ) {
+			self::pianifica_evento_workspace( $event_id, 30 );
+			return;
+		}
+		if ( ! is_wp_error( $result ) ) {
+			delete_post_meta( $event_id, '_mi_workspace_event_pending', $token );
+			delete_post_meta( $event_id, '_mi_workspace_event_error' );
+			delete_post_meta( $event_id, '_mi_workspace_event_attempts' );
+			return;
+		}
+		$attempts = 1 + absint( get_post_meta( $event_id, '_mi_workspace_event_attempts', true ) );
+		update_post_meta( $event_id, '_mi_workspace_event_attempts', $attempts );
+		update_post_meta( $event_id, '_mi_workspace_event_error', sanitize_text_field( $result->get_error_message() ) );
+		self::pianifica_evento_workspace( $event_id, min( 3600, 30 * ( 2 ** min( $attempts, 7 ) ) ) );
+	}
+
 	private static function prepara_produzioni_workspace( $event_id, $stato ) {
 		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( $event_id ); if ( is_wp_error( $lease ) ) return $lease; }
 		$event = get_post( $event_id );
@@ -628,9 +663,12 @@ final class MI_Portal {
 			$title = sanitize_text_field( wp_unslash( $_POST['title'] ?? '' ) );
 			if ( ! $title ) return self::redirect_result( 'Il titolo è obbligatorio.', true, $event_id );
 			$starts_at = sanitize_text_field( wp_unslash( $_POST['starts_at'] ?? '' ) );
+			$opens_at = sanitize_text_field( wp_unslash( $_POST['opens_at'] ?? get_post_meta( $event_id, '_mi_registration_opens_at', true ) ) );
+			$open_date = $opens_at ? DateTimeImmutable::createFromFormat( '!Y-m-d\TH:i', $opens_at, wp_timezone() ) : null;
 			$closes_at = sanitize_text_field( wp_unslash( $_POST['closes_at'] ?? '' ) );
 			$start_date = $starts_at ? DateTimeImmutable::createFromFormat( '!Y-m-d\TH:i', $starts_at, wp_timezone() ) : null;
 			$close_date = $closes_at ? DateTimeImmutable::createFromFormat( '!Y-m-d\TH:i', $closes_at, wp_timezone() ) : null;
+			if ( ( $opens_at && ! $open_date ) || ( $open_date && $close_date && $open_date > $close_date ) ) return self::redirect_result( 'L’inizio delle iscrizioni non può seguire la chiusura.', true, $event_id );
 			if ( ( $starts_at && ! $start_date ) || ( $closes_at && ! $close_date ) || ( $start_date && $close_date && $close_date > $start_date ) ) return self::redirect_result( 'Controlla le date: la chiusura delle iscrizioni non può seguire l’inizio dell’evento.', true, $event_id );
 			$now_minute = DateTimeImmutable::createFromFormat( '!Y-m-d\TH:i', current_time( 'Y-m-d\TH:i' ), wp_timezone() );
 			if ( $close_date && $now_minute && $close_date < $now_minute ) return self::redirect_result( 'La chiusura delle iscrizioni non può essere precedente a questo momento.', true, $event_id );
@@ -638,7 +676,12 @@ final class MI_Portal {
 			update_post_meta( $event_id, '_mi_event_location', mb_substr( sanitize_text_field( wp_unslash( $_POST['location'] ?? '' ) ), 0, 180 ) );
 			update_post_meta( $event_id, '_mi_capacity', min( 10000, max( 1, absint( $_POST['capacity'] ?? 1 ) ) ) );
 			self::save_date( $event_id, '_mi_event_starts_at', $starts_at );
+			self::save_date( $event_id, '_mi_registration_opens_at', $opens_at );
 			self::save_date( $event_id, '_mi_registration_closes_at', $closes_at );
+			if ( 'publish' === get_post_status( $event_id ) ) {
+				MI_Registration_Service::ensure_published_revision( $event_id, true );
+				self::accoda_evento_workspace( $event_id );
+			}
 			return self::redirect_result( 'Dettagli dell’evento aggiornati.', false, $event_id );
 		}
 		if ( empty( $_POST['confirm_cancellation'] ) ) return self::redirect_result( 'Conferma esplicitamente l’annullamento dell’evento.', true, $event_id );
@@ -1354,6 +1397,7 @@ final class MI_Portal {
 		$event = get_post( $event_id );
 		if ( ! $event || ! MI_Access::can_access_event( $event_id ) ) return;
 		$starts_at = (string) get_post_meta( $event_id, '_mi_event_starts_at', true );
+		$opens_at = (string) get_post_meta( $event_id, '_mi_registration_opens_at', true );
 		$closes_at = (string) get_post_meta( $event_id, '_mi_registration_closes_at', true );
 		$location = (string) get_post_meta( $event_id, '_mi_event_location', true );
 		$capacity = max( 1, absint( get_post_meta( $event_id, '_mi_capacity', true ) ) );
@@ -1372,9 +1416,13 @@ final class MI_Portal {
 		echo '<section class="mi-event-management" data-mi-selected-event tabindex="-1"><a class="mi-event-management__back" href="' . esc_url( $list_url ) . '" aria-label="Comprimi la scheda dell’evento" title="Comprimi la scheda"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 11 6-6 6 6M6 18l6-6 6 6"/></svg></a><div class="mi-event-management__heading"><div><span class="mi-portal-eyebrow">Evento selezionato</span><h2>' . esc_html( $event->post_title ) . '</h2></div><span class="mi-event-management__state">' . esc_html( $cancelled ? 'Annullato' : ( $expired ? 'Scaduto' : ( 'publish' === $event->post_status ? 'Attivo' : 'Bozza' ) ) ) . '</span></div>';
 		echo '<p><a class="mi-primary" href="' . esc_url( MI_Portal_Management::url( $event_id ) ) . '">Gestisci iscrizioni di questo evento</a></p>';
 		if ( $cancelled ) { echo '<div class="mi-portal-notice mi-portal-error"><strong>Evento annullato</strong><p>La scheda e le iscrizioni sono conservate nello storico.</p></div></section>'; return; }
+		if ( get_post_meta( $event_id, '_mi_workspace_event_pending', true ) ) {
+			echo '<p class="mi-portal-muted" role="status">Salvato in WordPress · sincronizzazione Google in attesa. I tentativi proseguono automaticamente.</p>';
+			if ( absint( get_post_meta( $event_id, '_mi_workspace_event_attempts', true ) ) >= 3 ) echo '<p class="mi-portal-error">Google non è ancora allineato: ' . esc_html( get_post_meta( $event_id, '_mi_workspace_event_error', true ) ) . '</p>';
+		}
 		echo '<details open><summary>Dettagli principali</summary><form class="mi-event-management__form" method="post" data-mi-event-quick-form><input type="hidden" name="mi_portal_action" value="update_event"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
 		wp_nonce_field( 'mi_portal_manage_event_' . $event_id, 'mi_portal_nonce' );
-		echo '<label>Titolo<input name="title" maxlength="180" required value="' . esc_attr( $event->post_title ) . '"></label><label>Luogo<input name="location" maxlength="180" value="' . esc_attr( $location ) . '"></label><div class="mi-wizard-grid"><label>Data e ora di inizio<input type="datetime-local" name="starts_at" value="' . esc_attr( $starts_at ) . '"></label><label>Chiusura iscrizioni<input type="datetime-local" name="closes_at" value="' . esc_attr( $closes_at ) . '"></label><label>Posti disponibili<input type="number" min="1" max="10000" name="capacity" value="' . esc_attr( $capacity ) . '"></label></div><button class="mi-primary" type="submit" data-mi-event-quick-submit>Salva modifiche</button></form>';
+		echo '<label>Titolo<input name="title" maxlength="180" required value="' . esc_attr( $event->post_title ) . '"></label><label>Luogo<input name="location" maxlength="180" value="' . esc_attr( $location ) . '"></label><div class="mi-event-management__dates"><label>Inizio evento<input type="datetime-local" name="starts_at" value="' . esc_attr( $starts_at ) . '"></label><label>Inizio iscrizioni<input type="datetime-local" name="opens_at" value="' . esc_attr( $opens_at ) . '"></label><label>Chiusura iscrizioni<input type="datetime-local" name="closes_at" value="' . esc_attr( $closes_at ) . '"></label><label>Posti disponibili<input type="number" min="1" max="10000" name="capacity" value="' . esc_attr( $capacity ) . '"></label></div><button class="mi-primary" type="submit" data-mi-event-quick-submit>Salva modifiche</button></form>';
 		if ( $registration_url ) {
 			echo '<div class="mi-event-management__registration"><strong>Link per le iscrizioni</strong><div class="mi-output-copy mi-event-registration-link"><input type="url" readonly aria-label="Link per le iscrizioni" value="' . esc_attr( $registration_url ) . '"><button type="button" class="mi-secondary" data-mi-copy="' . esc_attr( $registration_url ) . '">Copia</button><button type="button" class="mi-event-link-share" data-mi-share="' . esc_attr( $registration_url ) . '" data-mi-share-title="' . esc_attr( $event->post_title ) . '" aria-label="Condividi il link per le iscrizioni" title="Condividi il link per le iscrizioni"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="M8.2 10.8l7.6-4.5M8.2 13.2l7.6 4.5"></path></svg></button><a class="mi-secondary mi-output-link" href="' . esc_url( $registration_url ) . '" target="_blank" rel="noopener noreferrer">Apri <span aria-hidden="true">↗</span></a></div></div>';
 		}

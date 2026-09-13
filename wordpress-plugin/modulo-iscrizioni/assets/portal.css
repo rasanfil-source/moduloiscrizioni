@@ -136,3 +136,7 @@
 .mi-email-appearance>p,.mi-email-appearance>label,.mi-email-appearance>div{margin-left:18px;margin-right:18px}
 .mi-email-appearance>.mi-check{display:flex;margin-top:22px;margin-bottom:12px;padding:13px 14px;gap:10px;align-items:center;background:#fff;border:1px solid #d8dee9;border-radius:9px}
 .mi-email-appearance+.mi-check{display:flex;margin-top:28px;margin-bottom:12px;padding-top:20px;gap:10px;align-items:center;border-top:1px solid #d8dee9}
+.mi-event-management__dates{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:flex-end}
+.mi-event-management__dates>label{flex:0 1 240px;min-width:0;max-width:100%}
+.mi-event-management__dates>label:last-child{flex-basis:150px}
+.mi-event-management__dates input{width:100%;min-width:0;box-sizing:border-box}
