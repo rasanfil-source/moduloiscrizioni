@@ -134,7 +134,7 @@ final class MI_Public_Balance {
 		$status = MI_Spedizione_Email::stato_nuova_email( $snapshot );
 		$payload = wp_json_encode( array( 'event_id' => $event, 'template_type' => 'PUBLIC_BALANCE', 'email_preview' => $snapshot ) );
 		if ( false === $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->prefix}mi_email_outbox (registration_id,recipient,template_type,origin_key,payload_json,status,created_at) VALUES (%d,%s,'PUBLIC_BALANCE',%s,%s,%s,%s)", $registration, $receipt['email'], $key, $payload, $status, current_time( 'mysql', true ) ) ) ) throw new RuntimeException( 'Riepilogo non archiviato. Riprova.' );
-		return 'PENDING' === $status;
+		return MI_Spedizione_Email::email_da_spedire( $status );
 	}
 	private static function email_body( $event, $receipt, $payment ) {
 		$money = static function ( $c ) { return number_format( $c / 100, 2, ',', '.' ) . ' €'; };

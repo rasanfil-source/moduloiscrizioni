@@ -602,12 +602,17 @@ test('la coda email resta sicura fino all’attivazione operativa', async () => 
   assert.match(sender, /prova_verificata/);
   assert.match(sender, /wp_mail\s*\(/);
   assert.match(sender, /MI-PROVA-0001/);
+  assert.match(sender, /'PROVA' === self::modalita\(\).*'TEST_PENDING'/s);
+  assert.match(sender, /\$destinatario = \$invio_prova \? \$destinatario_prova : \$riga\['recipient'\]/);
+  assert.match(sender, /Destinatario originale:/);
+  assert.match(sender, /\['oggetto'\] = '\[PROVA\] '/);
+  assert.match(sender, /TEST_SENDING/);
 });
 
 test('la spedizione usa una coda acquisita atomicamente e tentativi limitati', async () => {
   const sender = await read('includes/class-mi-spedizione-email.php');
   const activator = await read('includes/class-mi-activator.php');
-  assert.match(sender, /status = 'SENDING'.*status = 'PENDING'/s);
+  assert.match(sender, /status = %s.*status = %s/s);
   assert.match(sender, /attempts < 5/);
   assert.match(sender, /'SENT'/);
   assert.match(sender, /'FAILED'/);
@@ -628,7 +633,7 @@ test('le email fallite possono essere riaccodate con protezione amministrativa',
   const sender = await read('includes/class-mi-spedizione-email.php');
   const admin = await read('includes/class-mi-admin.php');
   assert.match(sender, /admin_post_mi_riaccoda_email/);
-  assert.match(sender, /status IN \('FAILED', 'SENDING'\)/);
+  assert.match(sender, /status IN \('FAILED', 'SENDING', 'TEST_FAILED', 'TEST_SENDING'\)/);
   assert.match(sender, /attempts = 0/);
   assert.match(sender, /check_admin_referer/);
   assert.match(admin, /mi_riaccoda_email/);

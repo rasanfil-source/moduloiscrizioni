@@ -453,7 +453,7 @@ final class MI_Registration_Service {
 				}
 			}
 			$wpdb->query( 'COMMIT' );
-			if ( 'PENDING' === $email_status ) {
+			if ( MI_Spedizione_Email::email_da_spedire( $email_status ) ) {
 				MI_Spedizione_Email::pianifica_spedizione();
 			}
 			$workspace_status = self::accoda_sincronizzazione_workspace( $registration_id, 'PENDING' );
