@@ -110,7 +110,31 @@ final class MI_Modello_Email {
 			'footer'    => 'A presto!',
 		);
 		$saved = get_post_meta( $event_id, '_mi_email_template', true );
-		return self::aggiorna_segnaposto( array_merge( $defaults, is_array( $saved ) ? $saved : array() ) );
+		$settings = self::aggiorna_segnaposto( array_merge( $defaults, is_array( $saved ) ? $saved : array() ) );
+		$settings['html'] = self::uniforma_grafica_corpo( $settings['html'] );
+		return $settings;
+	}
+
+	/** Uniforma anche i modelli storici senza modificarne il testo personalizzato. */
+	private static function uniforma_grafica_corpo( $html ) {
+		$html = (string) $html;
+		$etichette = 'Quando:|Dove:|Codice iscrizione:|Stato:';
+		$html = (string) preg_replace( '#(?<!<strong>)(' . $etichette . ')(?!</strong>)#u', '<strong>$1</strong>', $html );
+		return (string) preg_replace_callback( '#<p\b([^>]*)>(.*?)</p>#is', static function ( $match ) {
+			$attributes = $match[1];
+			$margin = false !== stripos( $match[2], 'Conserva questa email:' ) ? '24px 0 0' : '0 0 16px';
+			if ( preg_match( '/\bstyle=([\'\"])(.*?)\1/is', $attributes ) ) {
+				$attributes = (string) preg_replace_callback( '/\bstyle=([\'\"])(.*?)\1/is', static function ( $style ) use ( $margin ) {
+					$declarations = preg_match( '/(?:^|;)\s*margin\s*:/i', $style[2] )
+						? preg_replace( '/(?:^|;)\s*margin\s*:[^;]*/i', ';margin:' . $margin, $style[2], 1 )
+						: rtrim( $style[2], '; ' ) . ';margin:' . $margin . ';';
+					return 'style=' . $style[1] . $declarations . $style[1];
+				}, $attributes, 1 );
+			} else {
+				$attributes .= ' style="margin:' . $margin . ';"';
+			}
+			return '<p' . $attributes . '>' . $match[2] . '</p>';
+		}, $html );
 	}
 
 	private static function aggiorna_segnaposto( $settings ) {
@@ -409,9 +433,9 @@ final class MI_Modello_Email {
 		$preheader = ! empty( $istantanea['preheader'] ) ? '<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">' . esc_html( $istantanea['preheader'] ) . '</div>' : '';
 		$logo = '';
 		if ( ! empty( $identity['logo_url'] ) ) {
-			$logo = '<img src="' . esc_url( $identity['logo_url'] ) . '" alt="' . esc_attr( $identity['logo_alt'] ?: ( $identity['nome_attivita'] ?? '' ) ) . '" width="54" height="54" style="display:block;width:54px;height:54px;border:3px solid #ffffff;border-radius:50%;object-fit:cover;background:#ffffff;box-shadow:0 1px 4px rgba(0,0,0,.22);">';
+			$logo = '<span style="display:block;width:48px;height:48px;padding:2px;box-sizing:border-box;border-radius:50%;background:#ffffff;"><img src="' . esc_url( $identity['logo_url'] ) . '" alt="' . esc_attr( $identity['logo_alt'] ?: ( $identity['nome_attivita'] ?? '' ) ) . '" width="44" height="44" style="display:block;width:44px;height:44px;border:0;border-radius:50%;object-fit:cover;background:#ffffff;"></span>';
 		}
-		$event_banner = ! empty( $event['cover_url'] ) ? '<tr><td background="' . esc_url( $event['cover_url'] ) . '" valign="top" style="height:210px;padding:16px;background-color:' . esc_attr( $primary ) . ';background-image:url(\'' . esc_url( $event['cover_url'] ) . '\');background-position:center;background-size:cover;background-repeat:no-repeat;">' . $logo . '</td></tr>' : ( $logo ? '<tr><td bgcolor="' . esc_attr( $primary ) . '" style="padding:16px;">' . $logo . '</td></tr>' : '' );
+		$event_banner = ! empty( $event['cover_url'] ) ? '<tr><td background="' . esc_url( $event['cover_url'] ) . '" style="height:210px;background-color:#e4e8ef;background-image:url(\'' . esc_url( $event['cover_url'] ) . '\');background-position:center;background-size:cover;background-repeat:no-repeat;"></td></tr>' : '';
 		$event_url = ! empty( $event['url'] ) ? esc_url( $event['url'] ) : '';
 		$cta = $event_url ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;margin-bottom:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . $event_url . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">Consulta la pagina dell’evento</a></td></tr></table>' : '';
 		$reply_to = ! empty( $email_identity['indirizzo_risposte'] ) && is_email( $email_identity['indirizzo_risposte'] ) ? sanitize_email( $email_identity['indirizzo_risposte'] ) : '';
@@ -435,10 +459,12 @@ final class MI_Modello_Email {
 			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#f6f8fc" style="width:100%;background:#f6f8fc;"><tr><td align="center" style="padding:24px 12px;">'
 			. '<table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" bgcolor="#ffffff" style="width:100%;max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e4e8ef;">'
 			. $event_banner . '<tr><td bgcolor="' . esc_attr( $primary ) . '" style="background:' . esc_attr( $primary ) . ';padding:20px;color:' . esc_attr( $primary_text ) . ';font-family:Arial,Helvetica,sans-serif;">'
-			. '<div style="font-size:13px;line-height:1.4;opacity:0.9;">' . esc_html( $title ) . '</div>'
+			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>'
+			. ( $logo ? '<td width="60" valign="top" style="width:60px;padding-right:12px;">' . $logo . '</td>' : '' )
+			. '<td valign="top"><div style="font-size:13px;line-height:1.4;opacity:0.9;">' . esc_html( $title ) . '</div>'
 			. '<div style="font-size:24px;font-weight:700;line-height:1.3;margin-top:5px;">' . esc_html( $communication_title ?: 'Comunicazione iscrizione' ) . '</div>'
 			. ( $activity_name ? '<div style="font-size:13px;line-height:1.4;margin-top:5px;opacity:0.9;">' . esc_html( $activity_name ) . '</div>' : '' )
-			. '</td></tr><tr><td style="padding:26px 22px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:16px;line-height:1.65;">'
+			. '</td></tr></table></td></tr><tr><td style="padding:26px 22px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:16px;line-height:1.65;">'
 			. $body . $code . $action_html . $cta . $status_html . $management_html
 			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#eef2ff" style="width:100%;margin-top:20px;background:#eef2ff;border-radius:14px;"><tr><td style="padding:16px 20px;font-family:Arial,Helvetica,sans-serif;color:#333333;"><div style="font-size:15px;font-weight:700;margin-bottom:8px;">Assistenza</div><div style="font-size:15px;line-height:1.7;">' . $assistance . '</div></td></tr></table>'
 			. '<div style="font-family:Arial,Helvetica,sans-serif;color:' . esc_attr( $secondary ) . ';font-size:14px;font-style:italic;font-weight:700;margin-top:18px;text-align:right;">' . ( $footer ?: esc_html( $identity['firma'] ?? '' ) ) . '</div>'
@@ -549,7 +575,7 @@ final class MI_Modello_Email {
 			'internal_recipients' => $recipients,
 			'subject'   => self::pulisci_riga( $_POST['mi_email_subject'] ?? '', 180 ),
 			'preheader' => self::pulisci_riga( $_POST['mi_email_preheader'] ?? '', 240 ),
-			'html'      => self::sanitizza_html_email( wp_unslash( $_POST['mi_email_html'] ?? '' ) ),
+			'html'      => self::uniforma_grafica_corpo( self::sanitizza_html_email( wp_unslash( $_POST['mi_email_html'] ?? '' ) ) ),
 			'text'      => sanitize_textarea_field( wp_unslash( $_POST['mi_email_text'] ?? '' ) ),
 			'footer'    => sanitize_textarea_field( wp_unslash( $_POST['mi_email_footer'] ?? '' ) ),
 		);
@@ -575,7 +601,7 @@ final class MI_Modello_Email {
 		$settings['subject'] = self::pulisci_riga( $subject, 180 );
 		$settings['text'] = mb_substr( sanitize_textarea_field( wp_unslash( $text ) ), 0, 5000 );
 		if ( 'ZERO' === strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ) ) $settings['text'] = self::rimuovi_riferimenti_pagamento_gratuito( $settings['text'] );
-		$settings['html'] = self::sanitizza_html_email( wpautop( esc_html( $settings['text'] ) ) );
+		$settings['html'] = self::uniforma_grafica_corpo( self::sanitizza_html_email( wpautop( esc_html( $settings['text'] ) ) ) );
 		if ( ! $settings['subject'] || ! $settings['text'] ) return new WP_Error( 'mi_email_vuota', 'Oggetto e testo dell’email non possono essere vuoti.' );
 		$settings = self::aggiorna_segnaposto( $settings );
 		$unknown = self::trova_segnaposto_non_ammessi( $settings );
