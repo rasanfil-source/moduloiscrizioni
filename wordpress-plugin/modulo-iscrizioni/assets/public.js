@@ -409,7 +409,7 @@
       }
       input.dataset.miParticipantOption = option.code;
       input.dataset.miChoiceGroup = choiceGroup;
-      label.dataset.serviceCategory = option.category || (isAccommodation ? 'alloggio' : (String(option.code).startsWith('pullman') ? 'pullman' : (option.code==='pranzo' ? 'pranzo' : 'altro')));
+      label.dataset.serviceCategory = option.category || (isAccommodation ? 'alloggio' : (String(option.code).startsWith('pullman') ? 'pullman' : (['pranzo','colazione'].includes(option.code) ? 'pranzo' : 'altro')));
       input.addEventListener(isAccommodation || isSingleChoice ? 'change' : 'input', () => { renderEconomicSummary(); updateStickySummary(); });
       const text = document.createElement('span');
       text.textContent = `${option.name}${Number(option.price_cents) > 0 ? ` · ${formatCurrency(option.price_cents)}` : ''}`;

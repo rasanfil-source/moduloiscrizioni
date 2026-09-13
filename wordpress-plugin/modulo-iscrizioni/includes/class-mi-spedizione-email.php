@@ -42,15 +42,10 @@ final class MI_Spedizione_Email {
 		$sheet_url = esc_url_raw( (string) $sheet_url, array( 'https' ) );
 		$event_url = MI_Shortcode::url_iscrizione( $event_id );
 		if ( ! $event_id || ! is_email( $recipient ) || 0 !== strpos( $sheet_url, 'https://docs.google.com/spreadsheets/' ) ) return new WP_Error( 'mi_notifica_gestore_non_valida', 'Dati della comunicazione al gestore non validi.' );
-		$values = array( '{{evento.titolo}}' => get_the_title( $event_id ), '{{ordine.codice}}' => '', '{{sottoscrittore.nome_completo}}' => $nome_destinatario );
-		$snapshot = MI_Modello_Email::crea_istantanea( $event_id, $values );
-		$snapshot['attivo'] = true;
-		$snapshot['oggetto'] = 'Evento pronto — ' . sanitize_text_field( get_the_title( $event_id ) );
-		$snapshot['preheader'] = 'Il modulo e il foglio operativo sono pronti.';
-		$snapshot['evento']['url'] = esc_url_raw( $event_url, array( 'https' ) );
-		$snapshot['html'] = '<p>Gentile ' . esc_html( $nome_destinatario ) . ',</p><p>l’evento <strong>' . esc_html( get_the_title( $event_id ) ) . '</strong> è stato pubblicato.</p><p>Il riferimento per la gestione è <strong>' . esc_html( $recipient ) . '</strong>. Per aprire il foglio devi essere autenticato in Google con questo indirizzo e avere i permessi sul documento.</p><p><strong>Foglio operativo dell’evento</strong></p><p><a href="' . esc_url( $sheet_url ) . '">Apri il foglio Google dell’evento</a></p>';
-		$snapshot['testo'] = "Gentile " . sanitize_text_field( $nome_destinatario ) . ",\n\nl’evento “" . sanitize_text_field( get_the_title( $event_id ) ) . "” è stato pubblicato.\n\nAccedi a Google con {$recipient} per aprire il foglio operativo:\n{$sheet_url}\n\nPagina dell’evento:\n{$event_url}";
-		$snapshot['identificativo'] = array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' );
+		$subject = 'Evento pronto — ' . sanitize_text_field( get_the_title( $event_id ) );
+		$body = '<p>Gentile ' . esc_html( $nome_destinatario ) . ',</p><p>il modulo e il foglio operativo sono pronti.</p><p>Il riferimento per la gestione è <strong>' . esc_html( $recipient ) . '</strong>. Per aprire il foglio devi essere autenticato in Google con questo indirizzo e avere i permessi sul documento.</p>';
+		$text = "Gentile " . sanitize_text_field( $nome_destinatario ) . ",\n\nil modulo e il foglio operativo sono pronti.\n\nAccedi a Google con {$recipient} per aprire il foglio operativo.";
+		$snapshot = MI_Modello_Email::crea_istantanea_istituzionale( $event_id, $subject, 'Il modulo e il foglio operativo sono pronti.', $body, $text, array( array( 'label' => 'Apri il foglio Google dell’evento', 'url' => $sheet_url ), array( 'label' => 'Apri la pagina dell’evento', 'url' => $event_url ) ) );
 		$payload_json = wp_json_encode( array( 'event_id' => $event_id, 'template_type' => 'EVENT_MANAGER_READY', 'email_preview' => $snapshot ) );
 		if ( false === $payload_json ) return new WP_Error( 'mi_notifica_gestore_json', 'Comunicazione al gestore non serializzabile.' );
 		global $wpdb;
@@ -89,7 +84,7 @@ final class MI_Spedizione_Email {
 		$allow_operational = ! empty( $payload['allow_operational'] );
 		$custom_types = get_option( 'mi_custom_communication_types', array() );
 		$custom_allowed = is_array( $custom_types ) && isset( $custom_types[ $template_type ] ) && preg_match( '/^CUSTOM_[A-Z0-9_]{1,24}$/', $template_type );
-		if ( ! $communication_id || ! $event_id || ( ! in_array( $template_type, array( 'PRE_DEPARTURE_REMINDER', 'BALANCE_REMINDER', 'EVENT_CANCELLATION' ), true ) && ! $custom_allowed ) ) return new WP_Error( 'mi_operational_email_invalid', 'Comunicazione non valida.', array( 'status' => 400 ) );
+		if ( ! $communication_id || ! $event_id || ( ! in_array( $template_type, array( 'PRE_DEPARTURE_REMINDER', 'DEPOSIT_REMINDER', 'BALANCE_REMINDER', 'EVENT_NOTICE', 'EVENT_CANCELLATION', 'REGISTRATION_CANCELLATION', 'MATERIAL_DELIVERY' ), true ) && ! $custom_allowed ) ) return new WP_Error( 'mi_operational_email_invalid', 'Comunicazione non valida.', array( 'status' => 400 ) );
 		if ( ( 'PRE_DEPARTURE_REMINDER' === $template_type || $custom_allowed ) && ! $message ) return new WP_Error( 'mi_operational_email_message_required', 'La comunicazione richiede un testo.', array( 'status' => 400 ) );
 		$recipient_payload = is_array( $payload['recipients'] ?? null ) ? array_slice( $payload['recipients'], 0, 1000 ) : array();
 		$recipient_state = array();

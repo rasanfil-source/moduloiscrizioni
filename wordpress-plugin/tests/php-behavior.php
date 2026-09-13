@@ -180,6 +180,6 @@ expect( false !== strpos( $email_html, 'opacity:0;color:transparent' ), 'prehead
 expect( false !== strpos( $email_html, '<meta name="viewport"' ) && false !== strpos( $email_html, 'border:1px solid #e4e8ef' ), 'struttura responsive del modello email assente' );
 expect( false !== strpos( $email_html, 'role="presentation"' ) && false !== strpos( $email_html, 'cellpadding="0"' ) && false !== strpos( $email_html, 'bgcolor="#151b38"' ), 'markup email-safe incompleto' );
 expect( false !== strpos( $email_html, 'Assistenza' ) && false !== strpos( $email_html, 'border-radius:12px' ) && false !== strpos( $email_html, 'font-style:italic' ), 'componenti del restyling email assenti' );
-expect( false !== strpos( $email_html, 'https://example.invalid/copertina.jpg' ) && false !== strpos( $email_html, 'font-size:18px' ), 'banner evento o testo leggibile assenti nell email' );
+expect( false !== strpos( $email_html, 'https://example.invalid/copertina.jpg' ) && false !== strpos( $email_html, 'font-size:16px' ), 'banner evento o testo leggibile assenti nell email' );
 
 fwrite( STDOUT, "PHP behavior tests: OK\n" );

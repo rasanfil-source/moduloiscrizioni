@@ -233,6 +233,12 @@ test('la console non richiede mai foto o scansioni dei documenti', () => {
 	assert.doesNotMatch(combined, /DriveApp\.createFile|Utilities\.newBlob/);
 });
 
+test('la data di rilascio del documento è disponibile nelle viste operative', () => {
+	assert.match(sources['Segreteria.gs'], /document_issue_date/);
+	assert.match(sources['Segreteria.gs'], /Data di rilascio del documento/);
+	assert.match(sources['Segreteria.gs'], /data_rilascio_documento/);
+});
+
 test('la modalità email GAS è fail-closed e sostituisce sempre il destinatario', () => {
   assert.match(sources['Email.gs'], /modalita_email/);
   assert.match(sources['Email.gs'], /MI_EMAIL_TEST_RECIPIENT/);
