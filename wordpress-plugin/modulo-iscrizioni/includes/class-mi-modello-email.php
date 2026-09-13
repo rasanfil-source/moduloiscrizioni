@@ -433,7 +433,7 @@ final class MI_Modello_Email {
 		$preheader = ! empty( $istantanea['preheader'] ) ? '<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">' . esc_html( $istantanea['preheader'] ) . '</div>' : '';
 		$logo = '';
 		if ( ! empty( $identity['logo_url'] ) ) {
-			$logo = '<span style="display:block;width:48px;height:48px;padding:2px;box-sizing:border-box;border-radius:50%;background:#ffffff;"><img src="' . esc_url( $identity['logo_url'] ) . '" alt="' . esc_attr( $identity['logo_alt'] ?: ( $identity['nome_attivita'] ?? '' ) ) . '" width="44" height="44" style="display:block;width:44px;height:44px;border:0;border-radius:50%;object-fit:cover;background:#ffffff;"></span>';
+			$logo = '<img src="' . esc_url( $identity['logo_url'] ) . '" alt="' . esc_attr( $identity['logo_alt'] ?: ( $identity['nome_attivita'] ?? '' ) ) . '" width="44" height="44" style="display:block;width:44px;height:44px;border:2px solid #ffffff;border-radius:50%;object-fit:cover;background:#ffffff;">';
 		}
 		$event_banner = ! empty( $event['cover_url'] ) ? '<tr><td background="' . esc_url( $event['cover_url'] ) . '" style="height:210px;background-color:#e4e8ef;background-image:url(\'' . esc_url( $event['cover_url'] ) . '\');background-position:center;background-size:cover;background-repeat:no-repeat;"></td></tr>' : '';
 		$event_url = ! empty( $event['url'] ) ? esc_url( $event['url'] ) : '';
