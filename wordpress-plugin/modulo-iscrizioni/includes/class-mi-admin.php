@@ -98,7 +98,7 @@ final class MI_Admin {
 			$email = strtolower( sanitize_title( $name[0] . '.' . $name[1] ) ) . '.' . $event_id . '@example.invalid';
 			$phone = '+39 320 000 ' . str_pad( (string) $index, 4, '0', STR_PAD_LEFT );
 			$fields = self::demo_participant_fields( (array) $event['participant_fields'], $index, $email, $phone );
-			$payload = array( 'started_at' => time() - 5, 'tickets' => array( sanitize_key( $ticket['code'] ) => 1 ), 'order_options' => array(), 'participants' => array( array( 'ticket_type_code' => sanitize_key( $ticket['code'] ), 'ticket_index' => 1, 'first_name' => $name[0], 'last_name' => $name[1], 'fields' => $fields, 'options' => array() ) ), 'buyer' => array( 'first_name' => $name[0], 'last_name' => $name[1], 'email' => $email, 'phone' => $phone ), 'special_requests' => 'Iscrizione dimostrativa generata dal pannello amministrativo.', 'privacy_accepted' => true, 'marketing_accepted' => false );
+			$payload = array( 'started_at' => time() - 5, 'tickets' => array( sanitize_key( $ticket['code'] ) => 1 ), 'order_options' => array(), 'participants' => array( array( 'ticket_type_code' => sanitize_key( $ticket['code'] ), 'ticket_index' => 1, 'first_name' => $name[0], 'last_name' => $name[1], 'fields' => $fields, 'options' => array() ) ), 'buyer' => array( 'first_name' => $name[0], 'last_name' => $name[1], 'email' => $email, 'phone' => $phone ), 'special_requests' => '', 'privacy_accepted' => true, 'marketing_accepted' => false );
 			$payload = self::demo_services_payload( $event, $payload, $index );
 			$key = 'admin-demo-' . $event_id . '-' . gmdate( 'YmdHis' ) . '-' . $index . '-' . wp_generate_password( 8, false, false );
 			$result = MI_Registration_Service::create( $event_id, $payload, $key, true, 'ADMIN_DEMO' );

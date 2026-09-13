@@ -1740,6 +1740,116 @@ test('il wizard mostra soltanto i costi coerenti con il tipo di evento', async (
   assert.match(script, /economicLabel\.hidden = !paidEvent/);
 });
 
+test('la scheda iscritto omette i controlli economici della prenotazione', async () => {
+  const service = await read('includes/class-mi-management-service.php');
+  const script = await read('assets/portal-management.js');
+  const admin = await read('includes/class-mi-admin.php');
+  assert.match(service, /function visible_special_requests/);
+  assert.match(service, /\$booking\['is_free_event'\]/);
+  assert.match(service, /! \$booking\['is_free_event'\] && MI_Portal_Payments::allowed/);
+  assert.match(script, /— Scheda iscritto/);
+  assert.doesNotMatch(script, /Registra un pagamento/);
+  assert.doesNotMatch(script, /Registra un movimento/);
+  assert.match(admin, /'special_requests' => ''/);
+});
+
+test('la scheda iscritto segnala gli altri partecipanti senza azioni sulla prenotazione', async () => {
+  const script = await read('assets/portal-management.js');
+  const css = await read('assets/portal-management.css');
+  assert.match(script, /const companions=b\.participants\.filter/);
+  assert.match(script, /Iscritto insieme con <strong>/);
+  assert.doesNotMatch(script, /data-cancel-registration/);
+  assert.match(script, /selectedPerson\?\[selectedPerson\]:\[\]/);
+  assert.match(css, /\.mi-detail-back/);
+});
+
+test('stampa ed esportazione seguono la scelta dei dati del report', async () => {
+  const script = await read('assets/portal-management.js');
+  const css = await read('assets/portal-management.css');
+  assert.match(script, /<details data-export-settings>[\s\S]*?<\/details><div class="mi-booking-detail__actions" data-report-actions>/);
+  assert.match(css, /\[data-report-actions\][^{]*\{[^}]*justify-content:flex-end[^}]*margin:12px 0 0/);
+});
+
+test('i servizi individuali sono sintetici e mostrano la colazione accanto all’alloggio', async () => {
+  const script = await read('assets/portal-management.js');
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(script, /function participantOptionsText/);
+  assert.match(script, /\/colazione\/i/);
+  assert.match(script, /replace\(\/\\s\*\[—–\]\\s\*\/g,' - '\)/);
+  assert.match(script, /Servizi e sistemazioni scelti: \$\{participantOptionsText\(p\.options\)\}/);
+  assert.match(portal, /'colazione' => 'Colazione'/);
+  assert.match(portal, /'Pullman - ' \. \$route_label/);
+});
+
+test('la scheda partecipante resta sobria, compatta e senza dicitura richiesto', async () => {
+  const script = await read('assets/portal-management.js');
+  const style = await read('assets/portal-management.css');
+  assert.doesNotMatch(script, /\(richiesto\)/);
+  assert.match(style, /form\[data-person\] fieldset\{[^}]*border:1px solid #c9d3e1[^}]*box-shadow:none/);
+  assert.match(style, /form\[data-person\] label\{[^}]*font-weight:500/);
+  assert.match(style, /form\[data-person\] :is\(input,select,textarea\)\{[^}]*border-radius:10px/);
+  assert.match(style, /form\[data-person\]\+form\[data-person\]\{[^}]*border-top:1px solid #dce3ec/);
+});
+
+test('il cambio servizi non richiede né mostra un motivo', async () => {
+  const script = await read('assets/portal-management.js');
+  const service = await read('includes/class-mi-management-service.php');
+  assert.doesNotMatch(script, /Vuoi annotare il motivo/);
+  assert.doesNotMatch(script, /data-change-options[^;]+textarea name="reason"/);
+  assert.match(script, /mutate\('change_options',\{participant_id:Number\(f\.dataset\.changeOptions\),options,reason:''\}\)/);
+  assert.match(service, /'reason' => sanitize_textarea_field\( \$data\['reason'\] \)/);
+  assert.doesNotMatch(service, /Indica il motivo della variazione/);
+});
+
+test('la scheda iscritto non espone il riepilogo economico della prenotazione', async () => {
+  const script = await read('assets/portal-management.js');
+  assert.doesNotMatch(script, /data-booking-economics>/);
+  assert.doesNotMatch(script, /Rettifica il dovuto della prenotazione/);
+});
+
+test('le presenze si registrano in blocco soltanto per i gruppi con rapporto annuale', async () => {
+  const script = await read('assets/portal-management.js');
+  const portal = await read('includes/class-mi-portal-management.php');
+  const service = await read('includes/class-mi-management-service.php');
+  assert.match(script, /if\(data\.annual_report_group\)/);
+  assert.match(script, /Seleziona tutti/);
+  assert.match(script, /Deseleziona tutti/);
+  assert.match(script, /attendance_bulk/);
+  assert.match(portal, /'attendance_bulk' === \$operation/);
+  assert.match(service, /function save_attendance_bulk/);
+  assert.match(service, /_mi_annual_attendance_report/);
+});
+
+test('camere, stampa e filtri seguono la nuova gerarchia operativa', async () => {
+  const script = await read('assets/portal-management.js');
+  assert.match(script, /data-room-mode="assign"/);
+  assert.match(script, /data-room-mode="change"/);
+  assert.match(script, /Assegna stanze/);
+  assert.match(script, /Cambia tipo di abitazione/);
+  assert.match(script, /\[\['ordinal','N\.'\]/);
+  assert.match(script, /features\.rooms\?\[\['room','Stanza'\]\]/);
+  assert.match(script, /allServices\]\.sort\(\(a,b\)=>String\(a\[1\]\.name\)\.localeCompare/);
+});
+
+test('la variazione servizi esclude gli alloggi e ne conserva assegnazione e opzione', async () => {
+  const script = await read('assets/portal-management.js');
+  const service = await read('includes/class-mi-management-service.php');
+  assert.match(script, /Varia i servizi accessori/);
+  assert.match(script, /!String\(o\.code\|\|''\)\.startsWith\('alloggio-'\)/);
+  assert.match(script, /Per alloggio e camera usa “Cambia sistemazione”/);
+  assert.match(service, /Per cambiare alloggio o camera usa Cambia sistemazione/);
+  assert.match(service, /\$options = array_merge\( array_values\( array_filter\( \$current_options/);
+});
+
+test('lo storico servizi mostra soltanto differenze reali senza quantità unitaria', async () => {
+  const script = await read('assets/portal-management.js');
+  assert.match(script, /function optionChangeText\(change\)/);
+  assert.match(script, /if\(oldQuantity===newQuantity\)return ''/);
+  assert.match(script, /if\(!oldQuantity\)return 'Aggiunto: '\+esc\(name\)/);
+  assert.match(script, /if\(!newQuantity\)return 'Rimosso: '\+esc\(name\)/);
+  assert.match(script, /optionHistory\.length\)content\.insertAdjacentHTML/);
+});
+
 test('la tessera evento mostra il logo del gruppo quando disponibile', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const css = await read('assets/portal.css');

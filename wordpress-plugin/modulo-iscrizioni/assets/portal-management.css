@@ -77,6 +77,9 @@
 .mi-management [data-management-status].mi-management-status--busy::before,.mi-management [data-management-status].mi-management-status--error::before{display:block}
 .mi-management [data-management-status].mi-management-status--busy{color:var(--info,#164b85)}
 .mi-management [data-management-status].mi-management-status--error{color:var(--danger,#9f1930);font-weight:var(--fw-medium,600)}
+.mi-management .mi-booking-cancel-warning{margin-top:20px;padding:12px 14px;border-left:4px solid var(--danger,#9f1930);background:#fff7f6;color:#4a1d18;border-radius:8px}
+.mi-management .mi-booking-cancel-warning p{margin:0}
+.mi-management .mi-booking-cancel-warning p+p{margin-top:6px}
 .mi-management .mi-status-pill{display:inline-block;padding:3px 8px;border-radius:999px;font-size:.8125rem;font-weight:var(--fw-medium,600);line-height:1.3;white-space:nowrap}
 .mi-management .mi-status-pill--confirmed{background:#e7f4ea;color:#146c2e}.mi-management .mi-status-pill--pending{background:#fff1cf;color:#765500}.mi-management .mi-status-pill--waitlist,.mi-management .mi-status-pill--offered{background:#e8f0fe;color:#164b85}.mi-management .mi-status-pill--cancelled,.mi-management .mi-status-pill--expired{background:#f1f3f5;color:#5d6777}
 .mi-management .mi-danger{border-color:var(--danger,#9f1930);color:var(--danger,#9f1930)}.mi-management .mi-danger:hover:not(:disabled){background:var(--danger,#9f1930);color:#fff}
@@ -100,7 +103,7 @@
 .mi-management [data-participant-reports]{width:100%;max-width:none;margin:24px 0 0;padding:24px 0 0;border:0;border-top:1px solid var(--line,#d7dde6);border-radius:0;background:transparent}
 .mi-management .mi-report-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px 24px;margin-bottom:16px}
 .mi-management .mi-report-heading h3{margin:0;font-size:1.125rem}
-.mi-management [data-participant-reports] [data-report-actions]{display:flex;flex-wrap:wrap;gap:8px;margin:0}
+.mi-management [data-participant-reports] [data-report-actions]{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin:12px 0 0}
 .mi-management [data-participant-reports] [data-report-actions] button{min-height:44px;padding:10px 16px;border-radius:10px;background:var(--surface,#fff);border-color:var(--line,#d7dde6);color:var(--navy,#17224a);font-size:.875rem;font-weight:600}
 .mi-management [data-participant-reports] [data-report-actions] button:hover{background:var(--bg,#f5f7fa)}
 .mi-management [data-participant-reports] [data-export-settings],.mi-management [data-participant-reports] details[data-service-summary]{max-width:none;margin:0;border:1px solid var(--line,#d7dde6);border-radius:10px;background:var(--surface,#fff)}
@@ -110,3 +113,18 @@
 .mi-management .mi-report-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 16px;padding:16px}
 .mi-management [data-participant-reports] [data-export-settings] .mi-report-columns label{margin:0;padding:0;min-height:32px;font-size:.875rem}
 @media(max-width:600px){.mi-management .mi-report-heading{align-items:flex-start;flex-direction:column}.mi-management .mi-management-actionbar [data-new-registration]{max-width:100%}.mi-management .mi-management-actionbar .mi-new-registration{white-space:normal;text-align:center}.mi-management .mi-report-columns{grid-template-columns:1fr}}
+.mi-management .mi-room-mode-controls{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}.mi-management .mi-room-mode-controls button{border-color:#c9d3e1;border-radius:10px;background:#fff;font-weight:600}.mi-management .mi-room-mode-controls button[aria-expanded=true]{border-color:var(--navy,#17224a);background:#f5f8fc}.mi-management .mi-room-operation-panel{margin:0;padding:16px;border:1px solid #c9d3e1;border-radius:10px;background:#fff}.mi-management .mi-room-operation-panel>h4{margin-top:0}.mi-management details.mi-room-operation-panel>summary{display:none}.mi-management .mi-attendance-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.mi-management [data-attendance-panel]{margin:18px 0;border:1px solid #c9d3e1;border-radius:10px}.mi-management [data-attendance-panel]>summary{padding:14px 16px;font-weight:600}.mi-management [data-attendance-panel]>p,.mi-management [data-attendance-panel]>.mi-attendance-actions,.mi-management [data-attendance-panel]>form{margin-left:16px;margin-right:16px}.mi-management .mi-attendance-table{overflow:auto}.mi-management .mi-attendance-table input[type=checkbox]{margin:auto}.mi-management .mi-participant-room-code{font-weight:600;white-space:nowrap}.mi-management .mi-detail-back{margin-top:24px;padding-top:16px;border-top:1px solid #dce3ec}@media(max-width:600px){.mi-management .mi-room-mode-controls{grid-template-columns:1fr}}
+@media print{.mi-management.mi-printing-list [data-print-list] table{display:table;width:100%;table-layout:auto}.mi-management.mi-printing-list [data-print-list] tr{display:table-row}.mi-management.mi-printing-list [data-print-list] th,.mi-management.mi-printing-list [data-print-list] td{display:table-cell}}
+
+/* Scheda partecipante: più contrasto e ritmo, senza introdurre profondità visiva. */
+.mi-management form[data-person]{margin-block:18px}
+.mi-management form[data-person]+form[data-person]{padding-top:18px;border-top:1px solid #dce3ec}
+.mi-management form[data-person] fieldset{padding:16px;border:1px solid #c9d3e1;border-radius:10px;background:#fff;box-shadow:none}
+.mi-management form[data-person] legend{padding:0 6px;color:#111827;font-weight:600}
+.mi-management form[data-person] .mi-management-grid{gap:10px 14px}
+.mi-management form[data-person] label{gap:4px;margin:4px 0;color:#111827;font-weight:500}
+.mi-management form[data-person] :is(input,select,textarea){min-height:44px;border:1px solid #c9d3e1;border-radius:10px;background:#fff;box-shadow:none;font-weight:400}
+.mi-management form[data-person] textarea{min-height:88px}
+.mi-management form[data-person] :is(input,select,textarea):hover{border-color:#aebacb}
+.mi-management form[data-person] :is(input,select,textarea):focus{border-color:#7a91b2;outline:0;box-shadow:0 0 0 2px rgba(122,145,178,.12)}
+.mi-management form[data-person]>fieldset>p{margin:10px 0;color:var(--muted,#657084)}

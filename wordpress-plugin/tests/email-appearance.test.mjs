@@ -13,6 +13,8 @@ assert.match(model, /layout' => 'INSTITUTIONAL'/);
 assert.match(model, /function componi_html_istituzionale/);
 assert.match(model, /border-radius:50%/);
 assert.match(model, /background-image:url/);
+assert.match(model, /<strong>Quando:<\/strong>.*<br><strong>Dove:<\/strong>.*<br><strong>Codice iscrizione:<\/strong>/s);
+assert.match(model, /margin:24px 0 0;[^']*<strong>Conserva questa email:<\/strong>/);
 assert.match(shipment, /crea_istantanea_istituzionale/);
 assert.match(portal, /_mi_email_style/);
 assert.match(portal, /group_email_identity_enabled/);
