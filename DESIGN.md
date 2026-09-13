@@ -52,6 +52,8 @@ Si usa il carattere di sistema già adottato dal portale, con testi e comandi ri
 
 ## Layout
 
+Sotto i 480px, i link dell’evento dedicano una riga intera all’indirizzo e la riga successiva a Copia, Condividi e Apri; l’icona Condividi mantiene 44×44px. La scheda prenotazione mobile raccoglie frecce e chiusura in una barra superiore separata dal contenuto scorrevole, con margini laterali di 16px. I selettori numero camera hanno altezza minima 44px. Lo storico movimenti usa intestazioni, righe alternate sobrie e scorrimento locale accessibile da tastiera; data, tipo, importo e metodo non vengono spezzati, riferimenti e note lunghi vanno a capo.
+
 Su mobile il riepilogo operativo dispone i conteggi in due colonne, con spazi ridotti e comandi di almeno 44px. Camere, presenze e report condividono bordi, intestazioni e spazi interni; le tabelle larghe conservano lo scorrimento locale. Caricamento, errore ed esito confermato hanno superfici semantiche con messaggi testuali; l’assenza di risultati resta uno stato neutro. Verifica sintetica completa disponibile in `tools/test-management-full-event-browser.cjs`, inclusi viewport da 320 e 390px e recupero dopo errore.
 
 L’integrazione dell’audit 3.26.72 mantiene lo scorrimento naturale e le sezioni camere, presenze e servizi già richiudibili. La ricerca persone resta visibile; i filtri secondari sono raccolti in «Altri filtri», con conteggio attivo, inizialmente chiusi sotto 900px se non ci sono filtri applicati. La scheda persona mostra gli importi complessivi della prenotazione con un’etichetta esplicita; non attribuisce il saldo alla singola persona. In wp-admin le tabelle di configurazione scorrono nel proprio contenitore e i dettagli secondari della prenotazione sono richiudibili.
@@ -69,6 +71,8 @@ Le superfici usano bordi e ombre molto leggere. Non si usano gradienti, vetro, a
 Controlli con raggio di 10 px e schede con raggio di 14 px. Le forme circolari sono riservate a loghi, iniziali e indicatori di stato.
 
 ## Components
+
+La configurazione evento in wp-admin distingue Gruppo e disponibilità, Date e lista d’attesa, Quote e pagamenti, Comunicazioni e richieste mediante intestazioni interne alla griglia. I campi e i filtri del plugin condividono altezza 44px e focus 3px; riquadri e modale usano la palette della segreteria senza alterare il resto dell’amministrazione WordPress.
 
 Il consolidamento dell’audit estetico mantiene palette e geometrie esistenti: token aggiuntivi per spazi 4/32/40/48, raggio controllo 10, scheda 14 e pannello 16. Il titolo del portale è 24px. I pulsanti secondari non diventano primari al passaggio del mouse; gli stati condividono i colori semantici, con posto proposto in attenzione. Le icone di contatto usano gli SVG esistenti su bersagli da 44px. Toolbar e sfondi dei dialoghi non usano blur; l’importo evidenziato nei pagamenti usa un segnale statico, senza pulsazione. I colori configurati dai gruppi restano distinti dalla palette dell’interfaccia. I blocchi servizi mantengono etichette e raggruppamenti, con superficie tenue e bordo uniforme.
 

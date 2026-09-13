@@ -6,3 +6,21 @@
 .mi-payments .mi-payment-totals p{color:var(--muted,#657084);font-size:.875rem}
 .mi-payments .mi-payment-totals strong{color:var(--ink,#172033);font-weight:var(--fw-medium,600);margin-top:4px}
 .mi-payments input.mi-amount-highlight{border-color:var(--focus,#244fc2);background:var(--info-light,#e8f0fe)}
+
+/* Keep the movement ledger readable, with scrolling confined to its region. */
+.mi-payments .mi-payment-history-scroll{max-width:100%;overflow-x:auto;margin:16px 0 24px;border:1px solid var(--line,#d7dde6);border-radius:12px;background:var(--surface,#fff)}
+.mi-payments .mi-payment-history-table{display:table;width:100%;min-width:760px;margin:0;border-collapse:collapse}
+.mi-payments .mi-payment-history-table :is(th,td){padding:12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line,#d7dde6);overflow-wrap:anywhere}
+.mi-payments .mi-payment-history-table th{background:var(--bg,#f5f7fa);color:var(--muted,#657084);font-size:.875rem;font-weight:600;line-height:1.4;white-space:nowrap}
+.mi-payments .mi-payment-history-table tbody tr:nth-child(even){background:var(--bg,#f5f7fa)}
+.mi-payments .mi-payment-history-table tbody tr:last-child td{border-bottom:0}
+.mi-payments .mi-payment-history-table td:nth-child(-n+4){white-space:nowrap}
+.mi-payments .mi-payment-history-table :is(th,td):nth-child(3){text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.mi-payments .mi-payment-history-table :is(th,td):nth-child(5){min-width:10rem}
+.mi-payments .mi-payment-history-table :is(th,td):nth-child(6){min-width:9rem}
+.mi-payments .mi-payment-history-table :is(th,td):nth-child(7){min-width:12rem}
+@media print{
+  .mi-payments .mi-payment-history-scroll{overflow:visible;border:0}
+  .mi-payments .mi-payment-history-table{min-width:0}
+  .mi-payments .mi-payment-history-table :is(th,td):nth-child(n+5){min-width:0}
+}

@@ -139,6 +139,7 @@ final class MI_Event_Post_Type {
 		}
 		?>
 		<div class="mi-admin-grid">
+			<h3 class="mi-admin-section-title">Gruppo e disponibilità</h3>
 			<p><label for="mi_activity_id"><strong>Gruppo</strong></label><br>
 			<select id="mi_activity_id" name="mi_activity_id" required>
 				<option value="">Seleziona gruppo</option>
@@ -147,12 +148,14 @@ final class MI_Event_Post_Type {
 				<?php endforeach; ?>
 			</select></p>
 			<p><label for="mi_capacity"><strong>Posti disponibili</strong></label><br><input id="mi_capacity" name="mi_capacity" type="number" min="1" max="10000" value="<?php echo esc_attr( $capacity ); ?>" required></p>
+			<h3 class="mi-admin-section-title">Date e lista d’attesa</h3>
 			<p><label for="mi_registration_opens_at"><strong>Apertura iscrizioni</strong></label><br><input id="mi_registration_opens_at" name="mi_registration_opens_at" type="datetime-local" value="<?php echo esc_attr( $opens_at ); ?>" required></p>
 			<p><label for="mi_registration_closes_at"><strong>Chiusura iscrizioni</strong></label><br><input id="mi_registration_closes_at" name="mi_registration_closes_at" type="datetime-local" value="<?php echo esc_attr( $closes_at ); ?>" required></p>
 			<p><label for="mi_event_starts_at"><strong>Data e ora dell’evento</strong></label><br><input id="mi_event_starts_at" name="mi_event_starts_at" type="datetime-local" value="<?php echo esc_attr( $event_starts_at ); ?>"></p>
 			<p><label for="mi_event_location"><strong>Luogo dell’evento</strong></label><br><input id="mi_event_location" name="mi_event_location" type="text" maxlength="180" value="<?php echo esc_attr( $event_location ); ?>" placeholder="Es. Piazza San Pietro, Roma"></p>
 			<p><label><input name="mi_waitlist_enabled" type="checkbox" value="1" <?php checked( $waitlist ); ?>> Attiva automaticamente la lista d’attesa a esaurimento posti</label></p>
 			<p><label for="mi_waitlist_offer_hours"><strong>Tempo per accettare un posto liberato</strong></label><br><input id="mi_waitlist_offer_hours" name="mi_waitlist_offer_hours" type="number" min="1" max="168" value="<?php echo esc_attr( $waitlist_offer_hours ); ?>"> ore</p>
+			<h3 class="mi-admin-section-title">Quote e pagamenti</h3>
 			<p><label for="mi_payment_deadline_at"><strong>Scadenza prenotazioni non saldate</strong></label><br><input id="mi_payment_deadline_at" name="mi_payment_deadline_at" type="datetime-local" value="<?php echo esc_attr( $payment_deadline_at ); ?>"></p>
 			<p class="description">Lascia vuoto per non applicare una scadenza automatica. È usata soltanto per gli eventi con versamenti tracciati.</p>
 			<p><label for="mi_pricing_mode"><strong>Prezzo</strong></label><br><select id="mi_pricing_mode" name="mi_pricing_mode"><option value="NONE" <?php selected( $pricing_mode, 'NONE' ); ?>>Nessun prezzo</option><option value="ZERO" <?php selected( $pricing_mode, 'ZERO' ); ?>>Gratuito</option><option value="FIXED" <?php selected( $pricing_mode, 'FIXED' ); ?>>Quota di partecipazione uguale per tutti</option><option value="CALCULATED" <?php selected( $pricing_mode, 'CALCULATED' ); ?>>Prezzi diversi secondo la tipologia</option></select></p>
@@ -161,6 +164,7 @@ final class MI_Event_Post_Type {
 			<div data-mi-economic-deposit><p><label for="mi_deposit_mode"><strong>Come calcolare la caparra</strong></label><br><select id="mi_deposit_mode" name="mi_deposit_mode"><option value="PERCENTAGE" <?php selected( $deposit_mode, 'PERCENTAGE' ); ?>>Percentuale (%)</option><option value="FIXED" <?php selected( $deposit_mode, 'FIXED' ); ?>>Importo fisso (€)</option></select></p><p data-mi-deposit-percentage><label for="mi_deposit_percentage"><strong>Percentuale caparra</strong></label><br><input id="mi_deposit_percentage" name="mi_deposit_percentage" type="number" min="1" max="99" value="<?php echo esc_attr( $deposit_percentage ); ?>"> %</p><p data-mi-deposit-fixed><label for="mi_deposit_fixed"><strong>Importo fisso della caparra</strong></label><br><input id="mi_deposit_fixed" name="mi_deposit_fixed" type="number" min="0.01" step="0.01" value="<?php echo esc_attr( number_format( $deposit_fixed_cents / 100, 2, '.', '' ) ); ?>"> €</p></div>
 			<fieldset data-mi-economic-payments><legend><strong>Fonti di pagamento ammesse</strong></legend><label><input type="checkbox" name="mi_payment_methods[]" value="BANK_TRANSFER" <?php checked( in_array( 'BANK_TRANSFER', $payment_methods, true ) ); ?>> Bonifico</label><br><label><input type="checkbox" name="mi_payment_methods[]" value="CARD" <?php checked( in_array( 'CARD', $payment_methods, true ) ); ?>> Carta</label><br><label><input type="checkbox" name="mi_payment_methods[]" value="CASH" <?php checked( in_array( 'CASH', $payment_methods, true ) ); ?>> Contante</label></fieldset>
 			<p class="description" data-mi-economic-help aria-live="polite"></p>
+			<h3 class="mi-admin-section-title">Comunicazioni e richieste</h3>
 			<p><label for="mi_identifier_display"><strong>Identificativo nell’email</strong></label><br><select id="mi_identifier_display" name="mi_identifier_display"><option value="NONE" <?php selected( $identifier_display, 'NONE' ); ?>>Non mostrare</option><option value="TEXT" <?php selected( $identifier_display, 'TEXT' ); ?>>Testo</option><option value="QR" <?php selected( $identifier_display, 'QR' ); ?>>QR facoltativo</option><option value="BARCODE" <?php selected( $identifier_display, 'BARCODE' ); ?>>Barcode facoltativo</option></select></p>
 			<p class="description">QR e barcode sono scelte dell’organizzatore. Il payload resta legato all’evento e al codice ordine, senza dati personali.</p>
 			<p><label><input name="mi_marketing_enabled" type="checkbox" value="1" <?php checked( $marketing_enabled ); ?>> Chiedi: “Vuoi essere avvisato delle future iniziative?”</label></p>

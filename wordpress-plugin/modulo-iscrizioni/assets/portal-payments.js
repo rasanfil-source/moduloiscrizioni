@@ -58,11 +58,12 @@ function init(root) {
     if(embedded){host.hidden=true;return;}
     const title=document.createElement('h3');title.textContent='Movimenti registrati';host.append(title);
     if(!movements.length){const p=document.createElement('p');p.textContent='Nessun movimento registrato.';host.append(p);return;}
-    const table=document.createElement('table'),head=table.createTHead().insertRow();
-    for(const label of ['Data','Tipo','Importo','Metodo','Riferimento','Operatore','Nota']){const th=document.createElement('th');th.textContent=label;head.append(th);}
+    const scroll=document.createElement('div');scroll.className='mi-payment-history-scroll';scroll.tabIndex=0;scroll.setAttribute('role','region');scroll.setAttribute('aria-label','Movimenti registrati');
+    const table=document.createElement('table');table.className='mi-payment-history-table';const head=table.createTHead().insertRow();
+    for(const label of ['Data','Tipo','Importo','Metodo','Riferimento','Operatore','Nota']){const th=document.createElement('th');th.scope='col';th.textContent=label;head.append(th);}
     const body=table.createTBody();
     for(const m of movements){const row=body.insertRow();for(const value of [new Date(m.data).toLocaleDateString('it-IT'),m.tipo,money(m.importo),m.metodo,m.riferimento,m.operatore,m.nota||''])row.insertCell().textContent=value;}
-    host.append(table);
+    scroll.append(table);host.append(scroll);
   }
   function invalidate() {
     clearTimeout(timer); controller?.abort(); generation++;

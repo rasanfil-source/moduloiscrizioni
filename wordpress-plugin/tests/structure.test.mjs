@@ -452,6 +452,9 @@ test('il wizard guidato crea solo bozze e rende gli alloggi condizionali', async
   assert.match(portal, /8 di 8/);
   assert.match(portal, /post_status' => 'draft'/);
   assert.match(portal, /Vuoi partire dalla configurazione di un evento precedente/);
+	assert.match(portal, /array_merge\( \$current_models, array_slice\( \$past_models, 0, 10 \) \)/);
+	assert.match(portal, /— in corso/);
+	assert.match(portal, /— passato/);
   assert.match(portal, /data-mi-overnight/);
   assert.match(portal, /data-mi-accommodations hidden/);
   assert.match(script, /rooms\.hidden\s*=\s*!servicePricing \|\| !overnight\.checked/);

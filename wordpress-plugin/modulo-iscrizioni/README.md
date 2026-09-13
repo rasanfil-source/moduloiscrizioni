@@ -1,6 +1,6 @@
-# Segreteria eventi — aggiornamento 3.26.73
+# Segreteria eventi — aggiornamento 3.26.82
 
-Consolidamento visivo del portale: conferme, filtri, scheda persona, camere, presenze e report. Migliorata la leggibilità su desktop e mobile. Nessuna modifica Apps Script richiesta rispetto alla 3.26.72. Caricare lo ZIP per sostituire il plugin esistente.
+Il selettore del modello mostra prima tutti gli eventi in corso e poi fino a 10 eventi passati recenti. Include inoltre le correzioni dell’audit grafico della 3.26.81. Nessuna modifica Apps Script richiesta. Caricare lo ZIP per sostituire il plugin esistente.
 
 ## Note delle versioni precedenti
 
