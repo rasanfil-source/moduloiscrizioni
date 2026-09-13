@@ -154,7 +154,7 @@ final class MI_Public_Balance {
 		if ( $deadlines && $receipt['balance'] > 0 ) $html .= '<div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:15px;border-radius:0 8px 8px 0;margin-bottom:25px"><strong>Scadenza indicata:</strong> ' . esc_html( implode( ' · ', array_unique( $deadlines ) ) ) . '</div>';
 		if ( $receipt['balance'] > 0 && in_array( 'BANK_TRANSFER', $payment['methods'], true ) ) $html .= '<h2 style="color:#1a365d;font-size:18px">Coordinate per il bonifico</h2><div style="background:#ebf8ff;border-radius:8px;padding:20px"><p><strong>Intestatario:</strong> ' . esc_html( $payment['holder'] ) . '</p><p><strong>IBAN:</strong> <code style="background:#fff;padding:4px 11px;border-radius:4px;font-size:16px;user-select:all">' . esc_html( $payment['iban'] ) . '</code></p><p><strong>Causale:</strong> ' . esc_html( $receipt['causale'] ) . '</p></div>';
 		if ( $missing ) $html .= '<div style="background:#f9fafb;border-left:6px solid #f59e0b;border-radius:10px;padding:20px 22px;margin-top:32px"><h3>📍 Prima dell’evento…</h3><p>Per completare al meglio l’organizzazione, ci manca ancora qualche informazione:</p>' . $missing . '<p>È sufficiente rispondere a questa email con le informazioni richieste.<br>Grazie per la collaborazione 💛</p></div>';
-		return $html;
+		return '<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:17px;line-height:1.68;">' . $html . '</div>';
 	}
 	public static function email_html( $event, $receipt, $payment ) {
 		$snapshot = MI_Modello_Email::crea_istantanea( $event, array() );
