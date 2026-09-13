@@ -47,7 +47,7 @@ final class MI_Attendance_Report {
 			if ( 'PRESENT' !== ( $attendance[$person['id']] ?? '' ) ) continue;
 			$key = $root( (int) $person['id'] );
 			if ( ! isset( $groups[$key] ) ) $groups[$key] = array( 'identity' => $key, 'names' => array(), 'events' => array(), 'records' => array() );
-			$name = trim( $person['first_name'] . ' ' . $person['last_name'] ); $groups[$key]['names'][$name] = $name;
+			$name = trim( $person['last_name'] . ' ' . $person['first_name'] ); $groups[$key]['names'][$name] = $name;
 			$groups[$key]['events'][(int) $person['event_id']] = $event['title'];
 			$groups[$key]['records'][] = array( 'id' => (int) $person['id'], 'code' => $person['order_code'], 'name' => $name );
 		}

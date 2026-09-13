@@ -2152,3 +2152,14 @@ test('il riepilogo finale nasconde Continua e riporta al campo non valido', asyn
   assert.match(script, /next\.hidden = index === steps\.length - 1/);
   assert.match(script, /form\.elements[\s\S]*field\.validity[\s\S]*invalidStep[\s\S]*invalid\.reportValidity/);
 });
+
+test('la gestione usa Cognome Nome e ricorda per evento le colonne del report', async () => {
+  const script = await read('assets/portal-management.js');
+  const service = await read('includes/class-mi-management-service.php');
+  const attendance = await read('includes/class-mi-attendance-report.php');
+  assert.match(script, /personName = person => \[person\?\.last_name,person\?\.first_name\]/);
+  assert.match(script, /localStorage\.getItem\('mi-report-columns:'\+event\)/);
+  assert.match(script, /localStorage\.setItem\('mi-report-columns:'\+event/);
+  assert.match(service, /'name' => trim\( \( \$person\['last_name'\]/);
+  assert.match(attendance, /\$person\['last_name'\] \. ' ' \. \$person\['first_name'\]/);
+});
