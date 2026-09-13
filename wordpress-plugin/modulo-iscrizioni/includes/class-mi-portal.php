@@ -1335,10 +1335,12 @@ final class MI_Portal {
 			if ( $cover_image ) echo '<img src="' . esc_url( $cover_image ) . '" alt="" loading="lazy" decoding="async" fetchpriority="low">';
 			echo '</span><span class="mi-event-card__identity"><strong>' . esc_html( $event_title ) . '</strong>';
 			if ( $activity_name ) echo '<small>' . esc_html( $activity_name ) . '</small>';
+			echo '<span class="mi-event-card__date-row"><small>' . esc_html( self::format_date( $starts_at ) ) . '</small>';
 			$price_config = $published ?: array( 'pricing_mode' => get_post_meta( $event->ID, '_mi_pricing_mode', true ) );
 			if ( self::is_free_configuration( $price_config ) ) echo '<span class="mi-event-free">Gratuito</span>';
+			echo '</span>';
 			$status_label = $is_cancelled ? 'Annullato' : ( 'publish' === $event->post_status ? ( self::is_past_event( $starts_at ) ? 'Concluso' : 'Attivo' ) : 'Bozza' );
-			echo '<small>' . esc_html( self::format_date( $starts_at ) ) . '</small></span><span class="mi-event-card__footer"><span class="mi-event-card__capacity"><small>Posti occupati</small><strong>' . esc_html( $count . ' / ' . $capacity ) . '</strong><i aria-hidden="true"><b style="width:' . esc_attr( $occupancy_percentage ) . '%"></b></i></span><span class="mi-event-card__status"><strong>' . esc_html( $status_label ) . '</strong>' . ( $registration_label ? '<small>' . ( $registration_opens_later ? '<b>' . esc_html( $registration_label ) . '</b>' : esc_html( $registration_label ) ) . '</small>' : '' ) . '<small>Scadenza: ' . esc_html( self::format_date( $closes_at ) ) . '</small></span></span></span></a>';
+			echo '</span><span class="mi-event-card__footer"><span class="mi-event-card__capacity"><small>Posti occupati</small><strong>' . esc_html( $count . ' / ' . $capacity ) . '</strong><i aria-hidden="true"><b style="width:' . esc_attr( $occupancy_percentage ) . '%"></b></i></span><span class="mi-event-card__status"><strong>' . esc_html( $status_label ) . '</strong>' . ( $registration_label ? '<small>' . ( $registration_opens_later ? '<b>' . esc_html( $registration_label ) . '</b>' : esc_html( $registration_label ) ) . '</small>' : '' ) . '<small>Scadenza: ' . esc_html( self::format_date( $closes_at ) ) . '</small></span></span></span></a>';
 			$registration_count = (int) ( $registration_counts[ $event->ID ] ?? 0 );
 			$active_count = (int) ( $active_registration_counts[ $event->ID ] ?? 0 );
 			$can_trash = ! $is_cancelled && 'draft' === $event->post_status && 0 === $registration_count;

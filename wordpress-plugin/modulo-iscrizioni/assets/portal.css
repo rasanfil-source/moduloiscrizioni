@@ -110,6 +110,9 @@
 
 /* Existing event cards: explicit free label, no badge for paid events. */
 .mi-event-card__identity .mi-event-free{display:inline-block;align-self:flex-start;width:fit-content;margin-top:4px;padding:2px 8px;border-radius:999px;background:var(--success-light);color:var(--success);font-size:.75rem;font-weight:var(--fw-medium, 600);line-height:1.4}
+.mi-event-card__date-row{display:flex;align-items:center;gap:8px;width:100%;min-width:0}
+.mi-event-card__date-row>small{min-width:0;overflow-wrap:anywhere}
+.mi-event-card__date-row .mi-event-free{flex-shrink:0;align-self:center;margin:0 0 0 auto}
 .mi-portal .mi-booking-card__content>strong,.mi-portal .mi-booking-detail article strong{color:var(--ink,#172033);font-weight:var(--fw-medium,600)}
 .mi-portal .mi-booking-card__content>small{color:var(--muted,#657084);font-weight:var(--fw-regular,400);line-height:1.5;margin-top:4px}
 .mi-portal .mi-booking-detail article{border-radius:14px;border-color:var(--line,#d7dde6);box-shadow:none;padding:20px;margin:24px 0}
