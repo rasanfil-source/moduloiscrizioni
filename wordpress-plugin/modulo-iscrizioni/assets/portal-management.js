@@ -295,7 +295,7 @@
           for(const selector of ['[data-room-inventory]','[data-room-occupants]']){const panel=content.querySelector(selector);if(panel&&!panel.hidden)roomSection.append(panel);}
         }
         const servicePanels=[...content.querySelectorAll('[data-person-services],[data-order-services]')];
-        if(servicePanels.length){const serviceSection=document.createElement('details');serviceSection.dataset.serviceSummary='';serviceSection.innerHTML='<summary>Riepilogo servizi richiesti</summary>';content.querySelector('[data-participant-reports]').append(serviceSection);servicePanels.forEach(panel=>serviceSection.append(panel));}
+        if(servicePanels.length){const serviceSection=document.createElement('details');serviceSection.dataset.serviceSummary='';serviceSection.innerHTML='<summary>Riepilogo servizi richiesti</summary><p>Per modificare i servizi (colazione, assicurazione, pullman…), vai su <strong>Gestisci → Varia i servizi accessori</strong>; per l’alloggio, su <strong>Gestione camere → Cambia tipo di abitazione</strong>.</p>';content.querySelector('[data-participant-reports]').append(serviceSection);servicePanels.forEach(panel=>serviceSection.append(panel));}
         let exportRows=[],pageRows=[],pageTotal=0,pageFingerprint='',listGeneration=0;
         const readAll=async()=>{
           if(!data.server_paging)return exportRows;

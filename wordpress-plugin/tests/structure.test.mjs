@@ -2177,3 +2177,10 @@ test('il riepilogo servizi e la barra operativa restano compatti', async () => {
   assert.match(css, /@media\(max-width:640px\)[\s\S]*\.mi-refresh-label\{display:none\}/);
   assert.match(css, /\.mi-participant-room-code\+td\{padding-left:3px\}/);
 });
+
+test('il riepilogo servizi indica dove effettuare le variazioni', async () => {
+  const script = await read('assets/portal-management.js');
+  assert.match(script, /Per modificare i servizi \(colazione, assicurazione, pullman…\)/);
+  assert.match(script, /<strong>Gestisci → Varia i servizi accessori<\/strong>/);
+  assert.match(script, /<strong>Gestione camere → Cambia tipo di abitazione<\/strong>/);
+});
