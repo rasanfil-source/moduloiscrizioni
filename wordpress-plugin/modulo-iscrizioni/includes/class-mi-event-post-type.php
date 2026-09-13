@@ -203,25 +203,25 @@ final class MI_Event_Post_Type {
 		</div>
 		<h3>Domande personalizzate</h3>
 		<p class="description">Aggiungi domande specifiche per questo evento. Le risposte seguiranno la scelta “solo uno” oppure “tutti gli iscritti”.</p>
-		<table class="widefat striped" id="mi-custom-fields"><thead><tr><th>Codice</th><th>Domanda</th><th>Tipo risposta</th><th>Scelte</th><th>Conservazione</th><th>Obbligatoria</th><th></th></tr></thead><tbody>
+		<div class="mi-responsive-table mi-config-table" tabindex="0" role="region" aria-label="Domande personalizzate"><table class="widefat striped" id="mi-custom-fields"><thead><tr><th scope="col">Codice</th><th scope="col">Domanda</th><th scope="col">Tipo risposta</th><th scope="col">Scelte</th><th scope="col">Conservazione</th><th scope="col">Obbligatoria</th><th scope="col"></th></tr></thead><tbody>
 		<?php foreach ( $custom_participant_fields as $custom_index => $field ) : ?>
 			<tr><td><input name="mi_custom_field_key[<?php echo esc_attr( $custom_index ); ?>]" value="<?php echo esc_attr( preg_replace( '/^custom_/', '', $field['key'] ) ); ?>" pattern="[a-z0-9_-]+"></td><td><input name="mi_custom_field_label[<?php echo esc_attr( $custom_index ); ?>]" value="<?php echo esc_attr( $field['label'] ); ?>" required></td><td><select name="mi_custom_field_type[<?php echo esc_attr( $custom_index ); ?>]"><?php foreach ( array( 'text' => 'Risposta breve', 'yesno' => 'Sì / No', 'textarea' => 'Risposta lunga', 'date' => 'Data', 'select' => 'Scelta singola', 'email' => 'Email', 'tel' => 'Cellulare' ) as $type => $label ) : ?><option value="<?php echo esc_attr( $type ); ?>" <?php selected( $field['type'], $type ); ?>><?php echo esc_html( $label ); ?></option><?php endforeach; ?></select></td><td><input name="mi_custom_field_options[<?php echo esc_attr( $custom_index ); ?>]" value="<?php echo esc_attr( implode( ' | ', $field['options'] ?? array() ) ); ?>" placeholder="Opzione A | Opzione B"></td><td><select name="mi_custom_field_retention[<?php echo esc_attr( $custom_index ); ?>]"><option value="STANDARD">WordPress e Sheets</option><option value="SHEETS_ONLY" <?php selected( $field['retention'] ?? '', 'SHEETS_ONLY' ); ?>>Escludi dalle copie di riepilogo</option></select></td><td><input type="hidden" name="mi_custom_field_required[<?php echo esc_attr( $custom_index ); ?>]" value="0"><input name="mi_custom_field_required[<?php echo esc_attr( $custom_index ); ?>]" type="checkbox" value="1" <?php checked( ! empty( $field['required'] ) ); ?>></td><td><button type="button" class="button mi-remove-custom-field">Rimuovi</button></td></tr>
 		<?php endforeach; ?>
-		</tbody></table>
+		</tbody></table></div>
 		<p><button type="button" class="button" id="mi-add-custom-field">Aggiungi domanda</button></p>
 		<h3>Tipologie di iscrizione</h3>
-		<table class="widefat striped" id="mi-ticket-types"><thead><tr><th>Codice</th><th>Nome</th><th>Prezzo €</th><th>Massimo per ordine</th><th>Capienza tipo</th><th></th></tr></thead><tbody>
+		<div class="mi-responsive-table mi-config-table" tabindex="0" role="region" aria-label="Tipologie di iscrizione"><table class="widefat striped" id="mi-ticket-types"><thead><tr><th scope="col">Codice</th><th scope="col">Nome</th><th scope="col">Prezzo €</th><th scope="col">Massimo per ordine</th><th scope="col">Capienza tipo</th><th scope="col"></th></tr></thead><tbody>
 		<?php foreach ( $ticket_types as $index => $ticket ) : ?>
 			<tr><td><input name="mi_ticket_code[]" value="<?php echo esc_attr( $ticket['code'] ); ?>" pattern="[a-z0-9-]+" required></td><td><input name="mi_ticket_name[]" value="<?php echo esc_attr( $ticket['name'] ); ?>" required></td><td><input name="mi_ticket_price[]" type="number" min="0" step="0.01" value="<?php echo esc_attr( number_format( (int) $ticket['price_cents'] / 100, 2, '.', '' ) ); ?>" required></td><td><input name="mi_ticket_max[]" type="number" min="1" max="20" value="<?php echo esc_attr( $ticket['max_per_order'] ); ?>" required></td><td><input name="mi_ticket_capacity[]" type="number" min="0" max="10000" value="<?php echo esc_attr( absint( $ticket['capacity'] ?? 0 ) ); ?>"><small>0 = capienza evento</small></td><td><button type="button" class="button mi-remove-ticket">Rimuovi</button></td></tr>
 		<?php endforeach; ?>
-		</tbody></table>
+		</tbody></table></div>
 		<p><button type="button" class="button" id="mi-add-ticket">Aggiungi tipologia</button></p>
 		<h3>Opzioni</h3>
-		<table class="widefat striped" id="mi-options"><thead><tr><th>Codice</th><th>Etichetta</th><th>Ambito</th><th>Prezzo €</th><th>Massimo</th><th></th></tr></thead><tbody>
+		<div class="mi-responsive-table mi-config-table" tabindex="0" role="region" aria-label="Opzioni"><table class="widefat striped" id="mi-options"><thead><tr><th scope="col">Codice</th><th scope="col">Etichetta</th><th scope="col">Ambito</th><th scope="col">Prezzo €</th><th scope="col">Massimo</th><th scope="col"></th></tr></thead><tbody>
 		<?php foreach ( $options as $option ) : ?>
 		<tr><td><input name="mi_option_code[]" value="<?php echo esc_attr( $option['code'] ); ?>" pattern="[a-z0-9-]+" required></td><td><input name="mi_option_name[]" value="<?php echo esc_attr( $option['name'] ); ?>" required></td><td><select name="mi_option_scope[]"><option value="ORDER" <?php selected( $option['scope'], 'ORDER' ); ?>>Ordine</option><option value="TICKET" <?php selected( $option['scope'], 'TICKET' ); ?>>Partecipante</option></select></td><td><input name="mi_option_price[]" type="number" min="0" step="0.01" value="<?php echo esc_attr( number_format( (int) $option['price_cents'] / 100, 2, '.', '' ) ); ?>"></td><td><input name="mi_option_max[]" type="number" min="1" max="20" value="<?php echo esc_attr( absint( $option['max_quantity'] ?? 1 ) ); ?>"></td><td><button type="button" class="button mi-remove-option">Rimuovi</button></td></tr>
 		<?php endforeach; ?>
-		</tbody></table><p><button type="button" class="button" id="mi-add-option">Aggiungi opzione</button></p>
+		</tbody></table></div><p><button type="button" class="button" id="mi-add-option">Aggiungi opzione</button></p>
 		<p class="description">Il totale sarà sempre ricalcolato sul server. La spedizione delle conferme dipende dalla modalità email scelta dall’amministratore.</p>
 		<?php
 	}
@@ -473,7 +473,7 @@ final class MI_Event_Post_Type {
 			return;
 		}
 		if ( self::GROUP_TYPE === $screen->post_type ) wp_enqueue_media();
-		wp_enqueue_style( 'mi-admin', MI_PLUGIN_URL . 'assets/admin.css', array(), MI_VERSION );
-		wp_enqueue_script( 'mi-admin', MI_PLUGIN_URL . 'assets/admin.js', array(), MI_VERSION, true );
+		wp_enqueue_style( 'mi-admin', MI_PLUGIN_URL . 'assets/admin.css', array(), MI_VERSION . '.' . filemtime( MI_PLUGIN_DIR . 'assets/admin.css' ) );
+		wp_enqueue_script( 'mi-admin', MI_PLUGIN_URL . 'assets/admin.js', array(), MI_VERSION . '.' . filemtime( MI_PLUGIN_DIR . 'assets/admin.js' ), true );
 	}
 }

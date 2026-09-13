@@ -1787,7 +1787,7 @@ test('la scheda partecipante resta sobria, compatta e senza dicitura richiesto',
   assert.doesNotMatch(script, /\(richiesto\)/);
   assert.match(style, /form\[data-person\] fieldset\{[^}]*border:1px solid #c9d3e1[^}]*box-shadow:none/);
   assert.match(style, /form\[data-person\] label\{[^}]*font-weight:500/);
-  assert.match(style, /form\[data-person\] :is\(input,select,textarea\)\{[^}]*border-radius:10px/);
+  assert.match(style, /form\[data-person\] :is\(input,select,textarea\)\{[^}]*border-radius:var\(--radius-control,10px\)/);
   assert.match(style, /form\[data-person\]\+form\[data-person\]\{[^}]*border-top:1px solid #dce3ec/);
 });
 

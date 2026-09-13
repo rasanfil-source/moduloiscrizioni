@@ -98,3 +98,16 @@
 .post-type-mi_event .mi-status-pending_payment,.post-type-mi_event .mi-status-waitlist_offered{background:#fff3cd;color:#765500}
 .post-type-mi_event .mi-status-waitlisted{background:#e8f0fe;color:#164b85}
 .post-type-mi_event .mi-status-cancelled,.post-type-mi_event .mi-status-expired{background:#fdecef;color:#9f1930}
+
+/* Audit UI: scoped controls and contained table scrolling. */
+.post-type-mi_event .mi-config-table { max-width:100%; margin:12px 0; }
+.post-type-mi_event .mi-config-table table { min-width:800px; }
+.post-type-mi_event .mi-config-table input:not([type=checkbox]) { width:100%; min-width:100px; }
+.post-type-mi_event .mi-admin-filters { display:flex; flex-wrap:wrap; align-items:end; gap:16px; padding:16px; margin:16px 0; border:1px solid #d7dde6; border-radius:14px; background:#fff; }
+.post-type-mi_event .mi-admin-filters label { display:flex; flex-direction:column; gap:8px; }
+.post-type-mi_event .mi-admin-details { margin:16px 0; padding:16px; border:1px solid #d7dde6; border-radius:14px; background:#fff; }
+.post-type-mi_event .mi-admin-details summary { cursor:pointer; font-size:16px; font-weight:600; }
+.post-type-mi_event .mi-admin-details[open] summary { margin-bottom:16px; }
+.post-type-mi_event .mi-registration-summary td,.post-type-mi_event .mi-admin-details td,.post-type-mi_event .mi-bookings-table td { font-variant-numeric:tabular-nums; }
+.post-type-mi_event .mi-responsive-table:focus-visible,.post-type-mi_event .mi-admin-details summary:focus-visible { outline:3px solid #244fc2; outline-offset:3px; }
+@media(max-width:782px){.post-type-mi_event .mi-admin-filters label{width:100%;}.post-type-mi_event .mi-admin-filters input,.post-type-mi_event .mi-admin-filters select{max-width:100%;}}

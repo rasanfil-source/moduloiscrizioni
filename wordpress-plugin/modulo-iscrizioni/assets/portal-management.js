@@ -15,6 +15,25 @@
     document.body.append(dialog);dialog.showModal();
     return new Promise(resolve=>dialog.addEventListener('close',()=>{const accepted=dialog.returnValue==='accept';dialog.remove();previous?.focus();resolve(accepted);},{once:true}));
   }
+  // Confirmations also serve the event and group forms outside management.
+  const confirmingForms = new WeakSet(), approvedForms = new WeakSet();
+  document.addEventListener('submit', async event => {
+    const form = event.target;
+    if (!form.matches('form[data-mi-confirm]')) return;
+    if (approvedForms.has(form)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (confirmingForms.has(form)) return;
+    confirmingForms.add(form);
+    const submitter = event.submitter;
+    try {
+      if (await ask(form.dataset.miConfirm, submitter?.textContent.trim() || 'Conferma')) {
+        approvedForms.add(form);
+        try { form.requestSubmit(submitter || undefined); }
+        finally { approvedForms.delete(form); }
+      }
+    } finally { confirmingForms.delete(form); }
+  }, true);
   function init(root) {
     if(root.dataset.ready)return;root.dataset.ready='1';
     const content=root.querySelector('[data-management-content]'),status=root.querySelector('[data-management-status]'),select=root.querySelector('[data-event-select]');
@@ -30,7 +49,15 @@
     filterEvents();
     const updateLocation=()=>{const url=new URL(location.href);url.searchParams.set('mi_portal_period',period);url.searchParams.set('mi_portal_event',event);url.searchParams.delete('mi_order');url.searchParams.delete('mi_sheet_sync');history.replaceState(null,'',url);};
     if(periodSelect)periodSelect.onchange=async()=>{const next=periodSelect.value;if(!await canLeave()){periodSelect.value=period;return;}period=next;event='';filterEvents();updateLocation();await summary();if(select.options.length===1)say(period==='past'?'Non ci sono eventi passati.':'Non ci sono eventi attivi.');};
-    const say=t=>{const text=String(t);status.textContent=text;status.classList.toggle('mi-management-updated',text.startsWith('Aggiornato: '));status.classList.toggle('mi-management-status--error',/(non disponibile|non confermato|non riuscita|errore|impossibile|riprova|controlla)/i.test(text));status.classList.toggle('mi-management-status--busy',/(caricamento|salvataggio|calcolo|sincronizzazione|aggiornamento)/i.test(text));};
+    const say=t=>{
+      const text=String(t),error=/(non disponibile|non confermat[oa]|non riuscit[oa]|non salvat[oeia]|non completat[oa]|errore|impossibile|riprova|controlla|interrott[oa])/i.test(text);
+      const busy=!error&&/^(caricamento|salvataggio|calcolo|sincronizzazione|aggiornamento)[\s…\.]/i.test(text);
+      status.textContent=text;
+      status.classList.toggle('mi-management-updated',text.startsWith('Aggiornato: '));
+      status.classList.toggle('mi-management-status--error',error);
+      status.classList.toggle('mi-management-status--busy',busy);
+      status.classList.toggle('mi-management-status--success',!error&&!busy&&/^(dati aggiornati|salvataggio completato|assegnazioni salvate|presenze salvate|esportati\b)/i.test(text));
+    };
     async function request(operation,data={}) {
       const abort=new AbortController(),timeout=setTimeout(()=>abort.abort(),90000);
       try{const response=await fetch(root.dataset.endpoint,{method:'POST',credentials:'same-origin',cache:'no-store',signal:abort.signal,body:new URLSearchParams({action:'mi_portal_management',nonce:root.dataset.nonce,event_id:event,order_code:order,operation,...data})});
@@ -279,6 +306,11 @@
         const filterControls=filterSection.querySelector('div');filterControls.append(searchBar,depositFilter.closest('label'),criticalFilter.closest('label'),serviceFilter.closest('label'),requestFilter.closest('label'),deadlineFilter.closest('label'));
         const closedLabel=document.createElement('label');closedLabel.className='mi-include-closed';
         const closedToggle=document.createElement('input');closedToggle.type='checkbox';closedToggle.checked=!!listContext.includeClosed;closedToggle.dataset.includeClosed='';closedLabel.append(closedToggle,' Mostra anche le iscrizioni chiuse');filterSection.append(closedLabel);
+        const advancedFilters=document.createElement('details');advancedFilters.className='mi-advanced-filters';
+        advancedFilters.innerHTML='<summary>Altri filtri <span data-filter-count></span></summary>';
+        filterControls.before(searchBar,advancedFilters);advancedFilters.append(filterControls,closedLabel);
+        const activeFilterCount=()=>[listContext.filter&&listContext.filter!=='all',listContext.deposit,listContext.service,listContext.requests,listContext.deadline,listContext.includeClosed].filter(Boolean).length;
+        advancedFilters.open=activeFilterCount()>0||!window.matchMedia('(max-width:900px)').matches;
         closedToggle.onchange=()=>{listContext.includeClosed=closedToggle.checked;listContext.shown=30;draw();};
         if(data.annual_report_group){
           const attendancePeople=(data.people||[]).filter(person=>['CONFIRMED','PENDING_PAYMENT'].includes(person.status));
@@ -319,6 +351,7 @@
         };
         const draw=async(append=false,provided=null)=>{
           const revision=++listGeneration;
+          const activeCount=activeFilterCount();advancedFilters.querySelector('[data-filter-count]').textContent=activeCount?'('+activeCount+' attivi)':'';
           if(data.server_paging){
             try{
               if(provided){pageRows=provided.rows;pageTotal=provided.total;}
@@ -363,6 +396,7 @@
             content.querySelectorAll('[data-list] tbody tr').forEach((row,index)=>{
               const person=list[index],missing=[...(person.missing||[])];
               if(features.rooms&&person.unassigned)missing.push('Camera da assegnare');
+              if(missing.length){const attention=document.createElement('small');attention.className='mi-row-attention';attention.textContent=missing.join(' · ');row.querySelector('[data-open]').after(attention);}
               row.cells[missingIndex].textContent=missing.join(', ');row.cells[missingIndex].hidden=!showMissing;
             });
           }
@@ -382,6 +416,7 @@
             header.innerHTML='<button type="button" data-sort-column="'+key+'">'+label+' <span aria-hidden="true">'+(selected?(descending?'↓':'↑'):'↕')+'</span></button>';
             header.querySelector('button').onclick=async()=>{listContext.direction=selected&&!descending?'desc':'asc';listContext.sort=key;listContext.shown=30;await draw();content.querySelector('[data-sort-column="'+key+'"]')?.focus();};
           }
+          if(all.length===0)content.querySelector('[data-list]>p:last-child')?.classList.add('mi-list-empty');
           listResize?.disconnect();
           if(list.length>10){
             const table=content.querySelector('[data-list] table'),viewport=document.createElement('div');
@@ -455,6 +490,9 @@
       if(!await canLeave())return;const ticket=++generation;order=code;say('Caricamento scheda…');
       try{const b=await request('detail');if(ticket!==generation)return;booking=b;printList=null;parkPanels();dirty=false;select.disabled=false;const selectedPerson=b.participants.find(p=>p.number===Number(personNumber))||b.participants[0];document.title=(selectedPerson?personName(selectedPerson):'Iscritto')+' — Scheda iscritto';
         content.innerHTML='<button data-back>Torna al riepilogo</button><h3>'+(selectedPerson?esc(personName(selectedPerson)):'Scheda iscritto')+'</h3><p data-person-contact></p><div data-person-intro-end></div>';
+        if(!b.is_free_event&&(b.total_cents>0||b.paid_cents!==0)&&[b.total_cents,b.paid_cents,b.balance_cents].every(value=>Number.isFinite(value))){
+          content.querySelector('[data-person-intro-end]').insertAdjacentHTML('beforebegin','<section class="mi-person-economic" aria-label="Importi della prenotazione"><p>Intera prenotazione <strong>'+esc(b.order_code)+'</strong> · importi complessivi di tutte le persone</p><dl><div><dt>Totale</dt><dd>'+money(b.total_cents)+'</dd></div><div><dt>Versato netto</dt><dd>'+money(b.paid_cents)+'</dd></div><div><dt>Residuo</dt><dd>'+money(b.balance_cents)+'</dd></div></dl></section>');
+        }
         if(selectedPerson){
           const contact=content.querySelector('[data-person-contact]');
           const personal=b.fields.filter(f=>['participant_email','email','participant_phone','phone','mobile'].includes(f.key));

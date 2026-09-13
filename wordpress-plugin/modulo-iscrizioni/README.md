@@ -1,3 +1,9 @@
+# Segreteria eventi — aggiornamento 3.26.73
+
+Consolidamento visivo del portale: conferme, filtri, scheda persona, camere, presenze e report. Migliorata la leggibilità su desktop e mobile. Nessuna modifica Apps Script richiesta rispetto alla 3.26.72. Caricare lo ZIP per sostituire il plugin esistente.
+
+## Note delle versioni precedenti
+
 # Segreteria eventi — aggiornamento 3.26.5
 
 Riepilogo delle persone, filtro Stato condizionale, gestione camere per sistemazione e progressivi automatici S/DM/DS/T/M. Il comando Cambia sistemazione mostra l’anteprima per persona e per iscrizione e aggiorna servizi, camera e dovuto in un’unica transazione. Conserva le tariffe dell’iscrizione, gli altri servizi e le rettifiche precedenti. I rimborsi restano manuali. Apps Script non richiede aggiornamenti rispetto alla distribuzione 3.26.1. Installazione sul sito da completare.

@@ -23,6 +23,9 @@ Il modello autorizzativo è definito da `class-mi-access.php`: sessione personal
 
 ## Comportamenti
 
+- Le conferme dei form evento e gruppo del portale usano il dialog HTML della gestione. La richiesta di conferma precede gli altri gestori submit; dopo l’accettazione il form viene rivalidato e conserva il pulsante di invio originario. Escape annulla e ripristina il focus. Il dialog Annulla evento conserva la propria conferma e non apre una seconda finestra nativa.
+- I filtri secondari possono essere richiusi senza perdere i valori applicati. Ricerca, filtri, paginazione ed esportazione continuano a usare il medesimo contesto. Gli importi in scheda persona provengono dal dettaglio già autorizzato e sono etichettati come riferiti all’intera prenotazione.
+
 - Gestione camere offre il filtro Tutte / Assegnate / Da assegnare, inizialmente Da assegnare, basato sul codice camera salvato delle persone della sistemazione scelta. Il filtro resta selezionato dopo il salvataggio; se non ci sono risultati viene indicato come tornare a Tutte. Come il cambio di sistemazione, il cambio di filtro è bloccato con bozze o salvataggi pendenti. Le colonne sono Persona iscritta, Codice, Numero; i riferimenti di iscrizione restano interni.
 
 - Cambia sistemazione richiede permesso pagamenti, persone ammesse, tariffa storica della nuova sistemazione; le annotazioni sono facoltative e inizialmente chiuse. L’anteprima è di sola lettura e mostra vecchia/nuova camera e differenza del dovuto per ogni iscrizione; conserva altri servizi e rettifiche pregresse. Conferma aggiorna servizi, camera e dovuto in un’unica transazione, con controllo della versione comprensiva dei versamenti, retry e audit consultabile. Caparra prevista conservata entro il nuovo totale; rimborsi manuali. Una defezione non converte automaticamente la sistemazione dei rimanenti. Le funzioni generiche Cambio servizi e Rettifica dovuto restano disponibili per gli altri casi.

@@ -12,7 +12,7 @@ La parrocchia è l'ente base. Ogni gruppo può avere logo, immagine, colori e co
 
 ## Stato
 
-Il repository contiene **3.26.16**, con la pagina pubblica del saldo ripresa dal modello Cammino, ricerca per cognome con disambiguazione e calcoli basati sui versamenti effettivi. Include gli aggiornamenti gestionali e il cambio di sistemazione con anteprima. L’installazione WordPress resta separata dalla pubblicazione GitHub: [stato e istruzioni](docs/rilascio-3.26.16.md).
+Il repository contiene **3.26.73**, con consolidamento visivo del portale, filtri e scheda persona più leggibili, conferme uniformate e controlli su mobile. L’installazione WordPress resta separata dalla pubblicazione GitHub: [stato e istruzioni](docs/rilascio-3.26.73.md).
 
 Una bozza è una creazione interrotta: selezionandola da **Gestisci eventi** si riapre dal primo passaggio incompleto, già popolato con i dati salvati. Se la configurazione è completa, si apre direttamente **Attiva l’evento**, con gli indirizzi pronti per i pulsanti **Iscriviti** e, quando previsto, **Saldo**, oltre allo shortcode per WordPress e Divi. Workspace crea in modo idempotente un foglio operativo dedicato nella stessa cartella Drive di `DB_MODULI`, con nome `Evento ID - Titolo`, e ne restituisce il collegamento. La preparazione non pubblica l’evento e non invia email.
 
@@ -23,7 +23,7 @@ Il sistema non richiede fotografie o scansioni dei documenti. Se indispensabili 
 Il codice non memorizza IBAN, numeri completi di carta, link operativi, ID del foglio, URL di distribuzione, segreti o destinatari reali. L’aggiornamento del repository non equivale a un deploy: prima dell’uso occorre aggiornare il plugin, eseguire `configuraCartellaDiLavoro()` sul progetto Apps Script aggiornato e collaudare in ambiente autorizzato con sole identità fittizie.
 
 - [Progetto funzionale e tecnico](PROGETTO.md)
-- [Rilascio corrente](docs/rilascio-3.25.1.md)
+- [Rilascio corrente](docs/rilascio-3.26.73.md)
 - [Schema dati](docs/SCHEMA_DATI.md)
 - [Allineamento tra documentazione e codice](docs/ALLINEAMENTO_CODICE_DOCUMENTAZIONE.md)
 - [Guida rapida per l'operatore](docs/GUIDA_OPERATORE.md)
