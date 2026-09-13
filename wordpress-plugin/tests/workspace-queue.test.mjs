@@ -19,6 +19,6 @@ test('le scritture Google sono serializzate e i retry non riacquisiscono il lock
   assert.match(client, /GET_LOCK\(%s, 0\)/);
   assert.match(client, /finally.*RELEASE_LOCK/s);
   assert.match(client, /self::request_unlocked\( \$action, \$payload, 1 \)/);
-  assert.match(service, /if \( get_transient\( \$retry_key \) \) \) return 'PENDING'/);
+  assert.match(service, /if \( get_transient\( \$retry_key \) \) return 'PENDING'/);
   assert.match(service, /time\(\) \+ \$delay, 'mi_sync_workspace_registration'/);
 });
