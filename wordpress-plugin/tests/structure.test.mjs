@@ -2163,3 +2163,17 @@ test('la gestione usa Cognome Nome e ricorda per evento le colonne del report', 
   assert.match(service, /'name' => trim\( \( \$person\['last_name'\]/);
   assert.match(attendance, /\$person\['last_name'\] \. ' ' \. \$person\['first_name'\]/);
 });
+
+test('il riepilogo servizi e la barra operativa restano compatti', async () => {
+  const script = await read('assets/portal-management.js');
+  const portal = await read('includes/class-mi-portal-management.php');
+  const css = await read('assets/portal-management.css');
+  assert.match(script, /<div data-person-services>/);
+  assert.doesNotMatch(script, /Servizi individuali delle persone ammesse/);
+  assert.doesNotMatch(script, /Le opzioni della prenotazione restano separate/);
+  assert.match(script, /service\.people\+' '\+\(service\.people===1\?'persona':'persone'\)/);
+  assert.match(script, />Inserisci nuova iscrizione</);
+  assert.match(portal, /mi-refresh-icon[\s\S]*mi-refresh-label/);
+  assert.match(css, /@media\(max-width:640px\)[\s\S]*\.mi-refresh-label\{display:none\}/);
+  assert.match(css, /\.mi-participant-room-code\+td\{padding-left:3px\}/);
+});

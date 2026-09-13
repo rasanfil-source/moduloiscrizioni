@@ -116,6 +116,20 @@
 .mi-management .mi-room-mode-controls{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}.mi-management .mi-room-mode-controls button{border-color:#c9d3e1;border-radius:10px;background:#fff;font-weight:600}.mi-management .mi-room-mode-controls button[aria-expanded=true]{border-color:var(--navy,#17224a);background:#f5f8fc}.mi-management .mi-room-operation-panel{margin:0;padding:16px;border:1px solid #c9d3e1;border-radius:10px;background:#fff}.mi-management .mi-room-operation-panel>h4{margin-top:0}.mi-management details.mi-room-operation-panel>summary{display:none}.mi-management .mi-attendance-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.mi-management [data-attendance-panel]{margin:18px 0;border:1px solid #c9d3e1;border-radius:10px}.mi-management [data-attendance-panel]>summary{padding:14px 16px;font-weight:600}.mi-management [data-attendance-panel]>p,.mi-management [data-attendance-panel]>.mi-attendance-actions,.mi-management [data-attendance-panel]>form{margin-left:16px;margin-right:16px}.mi-management .mi-attendance-table{overflow:auto}.mi-management .mi-attendance-table input[type=checkbox]{margin:auto}.mi-management .mi-participant-room-code{font-weight:600;white-space:nowrap}.mi-management .mi-detail-back{margin-top:24px;padding-top:16px;border-top:1px solid #dce3ec}@media(max-width:600px){.mi-management .mi-room-mode-controls{grid-template-columns:1fr}}
 @media print{.mi-management.mi-printing-list [data-print-list] table{display:table;width:100%;table-layout:auto}.mi-management.mi-printing-list [data-print-list] tr{display:table-row}.mi-management.mi-printing-list [data-print-list] th,.mi-management.mi-printing-list [data-print-list] td{display:table-cell}}
 
+/* Compact operational actions and tighter room/name relationship. */
+.mi-management .mi-management-actionbar{align-items:flex-end}
+.mi-management .mi-participant-table .mi-participant-room-code{padding-right:3px}
+.mi-management .mi-participant-table .mi-participant-room-code+td{padding-left:3px}
+.mi-management .mi-refresh-icon{display:none}
+@media(max-width:640px){
+  .mi-management .mi-management-actionbar{align-items:flex-end;flex-direction:row;gap:8px}
+  .mi-management .mi-management-actionbar [data-new-registration]{text-align:right}
+  .mi-management .mi-management-actionbar .mi-new-registration{width:auto;padding-inline:12px;white-space:nowrap}
+  .mi-management .mi-management-actionbar [data-refresh]{width:44px;padding:0}
+  .mi-management .mi-management-actionbar .mi-refresh-label{display:none}
+  .mi-management .mi-management-actionbar .mi-refresh-icon{display:inline;font-size:1.45rem;line-height:1}
+}
+
 /* Scheda partecipante: più contrasto e ritmo, senza introdurre profondità visiva. */
 .mi-management form[data-person]{margin-block:18px}
 .mi-management form[data-person]+form[data-person]{padding-top:18px;border-top:1px solid #dce3ec}
