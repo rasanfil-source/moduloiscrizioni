@@ -70,17 +70,18 @@
 
       <div id="summaryBox" aria-live="polite">Inserisci cognome per iniziare</div>
 
-      <!-- Breakdown dettaglio costi — visibile live appena caricata la prenotazione -->
-      <div id="breakdownBox">
-        <div style="font-size:.75rem;font-weight:600;color:#718096;text-transform:uppercase;
-                    letter-spacing:.5px;margin-bottom:8px;">Dettaglio costi</div>
-        <div id="costLines"></div>
-        <div class="breakdown-row total"><span>Totale</span><span id="totOpzioni">—</span></div>
-        <div class="breakdown-row caparra" id="rowCaparra"><span>Caparra versata</span><span id="caparraVersata">—</span></div>
-        <div class="breakdown-row" id="rowCaparraDue"><span>Caparra da versare</span><span id="caparraDaVersare">—</span></div>
-        <div class="breakdown-row" id="rowSaldo"><span>Saldo da versare</span><span id="quotaSaldo">—</span></div>
-        <div class="breakdown-row caparra"><span>Versato (esclusi rimborsi effettuati)</span><span id="versatoEffettivo">—</span></div>
-      </div>
+      <!-- Breakdown costi: disponibile su richiesta e chiuso inizialmente. -->
+      <details id="breakdownBox">
+        <summary>Dettaglio dei costi</summary>
+        <div class="breakdown-content">
+          <div id="costLines"></div>
+          <div class="breakdown-row total"><span>Totale</span><span id="totOpzioni">—</span></div>
+          <div class="breakdown-row caparra" id="rowCaparra"><span>Caparra versata</span><span id="caparraVersata">—</span></div>
+          <div class="breakdown-row" id="rowCaparraDue"><span>Caparra da versare</span><span id="caparraDaVersare">—</span></div>
+          <div class="breakdown-row" id="rowSaldo"><span>Saldo da versare</span><span id="quotaSaldo">—</span></div>
+          <div class="breakdown-row caparra"><span>Versato (esclusi rimborsi effettuati)</span><span id="versatoEffettivo">—</span></div>
+        </div>
+      </details>
 
       <!-- Saldo finale -->
       <div id="totalBox">

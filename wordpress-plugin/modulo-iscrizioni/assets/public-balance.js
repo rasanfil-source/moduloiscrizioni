@@ -689,6 +689,7 @@ function addPersonCard() {
 
   // Focus primo input della nuova card
   if (persone.length > 1) card.querySelector('.person-cognome').focus();
+  return persone[persone.length - 1];
 }
 
 function removeCard(index) {
@@ -931,16 +932,23 @@ function showAmounts(result,lines) {
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 addPersonCard();
 
-if (MIBalance.prefill?.cognome) {
-  const person = persone[0];
-  const card = person?.cardEl;
-  if (card) {
-    card.querySelector('.person-cognome').value = MIBalance.prefill.cognome;
-    card.querySelector('.person-nome').value = MIBalance.prefill.nome || '';
-    person.candidate = Number(MIBalance.prefill.row) || null;
-    lookupPersona(card, person.index);
+async function loadPrefilledBooking() {
+  const configured = Array.isArray(MIBalance.prefill?.people) && MIBalance.prefill.people.length
+    ? MIBalance.prefill.people
+    : (MIBalance.prefill?.cognome ? [MIBalance.prefill] : []);
+  for (const source of configured) {
+    if (persone.some(person => person.loaded && person.row === Number(source.row))) continue;
+    const person = persone.find(candidate => !candidate.loaded && !candidate.cardEl.querySelector('.person-cognome').value) || addPersonCard();
+    const card = person?.cardEl;
+    if (!card) continue;
+    card.querySelector('.person-cognome').value = source.cognome || '';
+    card.querySelector('.person-nome').value = source.nome || '';
+    person.candidate = Number(source.row) || null;
+    await lookupPersona(card, person.index);
   }
 }
+
+loadPrefilledBooking();
 
 btnAdd.addEventListener('click', addPersonCard);
 btnCalc.addEventListener('click', confermaEInvia);

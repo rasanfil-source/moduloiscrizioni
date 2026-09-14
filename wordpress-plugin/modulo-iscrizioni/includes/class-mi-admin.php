@@ -12,6 +12,7 @@ final class MI_Admin {
 		add_action( 'admin_post_mi_export_payments', array( __CLASS__, 'export_payments' ) );
 		add_action( 'admin_post_mi_cancel_registration', array( __CLASS__, 'cancel_registration' ) );
 		add_action( 'admin_post_mi_seed_demo_registrations', array( __CLASS__, 'seed_demo_registrations' ) );
+		add_action( 'admin_post_mi_save_payment_settings', array( __CLASS__, 'save_payment_settings' ) );
 		add_filter( 'post_row_actions', array( __CLASS__, 'event_row_actions' ), 10, 2 );
 		add_filter( 'wp_insert_post_data', array( __CLASS__, 'guard_publication' ), 20, 2 );
 		add_action( 'admin_notices', array( __CLASS__, 'publication_notice' ) );
@@ -59,6 +60,41 @@ final class MI_Admin {
 		);
 		add_submenu_page( 'edit.php?post_type=' . MI_Event_Post_Type::EVENT_TYPE, 'Pagamenti', 'Pagamenti', 'mi_view_registrations', 'mi-payments', array( __CLASS__, 'payments_page' ) );
 		add_submenu_page( 'edit.php?post_type=' . MI_Event_Post_Type::EVENT_TYPE, 'Dati dimostrativi', 'Dati dimostrativi', 'manage_options', 'mi-demo-data', array( __CLASS__, 'demo_data_page' ) );
+		add_submenu_page( 'edit.php?post_type=' . MI_Event_Post_Type::EVENT_TYPE, 'Dati per i pagamenti', 'Dati per i pagamenti', 'manage_options', 'mi-payment-settings', array( __CLASS__, 'payment_settings_page' ) );
+	}
+
+	public static function payment_settings_page() {
+		if ( ! current_user_can( 'manage_options' ) ) wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) );
+		$config = MI_Public_Balance::payment_config( 0 );
+		$saved = ! empty( $_GET['mi_payment_settings_saved'] );
+		$error = sanitize_text_field( wp_unslash( $_GET['mi_payment_settings_error'] ?? '' ) );
+		?><div class="wrap"><h1>Dati per i pagamenti</h1><p>Questi dati vengono salvati nel database e utilizzati come impostazioni generali per gli eventi a pagamento. Non vengono richiesti né conservati dati delle carte.</p>
+		<?php if ( $saved ) : ?><div class="notice notice-success is-dismissible"><p>Impostazioni di pagamento salvate.</p></div><?php endif; ?>
+		<?php if ( $error ) : ?><div class="notice notice-error"><p><?php echo esc_html( $error ); ?></p></div><?php endif; ?>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="mi_save_payment_settings"><?php wp_nonce_field( 'mi_save_payment_settings' ); ?>
+		<table class="form-table" role="presentation"><tr><th><label for="mi_payment_holder">Intestatario del conto</label></th><td><input class="regular-text" id="mi_payment_holder" name="holder" maxlength="160" value="<?php echo esc_attr( $config['holder'] ); ?>" required></td></tr>
+		<tr><th><label for="mi_payment_iban">IBAN</label></th><td><input class="regular-text code" id="mi_payment_iban" name="iban" maxlength="34" value="<?php echo esc_attr( $config['iban'] ); ?>" autocomplete="off" required><p class="description">L’IBAN italiano viene salvato senza spazi e in lettere maiuscole.</p></td></tr>
+		<tr><th><label for="mi_payment_card_url">Pagina per il pagamento con carta</label></th><td><input class="large-text" type="url" id="mi_payment_card_url" name="card_url" value="<?php echo esc_attr( $config['cardUrl'] ); ?>" placeholder="https://…" required><p class="description">Deve essere un indirizzo HTTPS della pagina esterna ufficiale. Il modulo non acquisisce i dati della carta.</p></td></tr></table>
+		<?php submit_button( 'Salva impostazioni' ); ?></form></div><?php
+	}
+
+	public static function save_payment_settings() {
+		if ( ! current_user_can( 'manage_options' ) ) wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) );
+		check_admin_referer( 'mi_save_payment_settings' );
+		$holder = sanitize_text_field( wp_unslash( $_POST['holder'] ?? '' ) );
+		$iban = strtoupper( preg_replace( '/\s+/', '', sanitize_text_field( wp_unslash( $_POST['iban'] ?? '' ) ) ) );
+		$card_url = esc_url_raw( wp_unslash( $_POST['card_url'] ?? '' ), array( 'https' ) );
+		$error = '';
+		if ( ! $holder ) $error = 'Inserisci l’intestatario del conto.';
+		elseif ( ! preg_match( '/^IT[0-9]{2}[A-Z][0-9]{10}[A-Z0-9]{12}$/', $iban ) ) $error = 'Inserisci un IBAN italiano valido.';
+		elseif ( ! $card_url || 'https' !== wp_parse_url( $card_url, PHP_URL_SCHEME ) ) $error = 'Inserisci un collegamento HTTPS valido per il pagamento con carta.';
+		$url = admin_url( 'edit.php?post_type=' . MI_Event_Post_Type::EVENT_TYPE . '&page=mi-payment-settings' );
+		if ( $error ) wp_safe_redirect( add_query_arg( 'mi_payment_settings_error', $error, $url ) );
+		else {
+			update_option( 'mi_public_balance_payment', array( 'holder' => $holder, 'iban' => $iban, 'cardUrl' => $card_url ), false );
+			wp_safe_redirect( add_query_arg( 'mi_payment_settings_saved', '1', $url ) );
+		}
+		exit;
 	}
 
 	public static function demo_data_page() {

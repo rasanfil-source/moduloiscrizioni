@@ -58,7 +58,7 @@ Sotto i 480px, i link dell’evento dedicano una riga intera all’indirizzo e l
 
 Su mobile il riepilogo operativo dispone i conteggi in due colonne, con spazi ridotti e comandi di almeno 44px. Camere, presenze e report condividono bordi, intestazioni e spazi interni; le tabelle larghe conservano lo scorrimento locale. Caricamento, errore ed esito confermato hanno superfici semantiche con messaggi testuali; l’assenza di risultati resta uno stato neutro. Verifica sintetica completa disponibile in `tools/test-management-full-event-browser.cjs`, inclusi viewport da 320 e 390px e recupero dopo errore.
 
-L’integrazione dell’audit 3.26.72 mantiene lo scorrimento naturale e le sezioni camere, presenze e servizi già richiudibili. La ricerca persone resta visibile; i filtri secondari sono raccolti in «Altri filtri», con conteggio attivo, inizialmente chiusi sotto 900px se non ci sono filtri applicati. La scheda persona mostra gli importi complessivi della prenotazione con un’etichetta esplicita; non attribuisce il saldo alla singola persona. In wp-admin le tabelle di configurazione scorrono nel proprio contenitore e i dettagli secondari della prenotazione sono richiudibili.
+L’integrazione dell’audit 3.26.72 mantiene lo scorrimento naturale e le sezioni camere, presenze e servizi già richiudibili. La ricerca persone resta visibile; i filtri secondari sono raccolti in «Altri filtri», con conteggio attivo, inizialmente chiusi sotto 900px se non ci sono filtri applicati. La scheda persona mostra gli importi individuali; gli importi complessivi sono riservati a “Vedi tutta la prenotazione”. I vecchi versamenti non attribuiti restano esplicitamente da verificare. In wp-admin le tabelle di configurazione scorrono nel proprio contenitore e i dettagli secondari della prenotazione sono richiudibili.
 
 Il contenuto segue lo scorrimento naturale della pagina. Le azioni correlate sono raccolte in schede; su schermi stretti si impilano senza perdere etichette o comandi. Campi e pulsanti hanno almeno 44 px di altezza. I collegamenti completi restano selezionabili.
 
@@ -73,6 +73,10 @@ Le superfici usano bordi e ombre molto leggere. Non si usano gradienti, vetro, a
 Controlli con raggio di 10 px e schede con raggio di 14 px. Le forme circolari sono riservate a loghi, iniziali e indicatori di stato.
 
 ## Components
+
+In Pagamenti le persone della prenotazione sono righe con checkbox nativa a sinistra e Nome Cognome — quota; negli eventi con caparra compare sotto la ripartizione caparra + saldo. La tendina Versamento precede le persone. Selezione con bordo blu, superfici chiare e importi leggibili; il campo importo calcolato resta in sola lettura durante l’incasso. La persona cercata precede le altre senza sostituire la loro identità con quella del referente.
+
+La rifinitura del portale conserva fotografie, loghi e banda blu delle tessere. Il selettore superiore usa piccole icone decorative monocromatiche, etichette sempre visibili e una superficie unica con bordi discreti. I titoli delle tessere sono da 18px, peso 600; spazi interni e distanze seguono il ritmo 16/20px. I bordi delle superfici usano il token locale --line-soft; campi, focus e colori di stato mantengono il proprio contrasto. Su mobile rimane la navigazione orizzontale scorrevole. Queste finiture sono limitate allo schermo e non cambiano la stampa.
 
 La configurazione evento in wp-admin distingue Gruppo e disponibilità, Date e lista d’attesa, Quote e pagamenti, Comunicazioni e richieste mediante intestazioni interne alla griglia. I campi e i filtri del plugin condividono altezza 44px e focus 3px; riquadri e modale usano la palette della segreteria senza alterare il resto dell’amministrazione WordPress.
 
@@ -152,3 +156,11 @@ Le email operative partono con l’identità `Segreteria parrocchiale S. Eugenio
 Le conferme degli eventi gratuiti non contengono collegamenti, pulsanti o testi relativi a stato dei pagamenti e saldo. La regola viene verificata nuovamente al momento dell’invio per proteggere anche le email già accodate. Un vecchio collegamento firmato mostra soltanto evento, codice e stato dell’iscrizione; l’interfaccia pubblica di saldo rifiuta gli eventi senza un flusso di pagamento.
 
 Gli avvisi mi-action-progress usano fondo giallo chiaro #fff4ce, testo #604b13 e bordo #e5cf83. Le righe delle voci aggiuntive allineano i controlli al margine inferiore anche con etichette su due righe. La categoria visibile «Pasti» conserva il codice interno pranzo. In Gestione il periodo precede la scelta evento e inizialmente mostra gli attivi; i collegamenti diretti a un evento passato selezionano il periodo corrispondente.
+
+
+## Iscrizione e prenotazione — 3.26.110
+L’iscrizione è individuale; la prenotazione raccoglie gli iscritti insieme. Gestione iscrizioni comprende Tutti gli eventi e sostituisce l’accesso separato. La scheda mostra importi personali e conserva la persona dopo ogni salvataggio. Vedi tutta la prenotazione espone servizi, sistemazioni e importi individuali e complessivi. Crediti e debiti di persone diverse restano separati. Modifiche servizi hanno anteprima e aggiornano atomicamente le quote, preservando i versamenti. Nessuna attribuzione inventata per lo storico.
+
+## Identità della Segreteria eventi — 3.26.111
+
+La sola area operativa usa una favicon derivata dal logo della Parrocchia Sant’Eugenio: croce, fiore e baldacchino bianchi sul blu notte del portale. Un piccolo registro dorato distingue il lavoro di segreteria dall’identità pubblica del sito. L’icona non contiene scritte e conserva una silhouette leggibile da 32 px; le pagine pubbliche continuano a usare l’icona ordinaria del sito.

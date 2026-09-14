@@ -10,13 +10,33 @@ final class MI_Spedizione_Email {
 	private static $indirizzo_mittente = '';
 	private static $codice_incorporato = '';
 	private static $corpo_testo = '';
+	private static $pubblicazioni = array();
 
 	public static function avvia() {
 		add_action( 'admin_menu', array( __CLASS__, 'aggiungi_pagina' ) );
 		add_action( 'admin_post_mi_salva_spedizione_email', array( __CLASS__, 'salva_impostazioni' ) );
 		add_action( 'admin_post_mi_invia_email_prova', array( __CLASS__, 'invia_prova' ) );
 		add_action( 'admin_post_mi_riaccoda_email', array( __CLASS__, 'riaccoda_email' ) );
+		add_action( 'transition_post_status', array( __CLASS__, 'rileva_pubblicazione' ), 10, 3 );
+		add_action( 'save_post_' . MI_Event_Post_Type::EVENT_TYPE, array( __CLASS__, 'notifica_pubblicazione' ), 40, 2 );
 		add_action( 'mi_spedisci_email_in_coda', array( __CLASS__, 'spedisci_coda' ) );
+	}
+
+	public static function destinatario_evento( $event_id ) {
+		$group_id = absint( get_post_meta( $event_id, '_mi_activity_id', true ) );
+		$style = $group_id ? (array) get_post_meta( $group_id, '_mi_email_style', true ) : array();
+		$email = sanitize_email( $style['contact_email'] ?? '' );
+		return is_email( $email ) ? $email : ( sanitize_email( get_option( 'mi_email_segreteria_eventi', '' ) ) ?: MI_Modello_Email::EMAIL_SEGRETERIA );
+	}
+	public static function rileva_pubblicazione( $new, $old, $post ) {
+		if ( 'publish' === $new && 'publish' !== $old && MI_Event_Post_Type::EVENT_TYPE === $post->post_type ) { self::$pubblicazioni[$post->ID] = true; update_post_meta( $post->ID, '_mi_publication_notification_pending', '1' ); }
+	}
+	public static function notifica_pubblicazione( $event_id, $post ) {
+		if ( empty( self::$pubblicazioni[$event_id] ) && ! get_post_meta( $event_id, '_mi_publication_notification_pending', true ) ) return;
+		if ( 'publish' !== $post->post_status || wp_is_post_revision( $event_id ) || wp_is_post_autosave( $event_id ) ) return;
+		if ( get_post_meta( $event_id, '_mi_publication_notified', true ) ) return;
+		$result = self::accoda_notifica_gestore_evento( $event_id, null, '', self::destinatario_evento( $event_id ) );
+		if ( ! is_wp_error( $result ) ) { update_post_meta( $event_id, '_mi_publication_notified', '1' ); update_post_meta( $event_id, '_mi_publication_notification_pending', '' ); }
 	}
 
 	public static function modalita() {
@@ -46,19 +66,13 @@ final class MI_Spedizione_Email {
 		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( $event_id ); if ( is_wp_error( $lease ) ) return $lease; }
 		$event_id = absint( $event_id );
 		$recipient = sanitize_email( $gestore ? $gestore->user_email : $email_segreteria );
-		$nome_destinatario = $gestore ? $gestore->display_name : 'Segreteria';
-		$sheet_url = esc_url_raw( (string) $sheet_url, array( 'https' ) );
-		$event_url = MI_Shortcode::url_iscrizione( $event_id );
-		if ( ! $event_id || ! is_email( $recipient ) || 0 !== strpos( $sheet_url, 'https://docs.google.com/spreadsheets/' ) ) return new WP_Error( 'mi_notifica_gestore_non_valida', 'Dati della comunicazione al gestore non validi.' );
-		$subject = 'Evento pronto — ' . sanitize_text_field( get_the_title( $event_id ) );
-		$body = '<p>Gentile ' . esc_html( $nome_destinatario ) . ',</p><p>il modulo e il foglio operativo sono pronti.</p><p>Il riferimento per la gestione è <strong>' . esc_html( $recipient ) . '</strong>. Per aprire il foglio devi essere autenticato in Google con questo indirizzo e avere i permessi sul documento.</p>';
-		$text = "Gentile " . sanitize_text_field( $nome_destinatario ) . ",\n\nil modulo e il foglio operativo sono pronti.\n\nAccedi a Google con {$recipient} per aprire il foglio operativo.";
-		$snapshot = MI_Modello_Email::crea_istantanea_istituzionale( $event_id, $subject, 'Il modulo e il foglio operativo sono pronti.', $body, $text, array( array( 'label' => 'Apri il foglio Google dell’evento', 'url' => $sheet_url ), array( 'label' => 'Apri la pagina dell’evento', 'url' => $event_url ) ) );
+		if ( ! $event_id || ! is_email( $recipient ) || 'publish' !== get_post_status( $event_id ) ) return new WP_Error( 'mi_notifica_gestore_non_valida', 'Evento non pubblicato o destinatario non valido.' );
+		$snapshot = MI_Modello_Email::crea_istantanea_pubblicazione_evento( $event_id );
 		$payload_json = wp_json_encode( array( 'event_id' => $event_id, 'template_type' => 'EVENT_MANAGER_READY', 'email_preview' => $snapshot ) );
 		if ( false === $payload_json ) return new WP_Error( 'mi_notifica_gestore_json', 'Comunicazione al gestore non serializzabile.' );
 		global $wpdb;
 		$status = self::stato_nuova_email( $snapshot );
-		$origin_key = hash( 'sha256', 'event-manager-ready|' . $event_id . '|' . strtolower( $recipient ) . '|' . $sheet_url );
+		$origin_key = hash( 'sha256', 'event-published|' . $event_id . '|' . strtolower( $recipient ) );
 		$inserted = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->prefix}mi_email_outbox (registration_id,recipient,template_type,origin_key,payload_json,status,created_at) VALUES (0,%s,'EVENT_MANAGER_READY',%s,%s,%s,%s)", $recipient, $origin_key, $payload_json, $status, current_time( 'mysql', true ) ) );
 		if ( false === $inserted ) return new WP_Error( 'mi_notifica_gestore_archivio', 'Comunicazione al gestore non salvata.' );
 		if ( self::email_da_spedire( $status ) && $inserted ) self::pianifica_spedizione();
@@ -67,7 +81,7 @@ final class MI_Spedizione_Email {
 
 	/** Prepara la conferma di attivazione per la parrocchia e, se assegnato, per il gestore dell’evento. */
 	public static function accoda_notifiche_attivazione_evento( $event_id, ?WP_User $gestore, $sheet_url, $email_segreteria ) {
-		$email_segreteria = sanitize_email( $email_segreteria );
+		$email_segreteria = self::destinatario_evento( $event_id );
 		if ( ! is_email( $email_segreteria ) ) return new WP_Error( 'mi_notifica_segreteria_non_valida', 'L’indirizzo email della parrocchia non è valido.' );
 		$destinatari = array( array( 'utente' => null, 'email' => $email_segreteria ) );
 		if ( $gestore instanceof WP_User && is_email( $gestore->user_email ) && strtolower( $gestore->user_email ) !== strtolower( $email_segreteria ) ) $destinatari[] = array( 'utente' => $gestore, 'email' => $gestore->user_email );
@@ -228,13 +242,13 @@ final class MI_Spedizione_Email {
 		$oggetto = 'Prova Modulo Iscrizioni — ' . wp_date( 'd/m/Y H:i' );
 		$istantanea = array(
 			'preheader' => 'Anteprima sintetica del nuovo modello email.',
-			'html' => '<p>Questa è una <strong>email sintetica di prova</strong> del Modulo Iscrizioni.</p><p>Evento: Evento dimostrativo<br>Codice: MI-PROVA-0001<br>Iscrizione a nome di: Persona Esempio</p><p>Nessun dato di un’iscrizione reale è stato utilizzato.</p>',
-			'testo' => "Questa è una email sintetica di prova del Modulo Iscrizioni.\nEvento: Evento dimostrativo\nCodice: MI-PROVA-0001\nIscrizione a nome di: Persona Esempio\nNessun dato di un’iscrizione reale è stato utilizzato.",
+			'html' => '<p>Questa è una <strong>email sintetica di prova</strong> del Modulo Iscrizioni.</p><p>Evento: Evento dimostrativo<br>Iscrizione a nome di: Persona Esempio</p><p>Nessun dato di un’iscrizione reale è stato utilizzato.</p>',
+			'testo' => "Questa è una email sintetica di prova del Modulo Iscrizioni.\nEvento: Evento dimostrativo\nIscrizione a nome di: Persona Esempio\nNessun dato di un’iscrizione reale è stato utilizzato.",
 			'footer' => 'Un saluto dall’organizzazione.',
 			'identita' => array( 'nome_attivita' => 'Attività dimostrativa', 'primary_color' => '#151b38', 'secondary_color' => '#337ab7', 'primary_text_color' => '#ffffff', 'secondary_text_color' => '#ffffff' ),
 			'identita_email' => array(),
 			'evento' => array( 'titolo' => 'Evento dimostrativo', 'url' => '' ),
-			'identificativo' => array( 'codice' => 'MI-PROVA-0001' ),
+			'identificativo' => array( 'modalita' => 'NONE', 'codice' => '' ),
 		);
 		$corpo = MI_Modello_Email::componi_html( $istantanea );
 		self::$corpo_testo = MI_Modello_Email::componi_testo( $istantanea );
@@ -282,7 +296,7 @@ final class MI_Spedizione_Email {
 		if ( $operativo ) $stati[] = "'PENDING'";
 		if ( $destinatario_prova ) $stati[] = "'TEST_PENDING'";
 		if ( ! $stati ) return;
-		$righe = $wpdb->get_results( "SELECT id, registration_id, recipient, payload_json, attempts, status FROM {$table} WHERE status IN (" . implode( ',', $stati ) . ") AND attempts < 5 ORDER BY id ASC LIMIT 10", ARRAY_A );
+		$righe = $wpdb->get_results( "SELECT id, registration_id, recipient, template_type, payload_json, attempts, status FROM {$table} WHERE status IN (" . implode( ',', $stati ) . ") AND attempts < 5 ORDER BY id ASC LIMIT 10", ARRAY_A );
 		foreach ( $righe as $riga ) {
 			$event_payload = json_decode( (string) $riga['payload_json'], true );
 			$event_id = ! empty( $riga['registration_id'] ) ? MI_Event_Deletion::registration_event( $riga['registration_id'] ) : absint( $event_payload['event_id'] ?? 0 );
@@ -295,6 +309,13 @@ final class MI_Spedizione_Email {
 			}
 			$payload = json_decode( (string) $riga['payload_json'], true );
 			$istantanea = is_array( $payload ) && isset( $payload['email_preview'] ) && is_array( $payload['email_preview'] ) ? $payload['email_preview'] : array();
+			// Anche le istantanee storiche già accodate non devono mostrare il codice interno.
+			if ( isset( $istantanea['html'] ) ) $istantanea['html'] = (string) preg_replace( '#(?:<br\s*/?>)?\s*<strong>Codice(?: iscrizione)?:</strong>\s*[^<]*(?=<br\s*/?>|</p>)#iu', '', $istantanea['html'] );
+			if ( isset( $istantanea['testo'] ) ) $istantanea['testo'] = (string) preg_replace( '/^Codice(?: iscrizione)?:[^\r\n]*(?:\r?\n)?/imu', '', $istantanea['testo'] );
+			$istantanea['identificativo'] = array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' );
+			if ( 'REGISTRATION_SECRETARIAT_NOTIFICATION' === $riga['template_type'] ) {
+				foreach ( array( 'html', 'testo' ) as $campo ) if ( isset( $istantanea[ $campo ] ) ) $istantanea[ $campo ] = str_replace( array( '<strong>Referente:</strong>', 'Referente:' ), array( '<strong>Iscrizione a nome di:</strong>', 'Iscrizione a nome di:' ), $istantanea[ $campo ] );
+			}
 			if ( ! empty( $riga['registration_id'] ) ) {
 				$economia = $wpdb->get_row( $wpdb->prepare( "SELECT economic_mode,total_cents FROM {$wpdb->prefix}mi_registrations WHERE id=%d", $riga['registration_id'] ), ARRAY_A );
 				if ( is_array( $economia ) && ( ! in_array( $economia['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) || (int) $economia['total_cents'] <= 0 ) ) unset( $istantanea['status_url'] );

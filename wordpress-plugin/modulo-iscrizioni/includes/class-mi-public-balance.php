@@ -21,13 +21,22 @@ final class MI_Public_Balance {
 	public static function payment_config( $event ) {
 		$defaults = (array) get_option( 'mi_public_balance_payment', array() );
 		$config_file = MI_PLUGIN_DIR . 'public-balance-config.json';
-		if ( ! $defaults && is_readable( $config_file ) ) { $defaults = self::decode( file_get_contents( $config_file ) ); update_option( 'mi_public_balance_payment', $defaults, false ); }
+		if ( ! $defaults && is_readable( $config_file ) ) {
+			$local = self::decode( file_get_contents( $config_file ) );
+			$iban = strtoupper( preg_replace( '/\s+/', '', sanitize_text_field( (string) ( $local['iban'] ?? '' ) ) ) );
+			$holder = sanitize_text_field( (string) ( $local['holder'] ?? '' ) );
+			$card_url = esc_url_raw( (string) ( $local['cardUrl'] ?? '' ), array( 'https' ) );
+			if ( preg_match( '/^IT[0-9]{2}[A-Z][0-9]{10}[A-Z0-9]{12}$/', $iban ) && $holder && $card_url && 'https' === wp_parse_url( $card_url, PHP_URL_SCHEME ) ) {
+				$defaults = array( 'iban' => $iban, 'holder' => $holder, 'cardUrl' => $card_url );
+				update_option( 'mi_public_balance_payment', $defaults, false );
+			}
+		}
 		return array(
-			'iban' => (string) ( get_post_meta( $event, '_mi_balance_iban', true ) ?: ( $defaults['iban'] ?? '' ) ),
-			'holder' => (string) ( get_post_meta( $event, '_mi_balance_holder', true ) ?: ( $defaults['holder'] ?? '' ) ),
-			'cardUrl' => esc_url_raw( get_post_meta( $event, '_mi_balance_card_url', true ) ?: ( $defaults['cardUrl'] ?? '' ), array( 'https' ) ),
-			'contact' => sanitize_email( get_post_meta( $event, '_mi_balance_contact', true ) ?: ( $defaults['contact'] ?? get_option( 'admin_email' ) ) ),
-			'methods' => (array) get_post_meta( $event, '_mi_payment_methods', true ),
+			'iban' => (string) ( $event ? get_post_meta( $event, '_mi_balance_iban', true ) : '' ) ?: (string) ( $defaults['iban'] ?? '' ),
+			'holder' => (string) ( $event ? get_post_meta( $event, '_mi_balance_holder', true ) : '' ) ?: (string) ( $defaults['holder'] ?? '' ),
+			'cardUrl' => esc_url_raw( ( $event ? get_post_meta( $event, '_mi_balance_card_url', true ) : '' ) ?: ( $defaults['cardUrl'] ?? '' ), array( 'https' ) ),
+			'contact' => sanitize_email( ( $event ? get_post_meta( $event, '_mi_balance_contact', true ) : '' ) ?: ( $defaults['contact'] ?? get_option( 'admin_email' ) ) ),
+			'methods' => $event ? (array) get_post_meta( $event, '_mi_payment_methods', true ) : array(),
 		);
 	}
 	public static function route() {
@@ -244,7 +253,7 @@ final class MI_Public_Balance {
 	public static function render( $event, $prefill = array() ) {
 		try { self::event( $event ); } catch ( Throwable $error ) { wp_die( esc_html( $error->getMessage() ) ); }
 		nocache_headers();
-		$prefill = is_array( $prefill ) ? array( 'row' => absint( $prefill['row'] ?? 0 ), 'nome' => sanitize_text_field( (string) ( $prefill['nome'] ?? '' ) ), 'cognome' => sanitize_text_field( (string) ( $prefill['cognome'] ?? '' ) ) ) : array();
+		$prefill = is_array( $prefill ) ? array( 'row' => absint( $prefill['row'] ?? 0 ), 'nome' => sanitize_text_field( (string) ( $prefill['nome'] ?? '' ) ), 'cognome' => sanitize_text_field( (string) ( $prefill['cognome'] ?? '' ) ), 'people' => array_map( static function ( $person ) { return array( 'row' => absint( $person['row'] ?? 0 ), 'nome' => sanitize_text_field( (string) ( $person['nome'] ?? '' ) ), 'cognome' => sanitize_text_field( (string) ( $person['cognome'] ?? '' ) ) ); }, is_array( $prefill['people'] ?? null ) ? $prefill['people'] : array() ) ) : array();
 		$config = array_merge( self::payment_config( $event ), array( 'eventTitle' => get_the_title( $event ), 'endpoint' => add_query_arg( 'mi_public_balance', $event, home_url( '/' ) ), 'nonce' => wp_create_nonce( 'mi_public_balance_' . $event ), 'prefill' => $prefill ) );
 		$asset = MI_PLUGIN_URL . 'assets/';
 		header( 'Content-Type: text/html; charset=UTF-8' );

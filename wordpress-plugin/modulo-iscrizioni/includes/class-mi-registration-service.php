@@ -456,7 +456,7 @@ final class MI_Registration_Service {
 			}
 			$secretariat_recipient = sanitize_email( (string) get_option( 'mi_email_segreteria_eventi', MI_Modello_Email::EMAIL_SEGRETERIA ) );
 			if ( ! is_email( $secretariat_recipient ) ) $secretariat_recipient = MI_Modello_Email::EMAIL_SEGRETERIA;
-			$secretariat_snapshot = MI_Modello_Email::crea_istantanea_nuova_iscrizione_segreteria( $event_id, $email_values );
+			$secretariat_snapshot = MI_Modello_Email::crea_istantanea_nuova_iscrizione_segreteria( $event_id, $email_values, $registration_id );
 			$secretariat_status = MI_Spedizione_Email::stato_nuova_email( $secretariat_snapshot );
 			$secretariat_payload = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $order_code, 'status' => $status, 'quantity' => $selection['quantity'], 'email_preview' => $secretariat_snapshot ) );
 			if ( false === $secretariat_payload || false === $wpdb->insert( $outbox_table, array( 'registration_id' => $registration_id, 'recipient' => $secretariat_recipient, 'template_type' => 'REGISTRATION_SECRETARIAT_NOTIFICATION', 'payload_json' => $secretariat_payload, 'status' => $secretariat_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) {
@@ -793,7 +793,19 @@ final class MI_Registration_Service {
 	}
 
 	public static function cancel_registration( $registration_id, $actor_label = 'ADMIN', $promote_waitlist = true ) {
-		return self::transition_registration_status( absint( $registration_id ), 'CANCELLED', $actor_label, (bool) $promote_waitlist );
+		global $wpdb;
+		$registration_id = absint( $registration_id );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id,event_id,order_code,status,buyer_first_name,buyer_last_name,buyer_email FROM {$wpdb->prefix}mi_registrations WHERE id=%d", $registration_id ), ARRAY_A );
+		$result = self::transition_registration_status( $registration_id, 'CANCELLED', $actor_label, (bool) $promote_waitlist );
+		if ( is_wp_error( $result ) || 'CANCELLED' !== $result || ! $row || 'CANCELLED' === $row['status'] || ! is_email( $row['buyer_email'] ) ) return $result;
+		$snapshot = MI_Modello_Email::crea_istantanea_annullamento_iscrizione_iscritto( (int) $row['event_id'], trim( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ), $row['order_code'] );
+		$status = MI_Spedizione_Email::stato_nuova_email( $snapshot );
+		$payload = wp_json_encode( array( 'event_title' => get_the_title( (int) $row['event_id'] ), 'order_code' => $row['order_code'], 'status' => 'CANCELLED', 'email_preview' => $snapshot ) );
+		if ( false !== $payload ) {
+			$wpdb->insert( $wpdb->prefix . 'mi_email_outbox', array( 'registration_id' => $registration_id, 'recipient' => $row['buyer_email'], 'template_type' => 'REGISTRATION_CANCELLATION', 'payload_json' => $payload, 'status' => $status, 'created_at' => current_time( 'mysql', true ) ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) );
+			if ( MI_Spedizione_Email::email_da_spedire( $status ) ) MI_Spedizione_Email::pianifica_spedizione();
+		}
+		return $result;
 	}
 
 	public static function participant_from_token( $participant_id, $token ) {

@@ -18,6 +18,7 @@ private-data/
 credentials*.json
 service-account*.json
 *secret*.json
+wordpress-plugin/modulo-iscrizioni/public-balance-config.json
 *.pem
 *.key
 *.p12

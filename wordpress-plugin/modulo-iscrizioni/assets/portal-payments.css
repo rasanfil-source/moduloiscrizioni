@@ -24,3 +24,13 @@
   .mi-payments .mi-payment-history-table{min-width:0}
   .mi-payments .mi-payment-history-table :is(th,td):nth-child(n+5){min-width:0}
 }
+.mi-payments .mi-payment-people{margin:24px 0;padding:0;border:0}
+.mi-payments .mi-payment-people legend{font-size:1rem;font-weight:600;margin-bottom:12px}
+.mi-payments .mi-payment-person{display:flex;align-items:center;gap:12px;padding:14px 16px;margin:8px 0;background:var(--surface,#fff);border:1px solid var(--line,#d7dde6);border-radius:10px;cursor:pointer}
+.mi-payments .mi-payment-person input[type=checkbox]{width:20px;height:20px;flex:0 0 20px;margin:0;accent-color:var(--navy,#17224a)}
+.mi-payments .mi-payment-person span{min-width:0;overflow-wrap:anywhere}
+.mi-payments .mi-payment-person strong{font-weight:600;color:var(--ink,#172033)}
+.mi-payments .mi-payment-person small{display:block;font-size:.875rem;font-weight:400;color:var(--muted,#657084);margin-top:4px}
+.mi-payments .mi-payment-person:has(input:checked){border-color:var(--navy,#17224a);background:var(--bg,#f5f7fa)}
+.mi-payments [data-selection-total]{font-weight:600;font-variant-numeric:tabular-nums}
+.mi-payments input[readonly]{background:var(--bg,#f5f7fa)}

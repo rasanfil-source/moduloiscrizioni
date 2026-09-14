@@ -623,12 +623,32 @@ test('la coda email resta sicura fino all’attivazione operativa', async () => 
   assert.match(sender, /prova_verificata/);
   assert.match(sender, /MI_Workspace_Client::request\( 'INVIA_EMAIL_CONFERMA'/);
   assert.doesNotMatch(sender, /wp_mail\s*\(/);
-  assert.match(sender, /MI-PROVA-0001/);
+  assert.doesNotMatch(sender, /MI-PROVA-0001/);
   assert.match(sender, /'PROVA' === self::modalita\(\).*'TEST_PENDING'/s);
   assert.match(sender, /\$destinatario = \$invio_prova \? \$destinatario_prova : \$riga\['recipient'\]/);
   assert.match(sender, /Destinatario originale:/);
   assert.match(sender, /\['oggetto'\] = '\[PROVA\] '/);
   assert.match(sender, /TEST_SENDING/);
+});
+
+test('la Segreteria eventi usa una favicon propria anche nei collegamenti salvati', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  assert.match(portal, /add_action\( 'wp_head', array\( __CLASS__, 'portal_icon_links' \), 99 \)/);
+  assert.match(portal, /! empty\( \$_GET\['mi_portal'\] \)/);
+  assert.match(portal, /! empty\( \$_GET\['mi_status'\] \).*?! empty\( \$_GET\['mi_waitlist_offer'\] \)/);
+  assert.match(portal, /has_shortcode\( \$post->post_content, self::SHORTCODE \)/);
+  assert.match(portal, /rel="icon" type="image\/png" sizes="32x32"/);
+  assert.match(portal, /rel="icon" type="image\/png" sizes="192x192"/);
+  assert.match(portal, /rel="icon" type="image\/png" sizes="512x512"/);
+  assert.match(portal, /rel="apple-touch-icon" sizes="180x180"/);
+  assert.match(portal, /<title>[\s\S]*?self::portal_icon_links\(\);[\s\S]*?<link rel="stylesheet"/);
+
+  for (const size of [32, 180, 192, 512]) {
+    const png = await readFile(new URL(`assets/portal-icon-${size}.png`, root));
+    assert.equal(png.subarray(1, 4).toString('ascii'), 'PNG');
+    assert.equal(png.readUInt32BE(16), size);
+    assert.equal(png.readUInt32BE(20), size);
+  }
 });
 
 test('prova e operativo generano sia la conferma iscritto sia la notifica alla segreteria', async () => {
@@ -793,6 +813,7 @@ test('le email riparano a capo e Markdown senza mostrare codici letterali', asyn
 	const model = await read('includes/class-mi-modello-email.php');
 	const sender = await read('includes/class-mi-spedizione-email.php');
 	assert.match(model, /ripara_istantanea_codifica/);
+	assert.match(model, /La rimozione va eseguita dopo aver ricostruito gli a capo/);
 	assert.match(model, /testo_email_in_html/);
 	assert.match(model, /rimuovi_markdown_testo/);
 	assert.match(model, /\(\?:Quando\|Dove\|Codice iscrizione\|Stato\|Partecipazione\)/);
@@ -802,14 +823,16 @@ test('le email riparano a capo e Markdown senza mostrare codici letterali', asyn
 	assert.match(sender, /MI_Modello_Email::ripara_istantanea_codifica/);
 });
 
-test('l’identificativo QR è facoltativo e non contiene dati personali', async () => {
+test('le email non mostrano identificativi testuali o grafici', async () => {
   const model = await read('includes/class-mi-modello-email.php');
   const postType = await read('includes/class-mi-event-post-type.php');
   const sender = await read('includes/class-mi-spedizione-email.php');
   assert.match(postType, /QR facoltativo/);
   assert.match(model, /payload_qr/);
-  assert.match(model, /_mi_identifier_display/);
+  assert.match(model, /'modalita' => 'NONE'/);
   assert.match(sender, /identificativo/);
+  assert.match(sender, /istantanee storiche già accodate non devono mostrare il codice interno/);
+  assert.match(sender, /Codice\(\?: iscrizione\)\?/);
   assert.doesNotMatch(model, /buyer_email/);
 });
 
@@ -1255,6 +1278,12 @@ test('le comunicazioni descrivono il nome dell iscrizione senza chiamarlo refere
   assert.doesNotMatch(emailModel, /Referente:/);
   assert.match(emailSender, /Iscrizione a nome di: Persona Esempio/);
   assert.doesNotMatch(emailSender, /Referente: Persona Esempio/);
+  assert.match(emailSender, /REGISTRATION_SECRETARIAT_NOTIFICATION[\s\S]*Iscrizione a nome di:/);
+  assert.match(emailModel, /Gestisci o annulla l’iscrizione/);
+  assert.match(emailModel, /Se desideri chiarimenti, puoi contattare la segreteria/);
+  assert.match(emailModel, /crea_istantanea_annullamento_iscrizione_iscritto/);
+  const registrationService = await read('includes/class-mi-registration-service.php');
+  assert.match(registrationService, /template_type' => 'REGISTRATION_CANCELLATION'/);
   assert.match(publicScript, /line\((?:overview|summary), 'Iscrizione a nome di', buyerName\)/);
 });
 
@@ -1630,6 +1659,7 @@ test('il portale gestisce i gruppi in una scheda dedicata e il wizard vi rimanda
   const portal = await read('includes/class-mi-portal.php');
   const portalJs = await read('assets/portal.js');
   const css = await read('assets/portal.css');
+  const emailModel = await read('includes/class-mi-modello-email.php');
   assert.doesNotMatch(portal, /name="new_group_name"/);
   assert.match(portal, /mi_portal_view', 'groups'/);
   assert.match(portal, /Crea o modifica gruppo in:[\s\S]*>Gruppi<\/a>/);
@@ -1642,6 +1672,11 @@ test('il portale gestisce i gruppi in una scheda dedicata e il wizard vi rimanda
   assert.match(portal, /2 \* MB_IN_BYTES/);
   assert.match(portal, /GROUP_TYPE/);
   assert.match(portal, /mi_manage_all_events/);
+  assert.match(portal, /Email per le comunicazioni con gli iscritti/);
+  assert.match(portal, /name="group_email_contact"/);
+  assert.doesNotMatch(portal, /name="event_email_contact"/);
+  assert.match(emailModel, /unset\( \$event\['contact_email'\] \)/);
+  assert.match(emailModel, /'indirizzo_risposte'\s*=> \$style\['contact_email'\]/);
   assert.match(css, /\.mi-group-form-grid/);
 });
 
@@ -1871,7 +1906,9 @@ test('la conferma multipersona anticipa il riepilogo e richiude il dettaglio dei
   const css = await read('assets/public.css');
   assert.match(script, /participantCosts\.length > 1 && total > 0/);
   assert.match(script, /title\.textContent = 'Riepilogo della prenotazione'/);
-  assert.match(script, /heading\.textContent = `\$\{cost\.participant\.firstName\} \$\{cost\.participant\.lastName\} — \$\{formatCurrency\(cost\.subtotal\)\}`/);
+  assert.match(script, /heading\.textContent = `\$\{cost\.participant\.firstName\} \$\{cost\.participant\.lastName\}`/);
+  assert.match(script, /amount\.className = 'mi-registration__booking-amount'/);
+  assert.match(script, /amount\.textContent = formatCurrency\(cost\.subtotal\)/);
   assert.match(script, /compactDescription\(cost\)/);
   assert.match(script, /detailsSummary\.textContent = 'Dettaglio dei costi'/);
   assert.match(script, /line\(parent, 'Totale'/);
@@ -1879,7 +1916,11 @@ test('la conferma multipersona anticipa il riepilogo e richiude il dettaglio dei
   assert.match(script, /line\(parent, 'Saldo'/);
   assert.doesNotMatch(script, /details\.open\s*=/);
   assert.match(css, /\.mi-registration__booking-overview/);
+  assert.match(css, /\.mi-registration__booking-overview li\{display:grid;grid-template-columns:minmax\(0,1fr\) auto/);
+  assert.match(css, /\.mi-registration__booking-totals/);
   assert.match(css, /\.mi-registration__cost-details/);
+  assert.match(script, /specialRequestsInput\.rows = 3/);
+  assert.match(css, /\.mi-registration__special-requests\{display:block;width:min\(100%,560px\);margin:1rem auto 1\.25rem\}/);
 });
 
 test('la scheda iscritto omette i controlli economici della prenotazione', async () => {
@@ -2025,13 +2066,35 @@ test('le presenze si registrano in blocco soltanto per i gruppi con rapporto ann
 
 test('camere, stampa e filtri seguono la nuova gerarchia operativa', async () => {
   const script = await read('assets/portal-management.js');
+  const css = await read('assets/portal-management.css');
+  const service = await read('includes/class-mi-management-service.php');
   assert.match(script, /data-room-mode="assign"/);
   assert.match(script, /data-room-mode="change"/);
   assert.match(script, /Assegna stanze/);
   assert.match(script, /Cambia tipo di abitazione/);
+  assert.match(script, /mi-room-section-copy[\s\S]*Gestione camere[\s\S]*Assegna o modifica le camere/);
   assert.match(script, /\[\['ordinal','N\.'\]/);
   assert.match(script, /features\.rooms\?\[\['room','Stanza'\]\]/);
   assert.match(script, /allServices\]\.sort\(\(a,b\)=>String\(a\[1\]\.name\)\.localeCompare/);
+  assert.match(script, /const requestedRoomCode=person=>/);
+  assert.match(script, /data\.room_types\?\.\[option\.code\]/);
+  assert.match(script, /x\.room\|\|requestedRoomCode\(x\)\|\|'—'/);
+  assert.doesNotMatch(script, /missing\.push\('Camera da assegnare'\)/);
+  assert.match(css, /\.mi-participant-table button\[data-open\]\{min-height:28px;padding:2px 9px/);
+  assert.match(css, /\.mi-participant-table tbody td\{[^}]*vertical-align:middle/);
+  assert.match(script, /mi-room-assignment-actions mi-room-sticky-actions/);
+  assert.match(script, /data-accommodation-action-status/);
+  const confirmationBinding = script.indexOf('confirmButton.onclick=');
+  assert.ok(confirmationBinding > script.indexOf('const previewButton=changeForm.querySelector'));
+  assert.ok(confirmationBinding < script.indexOf("content.querySelector('[data-list]').insertAdjacentHTML('beforebegin','<details data-room-inventory>"));
+  assert.equal(script.match(/confirmButton\.onclick=/g)?.length, 1);
+  assert.match(script, /data-preview-accommodation[\s\S]*data-confirm-accommodation hidden/);
+  assert.match(css, /\.mi-room-sticky-actions\{position:fixed;z-index:1000/);
+  assert.match(css, /bottom:max\(10px,env\(safe-area-inset-bottom,0px\)\)/);
+  assert.match(css, /form:has\(>\.mi-room-sticky-actions\)\{padding-bottom:88px\}/);
+  assert.match(css, /details\[data-room-section\]\{[^}]*border-left:5px solid var\(--navy/);
+  assert.match(css, /\.mi-room-section-chevron/);
+  assert.match(service, /'alloggio-doppia-matrimoniale' === \$code[\s\S]*2 === count\( \$selected \)[\s\S]*continue/);
 });
 
 test('la variazione servizi esclude gli alloggi e ne conserva assegnazione e opzione', async () => {
@@ -2378,16 +2441,20 @@ test('l email non duplica il codice e il collegamento apre la prenotazione nel p
 	assert.doesNotMatch(sender, /<strong>Codice:<\/strong>/);
 	assert.doesNotMatch(model, /\? 'Codice: ' \./);
 	assert.doesNotMatch(model, /\$item_quantity \. ' × '/);
-	assert.match(model, /1 === \$item_quantity \? \$name : \$item_quantity \. ' — ' \. \$name/);
+	assert.match(model, /1 === \$item_quantity \? \$name : \$item_quantity \. ' partecipanti — ' \. \$name/);
 	assert.match(portal, /'evento' => \$event_id, 'ordine'/);
 	assert.match(portal, /public_status\( \$code, '', sanitize_text_field[\s\S]*\$requested_event \)/);
-	assert.match(portal, /SELECT id,first_name,last_name[\s\S]*registration_id=%d/);
+	assert.match(portal, /WHERE order_code=%s AND event_id=%d LIMIT 1/);
+	assert.match(portal, /get_results[\s\S]*SELECT id,first_name,last_name[\s\S]*registration_id=%d[\s\S]*status='ACTIVE'[\s\S]*ORDER BY id/);
+	assert.match(portal, /'people' => \$prefill_people/);
 	assert.match(portal, /MI_Public_Balance::render\( \(int\) \$registration\['event_id'\], \$prefill \)/);
 	assert.match(balance, /public static function render\( \$event, \$prefill = array\(\) \)/);
 	assert.match(balance, /'prefill' => \$prefill/);
-	assert.match(balanceScript, /MIBalance\.prefill\?\.cognome/);
-	assert.match(balanceScript, /person\.candidate = Number\(MIBalance\.prefill\.row\)/);
-	assert.match(balanceScript, /lookupPersona\(card, person\.index\)/);
+	assert.match(balance, /'people' => array_map/);
+	assert.match(balanceScript, /async function loadPrefilledBooking/);
+	assert.match(balanceScript, /MIBalance\.prefill\?\.people/);
+	assert.match(balanceScript, /person\.candidate = Number\(source\.row\)/);
+	assert.match(balanceScript, /await lookupPersona\(card, person\.index\)/);
 });
 
 test('la gestione usa Cognome Nome e ricorda per evento le colonne del report', async () => {
@@ -2413,6 +2480,36 @@ test('il riepilogo servizi e la barra operativa restano compatti', async () => {
   assert.match(portal, /mi-refresh-icon[\s\S]*mi-refresh-label/);
   assert.match(css, /@media\(max-width:640px\)[\s\S]*\.mi-refresh-label\{display:none\}/);
   assert.match(css, /\.mi-participant-room-code\+td\{padding-left:3px\}/);
+});
+
+test('il dettaglio costi di servizi e saldo è una fisarmonica chiusa inizialmente', async () => {
+	const template = await read('templates/public-balance.php');
+	const script = await read('assets/public-balance.js');
+	const css = await read('assets/public-balance.css');
+	assert.match(template, /<details id="breakdownBox">\s*<summary>Dettaglio dei costi<\/summary>/);
+	assert.doesNotMatch(template, /<details id="breakdownBox" open/);
+	assert.match(script, /breakdownBox\.style\.display='block'/);
+	assert.doesNotMatch(script, /breakdownBox\.open\s*=\s*true/);
+	assert.match(css, /#breakdownBox summary/);
+	assert.match(css, /#breakdownBox\[open\] summary/);
+});
+
+test('la configurazione locale dei pagamenti viene validata e importata nel database', async () => {
+	const balance = await read('includes/class-mi-public-balance.php');
+	assert.match(balance, /public-balance-config\.json/);
+	assert.match(balance, /\^IT\[0-9\]\{2\}\[A-Z\]\[0-9\]\{10\}\[A-Z0-9\]\{12\}\$/);
+	assert.match(balance, /esc_url_raw[\s\S]*array\( 'https' \)/);
+	assert.match(balance, /update_option\( 'mi_public_balance_payment', \$defaults, false \)/);
+});
+
+test('solo l amministratore può aggiornare IBAN e pagina carta dal pannello', async () => {
+	const admin = await read('includes/class-mi-admin.php');
+	assert.match(admin, /add_submenu_page[\s\S]*Dati per i pagamenti[\s\S]*manage_options[\s\S]*mi-payment-settings/);
+	assert.match(admin, /admin_post_mi_save_payment_settings/);
+	assert.match(admin, /save_payment_settings[\s\S]*current_user_can\( 'manage_options' \)[\s\S]*check_admin_referer\( 'mi_save_payment_settings' \)/);
+	assert.match(admin, /wp_parse_url\( \$card_url, PHP_URL_SCHEME \)/);
+	assert.match(admin, /update_option\( 'mi_public_balance_payment'[\s\S]*'cardUrl' => \$card_url/);
+	assert.match(admin, /Non vengono richiesti né conservati dati delle carte/);
 });
 
 test('il riepilogo servizi indica dove effettuare le variazioni', async () => {

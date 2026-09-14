@@ -25,6 +25,7 @@ function wp_date( $format, $timestamp, $timezone = null ) { $date = new DateTime
 function wp_kses_allowed_html( $context ) { return array( 'p' => array( 'style' => true ), 'table' => array( 'style' => true ), 'tr' => array( 'style' => true ), 'td' => array( 'style' => true ), 'a' => array( 'href' => true, 'style' => true ), 'div' => array( 'style' => true ), 'strong' => array(), 'code' => array(), 'br' => array(), 'img' => array( 'src' => true, 'alt' => true, 'style' => true ) ); }
 function wp_kses_post( $value ) { return (string) $value; }
 function wp_kses( $value, $allowed ) { return (string) $value; }
+function wpautop( $value ) { return '<p>' . str_replace( array( "\n\n", "\n" ), array( '</p><p>', '<br>' ), trim( $value ) ) . '</p>'; }
 
 require_once __DIR__ . '/../modulo-iscrizioni/includes/class-mi-field-schema.php';
 require_once __DIR__ . '/../modulo-iscrizioni/includes/class-mi-registration-service.php';
@@ -167,6 +168,7 @@ $email_event = array(
 $email_economic = array( 'total_cents' => 5000, 'initial_due_cents' => 2000, 'balance_cents' => 3000, 'payment_methods' => array( 'BANK_TRANSFER' ) );
 $email_values = MI_Modello_Email::valori_ordine( $email_event, 'MI-DEMO-1', 'In attesa di pagamento', 2, 'Persona Demo', $email_economic, array( array( 'name' => 'Quota', 'quantity' => 2 ) ) );
 expect( 'Oratorio' === $email_values['{{evento.luogo}}'], 'luogo evento assente dai segnaposto email' );
+expect( '2 partecipanti — Quota' === $email_values['{{ordine.riepilogo}}'], 'quantità partecipanti ambigua nel riepilogo email' );
 expect( false !== strpos( $email_values['{{ordine.riepilogo_economico}}'], '50,00 €' ), 'riepilogo economico email errato' );
 expect( false !== strpos( $email_values['{{pagamento.istruzioni}}'], 'Bonifico' ), 'istruzioni di pagamento email assenti' );
 
@@ -183,11 +185,12 @@ expect( false !== strpos( $email_html, 'opacity:0;color:transparent' ), 'prehead
 expect( false !== strpos( $email_html, '<meta name="viewport"' ) && false !== strpos( $email_html, 'border:1px solid #e4e8ef' ), 'struttura responsive del modello email assente' );
 expect( false !== strpos( $email_html, 'role="presentation"' ) && false !== strpos( $email_html, 'cellpadding="0"' ) && false !== strpos( $email_html, 'bgcolor="#151b38"' ), 'markup email-safe incompleto' );
 expect( false !== strpos( $email_html, 'Assistenza' ) && false !== strpos( $email_html, 'border-radius:12px' ) && false !== strpos( $email_html, 'font-style:italic' ), 'componenti del restyling email assenti' );
-expect( false !== strpos( $email_html, 'https://example.invalid/copertina.jpg' ) && false !== strpos( $email_html, 'font-size:16px' ), 'banner evento o testo leggibile assenti nell email' );
+expect( false !== strpos( $email_html, 'https://example.invalid/copertina.jpg' ) && false !== strpos( $email_html, 'font-size:17px' ), 'banner evento o testo leggibile assenti nell email' );
 
-$repaired_email = MI_Modello_Email::ripara_istantanea_codifica( array( 'testo' => 'Carissimo,nnla tua iscrizione è registrata.nn**Quando:** 18/10/2026n**Dove:** Roma. I dati saranno cancellati dopo un anno.&#x20;', 'html' => '<p>Carissimo,nnla tua iscrizione è registrata.nn**Quando:** 18/10/2026n**Dove:** Roma. I dati saranno cancellati dopo un anno.&#x20;</p>' ) );
+$repaired_email = MI_Modello_Email::ripara_istantanea_codifica( array( 'testo' => 'Carissimo,nnla tua iscrizione è registrata.nn**Quando:** 18/10/2026n**Dove:** Roma.n**Codice iscrizione:** TEST-1n**Stato:** Confermata.nnInformativa (Roma).nLa finalità resta pastorale. I dati saranno cancellati dopo un anno.&#x20;', 'html' => '<p>Carissimo,nnla tua iscrizione è registrata.nn**Quando:** 18/10/2026n**Dove:** Roma.n**Codice iscrizione:** TEST-1n**Stato:** Confermata.nnInformativa (Roma).nLa finalità resta pastorale. I dati saranno cancellati dopo un anno.&#x20;</p>' ) );
 expect( false === strpos( $repaired_email['html'], '**' ) && false !== strpos( $repaired_email['html'], '<strong>Quando:</strong>' ), 'Markdown email non convertito' );
 expect( false !== strpos( $repaired_email['testo'], "\n\n" ) && false === strpos( $repaired_email['testo'], '**' ) && false === strpos( $repaired_email['testo'], '&#x20;' ), 'a capo o entità email storici non riparati' );
 expect( false !== strpos( $repaired_email['testo'], 'saranno' ) && false !== strpos( $repaired_email['testo'], 'anno' ), 'le doppie n delle parole italiane sono state alterate' );
+expect( false !== strpos( $repaired_email['testo'], "(Roma).\nLa finalità" ) && false === strpos( $repaired_email['testo'], 'TEST-1' ), 'a capo singolo o codice storico non riparati' );
 
 fwrite( STDOUT, "PHP behavior tests: OK\n" );

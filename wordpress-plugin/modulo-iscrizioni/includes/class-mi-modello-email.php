@@ -51,6 +51,8 @@ final class MI_Modello_Email {
 		$group_id = $event_id ? absint( get_post_meta( $event_id, '_mi_activity_id', true ) ) : 0;
 		$group = $group_id ? self::sanitizza_stile( get_post_meta( $group_id, '_mi_email_style', true ) ) : array();
 		$event = $event_id ? self::sanitizza_stile( get_post_meta( $event_id, '_mi_email_style', true ) ) : array();
+		// L’indirizzo per gli iscritti appartiene al gruppo e non può essere sostituito dal gestore del singolo evento.
+		unset( $event['contact_email'] );
 		$style = array_merge( self::stile_default(), $group, $event );
 		$group_logo_id = $group_id ? get_post_thumbnail_id( $group_id ) : 0;
 		$group_cover_id = $group_id ? absint( get_post_meta( $group_id, '_mi_group_cover_image_id', true ) ) : 0;
@@ -107,8 +109,8 @@ final class MI_Modello_Email {
 			'internal_recipients' => array(),
 			'subject'   => 'Iscrizione confermata — {{evento.titolo}}',
 			'preheader' => 'La tua iscrizione è stata registrata. Qui trovi il riepilogo e le prossime indicazioni.',
-			'html'      => '<p style="margin:0 0 16px;">Ciao {{sottoscrittore.nome_completo}},</p><p style="margin:0 0 20px;">la tua iscrizione a <strong>{{evento.titolo}}</strong> è stata registrata.</p><p style="margin:0 0 20px;"><strong>Quando:</strong> {{evento.data}}<br><strong>Dove:</strong> {{evento.luogo}}<br><strong>Codice iscrizione:</strong> {{ordine.codice}}<br><strong>Stato:</strong> {{ordine.stato}}<br><strong>Partecipazione:</strong> {{ordine.riepilogo}}</p><p style="margin:0 0 20px;"><strong>Situazione economica:</strong><br>{{ordine.riepilogo_economico}}</p><p style="margin:0 0 20px;"><strong>Indicazioni per il pagamento:</strong><br>{{pagamento.istruzioni}}<br><strong>Scadenza:</strong> {{pagamento.scadenza}}<br><strong>Causale:</strong> {{pagamento.causale}}</p><p style="margin:24px 0 0;"><strong>Conserva questa email:</strong> contiene i riferimenti utili per la tua iscrizione.</p>',
-			'text'      => "Ciao {{sottoscrittore.nome_completo}},\n\nla tua iscrizione a {{evento.titolo}} è stata registrata.\n\nQuando: {{evento.data}}\nDove: {{evento.luogo}}\nCodice iscrizione: {{ordine.codice}}\nStato: {{ordine.stato}}\nPartecipazione: {{ordine.riepilogo}}\n\nSituazione economica: {{ordine.riepilogo_economico}}\nIndicazioni per il pagamento: {{pagamento.istruzioni}}\nScadenza: {{pagamento.scadenza}}\nCausale: {{pagamento.causale}}\n\nConserva questa email: contiene i riferimenti utili per la tua iscrizione.",
+			'html'      => '<p style="margin:0 0 16px;">Ciao {{sottoscrittore.nome_completo}},</p><p style="margin:0 0 20px;">la tua iscrizione a <strong>{{evento.titolo}}</strong> è stata registrata.</p><p style="margin:0 0 20px;"><strong>Quando:</strong> {{evento.data}}<br><strong>Dove:</strong> {{evento.luogo}}<br><strong>Stato:</strong> {{ordine.stato}}<br><strong>Partecipazione:</strong> {{ordine.riepilogo}}</p><p style="margin:0 0 20px;"><strong>Situazione economica:</strong><br>{{ordine.riepilogo_economico}}</p><p style="margin:0 0 20px;"><strong>Indicazioni per il pagamento:</strong><br>{{pagamento.istruzioni}}<br><strong>Scadenza:</strong> {{pagamento.scadenza}}<br><strong>Causale:</strong> {{pagamento.causale}}</p><p style="margin:24px 0 0;"><strong>Conserva questa email:</strong> contiene i riferimenti utili per la tua iscrizione.</p>',
+			'text'      => "Ciao {{sottoscrittore.nome_completo}},\n\nla tua iscrizione a {{evento.titolo}} è stata registrata.\n\nQuando: {{evento.data}}\nDove: {{evento.luogo}}\nStato: {{ordine.stato}}\nPartecipazione: {{ordine.riepilogo}}\n\nSituazione economica: {{ordine.riepilogo_economico}}\nIndicazioni per il pagamento: {{pagamento.istruzioni}}\nScadenza: {{pagamento.scadenza}}\nCausale: {{pagamento.causale}}\n\nConserva questa email: contiene i riferimenti utili per la tua iscrizione.",
 			'footer'    => 'A presto!',
 		);
 		$saved = get_post_meta( $event_id, '_mi_email_template', true );
@@ -240,12 +242,11 @@ final class MI_Modello_Email {
 		$snapshot['identita_email'] = array(
 			'nome_mittente'        => $settings['sender_name'] ?: self::NOME_SEGRETERIA,
 			'indirizzo_mittente'   => self::EMAIL_SEGRETERIA,
-			'indirizzo_risposte'   => $settings['reply_to'] ?: self::EMAIL_SEGRETERIA,
+			'indirizzo_risposte'   => $style['contact_email'] ?: self::EMAIL_SEGRETERIA,
 			'destinatari_interni'  => array_values( (array) $settings['internal_recipients'] ),
 		);
-		$identifier_mode = strtoupper( (string) get_post_meta( $event_id, '_mi_identifier_display', true ) );
 		$snapshot['identificativo'] = array(
-			'modalita' => in_array( $identifier_mode, array( 'NONE', 'TEXT', 'QR', 'BARCODE' ), true ) ? $identifier_mode : 'TEXT',
+			'modalita' => 'NONE',
 			'codice'   => (string) ( $values['{{ordine.codice}}'] ?? '' ),
 			'payload_qr' => 'modulo-iscrizioni|evento:' . absint( $event_id ) . '|ordine:' . sanitize_text_field( (string) ( $values['{{ordine.codice}}'] ?? '' ) ),
 		);
@@ -334,16 +335,35 @@ final class MI_Modello_Email {
 	}
 
 	/** Notifica interna che accompagna ogni nuova iscrizione senza riutilizzare il testo rivolto all'iscritto. */
-	public static function crea_istantanea_nuova_iscrizione_segreteria( $event_id, $values ) {
+	public static function crea_istantanea_nuova_iscrizione_segreteria( $event_id, $values, $registration_id = 0 ) {
 		$event_title = sanitize_text_field( (string) ( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) ) );
 		$order_code = sanitize_text_field( (string) ( $values['{{ordine.codice}}'] ?? '' ) );
 		$buyer_name = sanitize_text_field( (string) ( $values['{{sottoscrittore.nome_completo}}'] ?? '' ) );
 		$status = sanitize_text_field( (string) ( $values['{{ordine.stato}}'] ?? '' ) );
-		$summary = sanitize_textarea_field( (string) ( $values['{{ordine.riepilogo}}'] ?? '' ) );
-		$subject = 'Nuova iscrizione — ' . $event_title;
-		$body = '<p>È stata registrata una nuova iscrizione per <strong>' . esc_html( $event_title ) . '</strong>.</p><p><strong>Iscrizione a nome di:</strong> ' . esc_html( $buyer_name ) . '<br><strong>Codice:</strong> ' . esc_html( $order_code ) . '<br><strong>Stato:</strong> ' . esc_html( $status ) . '</p>' . ( $summary ? '<p><strong>Riepilogo:</strong><br>' . nl2br( esc_html( $summary ) ) . '</p>' : '' );
-		$text = "È stata registrata una nuova iscrizione per {$event_title}.\n\nIscrizione a nome di: {$buyer_name}\nCodice: {$order_code}\nStato: {$status}" . ( $summary ? "\n\nRiepilogo:\n{$summary}" : '' );
-		return self::crea_istantanea_istituzionale( $event_id, $subject, 'Una nuova iscrizione è stata registrata.', $body, $text );
+		$quantity = absint( $values['{{ordine.partecipanti}}'] ?? 0 );
+		$subject = 'Nuova prenotazione — ' . $event_title;
+		$body = '<p>È stata registrata una nuova prenotazione per <strong>' . esc_html( $event_title ) . '</strong>.</p><p><strong>Prenotazione a nome di:</strong> ' . esc_html( $buyer_name ) . '<br><strong>Stato:</strong> ' . esc_html( $status ) . '<br><strong>Partecipanti:</strong> ' . $quantity . '</p>';
+		$text = "È stata registrata una nuova prenotazione per {$event_title}.\n\nPrenotazione a nome di: {$buyer_name}\nStato: {$status}\nPartecipanti: {$quantity}";
+		$actions = array();
+		if ( absint( $registration_id ) && class_exists( 'MI_Portal_Management' ) ) {
+			$actions[] = array( 'label' => 'Apri la scheda del primo iscritto', 'url' => MI_Portal_Management::url( $event_id, $order_code ) );
+		}
+		return self::crea_istantanea_istituzionale( $event_id, $subject, 'Una nuova prenotazione è stata registrata.', $body, $text, $actions );
+	}
+
+	/** Informa chi si è iscritto quando la segreteria annulla l’intera prenotazione. */
+	public static function crea_istantanea_annullamento_iscrizione_iscritto( $event_id, $buyer_name, $order_code ) {
+		$event_title = sanitize_text_field( get_the_title( absint( $event_id ) ) );
+		$buyer_name = sanitize_text_field( (string) $buyer_name );
+		$order_code = sanitize_text_field( (string) $order_code );
+		$contact = sanitize_email( (string) ( self::stile_risolto( $event_id )['contact_email'] ?? self::EMAIL_SEGRETERIA ) );
+		if ( ! is_email( $contact ) ) $contact = self::EMAIL_SEGRETERIA;
+		$subject = 'Iscrizione annullata — ' . $event_title;
+		$body = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ti informiamo che la tua iscrizione a <strong>' . esc_html( $event_title ) . '</strong> è stata annullata dalla segreteria.</p><p>Se desideri chiarimenti, puoi contattare la segreteria scrivendo a <a href="mailto:' . esc_attr( $contact ) . '">' . esc_html( $contact ) . '</a>.</p>';
+		$text = "Gentile {$buyer_name},\n\nti informiamo che la tua iscrizione a {$event_title} è stata annullata dalla segreteria.\n\nSe desideri chiarimenti, puoi contattare la segreteria scrivendo a {$contact}.";
+		$snapshot = self::crea_istantanea_istituzionale( $event_id, $subject, 'La segreteria ha annullato la tua iscrizione.', $body, $text );
+		$snapshot['identita_email']['indirizzo_risposte'] = $contact;
+		return $snapshot;
 	}
 
 	/** Avvisa la segreteria quando una persona annulla autonomamente la propria partecipazione. */
@@ -352,9 +372,21 @@ final class MI_Modello_Email {
 		$participant_name = sanitize_text_field( (string) $participant_name );
 		$order_code = sanitize_text_field( (string) $order_code );
 		$subject = 'Partecipazione annullata — ' . $event_title;
-		$body = '<p>È stata annullata una partecipazione a <strong>' . esc_html( $event_title ) . '</strong>.</p><p><strong>Persona iscritta:</strong> ' . esc_html( $participant_name ) . '<br><strong>Codice:</strong> ' . esc_html( $order_code ) . '</p>';
-		$text = "È stata annullata una partecipazione a {$event_title}.\n\nPersona iscritta: {$participant_name}\nCodice: {$order_code}";
+		$body = '<p>È stata annullata una partecipazione a <strong>' . esc_html( $event_title ) . '</strong>.</p><p><strong>Persona iscritta:</strong> ' . esc_html( $participant_name ) . '</p>';
+		$text = "È stata annullata una partecipazione a {$event_title}.\n\nPersona iscritta: {$participant_name}";
 		return self::crea_istantanea_istituzionale( $event_id, $subject, 'Una partecipazione è stata annullata.', $body, $text );
+	}
+
+	/** La pubblicazione usa la veste istituzionale con logo e banner risolti dell'evento. */
+	public static function crea_istantanea_pubblicazione_evento( $event_id ) {
+		$subject = 'Congratulazioni! Il tuo evento è stato pubblicato.';
+		$date = self::formatta_data_locale( get_post_meta( $event_id, '_mi_event_starts_at', true ) ) ?: 'Da definire';
+		$place = sanitize_text_field( get_post_meta( $event_id, '_mi_event_location', true ) ) ?: 'Da definire';
+		$body = '<p><strong>Data di inizio:</strong> ' . esc_html( $date ) . '<br><strong>Luogo:</strong> ' . esc_html( $place ) . '</p>';
+		$snapshot = self::crea_istantanea_istituzionale( $event_id, $subject, $subject, $body, "Data di inizio: {$date}\nLuogo: {$place}", array( array( 'label' => 'Apri l’evento', 'url' => MI_Shortcode::url_iscrizione( $event_id ) ), array( 'label' => 'Gestisci iscrizioni', 'url' => MI_Portal_Management::url( $event_id ) ) ) );
+		$style = self::stile_risolto( $event_id );
+		$snapshot['publication_assets'] = array( 'logo' => $style['logo_url'] ?? '', 'banner' => $style['banner_url'] ?? '', 'alt' => $style['identity_name'] ?? '' );
+		return $snapshot;
 	}
 
 	/** Le notifiche alla parrocchia non devono mai ereditare asset o colori dell'evento. */
@@ -385,7 +417,7 @@ final class MI_Modello_Email {
 			$name = sanitize_text_field( (string) ( $item['name'] ?? $item['code'] ?? '' ) );
 			$item_quantity = absint( $item['quantity'] ?? 0 );
 			if ( $name && $item_quantity ) {
-				$summary_lines[] = 1 === $item_quantity ? $name : $item_quantity . ' — ' . $name;
+				$summary_lines[] = 1 === $item_quantity ? $name : $item_quantity . ' partecipanti — ' . $name;
 			}
 		}
 		if ( ! $summary_lines ) {
@@ -517,10 +549,14 @@ final class MI_Modello_Email {
 			$url = esc_url( $action['url'] ?? '' ); $label = sanitize_text_field( $action['label'] ?? '' );
 			if ( $url && $label ) $actions .= '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:14px;"><tr><td bgcolor="#111827" style="border-radius:7px;"><a href="' . $url . '" style="display:inline-block;padding:12px 17px;font-family:Arial,Helvetica,sans-serif;color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:700;">' . esc_html( $label ) . '</a></td></tr></table>';
 		}
+		$assets = $snapshot['publication_assets'] ?? array();
+		$logo = ! empty( $assets['logo'] ) ? '<img src="' . esc_url( $assets['logo'] ) . '" alt="' . esc_attr( $assets['alt'] ?? 'Logo' ) . '" width="64" style="display:block;width:64px;max-width:100%;height:auto;margin-bottom:16px;">' : '';
+		$banner = ! empty( $assets['banner'] ) ? '<tr><td><img src="' . esc_url( $assets['banner'] ) . '" alt="' . esc_attr( $event ) . '" width="680" style="display:block;width:100%;max-width:680px;height:auto;border:0;"></td></tr>' : '';
+
 		$preheader = sanitize_text_field( (string) ( $snapshot['preheader'] ?? '' ) );
 		return '<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' . esc_html( $title ) . '</title></head><body style="margin:0;padding:0;background:#F3F4F6;">'
 			. ( $preheader ? '<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">' . esc_html( $preheader ) . '</div>' : '' )
-			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#F3F4F6;"><tr><td align="center" style="padding:24px 12px;"><table role="presentation" width="680" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:680px;background:#FFFFFF;border:1px solid #D1D5DB;border-radius:10px;overflow:hidden;"><tr><td bgcolor="#E5E7EB" style="padding:22px 24px;border-bottom:1px solid #D1D5DB;"><div style="font-family:Arial,Helvetica,sans-serif;color:#374151;font-size:12px;line-height:1.4;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;">Segreteria parrocchiale · Portale eventi</div><h1 style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:23px;line-height:1.3;margin:7px 0 0;font-weight:700;">' . esc_html( $title ) . '</h1>' . ( $event ? '<div style="font-family:Arial,Helvetica,sans-serif;color:#4B5563;font-size:14px;line-height:1.5;margin-top:7px;">Evento: ' . esc_html( $event ) . '</div>' : '' ) . '</td></tr><tr><td style="padding:24px;font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:17px;line-height:1.68;">' . $body . $actions . '</td></tr></table><div style="font-family:Arial,Helvetica,sans-serif;color:#6B7280;font-size:12px;line-height:1.6;margin-top:14px;text-align:center;">Parrocchia di S. Eugenio · Viale delle Belle Arti 10, Roma</div></td></tr></table></body></html>';
+			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#F3F4F6;"><tr><td align="center" style="padding:24px 12px;"><table role="presentation" width="680" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:680px;background:#FFFFFF;border:1px solid #D1D5DB;border-radius:10px;overflow:hidden;"><tr><td bgcolor="#E5E7EB" style="padding:22px 24px;border-bottom:1px solid #D1D5DB;"><div style="font-family:Arial,Helvetica,sans-serif;color:#374151;font-size:12px;line-height:1.4;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;">Segreteria parrocchiale · Portale eventi</div>' . $logo . '<h1 style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:23px;line-height:1.3;margin:7px 0 0;font-weight:700;">' . esc_html( $title ) . '</h1>' . ( $event ? '<div style="font-family:Arial,Helvetica,sans-serif;color:#4B5563;font-size:14px;line-height:1.5;margin-top:7px;">Evento: ' . esc_html( $event ) . '</div>' : '' ) . '</td></tr>' . $banner . '<tr><td style="padding:24px;font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:17px;line-height:1.68;">' . $body . $actions . '</td></tr></table><div style="font-family:Arial,Helvetica,sans-serif;color:#6B7280;font-size:12px;line-height:1.6;margin-top:14px;text-align:center;">Parrocchia di S. Eugenio · Viale delle Belle Arti 10, Roma</div></td></tr></table></body></html>';
 	}
 
 	public static function componi_testo( $istantanea ) {
@@ -563,6 +599,10 @@ final class MI_Modello_Email {
 			$istantanea['html'] = self::uniforma_grafica_corpo( self::sanitizza_html_email( (string) ( $istantanea['html'] ?? '' ) ) );
 		}
 		$istantanea['testo'] = self::rimuovi_markdown_testo( $testo );
+		// La rimozione va eseguita dopo aver ricostruito gli a capo: nelle vecchie
+		// istantanee il prefisso letterale "n" impediva di riconoscere la riga.
+		$istantanea['testo'] = (string) preg_replace( '/^Codice(?: iscrizione)?:[^\r\n]*(?:\r?\n)?/imu', '', $istantanea['testo'] );
+		$istantanea['html'] = (string) preg_replace( '#(?:<br\s*/?>)?\s*(?:<strong>)?Codice(?: iscrizione)?:(?:</strong>)?\s*[^<]*(?=<br\s*/?>|</p>)#iu', '', $istantanea['html'] );
 		return $istantanea;
 	}
 
@@ -579,7 +619,8 @@ final class MI_Modello_Email {
 		$testo = str_replace( array( "\\r\\n", "\\n", "\\r" ), "\n", (string) $testo );
 		$testo = html_entity_decode( $testo, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 		$testo = str_replace( array( "\xC2\xA0", "\xE2\x80\x8B" ), array( ' ', '' ), $testo );
-		$testo = (string) preg_replace( '/(?<=[.!?,;:])nn(?=\*{0,2}[\p{L}])/u', "\n\n", $testo );
+		$testo = (string) preg_replace( '/(?<=[.!?,;:)])nn(?=\*{0,2}[\p{L}])/u', "\n\n", $testo );
+		$testo = (string) preg_replace( '/(?<=[.!?;)])n(?=\*{0,2}[\p{Lu}])/u', "\n", $testo );
 		$testo = (string) preg_replace( '/n(?=\*{0,2}(?:Quando|Dove|Codice iscrizione|Stato|Partecipazione):)/u', "\n", $testo );
 		return trim( (string) preg_replace( "/\n{3,}/", "\n\n", $testo ) );
 	}

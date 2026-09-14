@@ -10,6 +10,18 @@ final class MI_Portal_Management {
 		nocache_headers();
 		if ( ! self::allowed() || ! check_ajax_referer( 'mi_portal_management', 'nonce', false ) ) wp_send_json_error( array( 'message' => 'Accesso non consentito o sessione scaduta.' ), 403 );
 		$operation = sanitize_key( wp_unslash( $_POST['operation'] ?? '' ) );
+		if ( 'all_people' === $operation ) {
+			$period = 'past' === ( $_POST['period'] ?? '' ) ? 'past' : 'current'; $ids = array();
+			foreach ( get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'private', 'draft' ), 'numberposts' => -1 ) ) as $candidate ) {
+				if ( ! MI_Access::can_access_event( (int) $candidate->ID ) ) continue;
+				$end = get_post_meta( $candidate->ID, '_mi_event_starts_at', true ) ?: get_post_meta( $candidate->ID, '_mi_registration_closes_at', true );
+				$past = get_post_meta( $candidate->ID, '_mi_event_archived_at', true ) || MI_Portal::is_past_event( $end );
+				if ( $past === ( 'past' === $period ) ) $ids[] = (int) $candidate->ID;
+			}
+			$result = MI_Management_Service::all_people( $ids, sanitize_text_field( wp_unslash( $_POST['query'] ?? '' ) ), absint( $_POST['offset'] ?? 0 ), '1' === ( $_POST['include_closed'] ?? '' ) );
+			if ( is_wp_error( $result ) ) wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
+			wp_send_json_success( $result );
+		}
 		if ( 'annual_report' === $operation ) {
 			$report_event = absint( $_POST['event_id'] ?? 0 );
 			$report_group = absint( get_post_meta( $report_event, '_mi_activity_id', true ) );
@@ -52,7 +64,9 @@ final class MI_Portal_Management {
 			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id,event_id,order_code FROM {$wpdb->prefix}mi_registrations WHERE order_code=%s AND event_id=%d", $code, $event_id ), ARRAY_A );
 			if ( ! $row ) wp_send_json_error( array( 'message' => 'Prenotazione non accessibile.' ), 403 );
 			$payload = array( 'event_id' => (string) $event_id, 'order_code' => $row['order_code'], 'operator_label' => mb_substr( 'WP#' . get_current_user_id() . ' · ' . wp_get_current_user()->display_name, 0, 100 ) );
-			if ( 'detail' === $operation ) {
+			if ( 'options_preview' === $operation ) {
+				$result = MI_Management_Service::options_preview( (int) $row['id'], json_decode( wp_unslash( $_POST['data'] ?? '{}' ), true ), sanitize_text_field( wp_unslash( $_POST['version'] ?? '' ) ) );
+			} elseif ( 'detail' === $operation ) {
 				$result = MI_Management_Service::detail( (int) $row['id'] );
 			} elseif ( 'cancel_registration' === $operation ) {
 				$result = MI_Registration_Service::cancel_registration( (int) $row['id'], 'WP#' . get_current_user_id() . ' · ' . wp_get_current_user()->display_name, false );
@@ -106,7 +120,7 @@ final class MI_Portal_Management {
 		<label>Gruppo<select data-annual-group><option value="">Scegli un gruppo</option><?php foreach ( get_posts( array( 'post_type' => MI_Event_Post_Type::ACTIVITY_TYPE, 'post_status' => array( 'publish', 'private', 'draft' ), 'numberposts' => -1 ) ) as $group ) if ( MI_Access::can_access_activity( $group->ID ) ) : ?><option value="<?php echo esc_attr( $group->ID ); ?>"><?php echo esc_html( $group->post_title ); ?></option><?php endif; ?></select></label>
 		<label>Anno<input data-annual-year type="number" min="2000" max="2200" value="<?php echo esc_attr( wp_date( 'Y' ) ); ?>"></label><label>Numero minimo di eventi frequentati<input data-annual-minimum type="number" min="1" max="1000" value="2"></label><button type="button" data-load-annual>Genera rapporto annuale</button><p data-annual-status role="status"></p><div data-annual-results></div></details>
 		<div class="mi-management-event-selectors"<?php echo $compact ? ' hidden' : ''; ?>><label><select data-period-select aria-label="Eventi attivi o passati"><option value="current" <?php selected( $period, 'current' ); ?>>Eventi attivi</option><option value="past" <?php selected( $period, 'past' ); ?>>Eventi passati</option></select></label>
-		<label>Evento<select data-event-select aria-label="Evento"><option value="">Scegli un evento</option><?php foreach ( $events as $event ) : ?><option data-period="<?php echo esc_attr( $periods[$event->ID] ); ?>" value="<?php echo esc_attr( $event->ID ); ?>" <?php selected( $event_id, $event->ID ); ?>><?php echo esc_html( $event->post_title ); ?></option><?php endforeach; ?></select></label></div>
+		<label>Evento<select data-event-select aria-label="Evento"><option value="">Tutti gli eventi</option><?php foreach ( $events as $event ) : ?><option data-period="<?php echo esc_attr( $periods[$event->ID] ); ?>" value="<?php echo esc_attr( $event->ID ); ?>" <?php selected( $event_id, $event->ID ); ?>><?php echo esc_html( $event->post_title ); ?></option><?php endforeach; ?></select></label></div>
 		<div data-event-actions data-sheet-auto="<?php echo empty( $_GET['mi_sheet_sync'] ) ? '0' : '1'; ?>" hidden><div class="mi-booking-detail__actions mi-event-toolbar"><button type="button" data-refresh aria-label="Aggiorna riepilogo"><span class="mi-refresh-icon" aria-hidden="true">↻</span><span class="mi-refresh-label">Aggiorna riepilogo</span></button><button type="button" data-print>Stampa riepilogo iscritti</button><a class="mi-sheet-button" data-open-sheet hidden target="_blank" rel="noopener"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true" focusable="false"><path d="M6 2h8l5 5v15H6zM14 2v6h5"/><path d="M9 11h7v8H9zM9 15h7M12.5 11v8"/></svg><span>Apri foglio Google</span><span aria-hidden="true">↗</span></a></div>
 		<p data-management-status role="status" aria-live="polite"></p></div><div data-management-content></div>
 		</section>
