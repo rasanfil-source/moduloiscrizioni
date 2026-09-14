@@ -14,17 +14,29 @@ final class MI_Public_Balance {
 	private static function token( $event, $id ) { return hash_hmac( 'sha256', 'balance-person|' . $event . '|' . $id, wp_salt( 'auth' ) ); }
 	private static function event( $event ) {
 		if ( ! $event || 'publish' !== get_post_status( $event ) || MI_Event_Post_Type::EVENT_TYPE !== get_post_type( $event ) || get_post_meta( $event, '_mi_event_cancelled_at', true ) ) throw new InvalidArgumentException( 'Evento non disponibile.' );
+		$pricing_mode = strtoupper( (string) get_post_meta( $event, '_mi_pricing_mode', true ) );
+		$economic_mode = strtoupper( (string) get_post_meta( $event, '_mi_economic_mode', true ) );
+		if ( 'ZERO' === $pricing_mode || ! in_array( $economic_mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) throw new InvalidArgumentException( 'Per questo evento non è previsto alcun pagamento.' );
 	}
 	public static function payment_config( $event ) {
 		$defaults = (array) get_option( 'mi_public_balance_payment', array() );
 		$config_file = MI_PLUGIN_DIR . 'public-balance-config.json';
-		if ( ! $defaults && is_readable( $config_file ) ) { $defaults = self::decode( file_get_contents( $config_file ) ); update_option( 'mi_public_balance_payment', $defaults, false ); }
+		if ( ! $defaults && is_readable( $config_file ) ) {
+			$local = self::decode( file_get_contents( $config_file ) );
+			$iban = strtoupper( preg_replace( '/\s+/', '', sanitize_text_field( (string) ( $local['iban'] ?? '' ) ) ) );
+			$holder = sanitize_text_field( (string) ( $local['holder'] ?? '' ) );
+			$card_url = esc_url_raw( (string) ( $local['cardUrl'] ?? '' ), array( 'https' ) );
+			if ( preg_match( '/^IT[0-9]{2}[A-Z][0-9]{10}[A-Z0-9]{12}$/', $iban ) && $holder && $card_url && 'https' === wp_parse_url( $card_url, PHP_URL_SCHEME ) ) {
+				$defaults = array( 'iban' => $iban, 'holder' => $holder, 'cardUrl' => $card_url );
+				update_option( 'mi_public_balance_payment', $defaults, false );
+			}
+		}
 		return array(
-			'iban' => (string) ( get_post_meta( $event, '_mi_balance_iban', true ) ?: ( $defaults['iban'] ?? '' ) ),
-			'holder' => (string) ( get_post_meta( $event, '_mi_balance_holder', true ) ?: ( $defaults['holder'] ?? '' ) ),
-			'cardUrl' => esc_url_raw( get_post_meta( $event, '_mi_balance_card_url', true ) ?: ( $defaults['cardUrl'] ?? '' ), array( 'https' ) ),
-			'contact' => sanitize_email( get_post_meta( $event, '_mi_balance_contact', true ) ?: ( $defaults['contact'] ?? get_option( 'admin_email' ) ) ),
-			'methods' => (array) get_post_meta( $event, '_mi_payment_methods', true ),
+			'iban' => (string) ( $event ? get_post_meta( $event, '_mi_balance_iban', true ) : '' ) ?: (string) ( $defaults['iban'] ?? '' ),
+			'holder' => (string) ( $event ? get_post_meta( $event, '_mi_balance_holder', true ) : '' ) ?: (string) ( $defaults['holder'] ?? '' ),
+			'cardUrl' => esc_url_raw( ( $event ? get_post_meta( $event, '_mi_balance_card_url', true ) : '' ) ?: ( $defaults['cardUrl'] ?? '' ), array( 'https' ) ),
+			'contact' => sanitize_email( ( $event ? get_post_meta( $event, '_mi_balance_contact', true ) : '' ) ?: ( $defaults['contact'] ?? get_option( 'admin_email' ) ) ),
+			'methods' => $event ? (array) get_post_meta( $event, '_mi_payment_methods', true ) : array(),
 		);
 	}
 	public static function route() {
@@ -128,15 +140,15 @@ final class MI_Public_Balance {
 		foreach ( $receipt['people'] as $person ) if ( ! empty( $person['missing'] ) ) $text .= "\n\nPrima dell’evento — " . $person['name'] . ': ' . implode( ', ', $person['missing'] ) . '. Rispondi a questa email con le informazioni richieste.';
 		$snapshot = MI_Modello_Email::crea_istantanea( $event, array() );
 		$snapshot['attivo'] = true; $snapshot['oggetto'] = 'Ecco il tuo saldo e le istruzioni di pagamento — ' . get_the_title( $event ); $snapshot['testo'] = $text;
-		$snapshot['layout'] = 'PUBLIC_BALANCE'; $snapshot['html'] = self::email_html( $event, $receipt, $payment );
+		$snapshot['titolo'] = 'Riepilogo della prenotazione'; $snapshot['preheader'] = 'Importi, scadenze e indicazioni aggiornate.'; $snapshot['html'] = self::email_body( $event, $receipt, $payment );
 		$snapshot['identita_email']['indirizzo_risposte'] = $payment['contact'];
 		$snapshot['identificativo'] = array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' );
 		$status = MI_Spedizione_Email::stato_nuova_email( $snapshot );
 		$payload = wp_json_encode( array( 'event_id' => $event, 'template_type' => 'PUBLIC_BALANCE', 'email_preview' => $snapshot ) );
 		if ( false === $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->prefix}mi_email_outbox (registration_id,recipient,template_type,origin_key,payload_json,status,created_at) VALUES (%d,%s,'PUBLIC_BALANCE',%s,%s,%s,%s)", $registration, $receipt['email'], $key, $payload, $status, current_time( 'mysql', true ) ) ) ) throw new RuntimeException( 'Riepilogo non archiviato. Riprova.' );
-		return 'PENDING' === $status;
+		return MI_Spedizione_Email::email_da_spedire( $status );
 	}
-	public static function email_html( $event, $receipt, $payment ) {
+	private static function email_body( $event, $receipt, $payment ) {
 		$money = static function ( $c ) { return number_format( $c / 100, 2, ',', '.' ) . ' €'; };
 		$rows = ''; $missing = ''; $deadlines = array();
 		foreach ( $receipt['people'] as $person ) {
@@ -150,11 +162,16 @@ final class MI_Public_Balance {
 		if ( $receipt['deposit'] ) $costs += array( 'Caparra versata' => $receipt['depositPaid'], 'Caparra da versare' => $receipt['depositDue'], 'Saldo da versare' => $receipt['saldoDue'] );
 		$costs += array( 'Versato (esclusi rimborsi effettuati)' => $receipt['paid'], 'Totale da versare' => $receipt['balance'] );
 		$cost_html = ''; foreach ( $costs as $label => $value ) $cost_html .= '<tr><td style="padding:8px 0;color:#4a5568">' . esc_html( $label ) . '</td><td style="padding:8px 0;text-align:right;font-weight:600">' . esc_html( $money( $value ) ) . '</td></tr>';
-		$html = '<!doctype html><html><head><meta charset="utf-8"></head><body style="font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;background:#f5f5f5;margin:0;padding:20px"><div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px #0002"><div style="background:linear-gradient(135deg,#1a365d,#2c5282);color:#fff;padding:30px;text-align:center"><h1 style="margin:0;font-size:24px">' . esc_html( get_the_title( $event ) ) . '</h1><p>Riepilogo della tua prenotazione</p><p style="font-size:12px">Emesso il ' . esc_html( current_time( 'd/m/Y H:i' ) ) . '</p></div><div style="padding:30px"><h2 style="color:#1a365d;font-size:18px">Partecipanti</h2><table style="width:100%;border-collapse:collapse;margin-bottom:25px">' . $rows . '</table><div style="background:#f7fafc;border-radius:8px;padding:20px;margin-bottom:25px"><table style="width:100%">' . $cost_html . '</table></div>';
+		$html = '<p style="color:#64748B;font-size:13px">Emesso il ' . esc_html( current_time( 'd/m/Y H:i' ) ) . '</p><h2 style="font-size:18px">Partecipanti</h2><table style="width:100%;border-collapse:collapse;margin-bottom:25px">' . $rows . '</table><div style="background:#f7fafc;border-radius:8px;padding:20px;margin-bottom:25px"><table style="width:100%">' . $cost_html . '</table></div>';
 		if ( $deadlines && $receipt['balance'] > 0 ) $html .= '<div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:15px;border-radius:0 8px 8px 0;margin-bottom:25px"><strong>Scadenza indicata:</strong> ' . esc_html( implode( ' · ', array_unique( $deadlines ) ) ) . '</div>';
 		if ( $receipt['balance'] > 0 && in_array( 'BANK_TRANSFER', $payment['methods'], true ) ) $html .= '<h2 style="color:#1a365d;font-size:18px">Coordinate per il bonifico</h2><div style="background:#ebf8ff;border-radius:8px;padding:20px"><p><strong>Intestatario:</strong> ' . esc_html( $payment['holder'] ) . '</p><p><strong>IBAN:</strong> <code style="background:#fff;padding:4px 11px;border-radius:4px;font-size:16px;user-select:all">' . esc_html( $payment['iban'] ) . '</code></p><p><strong>Causale:</strong> ' . esc_html( $receipt['causale'] ) . '</p></div>';
 		if ( $missing ) $html .= '<div style="background:#f9fafb;border-left:6px solid #f59e0b;border-radius:10px;padding:20px 22px;margin-top:32px"><h3>📍 Prima dell’evento…</h3><p>Per completare al meglio l’organizzazione, ci manca ancora qualche informazione:</p>' . $missing . '<p>È sufficiente rispondere a questa email con le informazioni richieste.<br>Grazie per la collaborazione 💛</p></div>';
-		return $html . '</div><div style="background:#f7fafc;padding:20px;text-align:center;border-top:1px solid #e2e8f0"><p>Grazie!</p><a href="mailto:' . esc_html( $payment['contact'] ) . '">' . esc_html( $payment['contact'] ) . '</a></div></div></body></html>';
+		return '<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:17px;line-height:1.68;">' . $html . '</div>';
+	}
+	public static function email_html( $event, $receipt, $payment ) {
+		$snapshot = MI_Modello_Email::crea_istantanea( $event, array() );
+		$snapshot['attivo'] = true; $snapshot['oggetto'] = 'Riepilogo — ' . get_the_title( $event ); $snapshot['titolo'] = 'Riepilogo della prenotazione'; $snapshot['html'] = self::email_body( $event, $receipt, $payment );
+		return MI_Modello_Email::componi_html( $snapshot );
 	}
 	public static function save( $event, $data, $preview = false ) {
 		global $wpdb;
@@ -233,13 +250,14 @@ final class MI_Public_Balance {
 		foreach ( $bundles as $rid => $b ) try { MI_Registration_Service::accoda_iscrizione_workspace( $rid ); } catch ( Throwable $error ) { /* Durable workspace queue will retry. */ }
 		return $receipt;
 	}
-	public static function render( $event ) {
+	public static function render( $event, $prefill = array() ) {
 		try { self::event( $event ); } catch ( Throwable $error ) { wp_die( esc_html( $error->getMessage() ) ); }
 		nocache_headers();
-		$config = array_merge( self::payment_config( $event ), array( 'eventTitle' => get_the_title( $event ), 'endpoint' => add_query_arg( 'mi_public_balance', $event, home_url( '/' ) ), 'nonce' => wp_create_nonce( 'mi_public_balance_' . $event ) ) );
+		$prefill = is_array( $prefill ) ? array( 'row' => absint( $prefill['row'] ?? 0 ), 'nome' => sanitize_text_field( (string) ( $prefill['nome'] ?? '' ) ), 'cognome' => sanitize_text_field( (string) ( $prefill['cognome'] ?? '' ) ), 'people' => array_map( static function ( $person ) { return array( 'row' => absint( $person['row'] ?? 0 ), 'nome' => sanitize_text_field( (string) ( $person['nome'] ?? '' ) ), 'cognome' => sanitize_text_field( (string) ( $person['cognome'] ?? '' ) ) ); }, is_array( $prefill['people'] ?? null ) ? $prefill['people'] : array() ) ) : array();
+		$config = array_merge( self::payment_config( $event ), array( 'eventTitle' => get_the_title( $event ), 'endpoint' => add_query_arg( 'mi_public_balance', $event, home_url( '/' ) ), 'nonce' => wp_create_nonce( 'mi_public_balance_' . $event ), 'prefill' => $prefill ) );
 		$asset = MI_PLUGIN_URL . 'assets/';
 		header( 'Content-Type: text/html; charset=UTF-8' );
-		echo '<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><title>Saldo — ' . esc_html( get_the_title( $event ) ) . '</title><link rel="stylesheet" href="' . esc_url( $asset . 'public-balance.css?ver=' . MI_VERSION ) . '"></head><body>';
+		echo '<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><title>Servizi e saldo — ' . esc_html( get_the_title( $event ) ) . '</title><link rel="stylesheet" href="' . esc_url( $asset . 'public-balance.css?ver=' . MI_VERSION ) . '"></head><body>';
 		include MI_PLUGIN_DIR . 'templates/public-balance.php';
 		echo '<script>window.MIBalance=' . wp_json_encode( $config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT ) . ';</script><script src="' . esc_url( $asset . 'public-balance.js?ver=' . MI_VERSION ) . '"></script></body></html>';
 	}

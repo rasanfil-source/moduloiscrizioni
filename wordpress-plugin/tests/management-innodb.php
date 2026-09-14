@@ -26,6 +26,9 @@ foreach(['registrations','participants','rooms','payments','registration_events'
  $wpdb->query('DROP TABLE IF EXISTS wp_mi_'.$name);
  check(false!==$wpdb->query('CREATE TABLE wp_mi_'.$name.' ('.$m[1].') ENGINE=InnoDB'),$wpdb->last_error);
 }
+preg_match('/CREATE TABLE \{\$items\} \((.*?)\) ENGINE=InnoDB/s',$schema,$item_schema);
+$wpdb->query('DROP TABLE IF EXISTS wp_mi_registration_items');
+check(false!==$wpdb->query('CREATE TABLE wp_mi_registration_items ('.$item_schema[1].') ENGINE=InnoDB'),$wpdb->last_error);
 function inventory_version(){global $wpdb;$method=new ReflectionMethod(MI_Management_Service::class,'rooms');return hash('sha256',wp_json_encode($method->invoke(null,42)));}
 $empty_version=inventory_version();$inventory_data=['code'=>'PRE','name'=>'Prima camera','capacity'=>2];
 $r=MI_Management_Service::save_event_room(42,'room_save',$inventory_data,$empty_version,'wp_7_12345678-1234-4234-8234-123456789ac1');check(!empty($r['saved']),'Inventario senza prenotazioni non salvato');
@@ -111,7 +114,7 @@ $version=booking_version(1);$change=['participant_id'=>1,'options'=>['single'=>0
 $r=save_change(1,'change_options',$change,'123456789ab4',$version);check(!empty($r['saved']),'Cambio servizi non salvato');
 $r=save_change(1,'change_options',$change,'123456789ab4',$version);check(!empty($r['replayed']),'Retry cambio servizi non idempotente');
 $options=json_decode($wpdb->get_var('SELECT options_json FROM wp_mi_participants WHERE id=1'),true);check(count($options)===1&&$options[0]['code']==='double','Sistemazione non aggiornata');
-check((int)$wpdb->get_var('SELECT total_cents FROM wp_mi_registrations WHERE id=1')===5000,'Cambio servizi ha rettificato automaticamente il dovuto');
+check((int)$wpdb->get_var('SELECT total_cents FROM wp_mi_registrations WHERE id=1')===3000,'Cambio servizi non ha aggiornato automaticamente il dovuto');
 check((int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_payments')===0,'Cambio servizi ha creato un movimento');
 $invalid=$change;$invalid['options']=['double'=>-1];$r=save_change(1,'change_options',$invalid,'123456789ab5');check(!empty($r['rejected']),'Quantità negativa accettata nel salvataggio');
 $audit=json_decode($wpdb->get_var("SELECT detail_json FROM wp_mi_registration_events WHERE event_type='MANAGEMENT_change_options' ORDER BY id DESC LIMIT 1"),true);check($audit['before_options'][0]['code']==='single'&&$audit['after_options'][0]['code']==='double','Variazione non tracciata');
@@ -179,12 +182,17 @@ check(assigned_rooms(11)===['M3','M4'],'Multiple senza progressivi individuali s
 foreach([12=>'DM1',13=>'DS2',14=>'T2']as $id=>$code)check(count(array_unique(assigned_rooms($id)))===1&&assigned_rooms($id)[0]===$code,'Gruppo congiunto senza codice condiviso '.$id);
 check(assigned_rooms(15)===['']&&assigned_rooms(16)===['','','',''],'Richieste da abbinare assegnate automaticamente');
 check(assigned_rooms(17)===['','S3'],'Iscrizione mista abbinata impropriamente');
+seed_auto_rooms(21,['doppia-matrimoniale','doppia-matrimoniale','singola']);run_auto_rooms(21);
+check(assigned_rooms(21)===['DM2','DM2','S4'],'La coppia matrimoniale nella prenotazione mista non condivide la camera');
+seed_auto_rooms(22,['doppia-matrimoniale','doppia-matrimoniale','doppia-matrimoniale']);run_auto_rooms(22);
+seed_auto_rooms(23,['doppia-matrimoniale','doppia-matrimoniale','doppia-matrimoniale','doppia-matrimoniale']);run_auto_rooms(23);
+check(assigned_rooms(22)===['','','']&&assigned_rooms(23)===['','','',''],'Tre o più richieste matrimoniali assegnate automaticamente');
 $before=assigned_rooms(12);$audit_count=(int)$wpdb->get_var("SELECT COUNT(*) FROM wp_mi_registration_events WHERE event_type='AUTO_ROOM_ASSIGN'");run_auto_rooms(12);check($before===assigned_rooms(12)&&(int)$wpdb->get_var("SELECT COUNT(*) FROM wp_mi_registration_events WHERE event_type='AUTO_ROOM_ASSIGN'")===$audit_count,'Automatismo ripetuto modifica assegnazioni esistenti');
 seed_auto_rooms(18,['singola'],'WAITLISTED');run_auto_rooms(18);check(assigned_rooms(18)===[''],'Lista attesa assegnata prima dell’ammissione');
-$wpdb->query("UPDATE wp_mi_registrations SET status='CONFIRMED' WHERE id=18");run_auto_rooms(18);check(assigned_rooms(18)===['S4'],'Assegnazione dopo ammissione assente');
-echo "Automatismi: progressivi S/M, gruppi congiunti DM/DS/T, esclusione richieste incomplete e lista attesa verificati.\n";
+$wpdb->query("UPDATE wp_mi_registrations SET status='CONFIRMED' WHERE id=18");run_auto_rooms(18);check(assigned_rooms(18)===['S5'],'Assegnazione dopo ammissione assente');
+echo "Automatismi: progressivi S/M, coppia DM anche in prenotazioni miste, gruppi DS/T, esclusione di tre o più richieste DM e lista attesa verificati.\n";
 seed_auto_rooms(19,['singola']);seed_auto_rooms(20,['singola']);$processes=[];
 foreach([19,20]as $id){$pipes=[];$proc=proc_open([PHP_BINARY,'-d','extension_dir='.dirname(PHP_BINARY).'/ext','-d','extension=mbstring','-d','extension=mysqli',__FILE__,'auto-worker',(string)$id],[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);fclose($pipes[0]);$processes[]=[$proc,$pipes];}
 foreach($processes as [$proc,$pipes]){$out=stream_get_contents($pipes[1]);$err=stream_get_contents($pipes[2]);fclose($pipes[1]);fclose($pipes[2]);check(proc_close($proc)===0&&$out==='ok','Automatismo concorrente fallito: '.$out.$err);}
-$codes=array_merge(assigned_rooms(19),assigned_rooms(20));sort($codes);check($codes===['S5','S6'],'Numeri automatici duplicati in concorrenza');
+$codes=array_merge(assigned_rooms(19),assigned_rooms(20));sort($codes);check($codes===['S6','S7'],'Numeri automatici duplicati in concorrenza');
 echo "Progressivi automatici concorrenti: nessuna duplicazione.\n";

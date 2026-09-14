@@ -1,5 +1,46 @@
 const MI_TEST_EMAIL_PROPERTY = 'MI_EMAIL_TEST_RECIPIENT';
 
+function statoCanaleEmail_() {
+  const sender = String(Session.getEffectiveUser().getEmail() || '').trim().toLowerCase();
+  const expected = String(PropertiesService.getScriptProperties().getProperty('MI_EMAIL_SENDER') || '').trim().toLowerCase();
+  const authorized = expected && sender === expected;
+  return { ok: !!authorized, error: authorized ? '' : 'EMAIL_SENDER_NOT_AUTHORIZED', channel: 'GOOGLE_WORKSPACE', sender: sender };
+}
+
+/** Signed WordPress outbox. Persist intent before sending: uncertain deliveries require review. */
+function inviaEmailConfermaDaWordPress_(payload) {
+  const p = payload || {};
+  const sender = statoCanaleEmail_();
+  if (!sender.ok) return sender;
+  const recipient = String(p.destinatario || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient) || !/^[a-f0-9]{64}$/.test(String(p.delivery_key || '')) || !['PROVA', 'OPERATIVO'].includes(p.mode)) return { ok: false, error: 'INVALID_EMAIL_PAYLOAD' };
+  const props = PropertiesService.getScriptProperties();
+  if (p.mode === 'PROVA' && recipient !== String(props.getProperty(MI_TEST_EMAIL_PROPERTY) || '').trim().toLowerCase()) return { ok: false, error: 'TEST_RECIPIENT_MISMATCH' };
+  if (!p.oggetto || !p.testo || !p.html || String(p.oggetto).length > 250 || String(p.testo).length > 100000 || String(p.html).length > 300000 || /[\r\n]/.test(String(p.oggetto))) return { ok: false, error: 'INVALID_EMAIL_PAYLOAD' };
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) return { ok: false, error: 'EMAIL_BUSY' };
+  try {
+    const book = ottieniFoglioDiLavoroAssociato_();
+    let sheet = book.getSheetByName('Registro invii email');
+    if (!sheet) { sheet = book.insertSheet('Registro invii email'); sheet.appendRow(['delivery_key', 'stato', 'data_utc']); }
+    const rows = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues() : [];
+    const previous = rows.find(row => row[0] === p.delivery_key);
+    if (previous) return previous[1] === 'ACCEPTED' ? { ok: true, channel: 'GOOGLE_WORKSPACE', replayed: true } : { ok: false, error: 'EMAIL_DELIVERY_UNCERTAIN' };
+    if (MailApp.getRemainingDailyQuota() < 1) return { ok: false, error: 'EMAIL_QUOTA_EXCEEDED' };
+    sheet.appendRow([p.delivery_key, 'SENDING', new Date().toISOString()]);
+    const row = sheet.getLastRow();
+    SpreadsheetApp.flush();
+    const options = { to: recipient, subject: String(p.oggetto), body: String(p.testo), htmlBody: String(p.html), name: 'Parrocchia Sant’Eugenio', replyTo: recipient };
+    if (p.mode === 'OPERATIVO') options.replyTo = sender.sender;
+    if (p.codice_svg) options.inlineImages = { 'mi-registration-code': Utilities.newBlob(String(p.codice_svg), 'image/svg+xml', 'codice-iscrizione.svg') };
+    try { MailApp.sendEmail(options); }
+    catch (error) { console.error('EMAIL_SEND_FAILED', String(error)); return { ok: false, error: 'EMAIL_DELIVERY_UNCERTAIN' }; }
+    sheet.getRange(row, 2).setValue('ACCEPTED');
+    SpreadsheetApp.flush();
+    return { ok: true, channel: 'GOOGLE_WORKSPACE', sender: sender.sender };
+  } finally { lock.releaseLock(); }
+}
+
 /** Invia soltanto la prova del Modulo Iscrizioni richiesta da WordPress. */
 function inviaEmailProvaDaWordPress_(payload) {
   payload = payload && typeof payload === 'object' ? payload : {};

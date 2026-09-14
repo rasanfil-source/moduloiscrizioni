@@ -1,12 +1,13 @@
 <?php
 define('ABSPATH',__DIR__);define('ARRAY_A','ARRAY_A');
+function wp_parse_url($url,$component=-1){return parse_url($url,$component);}
 define('MI_PLUGIN_DIR',__DIR__.'/../modulo-iscrizioni/');function get_option($key,$default=false){return $default;}function update_option($k,$v,$a=false){}
 function sanitize_text_field($s){return strip_tags($s);} function remove_accents($s){return strtr($s,['è'=>'e','é'=>'e','È'=>'E']);} function absint($n){return abs((int)$n);} function wp_salt($s){return 'test-'.$s;} function wp_json_encode($v){return json_encode($v);} function sanitize_email($s){return $s;} function is_email($s){return filter_var($s,FILTER_VALIDATE_EMAIL);} function get_post_status($id){return $id===42?'publish':'draft';} function get_post_type($id){return 'mi_event';} function esc_url_raw($s,$p=[]){return $s;} function get_the_title($id){return 'Evento prova';} function esc_html($s){return htmlspecialchars($s);} function current_time($a,$b=false){return '2026-09-11 12:00:00';}
 function get_post_meta($id,$key,$single=true){if($key==='_mi_economic_mode')return 'DEPOSIT_BALANCE';if($key==='_mi_payment_methods')return ['BANK_TRANSFER','CARD'];if($key==='_mi_options')return [['code'=>'pullman-a','name'=>'Roma → Fiumicino','category'=>'pullman','scope'=>'TICKET','price_cents'=>1000,'max_quantity'=>1]];return '';}
 class MI_Event_Post_Type{const EVENT_TYPE='mi_event';}
 class MI_Management_Service{static function lock_room_event($id){}}
 class MI_Modello_Email{static function crea_istantanea($id,$values){return [];}}
-class MI_Spedizione_Email{static function stato_nuova_email($s){return 'PREVIEW';}static function pianifica_spedizione(){}}
+class MI_Spedizione_Email{static function stato_nuova_email($s){return 'PREVIEW';}static function email_da_spedire($status){return in_array($status,['PENDING','TEST_PENDING'],true);}static function pianifica_spedizione(){}}
 class MI_Registration_Service{static function mark_workspace_changed_locked($id){}static function accoda_iscrizione_workspace($id){}static function append_registration_event($id,$type,$from,$to,$key,$data){global $wpdb;$wpdb->events[$key]=$data;return true;}}
 class BalanceDB{
  public $prefix='wp_',$last_error='',$events=[],$writes=0,$reg,$persons,$payments=[],$backup;

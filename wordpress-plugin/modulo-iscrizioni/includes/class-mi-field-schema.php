@@ -3,6 +3,19 @@
 defined( 'ABSPATH' ) || exit;
 
 final class MI_Field_Schema {
+	public static function normalize_phone( $value ) {
+		$value  = trim( (string) $value );
+		$digits = preg_replace( '/\D+/', '', $value );
+		if ( '+' !== substr( $value, 0, 1 ) && preg_match( '/^3\d{9}$/', $digits ) ) {
+			return '+39 ' . substr( $digits, 0, 3 ) . ' ' . substr( $digits, 3 );
+		}
+		if ( '+' !== substr( $value, 0, 1 ) && preg_match( '/^(?:39|0039)3\d{9}$/', $digits ) ) {
+			$mobile = preg_replace( '/^(?:0039|39)/', '', $digits );
+			return '+39 ' . substr( $mobile, 0, 3 ) . ' ' . substr( $mobile, 3 );
+		}
+		return preg_replace( '/[^0-9+().\s-]/', '', $value );
+	}
+
 	public static function catalog() {
 		return array(
 			'email' => array(
@@ -43,6 +56,10 @@ final class MI_Field_Schema {
 			),
 			'document_number' => array(
 				'key' => 'document_number', 'label' => 'Numero del documento', 'type' => 'text', 'max_length' => 80,
+				'help' => 'Disponibile ai gestori autorizzati nel registro e nel foglio evento.', 'high_impact' => true, 'retention' => 'SHEETS_ONLY',
+			),
+			'document_issue_date' => array(
+				'key' => 'document_issue_date', 'label' => 'Data rilascio documento identità', 'type' => 'date',
 				'help' => 'Disponibile ai gestori autorizzati nel registro e nel foglio evento.', 'high_impact' => true, 'retention' => 'SHEETS_ONLY',
 			),
 			'document_country' => array(
@@ -217,7 +234,7 @@ final class MI_Field_Schema {
 				if ( ! is_email( $value ) ) return new WP_Error( 'mi_participant_email_invalid', 'Controlla le email dei partecipanti.', array( 'status' => 400 ) );
 				$answers[ $key ] = $value;
 			} elseif ( 'tel' === $field['type'] ) {
-				$value = preg_replace( '/[^0-9+().\s-]/', '', $value );
+				$value = self::normalize_phone( $value );
 				if ( ! preg_match( '/^\+[1-9][0-9().\s-]{6,30}$/', $value ) ) return new WP_Error( 'mi_participant_phone_invalid', 'Controlla i cellulari dei partecipanti.', array( 'status' => 400 ) );
 				$answers[ $key ] = $value;
 			} elseif ( 'date' === $field['type'] ) {

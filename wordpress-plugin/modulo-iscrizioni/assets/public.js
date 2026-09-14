@@ -39,7 +39,7 @@
 	  specialRequestsLabel.textContent = 'Richieste particolari (facoltativo)';
 	  const specialRequestsInput = document.createElement('textarea');
 	  specialRequestsInput.name = 'specialRequests';
-	  specialRequestsInput.rows = 4;
+	  specialRequestsInput.rows = 3;
 	  specialRequestsInput.maxLength = 2000;
 	  specialRequestsInput.placeholder = 'Segnala esigenze organizzative, alimentari o di accessibilità che ritieni utile comunicare.';
 	  specialRequestsLabel.append(specialRequestsInput);
@@ -64,6 +64,36 @@
 	buyerLastName?.addEventListener('input', prefillFirstBookingFromContact);
 	buyerEmail?.addEventListener('input', prefillFirstBookingFromContact);
 	buyerPhone?.addEventListener('input', prefillFirstBookingFromContact);
+	preparePhoneField(buyerPhone);
+
+	function validatePhoneField(input, reveal = false, normalize = false) {
+	  if (!input) return true;
+	  const originalValue = String(input.value || '').trim();
+	  const value = normalize ? core.normalizePhone(originalValue) : originalValue;
+	  if (normalize && value !== originalValue) input.value = value;
+	  const invalid = Boolean(value) && !core.isValidPhone(value);
+	  const message = 'Inserisci un numero di cellulare completo.';
+	  input.setCustomValidity(invalid ? message : '');
+	  const showError = invalid && (reveal || input.dataset.miPhoneTouched === '1');
+	  input.toggleAttribute('aria-invalid', showError);
+	  const error = input.parentElement?.querySelector('[data-mi-phone-error]');
+	  if (error) error.hidden = !showError;
+	  return !invalid;
+	}
+
+	function preparePhoneField(input) {
+	  if (!input || input.dataset.miPhoneValidation === '1') return;
+	  input.dataset.miPhoneValidation = '1';
+	  const error = document.createElement('small');
+	  error.className = 'mi-registration__field-error';
+	  error.dataset.miPhoneError = '1';
+	  error.textContent = 'Inserisci un numero di cellulare completo.';
+	  error.hidden = true;
+	  input.after(error);
+	  input.addEventListener('blur', () => { input.dataset.miPhoneTouched = '1'; validatePhoneField(input, true, true); });
+	  input.addEventListener('input', () => validatePhoneField(input));
+	  validatePhoneField(input);
+	}
 
     function makeRequestKey() {
       if (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function') {
@@ -112,6 +142,25 @@
     function formatCurrency(cents) {
       return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(Math.max(0, cents) / 100);
     }
+
+	function pendingPaymentConfirmation(name, economicSummary = {}) {
+	  const total = Math.max(0, Number(economicSummary.total_cents) || 0);
+	  if (economicSummary.mode === 'DEPOSIT_BALANCE') {
+		const deposit = Math.min(total, Math.max(0, Number(economicSummary.initial_due_cents) || 0));
+		const balance = Math.max(0, total - deposit);
+		return `Prenotazione registrata a nome di ${name}. Totale: ${formatCurrency(total)}. Da versare ora: ${formatCurrency(deposit)} di caparra. Saldo successivo: ${formatCurrency(balance)}.`;
+	  }
+	  return `Prenotazione registrata a nome di ${name}. Totale da versare: ${formatCurrency(total)}.`;
+	}
+
+	function localDateWithYearOffset(yearOffset = 0) {
+	  const date = new Date();
+	  date.setFullYear(date.getFullYear() + yearOffset);
+	  const year = String(date.getFullYear()).padStart(4, '0');
+	  const month = String(date.getMonth() + 1).padStart(2, '0');
+	  const day = String(date.getDate()).padStart(2, '0');
+	  return `${year}-${month}-${day}`;
+	}
 
     function totalCents() {
 	  const prices = Object.fromEntries((config.event.ticket_types || []).map((ticket) => [ticket.code, config.event.pricing_mode === 'FIXED' ? Number(config.event.fixed_price_cents) || 0 : Number(ticket.price_cents) || 0]));
@@ -206,40 +255,124 @@
         row.append(label, detail);
         parent.append(row);
       };
-      line(summary, 'Referente', [buyerFirstName.value, buyerLastName.value].filter(Boolean).join(' '));
+      const buyerName = [buyerFirstName.value, buyerLastName.value].filter(Boolean).join(' ');
+      const total = totalCents();
+      summary.classList.toggle('is-free', total === 0);
+      if (total === 0) {
+        const freeRegistration = document.createElement('p');
+        freeRegistration.className = 'mi-registration__free-confirmation';
+        const freeRegistrationText = document.createElement('strong');
+        freeRegistrationText.textContent = `Iscrizione di ${buyerName}`;
+        freeRegistration.append(freeRegistrationText);
+        summary.append(freeRegistration);
+        return;
+      }
       const options = config.event.options || [];
-      participantValues.forEach((participant, index) => {
-        const section = document.createElement('section');
-        const heading = document.createElement('h3');
-        heading.textContent = `Prenotazione ${index + 1} · ${participant.firstName} ${participant.lastName}`;
-        section.append(heading);
+      const participantCosts = participantValues.map((participant) => {
         const ticket = (config.event.ticket_types || []).find((item) => item.code === participant.key.split(':')[0]);
         const base = config.event.pricing_mode === 'FIXED' ? Number(config.event.fixed_price_cents) || 0 : Number(ticket?.price_cents) || 0;
-        let subtotal = base;
-        if (base > 0) line(section, 'Quota di partecipazione', formatCurrency(base));
-        options.filter((option) => option.scope === 'TICKET').forEach((option) => {
-          const quantity = Number(participant.options?.[option.code]) || 0;
-          if (!quantity) return;
-          const cost = quantity * (Number(option.price_cents) || 0);
-          subtotal += cost;
-          line(section, `${option.name}${quantity > 1 ? ` × ${quantity}` : ''}`, formatCurrency(cost));
-        });
-        line(section, 'Totale partecipante', subtotal > 0 ? formatCurrency(subtotal) : 'Gratuito');
-        summary.append(section);
+        const selected = options.filter((option) => option.scope === 'TICKET').map((option) => ({ option, quantity: Number(participant.options?.[option.code]) || 0 })).filter((item) => item.quantity > 0).map((item) => ({ ...item, cost: item.quantity * (Number(item.option.price_cents) || 0) }));
+        return { participant, base, selected, subtotal: selected.reduce((total, item) => total + item.cost, base) };
       });
       const orderSelection = orderOptionSelection();
-      options.filter((option) => option.scope === 'ORDER').forEach((option) => {
-        const quantity = Number(orderSelection[option.code]) || 0;
-        if (quantity) line(summary, `${option.name} × ${quantity}`, formatCurrency(quantity * (Number(option.price_cents) || 0)));
-      });
-      const total = totalCents();
-      line(summary, 'Totale prenotazione', total > 0 ? formatCurrency(total) : 'Gratuito', true);
-      if (total > 0 && config.event.economic_mode === 'DEPOSIT_BALANCE') {
-        const deposit = config.event.deposit_mode === 'FIXED'
-          ? Math.min(total, (Number(config.event.deposit_fixed_cents) || 0) * totalQuantity())
-          : Math.round(total * Number(config.event.deposit_percentage || 30) / 100);
-        line(summary, 'Caparra', formatCurrency(deposit), true);
-        line(summary, 'Saldo successivo', formatCurrency(total - deposit), true);
+      const selectedOrderOptions = options.filter((option) => option.scope === 'ORDER').map((option) => ({ option, quantity: Number(orderSelection[option.code]) || 0 })).filter((item) => item.quantity > 0).map((item) => ({ ...item, cost: item.quantity * (Number(item.option.price_cents) || 0) }));
+      const deposit = total > 0 && config.event.economic_mode === 'DEPOSIT_BALANCE'
+        ? (config.event.deposit_mode === 'FIXED' ? Math.min(total, (Number(config.event.deposit_fixed_cents) || 0) * totalQuantity()) : Math.round(total * Number(config.event.deposit_percentage || 30) / 100))
+        : 0;
+      const optionCategory = (option) => {
+        const code = String(option.code || ''), name = String(option.name || ''), category = String(option.category || '');
+        if (code.startsWith('alloggio-') || category === 'alloggio') return 'alloggio';
+        if (code === 'colazione' || code.startsWith('assicurazione-') || /assicurazione|disdetta/i.test(name) || category === 'supplemento') return 'supplemento';
+        if (code.startsWith('pullman') || ['pullman', 'trasferimento'].includes(category)) return 'trasferimento';
+        if (code === 'pranzo' || category === 'pranzo') return 'pranzo';
+        return 'altro';
+      };
+      const compactDescription = ({ base, selected }) => {
+        const grouped = selected.reduce((all, item) => { const category = optionCategory(item.option); (all[category] ??= []).push(item); return all; }, {});
+        const parts = [];
+        if (base > 0) parts.push('quota di partecipazione');
+        if (grouped.alloggio?.length) parts.push(...grouped.alloggio.map(({ option }) => String(option.name || 'Alloggio').replace(/^Alloggio:\s*/i, '').toLocaleLowerCase('it')));
+        const transferCount = (grouped.trasferimento || []).reduce((count, item) => count + item.quantity, 0);
+        if (transferCount) parts.push(`${transferCount} ${transferCount === 1 ? 'trasferimento' : 'trasferimenti'}`);
+        const supplements = grouped.supplemento || [];
+        if (supplements.some(({ option }) => option.code === 'colazione' || /colazione/i.test(option.name || ''))) parts.push('colazione');
+        const insuranceCount = supplements.filter(({ option }) => String(option.code || '').startsWith('assicurazione-') || /assicurazione|disdetta/i.test(option.name || '')).length;
+        if (insuranceCount) parts.push(insuranceCount === 1 ? 'assicurazione' : `${insuranceCount} assicurazioni`);
+        const otherSupplements = supplements.filter(({ option }) => option.code !== 'colazione' && !/colazione|assicurazione|disdetta/i.test(String(option.code || '') + ' ' + String(option.name || '')));
+        parts.push(...otherSupplements.map(({ option }) => String(option.name || 'Supplemento').toLocaleLowerCase('it')));
+        const mealCount = (grouped.pranzo || []).reduce((count, item) => count + item.quantity, 0);
+        if (mealCount) parts.push(mealCount === 1 ? 'pasto' : `${mealCount} pasti`);
+        parts.push(...(grouped.altro || []).map(({ option }) => String(option.name || 'Altra voce').toLocaleLowerCase('it')));
+        return parts.join(' · ') || 'quota compresa';
+      };
+      const renderParticipantDetail = (parent, cost) => {
+        const { participant, base, selected, subtotal } = cost;
+        const section = document.createElement('section');
+        const heading = document.createElement('h3');
+        heading.textContent = `${participant.firstName} ${participant.lastName}`;
+        section.append(heading);
+        if (base > 0) line(section, 'Quota di partecipazione', formatCurrency(base));
+        selected.forEach(({ option, quantity, cost: optionCost }) => {
+          line(section, `${option.name}${quantity > 1 ? ` × ${quantity}` : ''}`, formatCurrency(optionCost));
+        });
+        line(section, 'Totale partecipante', subtotal > 0 ? formatCurrency(subtotal) : 'Gratuito');
+        parent.append(section);
+      };
+      const renderTotals = (parent, showOrderDetails = false) => {
+        if (showOrderDetails) selectedOrderOptions.forEach(({ option, quantity, cost }) => line(parent, `${option.name}${quantity > 1 ? ` × ${quantity}` : ''}`, formatCurrency(cost)));
+        else if (selectedOrderOptions.length) line(parent, 'Voci comuni', formatCurrency(selectedOrderOptions.reduce((sum, item) => sum + item.cost, 0)));
+        line(parent, 'Totale', total > 0 ? formatCurrency(total) : 'Gratuito', true);
+        if (deposit > 0) {
+          line(parent, 'Caparra', formatCurrency(deposit), true);
+          line(parent, 'Saldo', formatCurrency(total - deposit), true);
+        }
+      };
+      if (participantCosts.length > 1 && total > 0) {
+        const overview = document.createElement('section');
+        overview.className = 'mi-registration__booking-overview';
+        const title = document.createElement('h3');
+        title.textContent = 'Riepilogo della prenotazione';
+        const bookingName = document.createElement('p');
+        bookingName.className = 'mi-registration__booking-name';
+        const bookingNameLabel = document.createElement('span');
+        bookingNameLabel.textContent = 'Iscrizione a nome di';
+        const bookingNameValue = document.createElement('strong');
+        bookingNameValue.textContent = buyerName;
+        bookingName.append(bookingNameLabel, bookingNameValue);
+        const list = document.createElement('ul');
+        participantCosts.forEach((cost) => {
+          const item = document.createElement('li');
+          const identity = document.createElement('div');
+          identity.className = 'mi-registration__booking-person';
+          const heading = document.createElement('strong');
+          heading.textContent = `${cost.participant.firstName} ${cost.participant.lastName}`;
+          const description = document.createElement('span');
+          description.textContent = compactDescription(cost);
+          const amount = document.createElement('strong');
+          amount.className = 'mi-registration__booking-amount';
+          amount.textContent = formatCurrency(cost.subtotal);
+          identity.append(heading, description);
+          item.append(identity, amount);
+          list.append(item);
+        });
+        const totals = document.createElement('div');
+        totals.className = 'mi-registration__booking-totals';
+        renderTotals(totals);
+        overview.append(title, bookingName, list, totals);
+        summary.append(overview);
+        const details = document.createElement('details');
+        details.className = 'mi-registration__cost-details';
+        const detailsSummary = document.createElement('summary');
+        detailsSummary.textContent = 'Dettaglio dei costi';
+        const detailedCosts = document.createElement('div');
+        participantCosts.forEach((cost) => renderParticipantDetail(detailedCosts, cost));
+        renderTotals(detailedCosts, true);
+        details.append(detailsSummary, detailedCosts);
+        summary.append(details);
+      } else {
+        line(summary, 'Iscrizione a nome di', buyerName);
+        participantCosts.forEach((cost) => renderParticipantDetail(summary, cost));
+        renderTotals(summary, true);
       }
     }
 
@@ -250,6 +383,7 @@
 		return false;
 	  }
 	  const fields = Array.from(steps[currentStep - 1].querySelectorAll('input, select, textarea'));
+	  fields.filter((field) => field.type === 'tel').forEach((field) => validatePhoneField(field, true, true));
 	  const invalid = fields.find((field) => !field.checkValidity());
 	  if (invalid) { revealInvalidField(invalid); return false; }
 	  return true;
@@ -270,8 +404,9 @@
         key,
         firstName: row.querySelector('[data-mi-first-name]')?.value || '',
         lastName: row.querySelector('[data-mi-last-name]')?.value || '',
-		fields: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-field]')).map((input) => [input.dataset.miParticipantField, input.value.trim()])),
-		options: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-option]')).map((input) => [input.dataset.miParticipantOption, String(participantOptionQuantity(input))]))
+		fields: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-field]')).map((input) => [input.dataset.miParticipantField, input.type === 'tel' ? core.normalizePhone(input.value) : input.value.trim()])),
+		options: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-option]')).map((input) => [input.dataset.miParticipantOption, String(participantOptionQuantity(input))])),
+		noAccommodation: Boolean(row.querySelector('[data-mi-no-accommodation]')?.checked)
 		};
 	  });
     }
@@ -312,14 +447,23 @@
           participantField('Cognome', 'family-name', 'lastName', previous.lastName || '', index)
         );
 		const allRequired = config.event.participant_extra_scope === 'ALL';
-		(config.event.participant_fields || []).forEach((field) => grid.append(configuredParticipantField(field, previous.fields?.[field.key] || '', index, allRequired || index === 0)));
-		(config.event.options || []).filter((option) => option.scope === 'TICKET').forEach((option) => grid.append(configuredParticipantOption(option, previous.options?.[option.code] || '0', index)));
-        const groups = new Set(Array.from(grid.querySelectorAll('[data-mi-choice-group]')).map(input=>input.dataset.miChoiceGroup).filter(Boolean));
-        groups.forEach(group=>{
-          const clear=document.createElement('button');clear.type='button';clear.textContent=`Nessuna scelta: ${group}`;
-          clear.addEventListener('click',()=>{grid.querySelectorAll('[data-mi-choice-group]').forEach(input=>{if(input.dataset.miChoiceGroup===group)input.checked=false;});renderEconomicSummary();updateStickySummary();});
-          grid.append(clear);
-        });
+		const participantFields = config.event.participant_fields || [];
+		participantFields
+		  .filter((field) => !String(field.key || '').startsWith('custom_'))
+		  .forEach((field) => grid.append(configuredParticipantField(field, previous.fields?.[field.key] || '', index, allRequired || index === 0)));
+		const answerFields = participantFields.filter((field) => String(field.key || '').startsWith('custom_'));
+		if (answerFields.length) {
+		  const answers = document.createElement('fieldset');
+		  answers.className = 'mi-registration__answers';
+		  const answersLegend = document.createElement('legend');
+		  answersLegend.textContent = 'Domande per la partecipazione';
+		  const answersGrid = document.createElement('div');
+		  answersGrid.className = 'mi-registration__answers-grid';
+		  answerFields.forEach((field) => answersGrid.append(configuredParticipantField(field, previous.fields?.[field.key] || '', index, allRequired || index === 0)));
+		  answers.append(answersLegend, answersGrid);
+		  grid.append(answers);
+		}
+		appendParticipantOptionGroups(grid, (config.event.options || []).filter((option) => option.scope === 'TICKET'), previous, index);
         row.append(legend, grid);
 		participantsRoot.append(row);
       });
@@ -344,7 +488,8 @@
 
     function configuredParticipantField(field, value, index, required = false) {
       const label = document.createElement('label');
-	  label.textContent = required && field.required ? `${field.label} *` : field.label;
+	  const fieldLabel = field.key === 'document_issue_date' ? 'Data rilascio documento identità' : field.label;
+	  label.textContent = required && field.required ? `${fieldLabel} *` : fieldLabel;
       let input;
       if (field.type === 'select' || field.type === 'yesno') {
         input = document.createElement('select');
@@ -371,7 +516,13 @@
       input.dataset.miParticipantField = field.key;
       if (field.max_length) input.maxLength = field.max_length;
       if (field.autocomplete) input.autocomplete = `section-participant-${index + 1} ${field.autocomplete}`;
+	  if (field.type === 'date') {
+		const futureDate = field.date_rule === 'future';
+		input.min = localDateWithYearOffset(futureDate ? 0 : -120);
+		input.max = localDateWithYearOffset(futureDate ? 20 : 0);
+	  }
       label.append(input);
+	  if (field.type === 'tel') preparePhoneField(input);
 	  if (field.help && field.key !== 'birth_date') {
         const help = document.createElement('small');
         help.className = 'mi-registration__field-help';
@@ -385,9 +536,67 @@
       return ['radio', 'checkbox'].includes(input.type) ? (input.checked ? 1 : 0) : (Number.parseInt(input.value, 10) || 0);
     }
 
+    function participantOptionGroup(option) {
+      const code = String(option.code || '').toLowerCase();
+      const category = String(option.category || '').toLowerCase();
+      if (code.startsWith('alloggio-') || category === 'alloggio') return 'alloggio';
+      if (code === 'colazione' || code.startsWith('assicurazione-') || category === 'supplemento') return 'supplemento';
+      if (code.startsWith('pullman') || category === 'pullman' || category === 'trasferimento') return 'trasferimento';
+      if (code === 'pranzo' || ['pranzo', 'pasto', 'pasti'].includes(category)) return 'pasti';
+      return 'altro';
+    }
+
+    function appendParticipantOptionGroups(grid, options, previous, index) {
+      const definitions = [['alloggio', 'Alloggio'], ['supplemento', 'Supplementi'], ['trasferimento', 'Trasferimenti'], ['pasti', 'Pasti'], ['altro', 'Altro']];
+      definitions.forEach(([groupCode, groupLabel]) => {
+        const groupOptions = options.filter((option) => participantOptionGroup(option) === groupCode);
+        if (!groupOptions.length) return;
+        const fieldset = document.createElement('fieldset');
+        fieldset.className = 'mi-registration__service-group';
+        fieldset.dataset.miServiceGroup = groupCode;
+        const legend = document.createElement('legend');
+        legend.textContent = groupLabel;
+        const choices = document.createElement('div');
+        choices.className = 'mi-registration__service-options';
+        groupOptions.forEach((option) => choices.append(configuredParticipantOption(option, previous.options?.[option.code] || '0', index)));
+        const choiceGroups = new Set(groupOptions.map((option) => option.choice_group || (String(option.code || '').startsWith('alloggio-') ? 'alloggio' : '')).filter(Boolean));
+        choiceGroups.forEach((choiceGroup) => {
+          if (choiceGroup === 'alloggio') {
+            const none = document.createElement('label');
+            none.className = 'mi-registration__no-accommodation';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.dataset.miNoAccommodation = '1';
+            checkbox.checked = Boolean(previous.noAccommodation) && !choices.querySelector('[data-mi-choice-group="alloggio"]:checked');
+            const text = document.createElement('span');
+            text.textContent = 'Non desidero alloggio';
+            checkbox.addEventListener('change', () => {
+              if (checkbox.checked) choices.querySelectorAll('[data-mi-choice-group="alloggio"]').forEach((input) => { input.checked = false; });
+              renderEconomicSummary(); updateStickySummary();
+            });
+            none.append(checkbox, text);
+            choices.append(none);
+            return;
+          }
+          const clear = document.createElement('button');
+          clear.type = 'button';
+          clear.className = 'mi-registration__clear-choice';
+          clear.textContent = `Nessuna scelta: ${choiceGroup}`;
+          clear.addEventListener('click', () => {
+            choices.querySelectorAll('[data-mi-choice-group]').forEach((input) => { if (input.dataset.miChoiceGroup === choiceGroup) input.checked = false; });
+            renderEconomicSummary(); updateStickySummary();
+          });
+          choices.append(clear);
+        });
+        fieldset.append(legend, choices);
+        grid.append(fieldset);
+      });
+    }
+
     function configuredParticipantOption(option, value, index) {
       const label = document.createElement('label');
       const isAccommodation = String(option.code || '').startsWith('alloggio-');
+      const visualGroup = participantOptionGroup(option);
       const choiceGroup = option.choice_group || (isAccommodation ? 'alloggio' : '');
       const isSingleChoice = Number(option.max_quantity || 1) === 1;
       label.className = isAccommodation || isSingleChoice ? 'mi-registration__option-choice' : '';
@@ -409,11 +618,31 @@
       }
       input.dataset.miParticipantOption = option.code;
       input.dataset.miChoiceGroup = choiceGroup;
-      label.dataset.serviceCategory = option.category || (isAccommodation ? 'alloggio' : (String(option.code).startsWith('pullman') ? 'pullman' : (option.code==='pranzo' ? 'pranzo' : 'altro')));
-      input.addEventListener(isAccommodation || isSingleChoice ? 'change' : 'input', () => { renderEconomicSummary(); updateStickySummary(); });
-      const text = document.createElement('span');
-      text.textContent = `${option.name}${Number(option.price_cents) > 0 ? ` · ${formatCurrency(option.price_cents)}` : ''}`;
-      label.append(input, text);
+      label.dataset.serviceCategory = option.category || (isAccommodation ? 'alloggio' : (String(option.code).startsWith('pullman') ? 'pullman' : (option.code === 'pranzo' ? 'pranzo' : (option.code === 'colazione' || String(option.code).startsWith('assicurazione-') ? 'supplemento' : 'altro'))));
+      input.addEventListener(isAccommodation || isSingleChoice ? 'change' : 'input', () => {
+        if(choiceGroup==='alloggio'&&input.checked){const none=input.closest('.mi-registration__service-group')?.querySelector('[data-mi-no-accommodation]');if(none)none.checked=false;}
+        renderEconomicSummary();updateStickySummary();
+      });
+      const content = document.createElement('span');
+      content.className = 'mi-registration__option-content';
+      const name = document.createElement('span');
+      name.className = 'mi-registration__option-name';
+      const originalName = String(option.name || '');
+      name.textContent = visualGroup === 'alloggio' ? originalName.replace(/^Alloggio\s*:\s*/i, '') : (visualGroup === 'trasferimento' ? originalName.replace(/^Pullman\s*[-–—:]?\s*/i, '') : originalName);
+      if (visualGroup === 'trasferimento' && /^Pullman\b/i.test(originalName)) {
+        const descriptor = document.createElement('small');
+        descriptor.className = 'mi-registration__option-descriptor';
+        descriptor.textContent = 'Pullman';
+        content.append(descriptor);
+      }
+      content.append(name);
+      label.append(input, content);
+      if (Number(option.price_cents) > 0) {
+        const price = document.createElement('span');
+        price.className = 'mi-registration__option-price';
+        price.textContent = formatCurrency(option.price_cents);
+        label.append(price);
+      }
       return label;
     }
 
@@ -489,7 +718,8 @@
       accommodationNotice = null;
       const missing = Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).filter((row) => {
         const choices = Array.from(row.querySelectorAll('[data-mi-participant-option]')).filter((input) => input.dataset.miChoiceGroup==='alloggio');
-        return choices.length && !choices.some((input) => participantOptionQuantity(input) > 0);
+        const declined = row.querySelector('[data-mi-no-accommodation]')?.checked;
+        return choices.length && !declined && !choices.some((input) => participantOptionQuantity(input) > 0);
       });
       if (!missing.length) return false;
       const notice = document.createElement('section');
@@ -543,9 +773,10 @@
         showError('Seleziona almeno una iscrizione.');
         return;
       }
+      validatePhoneField(buyerPhone, true, true);
       if (!form.reportValidity()) return;
-      if (!core.isValidPhone(String(new FormData(form).get('buyerPhone') || ''))) {
-        showError('Inserisci il cellulare con prefisso internazionale, per esempio +39.');
+      if (!core.isValidPhone(String(buyerPhone?.value || ''))) {
+		showError('Inserisci un numero di cellulare completo.');
         return;
       }
 
@@ -591,11 +822,26 @@
 		const successText = result.status === 'WAITLISTED'
 		  ? `Richiesta inserita in lista d’attesa. Riceverai gli aggiornamenti alla casella: ${confirmationEmail}`
 		  : result.status === 'PENDING_PAYMENT'
-			? `Prenotazione registrata a nome di ${confirmationName}, in attesa di pagamento. Totale da versare: ${formatCurrency(result.economic_summary.total_cents)}.${result.economic_summary.mode === 'DEPOSIT_BALANCE' ? ` Caparra: ${formatCurrency(result.economic_summary.initial_due_cents)}.` : ''}`
-			: confirmationEmail
-			  ? `Iscrizione confermata. È stata inviata un’email di conferma alla casella: ${confirmationEmail}`
-			  : `Iscrizione confermata. È stata registrata a nome di ${confirmationName}.`;
-        successBox.textContent = successText;
+			? pendingPaymentConfirmation(confirmationName, result.economic_summary)
+			: '';
+        if (result.status === 'WAITLISTED' || result.status === 'PENDING_PAYMENT') {
+          successBox.textContent = successText;
+        } else {
+          const successHeading = document.createElement('h2');
+          successHeading.className = 'mi-registration__success-heading';
+          successHeading.textContent = 'Iscrizione confermata';
+          const successMessage = document.createElement('p');
+          successMessage.className = 'mi-registration__success-message';
+          if (confirmationEmail) {
+            successMessage.append('Abbiamo inviato l’email di conferma a ');
+            const emailAddress = document.createElement('strong');
+            emailAddress.textContent = confirmationEmail;
+            successMessage.append(emailAddress, '.');
+          } else {
+            successMessage.textContent = `L’iscrizione di ${confirmationName} è stata registrata.`;
+          }
+          successBox.replaceChildren(successHeading, successMessage);
+        }
         if (config.event.identifier_display === 'QR') {
 		  try {
 			await ensureQrGenerator();
@@ -626,17 +872,18 @@
         const completion = document.createElement('div');
         completion.className = 'mi-registration__completion';
         const countdown = document.createElement('p');
+		countdown.className = 'mi-registration__countdown';
         const finish = document.createElement('a');
         finish.className = 'mi-registration__finish';
         finish.href = completionUrl;
         finish.textContent = 'Termina';
         let seconds = 15;
-        countdown.textContent = `Passerai alla pagina successiva tra ${seconds} secondi.`;
+		countdown.textContent = `La pagina successiva si aprirà automaticamente tra ${seconds} secondi.`;
         completion.append(countdown, finish);
         successBox.append(completion);
         const completionTimer = window.setInterval(() => {
           seconds -= 1;
-          countdown.textContent = `Passerai alla pagina successiva tra ${seconds} ${seconds === 1 ? 'secondo' : 'secondi'}.`;
+		  countdown.textContent = `La pagina successiva si aprirà automaticamente tra ${seconds} ${seconds === 1 ? 'secondo' : 'secondi'}.`;
           if (seconds <= 0) {
             window.clearInterval(completionTimer);
             window.location.assign(completionUrl);

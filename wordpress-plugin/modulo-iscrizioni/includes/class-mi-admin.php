@@ -12,6 +12,7 @@ final class MI_Admin {
 		add_action( 'admin_post_mi_export_payments', array( __CLASS__, 'export_payments' ) );
 		add_action( 'admin_post_mi_cancel_registration', array( __CLASS__, 'cancel_registration' ) );
 		add_action( 'admin_post_mi_seed_demo_registrations', array( __CLASS__, 'seed_demo_registrations' ) );
+		add_action( 'admin_post_mi_save_payment_settings', array( __CLASS__, 'save_payment_settings' ) );
 		add_filter( 'post_row_actions', array( __CLASS__, 'event_row_actions' ), 10, 2 );
 		add_filter( 'wp_insert_post_data', array( __CLASS__, 'guard_publication' ), 20, 2 );
 		add_action( 'admin_notices', array( __CLASS__, 'publication_notice' ) );
@@ -59,6 +60,41 @@ final class MI_Admin {
 		);
 		add_submenu_page( 'edit.php?post_type=' . MI_Event_Post_Type::EVENT_TYPE, 'Pagamenti', 'Pagamenti', 'mi_view_registrations', 'mi-payments', array( __CLASS__, 'payments_page' ) );
 		add_submenu_page( 'edit.php?post_type=' . MI_Event_Post_Type::EVENT_TYPE, 'Dati dimostrativi', 'Dati dimostrativi', 'manage_options', 'mi-demo-data', array( __CLASS__, 'demo_data_page' ) );
+		add_submenu_page( 'edit.php?post_type=' . MI_Event_Post_Type::EVENT_TYPE, 'Dati per i pagamenti', 'Dati per i pagamenti', 'manage_options', 'mi-payment-settings', array( __CLASS__, 'payment_settings_page' ) );
+	}
+
+	public static function payment_settings_page() {
+		if ( ! current_user_can( 'manage_options' ) ) wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) );
+		$config = MI_Public_Balance::payment_config( 0 );
+		$saved = ! empty( $_GET['mi_payment_settings_saved'] );
+		$error = sanitize_text_field( wp_unslash( $_GET['mi_payment_settings_error'] ?? '' ) );
+		?><div class="wrap"><h1>Dati per i pagamenti</h1><p>Questi dati vengono salvati nel database e utilizzati come impostazioni generali per gli eventi a pagamento. Non vengono richiesti né conservati dati delle carte.</p>
+		<?php if ( $saved ) : ?><div class="notice notice-success is-dismissible"><p>Impostazioni di pagamento salvate.</p></div><?php endif; ?>
+		<?php if ( $error ) : ?><div class="notice notice-error"><p><?php echo esc_html( $error ); ?></p></div><?php endif; ?>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="mi_save_payment_settings"><?php wp_nonce_field( 'mi_save_payment_settings' ); ?>
+		<table class="form-table" role="presentation"><tr><th><label for="mi_payment_holder">Intestatario del conto</label></th><td><input class="regular-text" id="mi_payment_holder" name="holder" maxlength="160" value="<?php echo esc_attr( $config['holder'] ); ?>" required></td></tr>
+		<tr><th><label for="mi_payment_iban">IBAN</label></th><td><input class="regular-text code" id="mi_payment_iban" name="iban" maxlength="34" value="<?php echo esc_attr( $config['iban'] ); ?>" autocomplete="off" required><p class="description">L’IBAN italiano viene salvato senza spazi e in lettere maiuscole.</p></td></tr>
+		<tr><th><label for="mi_payment_card_url">Pagina per il pagamento con carta</label></th><td><input class="large-text" type="url" id="mi_payment_card_url" name="card_url" value="<?php echo esc_attr( $config['cardUrl'] ); ?>" placeholder="https://…" required><p class="description">Deve essere un indirizzo HTTPS della pagina esterna ufficiale. Il modulo non acquisisce i dati della carta.</p></td></tr></table>
+		<?php submit_button( 'Salva impostazioni' ); ?></form></div><?php
+	}
+
+	public static function save_payment_settings() {
+		if ( ! current_user_can( 'manage_options' ) ) wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) );
+		check_admin_referer( 'mi_save_payment_settings' );
+		$holder = sanitize_text_field( wp_unslash( $_POST['holder'] ?? '' ) );
+		$iban = strtoupper( preg_replace( '/\s+/', '', sanitize_text_field( wp_unslash( $_POST['iban'] ?? '' ) ) ) );
+		$card_url = esc_url_raw( wp_unslash( $_POST['card_url'] ?? '' ), array( 'https' ) );
+		$error = '';
+		if ( ! $holder ) $error = 'Inserisci l’intestatario del conto.';
+		elseif ( ! preg_match( '/^IT[0-9]{2}[A-Z][0-9]{10}[A-Z0-9]{12}$/', $iban ) ) $error = 'Inserisci un IBAN italiano valido.';
+		elseif ( ! $card_url || 'https' !== wp_parse_url( $card_url, PHP_URL_SCHEME ) ) $error = 'Inserisci un collegamento HTTPS valido per il pagamento con carta.';
+		$url = admin_url( 'edit.php?post_type=' . MI_Event_Post_Type::EVENT_TYPE . '&page=mi-payment-settings' );
+		if ( $error ) wp_safe_redirect( add_query_arg( 'mi_payment_settings_error', $error, $url ) );
+		else {
+			update_option( 'mi_public_balance_payment', array( 'holder' => $holder, 'iban' => $iban, 'cardUrl' => $card_url ), false );
+			wp_safe_redirect( add_query_arg( 'mi_payment_settings_saved', '1', $url ) );
+		}
+		exit;
 	}
 
 	public static function demo_data_page() {
@@ -98,7 +134,7 @@ final class MI_Admin {
 			$email = strtolower( sanitize_title( $name[0] . '.' . $name[1] ) ) . '.' . $event_id . '@example.invalid';
 			$phone = '+39 320 000 ' . str_pad( (string) $index, 4, '0', STR_PAD_LEFT );
 			$fields = self::demo_participant_fields( (array) $event['participant_fields'], $index, $email, $phone );
-			$payload = array( 'started_at' => time() - 5, 'tickets' => array( sanitize_key( $ticket['code'] ) => 1 ), 'order_options' => array(), 'participants' => array( array( 'ticket_type_code' => sanitize_key( $ticket['code'] ), 'ticket_index' => 1, 'first_name' => $name[0], 'last_name' => $name[1], 'fields' => $fields, 'options' => array() ) ), 'buyer' => array( 'first_name' => $name[0], 'last_name' => $name[1], 'email' => $email, 'phone' => $phone ), 'special_requests' => 'Iscrizione dimostrativa generata dal pannello amministrativo.', 'privacy_accepted' => true, 'marketing_accepted' => false );
+			$payload = array( 'started_at' => time() - 5, 'tickets' => array( sanitize_key( $ticket['code'] ) => 1 ), 'order_options' => array(), 'participants' => array( array( 'ticket_type_code' => sanitize_key( $ticket['code'] ), 'ticket_index' => 1, 'first_name' => $name[0], 'last_name' => $name[1], 'fields' => $fields, 'options' => array() ) ), 'buyer' => array( 'first_name' => $name[0], 'last_name' => $name[1], 'email' => $email, 'phone' => $phone ), 'special_requests' => '', 'privacy_accepted' => true, 'marketing_accepted' => false );
 			$payload = self::demo_services_payload( $event, $payload, $index );
 			$key = 'admin-demo-' . $event_id . '-' . gmdate( 'YmdHis' ) . '-' . $index . '-' . wp_generate_password( 8, false, false );
 			$result = MI_Registration_Service::create( $event_id, $payload, $key, true, 'ADMIN_DEMO' );
@@ -223,7 +259,7 @@ final class MI_Admin {
 		echo '<p><strong>Riepilogo filtro:</strong> versamenti ' . esc_html( self::formatta_importo( $summary['PAYMENT'] ) ) . ' · rimborsi ' . esc_html( self::formatta_importo( $summary['REFUND'] ) ) . ' · bonifici ' . esc_html( self::formatta_importo( $summary['BANK_TRANSFER'] ) ) . ' · carte ' . esc_html( self::formatta_importo( $summary['CARD'] ) ) . ' · contanti ' . esc_html( self::formatta_importo( $summary['CASH'] ) ) . '</p>';
 		$scope = MI_Access::activity_ids();
 		$events = 'ALL' === $scope ? get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) ) : get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'post__in' => get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids', 'meta_query' => array( array( 'key' => '_mi_activity_id', 'value' => $scope ?: array( 0 ), 'compare' => 'IN', 'type' => 'NUMERIC' ) ) ) ) ?: array( 0 ), 'orderby' => 'title', 'order' => 'ASC' ) );
-		?><div class="wrap"><h1>Pagamenti registrati</h1><p>I movimenti vengono inseriti manualmente. Lo stato dell’iscrizione si aggiorna automaticamente quando la quota richiesta viene raggiunta o non risulta più raggiunta. <a class="button button-secondary" href="<?php echo esc_url( $export_url ); ?>">Esporta CSV</a></p><form method="get" style="margin:16px 0"><input type="hidden" name="post_type" value="<?php echo esc_attr( MI_Event_Post_Type::EVENT_TYPE ); ?>"><input type="hidden" name="page" value="mi-payments"><label>Evento <select name="payment_event_id"><option value="0">Tutti</option><?php foreach ( $events as $event ) : ?><option value="<?php echo esc_attr( $event->ID ); ?>" <?php selected( $filter_event, $event->ID ); ?>><?php echo esc_html( $event->post_title ); ?></option><?php endforeach; ?></select></label> <label>Fonte <select name="payment_source"><option value="">Tutte</option><option value="BANK_TRANSFER" <?php selected( $filter_source, 'BANK_TRANSFER' ); ?>>Bonifico</option><option value="CARD" <?php selected( $filter_source, 'CARD' ); ?>>Carta</option><option value="CASH" <?php selected( $filter_source, 'CASH' ); ?>>Contante</option></select></label> <label>Movimento <select name="transaction_kind"><option value="">Tutti</option><option value="PAYMENT" <?php selected( $filter_transaction, 'PAYMENT' ); ?>>Versamenti</option><option value="REFUND" <?php selected( $filter_transaction, 'REFUND' ); ?>>Rimborsi</option></select></label> <button class="button">Filtra</button></form><table class="widefat striped"><thead><tr><th>Data</th><th>Ordine</th><th>Evento</th><th>Movimento</th><th>Rata</th><th>Importo</th><th>Fonte</th><th>Riferimento</th><th>Operatore</th></tr></thead><tbody><?php if ( ! $rows ) : ?><tr><td colspan="9">Nessun movimento registrato.</td></tr><?php endif; foreach ( $rows as $row ) : ?><tr><td><?php echo esc_html( self::formatta_data_locale( $row['effective_at'] ) ); ?></td><td><code><?php echo esc_html( $row['order_code'] ); ?></code></td><td><?php echo esc_html( get_the_title( (int) $row['event_id'] ) ); ?></td><td><?php echo esc_html( 'REFUND' === $row['transaction_kind'] ? 'Rimborso' : 'Versamento' ); ?></td><td><?php echo esc_html( $row['installment_kind'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['amount_cents'] ) ); ?></td><td><?php echo esc_html( $labels[ $row['payment_source'] ] ?? $row['payment_source'] ); ?></td><td><?php echo esc_html( $row['external_reference'] ?: '—' ); ?></td><td><?php echo esc_html( $row['operator_label'] ?: '—' ); ?></td></tr><?php endforeach; ?></tbody></table><?php self::render_pagination( $page, $per_page, $total_rows ); ?></div><?php
+		?><div class="wrap"><h1>Pagamenti registrati</h1><p>I movimenti vengono inseriti manualmente. Lo stato dell’iscrizione si aggiorna automaticamente quando la quota richiesta viene raggiunta o non risulta più raggiunta. <a class="button button-secondary" href="<?php echo esc_url( $export_url ); ?>">Esporta CSV</a></p><form method="get" class="mi-admin-filters"><input type="hidden" name="post_type" value="<?php echo esc_attr( MI_Event_Post_Type::EVENT_TYPE ); ?>"><input type="hidden" name="page" value="mi-payments"><label>Evento <select name="payment_event_id"><option value="0">Tutti</option><?php foreach ( $events as $event ) : ?><option value="<?php echo esc_attr( $event->ID ); ?>" <?php selected( $filter_event, $event->ID ); ?>><?php echo esc_html( $event->post_title ); ?></option><?php endforeach; ?></select></label> <label>Fonte <select name="payment_source"><option value="">Tutte</option><option value="BANK_TRANSFER" <?php selected( $filter_source, 'BANK_TRANSFER' ); ?>>Bonifico</option><option value="CARD" <?php selected( $filter_source, 'CARD' ); ?>>Carta</option><option value="CASH" <?php selected( $filter_source, 'CASH' ); ?>>Contante</option></select></label> <label>Movimento <select name="transaction_kind"><option value="">Tutti</option><option value="PAYMENT" <?php selected( $filter_transaction, 'PAYMENT' ); ?>>Versamenti</option><option value="REFUND" <?php selected( $filter_transaction, 'REFUND' ); ?>>Rimborsi</option></select></label> <button class="button">Filtra</button></form><table class="widefat striped"><thead><tr><th>Data</th><th>Ordine</th><th>Evento</th><th>Movimento</th><th>Rata</th><th>Importo</th><th>Fonte</th><th>Riferimento</th><th>Operatore</th></tr></thead><tbody><?php if ( ! $rows ) : ?><tr><td colspan="9">Nessun movimento registrato.</td></tr><?php endif; foreach ( $rows as $row ) : ?><tr><td><?php echo esc_html( self::formatta_data_locale( $row['effective_at'] ) ); ?></td><td><code><?php echo esc_html( $row['order_code'] ); ?></code></td><td><?php echo esc_html( get_the_title( (int) $row['event_id'] ) ); ?></td><td><?php echo esc_html( 'REFUND' === $row['transaction_kind'] ? 'Rimborso' : 'Versamento' ); ?></td><td><?php echo esc_html( $row['installment_kind'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['amount_cents'] ) ); ?></td><td><?php echo esc_html( $labels[ $row['payment_source'] ] ?? $row['payment_source'] ); ?></td><td><?php echo esc_html( $row['external_reference'] ?: '—' ); ?></td><td><?php echo esc_html( $row['operator_label'] ?: '—' ); ?></td></tr><?php endforeach; ?></tbody></table><?php self::render_pagination( $page, $per_page, $total_rows ); ?></div><?php
 	}
 
 	public static function export_payments() {
@@ -341,7 +377,7 @@ final class MI_Admin {
 		<?php $retry_result = sanitize_key( wp_unslash( $_GET['mi_workspace_retry'] ) ); ?>
 		<div class="notice <?php echo 'pending' === $retry_result ? 'notice-warning' : 'notice-success'; ?>"><p><?php echo esc_html( 'synced' === $retry_result ? 'Replica Workspace sincronizzata.' : ( 'pending' === $retry_result ? 'Il tentativo immediato non ha completato la replica. Consulta i dettagli tecnici della prenotazione.' : 'Replica Workspace riaccodata. Il registro locale resta autorevole durante il nuovo tentativo.' ) ); ?></p></div>
 		<?php endif; ?>
-		<form method="get" style="margin:16px 0">
+		<form method="get" class="mi-admin-filters">
 		<input type="hidden" name="post_type" value="<?php echo esc_attr( MI_Event_Post_Type::EVENT_TYPE ); ?>">
 		<input type="hidden" name="page" value="mi-registrations">
 		<label for="mi-event-filter">Evento</label>
@@ -406,13 +442,13 @@ final class MI_Admin {
 		<tr><th scope="row">Posti liberati il</th><td><?php echo esc_html( $detail['capacity_released_at'] ?: 'Non liberati' ); ?></td></tr>
 		</tbody></table>
 		</details>
-		<?php if ( $payment_rows || in_array( $detail['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) : ?><h3>Versamenti registrati</h3><?php if ( ! $payment_rows ) : ?><p>Nessun versamento registrato.</p><?php else : ?><table class="widefat striped" style="max-width:900px"><thead><tr><th>Data</th><th>Rata</th><th>Importo</th><th>Fonte</th><th>Riferimento</th><th>Nota</th></tr></thead><tbody><?php $payment_labels = array( 'BANK_TRANSFER' => 'Bonifico', 'CARD' => 'Carta', 'CASH' => 'Contante' ); foreach ( $payment_rows as $payment ) : ?><tr><td><?php echo esc_html( self::formatta_data_locale( $payment['effective_at'] ) ); ?></td><td><?php echo esc_html( $payment['installment_kind'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $payment['amount_cents'] ) ); ?></td><td><?php echo esc_html( $payment_labels[ $payment['payment_source'] ] ?? $payment['payment_source'] ); ?></td><td><?php echo esc_html( $payment['external_reference'] ?: '—' ); ?></td><td><?php echo esc_html( $payment['administrative_note'] ?: '—' ); ?></td></tr><?php endforeach; ?></tbody></table><?php endif; ?><?php endif; ?>
+		<?php if ( $payment_rows || in_array( $detail['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) : ?><details class="mi-admin-details"><summary>Versamenti registrati</summary><div class="mi-responsive-table"><?php if ( ! $payment_rows ) : ?><p>Nessun versamento registrato.</p><?php else : ?><table class="widefat striped" style="max-width:900px"><thead><tr><th>Data</th><th>Rata</th><th>Importo</th><th>Fonte</th><th>Riferimento</th><th>Nota</th></tr></thead><tbody><?php $payment_labels = array( 'BANK_TRANSFER' => 'Bonifico', 'CARD' => 'Carta', 'CASH' => 'Contante' ); foreach ( $payment_rows as $payment ) : ?><tr><td><?php echo esc_html( self::formatta_data_locale( $payment['effective_at'] ) ); ?></td><td><?php echo esc_html( $payment['installment_kind'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $payment['amount_cents'] ) ); ?></td><td><?php echo esc_html( $payment_labels[ $payment['payment_source'] ] ?? $payment['payment_source'] ); ?></td><td><?php echo esc_html( $payment['external_reference'] ?: '—' ); ?></td><td><?php echo esc_html( $payment['administrative_note'] ?: '—' ); ?></td></tr><?php endforeach; ?></tbody></table><?php endif; ?></div></details><?php endif; ?>
 		<p class="notice notice-info" style="max-width:900px;padding:12px"><strong>Gestione nel portale.</strong> Pagamenti, rimborsi, variazioni e ritiri si registrano dalla scheda della prenotazione. Nel foglio Google puoi correggere le celle azzurre e confermarle con Sincronizza.</p>
-		<h3>Tipologie e opzioni ordine</h3>
+		<details class="mi-admin-details"><summary>Tipologie e opzioni ordine</summary><div class="mi-responsive-table">
 		<?php $detail_order_options = json_decode( (string) ( $detail['order_options_json'] ?? '' ), true ); if ( ! is_array( $detail_order_options ) && $registration_items ) { $detail_order_options = json_decode( (string) $registration_items[0]['options_json'], true ); } $detail_order_options = is_array( $detail_order_options ) ? $detail_order_options : array(); ?>
 		<?php if ( $detail_order_options ) : ?><p><strong>Opzioni ordine:</strong> <?php echo esc_html( implode( ', ', array_map( static function ( $option ) { return ( $option['name'] ?? $option['code'] ?? 'Opzione' ) . ' × ' . absint( $option['quantity'] ?? 0 ); }, $detail_order_options ) ) ); ?></p><?php else : ?><p>Nessuna opzione ordine.</p><?php endif; ?>
 		<?php if ( ! $registration_items ) : ?><p>Nessuna tipologia storica disponibile.</p><?php else : ?><table class="widefat striped" style="max-width:900px"><thead><tr><th>Codice</th><th>Nome</th><th>Quantità</th><th>Prezzo unitario</th></tr></thead><tbody><?php foreach ( $registration_items as $registration_item ) : ?><tr><td><code><?php echo esc_html( $registration_item['ticket_type_code'] ); ?></code></td><td><?php echo esc_html( $registration_item['ticket_type_name'] ?: 'Nome storico non disponibile' ); ?></td><td><?php echo esc_html( $registration_item['quantity'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $registration_item['unit_price_cents'] ) ); ?></td></tr><?php endforeach; ?></tbody></table><?php endif; ?>
-		<?php if ( 'SYNCED' !== $detail['workspace_status'] ) : ?>
+		</div></details><?php if ( 'SYNCED' !== $detail['workspace_status'] ) : ?>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin:16px 0">
 		<input type="hidden" name="action" value="mi_retry_workspace">
 		<input type="hidden" name="registration_id" value="<?php echo esc_attr( $detail_id ); ?>">
@@ -421,9 +457,9 @@ final class MI_Admin {
 		<button class="button button-secondary" name="sync_now" value="1">Sincronizza ora questa prenotazione</button>
 		</form>
 		<?php endif; ?>
-		<h3>Storico stato</h3>
+		<details class="mi-admin-details"><summary>Storico stato</summary><div class="mi-responsive-table">
 		<?php if ( ! $registration_events ) : ?><p>Nessun evento di audit disponibile per questa iscrizione storica.</p><?php else : ?><table class="widefat striped" style="max-width:900px"><thead><tr><th>Data UTC</th><th>Evento</th><th>Da</th><th>A</th><th>Attore</th></tr></thead><tbody><?php foreach ( $registration_events as $registration_event ) : ?><tr><td><?php echo esc_html( $registration_event['created_at'] ); ?></td><td><?php echo esc_html( strtoupper( $registration_event['event_type'] ) ); ?></td><td><?php echo esc_html( strtoupper( $registration_event['from_status'] ?: '—' ) ); ?></td><td><?php echo esc_html( strtoupper( $registration_event['to_status'] ?: '—' ) ); ?></td><td><?php echo esc_html( $registration_event['actor_label'] ?: '—' ); ?></td></tr><?php endforeach; ?></tbody></table><?php endif; ?>
-		<h3>Dati dei partecipanti</h3>
+		</div></details><h3>Dati dei partecipanti</h3>
 		<?php if ( ! $participants ) : ?><p>Nessun partecipante associato.</p><?php endif; ?>
 		<?php $catalog = MI_Field_Schema::catalog(); ?>
 		<?php foreach ( $participants as $position => $participant ) : ?>
@@ -651,11 +687,11 @@ final class MI_Admin {
 			}
 		}
 		?>
-		<div class="wrap"><h1>Coda email</h1><p>Lo stato <code>PREVIEW</code> non viene spedito; <code>PENDING</code> indica una conferma operativa in attesa.</p>
-		<table class="widefat striped"><thead><tr><th>ID</th><th>Iscrizione</th><th>Destinatario</th><th>Modello</th><th>Stato</th><th>Tentativi</th><th>Ultimo errore</th><th>Inviata il</th><th>Data UTC</th><th></th></tr></thead><tbody>
+		<div class="wrap"><h1>Coda email</h1><p>Lo stato <code>PREVIEW</code> non viene spedito; <code>TEST_PENDING</code> indica un’email destinata esclusivamente alla casella di prova; <code>PENDING</code> indica un invio operativo al destinatario reale.</p>
+		<div class="mi-responsive-table" tabindex="0" role="region" aria-label="Coda email"><table class="widefat striped"><thead><tr><th>ID</th><th>Iscrizione</th><th>Destinatario</th><th>Modello</th><th>Stato</th><th>Tentativi</th><th>Ultimo errore</th><th>Inviata il</th><th>Data UTC</th><th></th></tr></thead><tbody>
 		<?php if ( ! $rows ) : ?><tr><td colspan="10">Coda vuota.</td></tr><?php endif; ?>
-		<?php foreach ( $rows as $row ) : ?><?php $preview_url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox', 'email_id' => (int) $row['id'] ), admin_url( 'edit.php' ) ); ?><tr><td><?php echo esc_html( $row['id'] ); ?></td><td><?php echo esc_html( $row['registration_id'] ); ?></td><td><?php echo esc_html( $row['recipient'] ); ?></td><td><?php echo esc_html( $row['template_type'] ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['attempts'] ); ?></td><td><?php echo esc_html( $row['last_error'] ?: 'Nessuno' ); ?></td><td><?php echo esc_html( $row['sent_at'] ?: 'Non inviata' ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $preview_url ); ?>">Apri dettaglio</a><?php if ( in_array( $row['status'], array( 'FAILED', 'SENDING' ), true ) ) : ?><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;margin-left:8px"><input type="hidden" name="action" value="mi_riaccoda_email"><input type="hidden" name="email_id" value="<?php echo esc_attr( $row['id'] ); ?>"><?php wp_nonce_field( 'mi_riaccoda_email' ); ?><button class="button-link">Riaccoda</button></form><?php endif; ?></td></tr><?php endforeach; ?>
-		</tbody></table>
+		<?php foreach ( $rows as $row ) : ?><?php $preview_url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox', 'email_id' => (int) $row['id'] ), admin_url( 'edit.php' ) ); ?><tr><td><?php echo esc_html( $row['id'] ); ?></td><td><?php echo esc_html( $row['registration_id'] ); ?></td><td><?php echo esc_html( $row['recipient'] ); ?></td><td><?php echo esc_html( $row['template_type'] ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['attempts'] ); ?></td><td><?php echo esc_html( $row['last_error'] ?: 'Nessuno' ); ?></td><td><?php echo esc_html( $row['sent_at'] ?: 'Non inviata' ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $preview_url ); ?>">Apri dettaglio</a><?php if ( in_array( $row['status'], array( 'FAILED', 'SENDING', 'TEST_FAILED', 'TEST_SENDING' ), true ) ) : ?><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;margin-left:8px"><input type="hidden" name="action" value="mi_riaccoda_email"><input type="hidden" name="email_id" value="<?php echo esc_attr( $row['id'] ); ?>"><?php wp_nonce_field( 'mi_riaccoda_email' ); ?><button class="button-link">Riaccoda</button></form><?php endif; ?></td></tr><?php endforeach; ?>
+		</tbody></table></div>
 		<?php if ( $detail ) : ?><?php $payload = json_decode( (string) $detail['payload_json'], true ); $preview = is_array( $payload ) && isset( $payload['email_preview'] ) && is_array( $payload['email_preview'] ) ? $payload['email_preview'] : array(); ?>
 		<hr><h2>Anteprima email conservata</h2>
 		<?php $economic_summary = is_array( $payload ) && isset( $payload['economic_summary'] ) && is_array( $payload['economic_summary'] ) ? $payload['economic_summary'] : array(); ?>
@@ -754,7 +790,9 @@ final class MI_Admin {
 		}
 		$screen = get_current_screen();
 		if ( $screen && in_array( $screen->post_type, array( MI_Event_Post_Type::EVENT_TYPE, MI_Event_Post_Type::ACTIVITY_TYPE ), true ) ) {
-			echo '<div class="notice notice-info"><p><strong>Spedizione email:</strong> la modalità iniziale è Anteprima; l’amministratore può collaudare un messaggio sintetico prima di abilitare le conferme operative.</p></div>';
+			$mode = MI_Spedizione_Email::modalita();
+			$description = 'PROVA' === $mode ? 'Prova — invio esclusivamente a ' . sanitize_email( get_option( MI_Spedizione_Email::OPZIONE_DESTINATARIO_PROVA, '' ) ) : ( 'OPERATIVO' === $mode ? 'Operativo — invio ai destinatari reali, subordinato al collaudo verificato.' : 'Anteprima — nessuna email viene spedita.' );
+			echo '<div class="notice notice-info"><p><strong>Modalità email attuale:</strong> ' . esc_html( $description ) . '</p></div>';
 		}
 	}
 }

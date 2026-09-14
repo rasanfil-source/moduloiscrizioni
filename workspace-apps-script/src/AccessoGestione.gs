@@ -22,7 +22,7 @@ function proteggiProiezione_(scheda, modificabili) {
 function preparaAccessoGestioneEvento_(foglio, idEvento) {
   const scheda = foglio.getSheetByName('Gestione evento') || foglio.insertSheet('Gestione evento', 0);
   scheda.clear();
-  scheda.getRange('A1').setValue('Gestione evento').setFontSize(20).setFontWeight('bold');
+  scheda.getRange('A1').setValue('Gestione evento').setFontSize(24).setFontWeight('bold');
   scheda.getRange('A2').setValue('Modifica le celle azzurre in Dati operativi, poi sincronizza. I pagamenti si registrano dal portale.');
   try {
     scheda.getRange('A4').setRichTextValue(SpreadsheetApp.newRichTextValue().setText('Apri gestione e riepilogo evento').setLinkUrl(urlGestioneWeb_('management', idEvento)).build());
@@ -33,6 +33,16 @@ function preparaAccessoGestioneEvento_(foglio, idEvento) {
   scheda.getRange('A6').setValue('Ultimo controllo automatico');
   scheda.getRange('B6').setValue(new Date()).setNumberFormat('dd/mm/yyyy hh:mm');
   scheda.setColumnWidth(1, 650);
+  scheda.setColumnWidth(2, 220);
+  scheda.getRange('A4').setFontSize(16).setFontWeight('bold').setWrap(true);
+  scheda.getRange('A6:B6').setFontSize(16).setWrap(true);
+  scheda.getRange('A9').setFontSize(16).setWrap(true);
+  scheda.getRange('A1:B9').setVerticalAlignment('middle');
+  scheda.getRange('A8').setHorizontalAlignment('center').setVerticalAlignment('middle');
+  scheda.setRowHeight(1, 44);
+  scheda.setRowHeight(4, 48);
+  scheda.setRowHeight(6, 40);
+  scheda.setRowHeight(9, 64);
   proteggiProiezione_(scheda);
 }
 /** Pending edits keep the current view intact until the operator synchronizes them. */
@@ -53,9 +63,9 @@ function scriviProiezioneEvento_(scheda, vista) {
   scheda.getRange(1,1,scheda.getMaxRows(),scheda.getMaxColumns()).clearDataValidations();
   scheda.getRange(1,1,scheda.getMaxRows(),scheda.getMaxColumns()).breakApart();
   scheda.showColumns(1,scheda.getMaxColumns());
-  const colonne = [{key:'_ordine',label:'Prenotazione'}, {key:'_numero',label:'Partecipante'}].concat(vista.colonne);
+  const colonne = [{key:'_numero',label:'Partecipante'}].concat(vista.colonne, [{key:'_ordine',label:'Prenotazione'}]);
   if (scheda.getMaxColumns() < colonne.length) scheda.insertColumnsAfter(scheda.getMaxColumns(), colonne.length - scheda.getMaxColumns());
-  const rows = vista.righe.map(function (r) { return [r.codice_ordine, r.numero_partecipante].concat(vista.colonne.map(function (c) { return neutralizzaFormula_(r.valori[c.key], 5000); })); });
+  const rows = vista.righe.map(function (r) { return [r.numero_partecipante].concat(vista.colonne.map(function (c) { return neutralizzaFormula_(r.valori[c.key], 5000); }), [r.codice_ordine]); });
   if (scheda.getMaxRows() < rows.length + 1) scheda.insertRowsAfter(scheda.getMaxRows(), rows.length + 1 - scheda.getMaxRows());
   scheda.getRange(1,1,1,colonne.length).setValues([colonne.map(function (c) {return c.label;})]).setFontWeight('bold');
   colonne.forEach(function (c,i) { identificaColonnaEvento_(scheda,i+1,c.key); });

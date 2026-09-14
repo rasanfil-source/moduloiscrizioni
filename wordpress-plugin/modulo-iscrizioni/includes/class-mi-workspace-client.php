@@ -18,6 +18,17 @@ final class MI_Workspace_Client {
 	}
 
 	public static function request( $action, array $payload, $attempt = 0 ) {
+		// Serializza le scritture lente provenienti da WordPress, senza attendere
+		// nel browser un altro processo. Il chiamante conserva il lavoro in coda.
+		if ( ! in_array( strtoupper( $action ), array( 'APPEND_REGISTRATION', 'PREPARA_PRODUZIONI_EVENTO' ), true ) ) return self::request_unlocked( $action, $payload, $attempt );
+		global $wpdb;
+		$lock = 'mi_workspace_' . substr( hash( 'sha256', $wpdb->prefix ), 0, 40 );
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $lock ) ) ) return new WP_Error( 'mi_workspace_busy', 'Sincronizzazione Google in corso; aggiornamento mantenuto in attesa.' );
+		try { return self::request_unlocked( $action, $payload, $attempt ); }
+		finally { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); }
+	}
+
+	private static function request_unlocked( $action, array $payload, $attempt = 0 ) {
 		if ( ! self::is_configured() ) {
 			return new WP_Error( 'mi_workspace_not_configured', 'Collegamento Workspace non configurato.' );
 		}
@@ -89,7 +100,7 @@ final class MI_Workspace_Client {
 		// con 404. La preparazione è idempotente: un solo nuovo tentativo, con una
 		// busta e un nonce nuovi, recupera il risultato senza duplicare il foglio.
 		if ( 404 === $http_status && 'PREPARA_PRODUZIONI_EVENTO' === $action && 0 === (int) $attempt ) {
-			return self::request( $action, $payload, 1 );
+			return self::request_unlocked( $action, $payload, 1 );
 		}
 		if ( 200 !== $http_status ) {
 			return new WP_Error( 'mi_workspace_http_' . $http_status, 'Workspace ha restituito una risposta HTTP inattesa (' . $http_status . ').' );
@@ -97,6 +108,10 @@ final class MI_Workspace_Client {
 		if ( ! is_array( $decoded ) || empty( $decoded['ok'] ) ) {
 			$remote_code = is_array( $decoded ) ? strtoupper( sanitize_key( (string) ( $decoded['error'] ?? '' ) ) ) : '';
 			$motivi = array(
+				'EMAIL_SENDER_NOT_AUTHORIZED' => 'distribuisci Apps Script con l’account info@parrocchiasanteugenio.it; nessun invio eseguito',
+				'EMAIL_DELIVERY_UNCERTAIN' => 'esito invio incerto: verificare il Registro invii email e i log Google prima di ritentare; reinvio automatico bloccato',
+				'EMAIL_QUOTA_EXCEEDED' => 'quota giornaliera Google esaurita',
+				'EMAIL_BUSY' => 'un altro invio è in corso',
 				'EVENT_BUSY' => 'è in corso un aggiornamento Google; riprova tra poco',
 				'DELETION_CONFLICT' => 'esiste una cancellazione con identificativo o scelta differenti',
 				'INVALID_DELETION' => 'i parametri della cancellazione non sono validi',

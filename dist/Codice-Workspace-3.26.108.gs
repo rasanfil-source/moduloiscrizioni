@@ -10,7 +10,7 @@ function apriGestioneWeb(vista) {
   const url = urlGestioneWeb_(vista);
   SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput('<p><a target="_blank" rel="noopener" href="' + url.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '">Apri la gestione eventi</a></p><p>Accedi con le tue credenziali WordPress.</p>').setWidth(430).setHeight(160), 'Gestione web');
 }
-function proteggiProiezione_(scheda) {
+function proteggiProiezione_(scheda, modificabili) {
   const protections = scheda.getProtections(SpreadsheetApp.ProtectionType.SHEET);
   const p = protections.find(function (item) { return item.getDescription() === 'MI_PROIEZIONE'; }) || scheda.protect().setDescription('MI_PROIEZIONE');
   p.setWarningOnly(false);
@@ -18,42 +18,80 @@ function proteggiProiezione_(scheda) {
   const me = Session.getEffectiveUser().getEmail();
   p.removeEditors(p.getEditors().filter(function (u) { return u.getEmail() !== me; }));
   if (p.canDomainEdit()) p.setDomainEdit(false);
+  p.setUnprotectedRanges(modificabili || []);
 }
 function preparaAccessoGestioneEvento_(foglio, idEvento) {
   const scheda = foglio.getSheetByName('Gestione evento') || foglio.insertSheet('Gestione evento', 0);
   scheda.clear();
-  scheda.getRange('A1').setValue('Gestione evento').setFontSize(20).setFontWeight('bold');
-  scheda.getRange('A2').setValue('Consulta questi fogli. Per pagamenti, dati e assegnazioni apri la gestione web.');
+  scheda.getRange('A1').setValue('Gestione evento').setFontSize(24).setFontWeight('bold');
+  scheda.getRange('A2').setValue('Modifica le celle azzurre in Dati operativi, poi sincronizza. I pagamenti si registrano dal portale.');
   try {
     scheda.getRange('A4').setRichTextValue(SpreadsheetApp.newRichTextValue().setText('Apri gestione e riepilogo evento').setLinkUrl(urlGestioneWeb_('management', idEvento)).build());
+    scheda.getRange('A8').setRichTextValue(SpreadsheetApp.newRichTextValue().setText('SINCRONIZZA').setLinkUrl(urlGestioneWeb_('management', idEvento)+'&mi_sheet_sync=1').build()).setFontSize(22).setFontWeight('bold').setBackground('#174c78').setFontColor('#ffffff');
+    scheda.setRowHeight(8,54);
+    scheda.getRange('A9').setValue('Apri il riepilogo delle modifiche e conferma con il tuo accesso al portale.');
   } catch (e) { scheda.getRange('A4').setValue(e.message); }
-  scheda.getRange('A6').setValue('Ultimo aggiornamento');
+  scheda.getRange('A6').setValue('Ultimo controllo automatico');
   scheda.getRange('B6').setValue(new Date()).setNumberFormat('dd/mm/yyyy hh:mm');
   scheda.setColumnWidth(1, 650);
+  scheda.setColumnWidth(2, 220);
+  scheda.getRange('A4').setFontSize(16).setFontWeight('bold').setWrap(true);
+  scheda.getRange('A6:B6').setFontSize(16).setWrap(true);
+  scheda.getRange('A9').setFontSize(16).setWrap(true);
+  scheda.getRange('A1:B9').setVerticalAlignment('middle');
+  scheda.getRange('A8').setHorizontalAlignment('center').setVerticalAlignment('middle');
+  scheda.setRowHeight(1, 44);
+  scheda.setRowHeight(4, 48);
+  scheda.setRowHeight(6, 40);
+  scheda.setRowHeight(9, 64);
   proteggiProiezione_(scheda);
 }
-/** Una proiezione si rigenera dal centrale; non acquisisce mai modifiche locali. */
+/** Pending edits keep the current view intact until the operator synchronizes them. */
 function scriviProiezioneEvento_(scheda, vista) {
+  const precedenteProtezione = scheda.getProtections(SpreadsheetApp.ProtectionType.SHEET).find(p=>p.getDescription()==='MI_PROIEZIONE');
+  const intervalliPrecedenti = precedenteProtezione ? precedenteProtezione.getUnprotectedRanges() : [];
+  proteggiProiezione_(scheda);
+  SpreadsheetApp.flush();
+  try {
+  allineaBaseConVista_(scheda, vista);
+  const pending = modificheCorrentiFoglio_(scheda);
+  if (pending.changes.length || pending.errors.length) {
+    proteggiProiezione_(scheda, intervalliPrecedenti);
+    return {aggiunte:0,manuali:pending.changes.length,conflitti:pending.errors.length};
+  }
   scheda.createDeveloperMetadataFinder().withKey('MI_CAMPO').find().forEach(function (m) { m.remove(); });
   scheda.clear();
   scheda.getRange(1,1,scheda.getMaxRows(),scheda.getMaxColumns()).clearDataValidations();
   scheda.getRange(1,1,scheda.getMaxRows(),scheda.getMaxColumns()).breakApart();
   scheda.showColumns(1,scheda.getMaxColumns());
-  const colonne = [{key:'_ordine',label:'Prenotazione'}, {key:'_numero',label:'Partecipante'}].concat(vista.colonne);
+  const colonne = [{key:'_numero',label:'Partecipante'}].concat(vista.colonne, [{key:'_ordine',label:'Prenotazione'}]);
   if (scheda.getMaxColumns() < colonne.length) scheda.insertColumnsAfter(scheda.getMaxColumns(), colonne.length - scheda.getMaxColumns());
-  const rows = vista.righe.map(function (r) { return [r.codice_ordine, r.numero_partecipante].concat(vista.colonne.map(function (c) { return neutralizzaFormula_(r.valori[c.key], 5000); })); });
+  const rows = vista.righe.map(function (r) { return [r.numero_partecipante].concat(vista.colonne.map(function (c) { return neutralizzaFormula_(r.valori[c.key], 5000); }), [r.codice_ordine]); });
   if (scheda.getMaxRows() < rows.length + 1) scheda.insertRowsAfter(scheda.getMaxRows(), rows.length + 1 - scheda.getMaxRows());
   scheda.getRange(1,1,1,colonne.length).setValues([colonne.map(function (c) {return c.label;})]).setFontWeight('bold');
   colonne.forEach(function (c,i) { identificaColonnaEvento_(scheda,i+1,c.key); });
   if (rows.length) scheda.getRange(2,1,rows.length,colonne.length).setValues(rows);
   scheda.setFrozenRows(1);
-  proteggiProiezione_(scheda);
+  const modificabili = [];
+  colonne.forEach(function(c,i) {
+    if (campoModificabileFoglio_(c.key) && rows.length) {
+      const range = scheda.getRange(2,i+1,rows.length,1);
+      range.setNumberFormat('@').setBackground('#eef5fc');
+      modificabili.push(range);
+    }
+  });
+  salvaBaseFoglio_(scheda);
+  proteggiProiezione_(scheda, modificabili);
   return { aggiunte:rows.length, manuali:0, conflitti:0 };
+  } catch(error) {
+    proteggiProiezione_(scheda, intervalliPrecedenti);
+    throw error;
+  }
 }
 
 
 // Sorgente: Config.gs
-const MI_SCHEMA_VERSION = '1.8.0';
+const MI_SCHEMA_VERSION = '1.9.0';
 const MI_SHEETS = Object.freeze({
   CONFIG: 'Configurazione',
   GROUPS: 'Gruppi',
@@ -70,14 +108,15 @@ const MI_SHEETS = Object.freeze({
   OPERATIONAL_LIST: 'Elenco operativo',
   REPORT_TEMPLATES: 'Modelli report',
   ACCOMMODATIONS: 'Sistemazioni',
+  REPLICA_REVISIONS: 'Revisioni replica',
   AUDIT_LOG: 'Registro controlli'
 });
 
 const MI_HEADERS = Object.freeze({
   'Configurazione': ['chiave', 'valore', 'descrizione'],
   'Gruppi': ['id_gruppo', 'nome', 'slug', 'stato', 'logo_url', 'immagine_url', 'data_aggiornamento'],
-  'Eventi': ['id_evento', 'id_gruppo', 'titolo', 'stato', 'capienza', 'apertura_iscrizioni', 'chiusura_iscrizioni', 'modalita_prezzo', 'data_aggiornamento'],
-  'Iscrizioni': ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'richieste_particolari', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'hash_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'versione_informativa_privacy', 'data_accettazione_privacy', 'biglietti_json', 'id_consenso_marketing', 'data_accettazione_marketing', 'opzioni_ordine_json'],
+  'Eventi': ['id_evento', 'id_gruppo', 'titolo', 'stato', 'capienza', 'apertura_iscrizioni', 'chiusura_iscrizioni', 'modalita_prezzo', 'data_aggiornamento', 'servizi_json'],
+  'Iscrizioni': ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'richieste_particolari', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'hash_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'versione_informativa_privacy', 'data_accettazione_privacy', 'biglietti_json', 'id_consenso_marketing', 'data_accettazione_marketing', 'opzioni_ordine_json', 'workspace_revision'],
   'Partecipanti': ['codice_ordine', 'numero_partecipante', 'codice_tipologia', 'indice_tipologia', 'nome', 'cognome', 'dati_aggiuntivi_json', 'opzioni_json', 'stato_partecipante', 'data_annullamento'],
   'Pagamenti': ['id_pagamento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo_centesimi', 'valuta', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'canale_registrazione', 'id_inserimento_origine', 'data_creazione', 'nota_amministrativa'],
   'Coda email': ['id_messaggio', 'codice_ordine', 'destinatario', 'tipo_modello', 'contenuto_json', 'stato', 'data_creazione'],
@@ -88,6 +127,7 @@ const MI_HEADERS = Object.freeze({
   'Elenco operativo': ['evento', 'codice_ordine', 'numero_partecipante', 'nome', 'cognome', 'stato'],
   'Modelli report': ['id_modello', 'nome', 'tipo', 'id_evento', 'colonne_json', 'filtri_json', 'raggruppamenti_json', 'ordinamento_json', 'predefinito', 'data_aggiornamento', 'etichetta_operatore'],
   'Sistemazioni': ['id_evento', 'codice', 'nome', 'capienza', 'attiva', 'note'],
+  'Revisioni replica': ['id_evento', 'revisione_camere'],
   'Registro controlli': ['id_controllo', 'data_evento', 'canale', 'azione', 'tipo_entita', 'riferimento_entita', 'esito', 'etichetta_attore', 'codice_dettaglio']
 });
 
@@ -256,8 +296,142 @@ function convertiRigheInOggetti_(sheet) {
 }
 
 
+// Sorgente: CronWordPress.gs
+/** Avvia il cron WordPress quando l'hosting disabilita l'avvio tramite visite.
+ * Esecuzione separata dalla proiezione: non tenere lock mentre WordPress richiama GAS.
+ */
+function avviaCronWordPress() {
+  const endpoint = String(PropertiesService.getScriptProperties().getProperty('MI_WORDPRESS_COMMAND_URL') || '');
+  const base = endpoint.replace(/\/wp-json\/modulo-iscrizioni\/v1\/workspace\/commands\/?$/, '/');
+  if (base === endpoint || !/^https:\/\/[^/?#]+\/$/.test(base)) throw new Error('Collegamento WordPress non valido.');
+  const response = UrlFetchApp.fetch(base + 'wp-cron.php', {method:'get',followRedirects:false,muteHttpExceptions:true});
+  const code = response.getResponseCode();
+  if (code < 200 || code >= 300) throw new Error('Avvio cron WordPress: HTTP ' + code);
+  return {ok:true,http_status:code};
+}
+
+function attivaCronWordPress() {
+  const exists = ScriptApp.getProjectTriggers().some(t=>t.getHandlerFunction()==='avviaCronWordPress');
+  if (!exists) ScriptApp.newTrigger('avviaCronWordPress').timeBased().everyMinutes(5).create();
+  return {ok:true,creato:!exists};
+}
+
+
+// Sorgente: EliminazioneEvento.gs
+/** Small permanent tombstone rejects delayed deliveries after event removal. */
+function eventoInEliminazione_(id) {
+  return !!PropertiesService.getScriptProperties().getProperty('MI_DELETED_EVENT_' + String(id));
+}
+
+/** Signed, bounded and repeatable. Children are removed before their order identities. */
+function eliminaDatiEventoDaWordPress_(payload) {
+  payload = payload || {};
+  const id = String(payload.id_evento || '');
+  const request = String(payload.request_id || '');
+  const mode = String(payload.mode || '');
+  if (!/^\d+$/.test(id) || !/^[a-f0-9-]{36}$/.test(request) || !['keep','trash'].includes(mode)) return {ok:false,error:'INVALID_DELETION'};
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return {ok:false,error:'EVENT_BUSY'};
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const key = 'MI_DELETED_EVENT_' + id;
+    let job = JSON.parse(props.getProperty(key) || 'null');
+    if (job && (job.request !== request || job.mode !== mode)) return {ok:false,error:'DELETION_CONFLICT'};
+    if (!job) {
+      const links = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES)).filter(r=>String(r.id_evento)===id);
+      const files = Array.from(new Set(links.map(r=>String(r.id_foglio||'')).concat(String(payload.id_foglio||'')).filter(Boolean)));
+      // A conflicting association must be investigated rather than deleting someone else's file.
+      const allLinks = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES));
+      if (allLinks.some(r=>String(r.id_evento)!==id && files.includes(String(r.id_foglio)))) return {ok:false,error:'SHARED_EVENT_SHEET'};
+      job = {request:request,mode:mode,files:files,fileIndex:0,complete:false};
+      props.setProperty(key,JSON.stringify(job));
+    }
+    const sheetUrl = job.files.length ? 'https://docs.google.com/spreadsheets/d/'+job.files[0]+'/edit' : '';
+    if (job.complete) return {ok:true,complete:true,sheet_url:sheetUrl};
+    // Do not swallow permission/not-found errors: retain the reference for an explicit retry.
+    while (job.fileIndex < job.files.length) {
+      const file = DriveApp.getFileById(job.files[job.fileIndex]);
+      if (mode==='trash' && !file.isTrashed()) file.setTrashed(true);
+      job.fileIndex++;
+      props.setProperty(key,JSON.stringify(job));
+    }
+    const registrations = ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS);
+    const codes = new Set((Array.isArray(payload.order_codes)?payload.order_codes:[]).map(String));
+    convertiRigheInOggetti_(registrations).filter(r=>String(r.id_evento)===id).forEach(r=>codes.add(String(r.codice_ordine)));
+    const children = [MI_SHEETS.PARTICIPANTS,MI_SHEETS.PAYMENTS,MI_SHEETS.EMAIL_OUTBOX,MI_SHEETS.SECRETARY_OPERATIONS,MI_SHEETS.OPERATIONAL_STATE,MI_SHEETS.OPERATIONAL_LIST];
+    const direct = [MI_SHEETS.OPERATIONAL_VIEWS,MI_SHEETS.ACCOMMODATIONS,MI_SHEETS.REPLICA_REVISIONS,MI_SHEETS.REPORT_TEMPLATES,MI_SHEETS.EVENT_WORKSPACES,MI_SHEETS.EVENTS];
+    const book = ottieniFoglioDiLavoroAssociato_();
+    const deadline = Date.now()+7000;
+    let removed=0;
+    const targets=children.map(name=>({name:name,match:r=>codes.has(String(r.codice_ordine))}));
+    targets.push({name:MI_SHEETS.AUDIT_LOG,match:r=>codes.has(String(r.riferimento_entita)) || (String(r.riferimento_entita)===id && ['FOGLIO_OPERATIVO','PRODUZIONI_EVENTO','EVENTO'].includes(String(r.azione)))});
+    direct.forEach(name=>targets.push({name:name,match:r=>String(r.id_evento)===id}));
+    // Preserve central order rows until every dependent row is removed, including across retries.
+    targets.push({name:MI_SHEETS.REGISTRATIONS,match:r=>String(r.id_evento)===id});
+    for (const target of targets) {
+      const sheet=book.getSheetByName(target.name);
+      if (!sheet) continue;
+      const rows=convertiRigheInOggetti_(sheet).filter(target.match).sort((a,b)=>b._row-a._row);
+      for (const row of rows) {
+        if (removed>=100 || (removed>0 && Date.now()>=deadline)) return {ok:true,complete:false,removed:removed,sheet_url:sheetUrl};
+        sheet.deleteRow(row._row); removed++;
+      }
+    }
+    // Retired per-event views are identified by metadata, never by a title match.
+    book.getSheets().forEach(sheet=>{
+      if (Object.values(MI_SHEETS).includes(sheet.getName())) return;
+      if (sheet.getDeveloperMetadata().some(m=>m.getKey()==='MI_ID_EVENTO' && String(m.getValue())===id)) book.deleteSheet(sheet);
+    });
+    job.files.forEach(file=>props.deleteProperty('MI_EVENT_VIEW_'+file));
+    job.complete=true; props.setProperty(key,JSON.stringify(job));
+    return {ok:true,complete:true,removed:removed,sheet_url:sheetUrl};
+  } finally {lock.releaseLock();}
+}
+
+
 // Sorgente: Email.gs
 const MI_TEST_EMAIL_PROPERTY = 'MI_EMAIL_TEST_RECIPIENT';
+
+function statoCanaleEmail_() {
+  const sender = String(Session.getEffectiveUser().getEmail() || '').trim().toLowerCase();
+  const expected = String(PropertiesService.getScriptProperties().getProperty('MI_EMAIL_SENDER') || '').trim().toLowerCase();
+  const authorized = expected && sender === expected;
+  return { ok: !!authorized, error: authorized ? '' : 'EMAIL_SENDER_NOT_AUTHORIZED', channel: 'GOOGLE_WORKSPACE', sender: sender };
+}
+
+/** Signed WordPress outbox. Persist intent before sending: uncertain deliveries require review. */
+function inviaEmailConfermaDaWordPress_(payload) {
+  const p = payload || {};
+  const sender = statoCanaleEmail_();
+  if (!sender.ok) return sender;
+  const recipient = String(p.destinatario || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient) || !/^[a-f0-9]{64}$/.test(String(p.delivery_key || '')) || !['PROVA', 'OPERATIVO'].includes(p.mode)) return { ok: false, error: 'INVALID_EMAIL_PAYLOAD' };
+  const props = PropertiesService.getScriptProperties();
+  if (p.mode === 'PROVA' && recipient !== String(props.getProperty(MI_TEST_EMAIL_PROPERTY) || '').trim().toLowerCase()) return { ok: false, error: 'TEST_RECIPIENT_MISMATCH' };
+  if (!p.oggetto || !p.testo || !p.html || String(p.oggetto).length > 250 || String(p.testo).length > 100000 || String(p.html).length > 300000 || /[\r\n]/.test(String(p.oggetto))) return { ok: false, error: 'INVALID_EMAIL_PAYLOAD' };
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) return { ok: false, error: 'EMAIL_BUSY' };
+  try {
+    const book = ottieniFoglioDiLavoroAssociato_();
+    let sheet = book.getSheetByName('Registro invii email');
+    if (!sheet) { sheet = book.insertSheet('Registro invii email'); sheet.appendRow(['delivery_key', 'stato', 'data_utc']); }
+    const rows = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues() : [];
+    const previous = rows.find(row => row[0] === p.delivery_key);
+    if (previous) return previous[1] === 'ACCEPTED' ? { ok: true, channel: 'GOOGLE_WORKSPACE', replayed: true } : { ok: false, error: 'EMAIL_DELIVERY_UNCERTAIN' };
+    if (MailApp.getRemainingDailyQuota() < 1) return { ok: false, error: 'EMAIL_QUOTA_EXCEEDED' };
+    sheet.appendRow([p.delivery_key, 'SENDING', new Date().toISOString()]);
+    const row = sheet.getLastRow();
+    SpreadsheetApp.flush();
+    const options = { to: recipient, subject: String(p.oggetto), body: String(p.testo), htmlBody: String(p.html), name: 'Parrocchia Sant’Eugenio', replyTo: recipient };
+    if (p.mode === 'OPERATIVO') options.replyTo = sender.sender;
+    if (p.codice_svg) options.inlineImages = { 'mi-registration-code': Utilities.newBlob(String(p.codice_svg), 'image/svg+xml', 'codice-iscrizione.svg') };
+    try { MailApp.sendEmail(options); }
+    catch (error) { console.error('EMAIL_SEND_FAILED', String(error)); return { ok: false, error: 'EMAIL_DELIVERY_UNCERTAIN' }; }
+    sheet.getRange(row, 2).setValue('ACCEPTED');
+    SpreadsheetApp.flush();
+    return { ok: true, channel: 'GOOGLE_WORKSPACE', sender: sender.sender };
+  } finally { lock.releaseLock(); }
+}
 
 /** Invia soltanto la prova del Modulo Iscrizioni richiesta da WordPress. */
 function inviaEmailProvaDaWordPress_(payload) {
@@ -329,6 +503,13 @@ function serializzaMovimento_(r) {
 // Sorgente: FogliOperativi.gs
 /** Prepara il registro dell'evento e il relativo foglio operativo su richiesta firmata di WordPress. */
 function preparaProduzioniEventoDaWordPress_(payload) {
+  const lock=LockService.getScriptLock();lock.waitLock(30000);
+  try {
+    if (eventoInEliminazione_(String((payload||{}).id_evento||''))) return {ok:false,error:'EVENT_DELETED'};
+    return preparaProduzioniEventoConLock_(payload);
+  } finally {lock.releaseLock();}
+}
+function preparaProduzioniEventoConLock_(payload) {
   payload = payload || {};
   const idEvento = normalizzaTesto_(payload.id_evento, 40);
   const titolo = normalizzaTesto_(payload.titolo, 200);
@@ -344,12 +525,13 @@ function preparaProduzioniEventoDaWordPress_(payload) {
     normalizzaTesto_(payload.apertura_iscrizioni, 40),
     normalizzaTesto_(payload.chiusura_iscrizioni, 40),
     payload.evento_gratuito === true ? 'ZERO' : normalizzaTesto_(payload.modalita_prezzo, 40),
-    new Date()
+    new Date(),
+    JSON.stringify(Array.isArray(payload.servizi) ? payload.servizi : [])
   ];
   if (esistente) eventi.getRange(esistente._row, 1, 1, valori.length).setValues([valori]);
   else eventi.appendRow(valori);
 	const profiloOperativo = normalizzaValoreElenco_(payload.profilo_operativo, ['AUTOMATICO', 'MINIMO', 'QUOTA_UNICA', 'SERVIZI_MULTIPLI', 'VIAGGIO_COMPLESSO']) || 'AUTOMATICO';
-  const risultato = apriFoglioOperativoEvento({ id_evento: idEvento, titolo: titolo, profilo_operativo: profiloOperativo });
+  const risultato = apriFoglioOperativoConLock_({ id_evento: idEvento, titolo: titolo, profilo_operativo: profiloOperativo });
 	const urlIscrizione = normalizzaUrlPubblico_(payload.url_iscrizione);
 	const urlSaldo = normalizzaUrlPubblico_(payload.url_saldo);
 	const emailGestore = payload.email_gestore ? normalizzaEmailGestore_(payload.email_gestore) : '';
@@ -389,6 +571,7 @@ function apriFoglioOperativoConLock_(form) {
   form = form || {};
   const idEvento = normalizzaTesto_(form.id_evento, 40);
   if (!idEvento) throw new Error('Scegli un evento.');
+  if (typeof eventoInEliminazione_ === 'function' && eventoInEliminazione_(idEvento)) throw new Error('Evento eliminato o in eliminazione.');
   const registro = ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES);
   const esistente = convertiRigheInOggetti_(registro).find(function (riga) { return String(riga.id_evento) === idEvento; });
   if (esistente && esistente.id_foglio) {
@@ -405,6 +588,8 @@ function apriFoglioOperativoConLock_(form) {
 	// Un evento appena creato non possiede ancora iscrizioni: evitiamo di rileggere
 	// l'intero database e prepariamo subito la struttura scelta in WordPress.
 	const vista = esistente ? generaVistaOperativaEvento_(idEvento) : generaVistaOperativaIniziale_(idEvento, normalizzaTesto_(form.titolo, 200), normalizzaTesto_(form.profilo_operativo, 30));
+	const datiEvento = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS)).find(r=>String(r.id_evento)===idEvento);
+	aggiungiColonneServizi_(vista.colonne, decodificaElenco_(datiEvento && datiEvento.servizi_json));
 	const titoloPulito = String(vista.evento.titolo || idEvento).replace(/[\\/:*?"<>|#%{}]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140);
 	const titolo = 'Evento ' + idEvento + ' - ' + titoloPulito;
   const foglio = SpreadsheetApp.create(titolo);
@@ -519,7 +704,7 @@ function eliminaFoglioEventoDaWordPress_(payload) {
 	const collegamento = convertiRigheInOggetti_(registro).find(function (riga) { return String(riga.id_evento) === idEvento; });
 	if (!collegamento) return { ok: true, id_evento: idEvento, eliminato: false };
 	if (collegamento.id_foglio) {
-		try { DriveApp.getFileById(String(collegamento.id_foglio)).setTrashed(true); } catch (errore) {}
+		DriveApp.getFileById(String(collegamento.id_foglio)).setTrashed(true);
 	}
 	registro.deleteRow(collegamento._row);
 	aggiungiControllo_('FOGLIO_OPERATIVO', 'DELETE', idEvento, 'SUCCESS', 'WORDPRESS', 'MOVED_TO_TRASH', 'WORDPRESS_PROXY');
@@ -560,28 +745,39 @@ function normalizzaUrlPubblico_(valore) {
 
 /** Riallinea dal database soltanto dopo una conferma esplicita nell'interfaccia. */
 function aggiornaFoglioOperativoEvento(form) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try { return aggiornaFoglioOperativoEventoConLock_(form); }
+  finally { lock.releaseLock(); }
+}
+
+function aggiornaFoglioOperativoEventoConLock_(form) {
   form = form || {};
   const idEvento = normalizzaTesto_(form.id_evento, 40);
   if (!idEvento) throw new Error('Scegli un evento.');
+  if (typeof eventoInEliminazione_ === 'function' && eventoInEliminazione_(idEvento)) throw new Error('Evento eliminato o in eliminazione.');
   const registro = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES));
   const collegamento = registro.find(function (riga) { return String(riga.id_evento) === idEvento; });
   if (!collegamento || !collegamento.id_foglio) throw new Error('Crea prima il foglio operativo dell’evento.');
   const foglio = SpreadsheetApp.openById(String(collegamento.id_foglio));
   const scheda = foglio.getSheetByName('Dati operativi') || foglio.getSheets()[0];
   const vista = generaVistaOperativaEvento_(idEvento);
-  const esito = scriviFoglioOperativoEvento_(scheda, vista);
+  const proprieta = PropertiesService.getScriptProperties();
+  const chiaveProiezione = 'MI_EVENT_VIEW_' + String(collegamento.id_foglio);
+  const ordiniEvento = new Set(convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(r=>String(r.id_evento)===idEvento).map(r=>String(r.codice_ordine)));
+  const movimentiEvento = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS)).filter(r=>ordiniEvento.has(String(r.codice_ordine))).map(r=>{const copia=Object.assign({},r);delete copia._row;return copia;});
+  const impronta = versioneGestione_({vista:vista,movimenti:movimentiEvento});
+  if (form.soloModificati === true && proprieta.getProperty(chiaveProiezione) === impronta) {
+    return {ok:true, invariato:true, esito:{aggiunte:0,manuali:0,conflitti:0}};
+  }
+  const esito = scriviProiezioneEvento_(scheda, vista);
   configuraSchedeEconomicheEvento_(foglio, idEvento);
-  aggiornaProiezionePagamentiEvento_(foglio, idEvento);
+  aggiornaProiezionePagamentiEventoConLock_(foglio, idEvento);
+  // Store only after all writes succeed. Pending edits remain in the sheet;
+  // a new canonical value changes the fingerprint and retries acknowledgment.
+  proprieta.setProperty(chiaveProiezione, impronta);
   aggiungiControllo_('FOGLIO_OPERATIVO', 'REFRESH', idEvento, 'SUCCESS', normalizzaTesto_(Session.getActiveUser().getEmail() || 'SEGRETERIA', 120), 'DATABASE_TO_EVENT_SHEET', 'SEGRETERIA');
-  return { ok: true, url_foglio: foglio.getUrl(), righe: vista.righe.length, esito: esito, message: 'Aggiornamento completato: ' + esito.aggiunte + ' partecipanti aggiornati. Le modifiche si effettuano nella gestione web.' };
-}
-
-/** Confronta il foglio evento con DB_MODULI senza scrivere alcun dato. */
-function scriviFoglioOperativoEvento_(scheda, vista) {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
-  try { return scriviProiezioneEvento_(scheda, vista); }
-  finally { lock.releaseLock(); }
+  return { ok: true, url_foglio: foglio.getUrl(), righe: vista.righe.length, esito: esito, message: 'Controllo completato. Le modifiche nelle celle blu si inviano con Sincronizza.' };
 }
 
 function rimuoviRaggruppamentiColonne_(scheda) {
@@ -875,7 +1071,10 @@ function preparaPagamentiEvento_(foglio, idEvento) {
 }
 function aggiornaProiezionePagamentiEvento_(foglio, idEvento) {
   const lock=LockService.getScriptLock(); lock.waitLock(30000);
-  try {
+  try { return aggiornaProiezionePagamentiEventoConLock_(foglio, idEvento); }
+  finally {lock.releaseLock();}
+}
+function aggiornaProiezionePagamentiEventoConLock_(foglio, idEvento) {
     const s=preparaPagamentiEvento_(foglio,idEvento);
     const ordini=new Set(convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(r=>String(r.id_evento)===String(idEvento)).map(r=>String(r.codice_ordine)));
     const rows=convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS)).filter(r=>ordini.has(String(r.codice_ordine))).sort((a,b)=>new Date(a.data_effettiva)-new Date(b.data_effettiva)).map(r=>{const m=serializzaMovimento_(r);return [m.id,r.codice_ordine,m.data,m.tipo,m.importo/100,m.metodo,m.riferimento,m.operatore,m.nota].map(v=>typeof v==='string'?neutralizzaFormula_(v,5000):v);});
@@ -888,11 +1087,10 @@ function aggiornaProiezionePagamentiEvento_(foglio, idEvento) {
     s.getRange(1,1,1,headers.length).setValues([headers]).setFontWeight('bold');
     if(rows.length){s.getRange(2,1,rows.length,headers.length).setValues(rows);s.getRange(2,5,rows.length,1).setNumberFormat('#,##0.00');}
     s.setFrozenRows(1);proteggiProiezione_(s);
-  } finally {lock.releaseLock();}
 }
 function aggiornaProiezionePagamentiPrenotazioneEvento_(foglio,idEvento,codice) {return aggiornaProiezionePagamentiEvento_(foglio,idEvento);}
 function sincronizzaFogliEventi() {
-  const collegamenti = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES)).filter(function (riga) { return !!riga.id_foglio; });
+  const collegamenti = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES)).filter(function (riga) { return !!riga.id_foglio && !(typeof eventoInEliminazione_ === 'function' && eventoInEliminazione_(riga.id_evento)); });
   if (!collegamenti.length) return [];
   const proprieta = PropertiesService.getScriptProperties();
   const inizio = Math.max(0, Number(proprieta.getProperty('MI_EVENT_SYNC_CURSOR')) || 0) % collegamenti.length;
@@ -904,7 +1102,7 @@ function sincronizzaFogliEventi() {
     // Avanzare prima dell'evento evita che un timeout sullo stesso file blocchi gli altri.
     proprieta.setProperty('MI_EVENT_SYNC_CURSOR', String((indice + 1) % collegamenti.length));
     try {
-      const risultato = aggiornaFoglioOperativoEvento({ id_evento: String(riga.id_evento) });
+      const risultato = aggiornaFoglioOperativoEvento({ id_evento: String(riga.id_evento), soloModificati: true });
       risultati.push({ id_evento: String(riga.id_evento), ok: true, esito: risultato.esito });
     } catch (errore) {
       aggiungiControllo_('FOGLIO_OPERATIVO', 'RETRY', String(riga.id_evento), 'ERROR', 'SEGRETERIA', normalizzaTesto_(errore.message, 300), 'SEGRETERIA');
@@ -1103,7 +1301,8 @@ function generaReportDaModello(form) {
   const allowed = campiElencoOperativo_().map(function (field) { return String(field.key); });
   const columns = normalizzaScelteReport_(model.colonne, allowed, 30);
   if (!columns.length) throw new Error('Il modello non contiene colonne disponibili per questo evento.');
-  const count = generaElencoOperativo_(eventId, columns, { ordinamento: model.ordinamento, raggruppamenti: model.raggruppamenti });
+  const filters = normalizzaFiltriEsecuzioneReport_(form.valori_filtri);
+  const count = generaElencoOperativo_(eventId, columns, { ordinamento: model.ordinamento, raggruppamenti: model.raggruppamenti, filtri: filters });
   aggiungiControllo_('GENERATE_REPORT', 'REPORT_TEMPLATE', id, 'SUCCESS', normalizzaTesto_(Session.getActiveUser().getEmail(), 120), eventId + ':' + count, 'WORKSPACE_UI');
   return { ok: true, count: count, nome: model.nome, print_url: creaUrlStampaElenco_(), message: 'Report generato con ' + count + ' partecipanti.' };
 }
@@ -1115,6 +1314,30 @@ function normalizzaScelteReport_(values, allowed, limit) {
     seen[value] = true;
     return true;
   }).slice(0, limit);
+}
+
+function normalizzaFiltriEsecuzioneReport_(raw) {
+  raw = raw || {};
+  if (typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Filtri report non validi.');
+  const allowed = ['query', 'status', 'room', 'transport'];
+  if (Object.keys(raw).some(function (key) { return allowed.indexOf(key) < 0; })) throw new Error('Filtro report non disponibile.');
+  const result = {};
+  allowed.forEach(function (key) { result[key] = normalizzaTesto_(raw[key] || '', 120); });
+  if (['', 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'WAITLIST_OFFERED'].indexOf(result.status) < 0) throw new Error('Stato report non valido.');
+  return result;
+}
+
+function corrispondeFiltriReport_(filters, registration, participant, data) {
+  filters = filters || {};
+  const aliases = { CONFERMATA: 'CONFIRMED', IN_ATTESA_PAGAMENTO: 'PENDING_PAYMENT' };
+  const status = String(registration.stato || '').toUpperCase();
+  if (filters.status && filters.status !== (aliases[status] || status)) return false;
+  const query = String(filters.query || '').trim().toLocaleLowerCase('it');
+  const name = [participant.nome, participant.cognome, participant.cognome, participant.nome, registration.codice_ordine, registration.email_referente].join(' ').toLocaleLowerCase('it');
+  if (query && name.indexOf(query) < 0) return false;
+  const room = data.room || data.camera || data.alloggio || '';
+  const transport = data.pullman || data.transport || '';
+  return (!filters.room || String(room).toLocaleLowerCase('it') === filters.room.toLocaleLowerCase('it')) && (!filters.transport || String(transport).toLocaleLowerCase('it') === filters.transport.toLocaleLowerCase('it'));
 }
 
 function decodificaConfigurazioneReport_(value) {
@@ -1278,11 +1501,12 @@ function generaElencoOperativo_(eventId, fields, options) {
   const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.OPERATIONAL_LIST); const event = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS)).find(function (row) { return String(row.id_evento) === String(eventId); }) || {};
   const registrations = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(function (row) { return String(row.id_evento) === String(eventId) && ['ANNULLATO', 'SCADUTO', 'CANCELLED', 'EXPIRED'].indexOf(String(row.stato).toUpperCase()) < 0; }); const byOrder = registrations.reduce(function (result, row) { result[String(row.codice_ordine)] = row; return result; }, {});
   const operational = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.OPERATIONAL_STATE)); const payments = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS)); const labels = campiElencoOperativo_().reduce(function (result, field) { result[field.key] = field.label; return result; }, {});
-  const rows = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).filter(function (row) { return !!byOrder[String(row.codice_ordine)] && String(row.stato_partecipante || 'ACTIVE').toUpperCase() !== 'CANCELLED'; }).map(function (participant) { const registration = byOrder[String(participant.codice_ordine)]; const data = decodificaOggetto_(participant.dati_aggiuntivi_json); operational.filter(function (state) { return String(state.codice_ordine) === String(participant.codice_ordine) && Number(state.numero_partecipante) === Number(participant.numero_partecipante); }).forEach(function (state) { data[String(state.chiave)] = state.valore; }); return fields.map(function (field) { return neutralizzaFormula_(valoreCampoElenco_(field, event, registration, participant, data, payments), 1000); }); });
+  const rows = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).filter(function (row) { return !!byOrder[String(row.codice_ordine)] && String(row.stato_partecipante || 'ACTIVE').toUpperCase() !== 'CANCELLED'; }).map(function (participant) { const registration = byOrder[String(participant.codice_ordine)]; const data = decodificaOggetto_(participant.dati_aggiuntivi_json); operational.filter(function (state) { return String(state.codice_ordine) === String(participant.codice_ordine) && Number(state.numero_partecipante) === Number(participant.numero_partecipante); }).forEach(function (state) { data[String(state.chiave)] = state.valore; }); if (!corrispondeFiltriReport_(options.filtri, registration, participant, data)) return null; const row = fields.map(function (field) { return neutralizzaFormula_(valoreCampoElenco_(field, event, registration, participant, data, payments), 1000); }); row._orderCode = String(participant.codice_ordine); return row; }).filter(Boolean);
 	const grouping = normalizzaScelteReport_(options.raggruppamenti, fields, 5).map(function (field) { return fields.indexOf(field); }).filter(function (index) { return index >= 0; });
 	const ordering = normalizzaScelteReport_(options.ordinamento, fields, 5).map(function (field) { return fields.indexOf(field); }).filter(function (index) { return index >= 0; });
 	const sortColumns = grouping.concat(ordering).filter(function (column, index, list) { return list.indexOf(column) === index; });
 	if (sortColumns.length) rows.sort(function (left, right) { for (let index = 0; index < sortColumns.length; index += 1) { const column = sortColumns[index]; const comparison = String(left[column] == null ? '' : left[column]).localeCompare(String(right[column] == null ? '' : right[column]), 'it', { numeric: true, sensitivity: 'base' }); if (comparison) return comparison; } return 0; });
+  limitaImportiAUnaRigaPerOrdine_(rows, fields);
   sheet.clear(); sheet.getRange(1, 1, 1, fields.length).merge().setValue('Elenco operativo — ' + String(event.titolo || eventId)).setBackground('#17224a').setFontColor('#ffffff').setFontWeight('bold').setFontSize(14); sheet.getRange(2, 1, 1, fields.length).setValues([fields.map(function (field) { return labels[field] || field; })]).setBackground('#1f4e78').setFontColor('#ffffff').setFontWeight('bold').setWrap(true);
   if (rows.length) sheet.getRange(3, 1, rows.length, fields.length).setValues(rows).setWrap(true).setVerticalAlignment('middle');
   if (grouping.length && rows.length) rows.forEach(function (row, index) { const previous = index ? rows[index - 1] : null; const startsGroup = !previous || grouping.some(function (column) { return String(row[column]) !== String(previous[column]); }); if (startsGroup) sheet.getRange(index + 3, 1, 1, fields.length).setBorder(true, null, null, null, null, null, '#17224a', SpreadsheetApp.BorderStyle.SOLID_MEDIUM); });
@@ -1437,6 +1661,8 @@ function generaVistaOperativaEvento_(idEvento, campiForzati) {
   const colonne = campi.filter(function (chiave) { return !!catalogo[chiave]; }).map(function (chiave) {
     return { key: chiave, label: catalogo[chiave].label, gruppo: gruppoCampoVistaOperativa_(chiave), comprimibile: ['paid_cash', 'paid_transfer', 'paid_card'].indexOf(chiave) >= 0 };
   });
+  aggiungiColonneServizi_(colonne, decodificaElenco_(evento.servizi_json));
+  iscrizioni.forEach(r=>{const snapshot=decodificaOggetto_(r.snapshot_json);aggiungiColonneServizi_(colonne, (snapshot.event||{}).options||[]);});
   const righe = partecipanti.map(function (partecipante) {
     const iscrizione = iscrizioniPerCodice[String(partecipante.codice_ordine)];
     const numero = Number(partecipante.numero_partecipante) || 0;
@@ -1516,7 +1742,7 @@ function determinaProfiloVistaOperativa_(iscrizioni, partecipanti) {
   partecipanti.forEach(function (riga) {
     const dati = decodificaOggetto_(riga.dati_aggiuntivi_json);
     const opzioni = JSON.stringify(decodificaElenco_(riga.opzioni_json)).toLowerCase();
-    if (dati.document_number || dati.numero_documento || dati.document_expiry_date || dati.scadenza_documento || dati.room || dati.camera || dati.alloggio) haDocumenti = true;
+    if (dati.document_number || dati.numero_documento || dati.document_issue_date || dati.data_rilascio_documento || dati.document_expiry_date || dati.scadenza_documento || dati.room || dati.camera || dati.alloggio) haDocumenti = true;
     if (dati.transport || dati.pullman || dati.lunch || dati.pranzo || /pullman|pranzo|colazione|cena/.test(opzioni)) haServizi = true;
   });
   const profili = {
@@ -1542,7 +1768,7 @@ function gruppoCampoVistaOperativa_(chiave) {
 function campiElencoOperativo_(includiDinamici) {
   const fields = [
     { key: 'event', label: 'Evento' }, { key: 'order_code', label: 'Codice prenotazione' }, { key: 'participant_number', label: 'N.' }, { key: 'first_name', label: 'Nome' }, { key: 'last_name', label: 'Cognome' }, { key: 'status', label: 'Stato' },
-    { key: 'email', label: 'Email' }, { key: 'phone', label: 'Cellulare' }, { key: 'birth_date', label: 'Data di nascita' }, { key: 'document_type', label: 'Tipo documento' }, { key: 'document_number', label: 'Numero documento' }, { key: 'document_issue_date', label: 'Data emissione documento' }, { key: 'document_expiry_date', label: 'Scadenza documento' }, { key: 'nationality', label: 'Nazionalità' }, { key: 'room', label: 'Alloggio' }, { key: 'transport', label: 'Pullman/trasporto' }, { key: 'breakfast', label: 'Colazione' },
+    { key: 'email', label: 'Email' }, { key: 'phone', label: 'Cellulare' }, { key: 'birth_date', label: 'Data di nascita' }, { key: 'document_type', label: 'Tipo documento' }, { key: 'document_number', label: 'Numero documento' }, { key: 'document_issue_date', label: 'Data di rilascio del documento' }, { key: 'document_expiry_date', label: 'Scadenza documento' }, { key: 'nationality', label: 'Nazionalità' }, { key: 'room', label: 'Alloggio' }, { key: 'transport', label: 'Pullman/trasporto' }, { key: 'breakfast', label: 'Colazione' },
     { key: 'lunch', label: 'Pranzo' }, { key: 'insurance', label: 'Assicurazione' }, { key: 'emergency_contact', label: 'Contatto di emergenza' }, { key: 'options', label: 'Altre opzioni' }, { key: 'total', label: 'Totale' }, { key: 'paid', label: 'Incassato' }, { key: 'paid_cash', label: 'Contanti' }, { key: 'paid_transfer', label: 'Bonifico' }, { key: 'paid_card', label: 'Carta/PayPal' }, { key: 'balance', label: 'Da incassare' }, { key: 'special_requests', label: 'Richieste particolari' }
   ];
 	if (includiDinamici === false) return fields;
@@ -1560,7 +1786,12 @@ function campiElencoOperativo_(includiDinamici) {
 }
 
 function valoreCampoElenco_(field, event, registration, participant, data, payments) {
-  const aliases = { email: ['participant_email', 'email'], phone: ['participant_phone', 'phone', 'mobile'], birth_date: ['birth_date', 'data_nascita'], document_type: ['document_type', 'tipo_documento'], document_number: ['document_number', 'numero_documento'], document_issue_date: ['document_issue_date', 'data_emissione_documento'], document_expiry_date: ['document_expiry_date', 'document_expiry', 'scadenza_documento'], nationality: ['nationality', 'nazionalita'], room: ['room', 'camera', 'alloggio'], transport: ['pullman', 'transport'], breakfast: ['colazione', 'breakfast'], lunch: ['pranzo', 'lunch'], insurance: ['assicurazione', 'insurance'], emergency_contact: ['emergency_contact', 'emergency_phone', 'contatto_emergenza', 'telefono_emergenza'] };
+  if (field === 'status') return etichettaStatoIscrizione_(['CANCELLED', 'CANCELLED_PARTICIPANT'].indexOf(String(participant.stato_partecipante).toUpperCase()) >= 0 ? 'CANCELLED' : registration.stato);
+  if (String(field).indexOf('option_')===0) {
+    const option=decodificaElenco_(participant.opzioni_json).find(o=>'option_'+String(o.code)===field);
+    return option ? Number(option.quantity)||0 : 0;
+  }
+  const aliases = { email: ['participant_email', 'email'], phone: ['participant_phone', 'phone', 'mobile'], birth_date: ['birth_date', 'data_nascita'], document_type: ['document_type', 'tipo_documento'], document_number: ['document_number', 'numero_documento'], document_issue_date: ['document_issue_date', 'data_rilascio_documento', 'data_emissione_documento'], document_expiry_date: ['document_expiry_date', 'document_expiry', 'scadenza_documento'], nationality: ['nationality', 'nazionalita'], room: ['room', 'camera', 'alloggio'], transport: ['pullman', 'transport'], breakfast: ['colazione', 'breakfast'], lunch: ['pranzo', 'lunch'], insurance: ['assicurazione', 'insurance'], emergency_contact: ['emergency_contact', 'emergency_phone', 'contatto_emergenza', 'telefono_emergenza'] };
   const direct = { event: event.titolo || registration.id_evento, order_code: registration.codice_ordine, participant_number: participant.numero_partecipante, first_name: participant.nome, last_name: participant.cognome, status: participant.stato_partecipante || registration.stato, special_requests: registration.richieste_particolari || '' };
   if (Object.prototype.hasOwnProperty.call(direct, field)) return direct[field];
   if (field === 'options') return decodificaElenco_(participant.opzioni_json).map(function (option) { return option.name || option.label || option.code || ''; }).filter(Boolean).join(', ');
@@ -1577,6 +1808,11 @@ function valoreCampoElenco_(field, event, registration, participant, data, payme
   if (field === 'email') return registration.email_referente || ''; if (field === 'phone') return registration.telefono_referente || ''; return '';
 }
 
+function etichettaStatoIscrizione_(value) {
+  const labels = { PENDING_PAYMENT: 'Da pagare', IN_ATTESA_PAGAMENTO: 'Da pagare', CONFIRMED: 'Confermata', CONFERMATA: 'Confermata', WAITLISTED: 'Lista d’attesa', WAITLIST_OFFERED: 'Posto proposto', CANCELLED: 'Annullata', EXPIRED: 'Scaduta', ACTIVE: 'Attiva', CANCELLED_PARTICIPANT: 'Annullata' };
+  return labels[String(value || '').toUpperCase()] || String(value || '');
+}
+
 function aggiornaStatoOperativo_(orderCode, participantNumber, key, value, operator, operationId) {
   const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.OPERATIONAL_STATE); const existing = convertiRigheInOggetti_(sheet).find(function (row) { return String(row.codice_ordine) === orderCode && Number(row.numero_partecipante) === participantNumber && String(row.chiave) === key; }); const values = [neutralizzaFormula_(orderCode, 64), participantNumber, neutralizzaFormula_(key, 80), neutralizzaFormula_(value, 1000), new Date(), neutralizzaFormula_(operator, 120), operationId];
   if (existing) sheet.getRange(existing._row, 1, 1, values.length).setValues([values]); else sheet.appendRow(values);
@@ -1584,6 +1820,19 @@ function aggiornaStatoOperativo_(orderCode, participantNumber, key, value, opera
 
 function decodificaOggetto_(value) { try { const parsed = JSON.parse(String(value || '{}')); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; } catch (error) { return {}; } }
 function decodificaElenco_(value) { try { const parsed = JSON.parse(String(value || '[]')); return Array.isArray(parsed) ? parsed : []; } catch (error) { return []; } }
+
+/** Economic columns belong to the order, even in a person-based report. */
+function limitaImportiAUnaRigaPerOrdine_(rows, fields) {
+  const monetary = ['total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance'];
+  const seen = Object.create(null);
+  rows.forEach(function (row) {
+    const code = row._orderCode;
+    if (!code) return;
+    if (seen[code]) fields.forEach(function (field, index) { if (monetary.indexOf(field) >= 0) row[index] = ''; });
+    seen[code] = true;
+  });
+  return rows;
+}
 
 
 // Sorgente: Setup.gs
@@ -1689,7 +1938,7 @@ function inizializzaScheda_(sheet, headers) {
 	const usesPreviousHeaders = previous.length > 0 && current.slice(0, previous.length).join('|') === previous.join('|') && current.slice(previous.length).every(function (value) { return value === ''; });
 	const italianPrevious = MI_INTESTAZIONI_PRECEDENTI[sheet.getName()] || [];
 	const usesItalianPrevious = italianPrevious.length > 0 && current.slice(0, italianPrevious.length).join('|') === italianPrevious.join('|') && current.slice(italianPrevious.length).every(function (value) { return value === ''; });
-	const immediatelyPrevious = sheet.getName() === MI_SHEETS.PARTICIPANTS ? headers.slice(0, -2) : ([MI_SHEETS.REGISTRATIONS, MI_SHEETS.PAYMENTS].indexOf(sheet.getName()) >= 0 ? headers.slice(0, -1) : []);
+	const immediatelyPrevious = sheet.getName() === MI_SHEETS.PARTICIPANTS ? headers.slice(0, -2) : ([MI_SHEETS.REGISTRATIONS, MI_SHEETS.PAYMENTS, MI_SHEETS.EVENTS].indexOf(sheet.getName()) >= 0 ? headers.slice(0, -1) : []);
 	const usesImmediatelyPrevious = immediatelyPrevious.length > 0 && current.slice(0, immediatelyPrevious.length).join('|') === immediatelyPrevious.join('|') && current.slice(immediatelyPrevious.length).every(function (value) { return value === ''; });
   if (hasData && current.join('|') !== headers.join('|') && !usesPreviousHeaders && !usesItalianPrevious && !usesImmediatelyPrevious) {
     throw new Error('Intestazioni inattese nel foglio ' + sheet.getName() + '. Intervento manuale richiesto.');
@@ -1741,6 +1990,119 @@ function applicaProtezioniConAvviso_() {
 }
 
 
+// Sorgente: SincronizzazioneManuale.gs
+/** Editable fields are data, never payment totals or booking identifiers. */
+function campoModificabileFoglio_(key) {
+  return /^[a-z][a-z0-9_]{0,79}$/.test(key) && !String(key).startsWith('option_') && !['_ordine','_numero','event','order_code','participant_number','status','options','total','paid','paid_cash','paid_transfer','paid_card','balance','special_requests','constructor','prototype'].includes(key);
+}
+function aggiungiColonneServizi_(columns, options) {
+  (Array.isArray(options)?options:[]).forEach(option=>{
+    if (option.scope!=='TICKET' || !/^[a-z0-9_-]{1,64}$/.test(String(option.code))) return;
+    const key='option_'+option.code;
+    if (!columns.some(column=>column.key===key)) columns.push({key:key,label:String(option.name||option.code),gruppo:'servizi',comprimibile:false});
+  });
+}
+function confrontaModificheFoglio_(base, current) {
+  const changes = [], errors = [], seen = new Set();
+  current.forEach(row => {
+    const identity = JSON.stringify([String(row.order), Number(row.number)]);
+    if (seen.has(identity)) { errors.push('Partecipante duplicato nel foglio: ' + row.order); return; }
+    seen.add(identity);
+    const original = base[identity];
+    if (!original) { errors.push('Riga senza prenotazione riconosciuta. Inserisci nuove iscrizioni dal portale.'); return; }
+    Object.keys(original).forEach(key => {
+      if (!Object.prototype.hasOwnProperty.call(row.values, key)) { errors.push('Colonna mancante: ' + key); return; }
+      const before = String(original[key] ?? ''), after = String(row.values[key] ?? '');
+      if (before !== after) {
+        if (!campoModificabileFoglio_(key)) errors.push('Colonna non modificabile: ' + key);
+        else changes.push({order_code:String(row.order),number:Number(row.number),key:key,before:before,after:after});
+      }
+    });
+  });
+  Object.keys(base).forEach(key => { if (!seen.has(key)) errors.push('Riga rimossa: annulla la partecipazione dal portale.'); });
+  return {changes:changes,errors:errors};
+}
+function leggiBaseFoglio_(foglio) {
+  const sheet = foglio.getSheetByName('_MI_BASE');
+  if (!sheet) return null;
+  const base = Object.create(null);
+  if (sheet.getLastRow() < 2) return base;
+  sheet.getRange(2,1,sheet.getLastRow()-1,3).getValues().forEach(row => {
+    const key = JSON.stringify([String(row[0]),Number(row[1])]);
+    if (base[key]) throw new Error('Base del foglio duplicata.');
+    base[key] = JSON.parse(String(row[2]));
+  });
+  return base;
+}
+function modificheCorrentiFoglio_(sheet) {
+  const base = leggiBaseFoglio_(sheet.getParent());
+  if (!base) return {changes:[],errors:[],initialized:false};
+  const columns = mappaColonneEvento_(sheet);
+  if (!columns._ordine || !columns._numero) return {changes:[],errors:['Identificativi del foglio mancanti.'],initialized:true};
+  const rows = sheet.getLastRow() > 1 ? sheet.getRange(2,1,sheet.getLastRow()-1,sheet.getLastColumn()).getDisplayValues() : [];
+  const current = rows.filter(r => r.some(v=>String(v)!=='')).map(row => {
+    const values = {};
+    Object.keys(columns).filter(key=>!['_ordine','_numero'].includes(key)).forEach(key=>values[key]=row[columns[key]-1]);
+    return {order:String(row[columns._ordine-1]),number:Number(row[columns._numero-1]),values:values};
+  });
+  return Object.assign({initialized:true},confrontaModificheFoglio_(base,current));
+}
+function salvaBaseFoglio_(sheet) {
+  const foglio = sheet.getParent();
+  const base = foglio.getSheetByName('_MI_BASE') || foglio.insertSheet('_MI_BASE');
+  const columns = mappaColonneEvento_(sheet);
+  const rows = sheet.getLastRow()>1 ? sheet.getRange(2,1,sheet.getLastRow()-1,sheet.getLastColumn()).getDisplayValues() : [];
+  const values = rows.map(row => {
+    const fields = {};
+    Object.keys(columns).filter(key=>!['_ordine','_numero'].includes(key)).forEach(key=>fields[key]=row[columns[key]-1]);
+    return [row[columns._ordine-1],Number(row[columns._numero-1]),JSON.stringify(fields)];
+  });
+  base.clearContents();
+  base.getRange(1,1,1,3).setValues([['Prenotazione','Partecipante','Valori confermati']]);
+  if (base.getMaxRows()<values.length+1) base.insertRowsAfter(base.getMaxRows(),values.length+1-base.getMaxRows());
+  if (values.length) base.getRange(2,1,values.length,3).setValues(values);
+  proteggiProiezione_(base);
+  base.hideSheet();
+}
+
+/** Confirm only cells whose edited value has actually returned from MySQL. */
+function allineaBaseConVista_(sheet, vista) {
+  const pending = modificheCorrentiFoglio_(sheet);
+  if (!pending.changes.length || pending.errors.length) return;
+  const incoming = Object.create(null);
+  vista.righe.forEach(row=>incoming[JSON.stringify([String(row.codice_ordine),Number(row.numero_partecipante)])]=row.valori);
+  const confirmed = Object.create(null);
+  pending.changes.forEach(change=>{
+    const id=JSON.stringify([change.order_code,change.number]), values=incoming[id];
+    if (values && Object.prototype.hasOwnProperty.call(values,change.key) && String(values[change.key]??'')===change.after) {
+      if (!confirmed[id]) confirmed[id]={};
+      confirmed[id][change.key]=change.after;
+    }
+  });
+  const base=sheet.getParent().getSheetByName('_MI_BASE');
+  if (!base || base.getLastRow()<2) return;
+  base.getRange(2,1,base.getLastRow()-1,3).getValues().forEach((row,index)=>{
+    const changes=confirmed[JSON.stringify([String(row[0]),Number(row[1])])];
+    if (changes) base.getRange(index+2,3).setValue(JSON.stringify(Object.assign(JSON.parse(String(row[2])),changes)));
+  });
+}
+
+function leggiModificheEventoMysql_(payload) {
+  const eventId=String(payload.event_id||'');
+  if (!/^[1-9][0-9]*$/.test(eventId)) throw new Error('Evento non valido.');
+  const lock=LockService.getScriptLock();lock.waitLock(30000);
+  try {
+    const record=convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES)).find(r=>String(r.id_evento)===eventId);
+    if (!record || !record.id_foglio) throw new Error('Foglio evento non disponibile.');
+    const sheet=SpreadsheetApp.openById(String(record.id_foglio)).getSheetByName('Dati operativi');
+    if (!sheet) throw new Error('Scheda Dati operativi non disponibile.');
+    const result=modificheCorrentiFoglio_(sheet);
+    if (!result.initialized) throw new Error('Aggiorna il foglio evento prima di sincronizzarlo.');
+    return {ok:true,changes:result.changes,errors:result.errors};
+  } finally {lock.releaseLock();}
+}
+
+
 // Sorgente: WebApp.gs
 function doGet(event) {
   return creaRispostaJson_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, mode: 'PREVIEW' });
@@ -1752,6 +2114,7 @@ function doPost(event) {
     const envelope = JSON.parse(event.postData.contents);
     const verified = verificaBusta_(envelope);
     if (!verified.ok) return creaRispostaJson_({ ok: false, error: verified.error });
+    if (envelope.action === 'ELIMINA_DATI_EVENTO') return creaRispostaJson_(eliminaDatiEventoDaWordPress_(envelope.payload));
     if (envelope.action === 'PING') return creaRispostaJson_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, mode: 'PREVIEW' });
 	if (envelope.action === 'STATO_SCHEMA') return creaRispostaJson_({ ok: true, schema_version: MI_SCHEMA_VERSION, registration_headers: MI_HEADERS[MI_SHEETS.REGISTRATIONS], accommodation_headers: MI_HEADERS[MI_SHEETS.ACCOMMODATIONS], group_headers: MI_HEADERS[MI_SHEETS.GROUPS], report_template_headers: MI_HEADERS[MI_SHEETS.REPORT_TEMPLATES], event_headers: MI_HEADERS[MI_SHEETS.EVENTS], mode: 'PREVIEW' });
 	if (envelope.action === 'STATO_REPLICA_ISCRIZIONE') return creaRispostaJson_(statoReplicaIscrizione_(envelope.payload));
@@ -1762,10 +2125,13 @@ function doPost(event) {
 	if (envelope.action === 'ORGANIZZA_FOGLI_EVENTO') return creaRispostaJson_(organizzaFogliEventoDaWordPress_(envelope.payload));
 	if (envelope.action === 'ELIMINA_FOGLIO_EVENTO') return creaRispostaJson_(eliminaFoglioEventoDaWordPress_(envelope.payload));
 	if (envelope.action === 'INVIA_EMAIL_PROVA') return creaRispostaJson_(inviaEmailProvaDaWordPress_(envelope.payload));
+	if (envelope.action === 'INVIA_EMAIL_CONFERMA') return creaRispostaJson_(inviaEmailConfermaDaWordPress_(envelope.payload));
+	if (envelope.action === 'STATO_CANALE_EMAIL') return creaRispostaJson_(statoCanaleEmail_());
     if (envelope.action === 'SALDO_PAGAMENTO_PORTALE') return creaRispostaJson_(saldoPagamentoPortale_(envelope.payload));
-    if (envelope.action === 'REGISTRA_PAGAMENTO_PORTALE') return creaRispostaJson_(registraPagamentoPortale_(envelope.payload));
+    if (envelope.action === 'REGISTRA_PAGAMENTO_PORTALE') return creaRispostaJson_({ok:false,error:'USE_MYSQL_PAYMENT_LEDGER'});
+    if (envelope.action === 'LEGGI_MODIFICHE_FOGLIO') return creaRispostaJson_(leggiModificheEventoMysql_(envelope.payload));
     if (envelope.action === 'SCHEDA_GESTIONE_PORTALE') return creaRispostaJson_(schedaGestionePortale_(envelope.payload));
-    if (envelope.action === 'AGGIORNA_GESTIONE_PORTALE') return creaRispostaJson_(rispostaAggiornamentoGestione_(envelope.payload));
+    if (envelope.action === 'AGGIORNA_GESTIONE_PORTALE') return creaRispostaJson_({ok:false,error:'USE_MYSQL_MANAGEMENT'});
     if (envelope.action === 'RIEPILOGO_GESTIONE_EVENTO') return creaRispostaJson_(riepilogoGestioneEvento_(envelope.payload));
     if (envelope.action === 'ELENCA_PAGAMENTI') return creaRispostaJson_(elencaPagamenti_(envelope.payload));
     if (envelope.action !== 'APPEND_REGISTRATION') return creaRispostaJson_({ ok: false, error: 'ACTION_NOT_ALLOWED' });
@@ -1883,6 +2249,14 @@ function confrontaInTempoCostante_(left, right) {
 function aggiungiIscrizione_(payload) {
   const risultato = registraIscrizioneCentrale_(payload);
   if (!risultato.complete) return risultato;
+  // MySQL acknowledges the central replica independently of slow sheet formatting.
+  // The periodic event job refreshes the views and retains pending operator edits.
+  if (payload.canonical_source === 'MYSQL') {
+    risultato.central_complete = true;
+    risultato.event_sheet_complete = false;
+    risultato.event_sheet_pending = true;
+    return risultato;
+  }
   // La consegna al foglio avviene dopo il rilascio del lock del registro centrale.
   try {
     aggiornaFoglioOperativoEvento({ id_evento: String(payload.event_id) });
@@ -1895,6 +2269,8 @@ function aggiungiIscrizione_(payload) {
 }
 
 function registraIscrizioneCentrale_(payload) {
+  const workspaceRevision = String(payload.workspace_revision === undefined ? '0' : payload.workspace_revision);
+  if (!/^(0|[1-9][0-9]{0,19})$/.test(workspaceRevision)) return { ok: false, error: 'INVALID_WORKSPACE_REVISION' };
   const orderCode = normalizzaTesto_(payload.order_code, 64);
   const eventId = normalizzaTesto_(payload.event_id, 64);
   const idempotencyKey = normalizzaTesto_(payload.idempotency_key, 64);
@@ -1940,12 +2316,15 @@ function registraIscrizioneCentrale_(payload) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
+    if (typeof eventoInEliminazione_ === 'function' && eventoInEliminazione_(eventId)) return {ok:false,error:'EVENT_DELETED'};
     const registrations = ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS);
     const registrationRows = convertiRigheInOggetti_(registrations);
     const byKey = registrationRows.find(function (item) { return String(item.chiave_idempotenza) === idempotencyKey; });
     const byCode = registrationRows.find(function (item) { return String(item.codice_ordine) === orderCode; });
     if ((byKey && String(byKey.codice_ordine) !== orderCode) || (byCode && String(byCode.chiave_idempotenza) !== idempotencyKey)) return { ok: false, error: 'IDEMPOTENCY_CONFLICT' };
     const existing = byKey || byCode;
+    const previousRevision = String(existing && existing.workspace_revision || '0');
+    if (previousRevision.length > workspaceRevision.length || (previousRevision.length === workspaceRevision.length && previousRevision > workspaceRevision)) return { ok: false, complete: false, error: 'STALE_WORKSPACE_REVISION' };
     const registrationValues = [
       neutralizzaFormula_(orderCode, 64),
       neutralizzaFormula_(eventId, 64),
@@ -1972,12 +2351,19 @@ function registraIscrizioneCentrale_(payload) {
 	  JSON.stringify(tickets),
 	  normalizzaTesto_(payload.marketing_consent_id, 100),
 	  normalizzaTesto_(payload.marketing_accepted_at, 40),
-	  JSON.stringify(Array.isArray(payload.order_options) ? payload.order_options : [])
+	  JSON.stringify(Array.isArray(payload.order_options) ? payload.order_options : []),
+      workspaceRevision
     ];
     if (existing) registrations.getRange(existing._row, 1, 1, registrationValues.length).setValues([registrationValues]);
     else registrations.appendRow(registrationValues);
 
-    const correzioni = indiceStatoOperativo_();
+    const correzioni = payload.canonical_source === 'MYSQL' ? {} : indiceStatoOperativo_();
+    if (payload.canonical_source === 'MYSQL') {
+      sincronizzaCamereMysql_(eventId, payload.rooms, payload.workspace_event_revision);
+      // Legacy overrides must not hide values now maintained by the canonical service.
+      const stato = ottieniSchedaObbligatoria_(MI_SHEETS.OPERATIONAL_STATE);
+      convertiRigheInOggetti_(stato).filter(r => String(r.codice_ordine) === orderCode).sort((a,b) => b._row-a._row).forEach(r => stato.deleteRow(r._row));
+    }
     const participantRows = participants.map(function (participant, index) {
       return [
         neutralizzaFormula_(orderCode, 64),
@@ -2012,10 +2398,33 @@ function registraIscrizioneCentrale_(payload) {
     const outboxComplete = convertiRigheInOggetti_(outbox).some(function (row) { return String(row.codice_ordine) === orderCode && String(row.tipo_modello) === 'REGISTRATION_CONFIRMATION' && String(row.destinatario) === originalRecipient; });
     const complete = registrationComplete && participantCount === participants.length && outboxComplete;
     aggiungiControllo_('APPEND_REGISTRATION', 'REGISTRATION', orderCode, 'SUCCESS', 'WORDPRESS', 'REGISTRATION_RECORDED', 'WORDPRESS_PROXY');
-    return { ok: complete, complete: complete, replayed: Boolean(existing), order_code: orderCode, error: complete ? undefined : 'INCOMPLETE_REPLICA' };
+    return { ok: complete, complete: complete, workspace_revision: String(payload.workspace_revision === undefined ? '' : payload.workspace_revision), replayed: Boolean(existing), order_code: orderCode, error: complete ? undefined : 'INCOMPLETE_REPLICA' };
   } finally {
     lock.releaseLock();
   }
+}
+
+/** Called under the central script lock. Room snapshots have an event-wide revision. */
+function sincronizzaCamereMysql_(eventId, rooms, revision) {
+  revision = String(revision);
+  if (!/^(0|[1-9][0-9]{0,19})$/.test(revision) || !Array.isArray(rooms)) throw new Error('INVALID_ROOM_SNAPSHOT');
+  const codes = new Set();
+  const values = rooms.map(room => {
+    const code = String(room.code || ''), name = normalizzaTesto_(room.name, 120), capacity = Number(room.capacity);
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(code) || codes.has(code) || !name || !Number.isInteger(capacity) || capacity < 1 || capacity > 1000) throw new Error('INVALID_ROOM_SNAPSHOT');
+    codes.add(code);
+    return [eventId, code, neutralizzaFormula_(name, 120), capacity, 'SI', ''];
+  });
+  const versions = ottieniSchedaObbligatoria_(MI_SHEETS.REPLICA_REVISIONS);
+  const previous = convertiRigheInOggetti_(versions).find(r => String(r.id_evento) === eventId);
+  const old = String(previous && previous.revisione_camere || '0');
+  if (old.length > revision.length || (old.length === revision.length && old > revision)) return;
+  // Record the high-water mark before changing rows; an identical retry repairs a partial write.
+  if (previous) versions.getRange(previous._row, 1, 1, 2).setValues([[eventId, revision]]);
+  else versions.appendRow([eventId, revision]);
+  const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.ACCOMMODATIONS);
+  convertiRigheInOggetti_(sheet).filter(r => String(r.id_evento) === eventId).sort((a,b) => b._row-a._row).forEach(r => sheet.deleteRow(r._row));
+  if (values.length) sheet.getRange(sheet.getLastRow()+1, 1, values.length, values[0].length).setValues(values);
 }
 
 function sincronizzaPagamenti_(orderCode, payments) {
@@ -2025,22 +2434,28 @@ function sincronizzaPagamenti_(orderCode, payments) {
   const kindMap = { PAYMENT: 'INCASSO', REFUND: 'RIMBORSO', INCASSO: 'INCASSO', RIMBORSO: 'RIMBORSO', STORNO: 'STORNO' };
   const sourceMap = { BANK_TRANSFER: 'BONIFICO', CARD: 'CARTA', CASH: 'CONTANTE', BONIFICO: 'BONIFICO', CARTA: 'CARTA', CONTANTE: 'CONTANTE' };
   const installmentMap = { DEPOSIT: 'CAPARRA', BALANCE: 'SALDO', FULL: 'INTERO', OTHER: 'NON_ASSEGNATO', CAPARRA: 'CAPARRA', SALDO: 'SALDO', INTERO: 'INTERO', NON_ASSEGNATO: 'NON_ASSEGNATO' };
-  payments.slice(0, 100).forEach(function (payment) {
-    const kind = kindMap[String(payment.transaction_kind || '').toUpperCase()];
+  payments.forEach(function (payment) {
+    const stableId = String(payment.payment_id || '');
+    if (stableId && !/^[1-9][0-9]*$/.test(stableId)) throw new Error('INVALID_PAYMENT_ID');
+    const kind = kindMap[String(payment.movement_kind || payment.transaction_kind || '').toUpperCase()];
     const source = sourceMap[String(payment.payment_source || '').toUpperCase()];
     const installment = installmentMap[String(payment.installment_kind || '').toUpperCase()] || 'NON_ASSEGNATO';
     const amount = Math.max(0, Math.round(Number(payment.amount_cents) || 0));
-    if (!kind || !source || amount < 1) return;
+    if (!kind || !source || amount < 1) throw new Error('INVALID_PAYMENT');
     const effective = normalizzaTesto_(payment.effective_at, 40);
-    const effectiveDate = effective ? new Date(effective) : new Date();
+    const effectiveDate = effective ? new Date(stableId && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(effective) ? effective.replace(' ', 'T') + 'Z' : effective) : new Date();
     if (isNaN(effectiveDate.getTime())) {
       aggiungiControllo_('SYNC_PAYMENT', 'PAYMENT', orderCode, 'REJECTED', 'WORDPRESS', 'INVALID_EFFECTIVE_AT', 'WORDPRESS_PROXY');
-      return;
+      throw new Error('INVALID_EFFECTIVE_AT');
     }
     const reference = normalizzaTesto_(payment.external_reference, 120);
-    const origin = 'WP|' + orderCode + '|' + kind + '|' + installment + '|' + effective + '|' + amount + '|' + source + '|' + reference;
-    if (existing.some(function (row) { return String(row.id_inserimento_origine) === origin; })) return;
+    const origin = stableId ? 'MYSQL|' + orderCode + '|' + stableId : 'WP|' + orderCode + '|' + kind + '|' + installment + '|' + effective + '|' + amount + '|' + source + '|' + reference;
+    const duplicate = existing.find(function (row) { return String(row.id_inserimento_origine) === origin; });
+    if (duplicate) {
+      if (stableId && (String(duplicate.tipo_movimento) !== kind || Number(duplicate.importo_centesimi) !== amount || String(duplicate.fonte_pagamento) !== source || new Date(duplicate.data_effettiva).getTime() !== effectiveDate.getTime())) throw new Error('PAYMENT_ID_CONFLICT');
+      return;
+    }
     sheet.appendRow([creaIdentificativoOpaco_('pay'), neutralizzaFormula_(orderCode, 64), kind, installment, effectiveDate, amount, 'EUR', source, neutralizzaFormula_(reference, 120), neutralizzaFormula_(payment.operator_label, 100), 'WORDPRESS', origin, new Date(), neutralizzaFormula_(payment.administrative_note, 500)]);
-    existing.push({ id_inserimento_origine: origin });
+    existing.push({ id_inserimento_origine: origin, tipo_movimento: kind, importo_centesimi: amount, fonte_pagamento: source, data_effettiva: effectiveDate });
   });
 }

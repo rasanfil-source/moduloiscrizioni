@@ -17,8 +17,12 @@ test('la selezione viene normalizzata e sommata', () => {
   assert.equal(core.sumQuantities(selection), 5);
 });
 
-test('il cellulare richiede il prefisso internazionale', () => {
+test('il cellulare italiano viene completato con il prefisso internazionale', () => {
+  assert.equal(core.normalizePhone('333 1234567'), '+39 333 1234567');
+  assert.equal(core.normalizePhone('39 333 1234567'), '+39 333 1234567');
+  assert.equal(core.normalizePhone('0039 333 1234567'), '+39 333 1234567');
   assert.equal(core.isValidPhone('+39 333 123 4567'), true);
-  assert.equal(core.isValidPhone('3331234567'), false);
+  assert.equal(core.isValidPhone('3331234567'), true);
+  assert.equal(core.isValidPhone('333123'), false);
   assert.equal(core.isValidPhone('+00 123'), false);
 });

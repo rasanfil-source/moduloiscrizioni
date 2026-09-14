@@ -230,7 +230,14 @@ test('camere e pullman si gestiscono dal portale unico', () => {
 test('la console non richiede mai foto o scansioni dei documenti', () => {
 	assert.doesNotMatch(segreteriaHtml, /type\s*=\s*["']file["']/i);
 	assert.doesNotMatch(segreteriaHtml, /foto(?:grafia)?\s+(?:del|di)\s+document|scansione\s+(?:del|di)\s+document/i);
-	assert.doesNotMatch(combined, /DriveApp\.createFile|Utilities\.newBlob/);
+	assert.doesNotMatch(combined, /DriveApp\.createFile/);
+	assert.doesNotMatch(Object.entries(sources).filter(([name]) => name !== 'Email.gs').map(([, text]) => text).join('\n'), /Utilities\.newBlob/);
+});
+
+test('la data di rilascio del documento è disponibile nelle viste operative', () => {
+	assert.match(sources['Segreteria.gs'], /document_issue_date/);
+	assert.match(sources['Segreteria.gs'], /Data di rilascio del documento/);
+	assert.match(sources['Segreteria.gs'], /data_rilascio_documento/);
 });
 
 test('la modalità email GAS è fail-closed e sostituisce sempre il destinatario', () => {

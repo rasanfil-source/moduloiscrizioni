@@ -24,19 +24,26 @@ final class MI_Portal_Payments {
 		if ( ( 'ALL' !== $scope && ! $scope ) || ( $event_id && ! MI_Access::can_access_event( $event_id ) ) ) return array( 'prenotazioni' => array(), 'has_more' => false );
 		$where = 'ALL' === $scope ? '1=1' : 'event_id IN (' . implode( ',', array_map( 'absint', $scope ) ) . ')';
 		if ( $event_id ) $where .= $wpdb->prepare( ' AND r.event_id=%d', $event_id );
+		// Escludi gli eventi dichiarati gratuiti prima di paginare, anche cercando per codice.
+		$where .= " AND NOT EXISTS (SELECT 1 FROM {$wpdb->prefix}postmeta free_event WHERE free_event.post_id=r.event_id AND free_event.meta_key='_mi_pricing_mode' AND free_event.meta_value='ZERO')";
 		$offset = ( max( 1, (int) $page ) - 1 ) * 30;
 		$match = MI_Booking_Search::sql( $query );
 		$rows = $wpdb->get_results( "SELECT id,event_id,order_code,buyer_first_name,buyer_last_name FROM {$wpdb->prefix}mi_registrations r WHERE {$where} AND {$match} ORDER BY buyer_last_name,buyer_first_name,id LIMIT 31 OFFSET {$offset}", ARRAY_A );
 		if ( $wpdb->last_error ) return new WP_Error( 'mi_payment_search', 'Ricerca non disponibile. Riprova.' );
 		$has_more = count( $rows ) > 30; $rows = array_slice( $rows, 0, 30 );
-		$names = array();
+		$names = array(); $matches = array();
 		if ( $rows ) {
 			$ids = implode( ',', array_map( 'intval', array_column( $rows, 'id' ) ) );
-			foreach ( $wpdb->get_results( "SELECT registration_id,first_name,last_name FROM {$wpdb->prefix}mi_participants WHERE registration_id IN ({$ids}) ORDER BY id", ARRAY_A ) as $person ) $names[$person['registration_id']][] = trim( $person['first_name'] . ' ' . $person['last_name'] );
+			foreach ( $wpdb->get_results( "SELECT id,registration_id,first_name,last_name FROM {$wpdb->prefix}mi_participants WHERE registration_id IN ({$ids}) ORDER BY id", ARRAY_A ) as $person ) {
+				$name = trim( $person['first_name'] . ' ' . $person['last_name'] );
+				$names[$person['registration_id']][] = $name;
+				if ( MI_Booking_Search::matches( array( $name ), $query ) ) $matches[$person['registration_id']][] = array( 'id' => (int) $person['id'], 'name' => $name );
+			}
 			if ( $wpdb->last_error ) return new WP_Error( 'mi_payment_search', 'Nominativi non disponibili. Riprova.' );
 		}
-		$results = array_map( static function ( $row ) use ( $names ) {
-			return array( 'id' => (int) $row['id'], 'nome' => trim( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ), 'codice' => $row['order_code'], 'evento' => get_the_title( (int) $row['event_id'] ), 'partecipanti' => $names[$row['id']] ?? array() );
+		$results = array_map( static function ( $row ) use ( $names, $matches ) {
+			$found = $matches[$row['id']] ?? array();
+			return array( 'id' => (int) $row['id'], 'nome' => $found ? implode( ', ', array_column( $found, 'name' ) ) : implode( ', ', $names[$row['id']] ?? array( trim( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ) ) ), 'matched_participant_ids' => array_column( $found, 'id' ), 'codice' => $row['order_code'], 'evento' => html_entity_decode( get_the_title( (int) $row['event_id'] ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ), 'partecipanti' => $names[$row['id']] ?? array() );
 		}, $rows ?: array() );
 		return array( 'prenotazioni' => $results, 'has_more' => $has_more );
 	}
@@ -59,6 +66,7 @@ final class MI_Portal_Payments {
 			if ( ! preg_match( '/^[a-f0-9-]{36}$/i', $request_id ) ) wp_send_json_error( array( 'message' => 'Identificativo del movimento non valido.' ), 400 );
 			$payload['request_id'] = 'wp_' . get_current_user_id() . '_' . $request_id;
 			$payload['operator_label'] = mb_substr( 'WP#' . get_current_user_id() . ' · ' . wp_get_current_user()->display_name, 0, 100 );
+			if ( isset( $_POST['participant_ids'] ) ) $payload['participant_ids'] = wp_unslash( $_POST['participant_ids'] );
 			foreach ( array( 'data', 'tipo', 'rata', 'importo', 'metodo', 'riferimento', 'nota' ) as $field ) {
 				$payload[ $field ] = mb_substr( sanitize_textarea_field( wp_unslash( $_POST[ $field ] ?? '' ) ), 0, 'nota' === $field ? 500 : 120 );
 			}
@@ -73,7 +81,7 @@ final class MI_Portal_Payments {
 		<section class="mi-payments" data-mi-payments data-event="<?php echo esc_attr( absint( $_GET['mi_portal_event'] ?? 0 ) ); ?>" data-initial-order="<?php echo esc_attr( sanitize_text_field( wp_unslash( $_GET['mi_order'] ?? '' ) ) ); ?>" data-endpoint="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'mi_portal_payment' ) ); ?>">
 		<h2>Inserisci un pagamento</h2><p>Cerca una prenotazione, controlla il saldo e registra il movimento.</p>
 		<p class="mi-portal-muted">Operatore: <strong><?php echo esc_html( wp_get_current_user()->display_name ); ?></strong> · <?php echo MI_Access::is_global_manager() ? 'Tutte le iniziative' : 'Solo le iniziative assegnate'; ?></p>
-		<fieldset data-search-fields><label for="mi-payment-search">Nome, email, telefono del referente o codice prenotazione</label>
+		<fieldset data-search-fields><label for="mi-payment-search">Nome della persona, email, telefono o codice prenotazione</label>
 		<div class="mi-payment-search"><input id="mi-payment-search" type="search" autocomplete="off" maxlength="80" aria-describedby="mi-payment-search-status"><button type="button" data-clear class="mi-secondary" hidden>Cancella ricerca</button></div>
 		<p id="mi-payment-search-status" role="status" aria-live="polite">Digita almeno due caratteri.</p><div data-results class="mi-booking-list"></div></fieldset>
 		<?php if ( current_user_can( 'mi_view_registrations' ) || current_user_can( 'manage_options' ) ) : ?><p><a class="mi-secondary" href="<?php echo esc_url( add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-payments', 'payment_event_id' => absint( $_GET['mi_portal_event'] ?? 0 ) ), admin_url( 'edit.php' ) ) ); ?>">Report pagamenti e rimborsi</a></p><?php endif; ?>
@@ -86,7 +94,7 @@ final class MI_Portal_Payments {
 		<label>Metodo<select name="metodo"><option value="BONIFICO">Bonifico</option><option value="CARTA">Carta</option><option value="CONTANTE">Contanti</option></select></label>
 		<label>Data effettiva<input name="data" type="date" required aria-describedby="mi-payment-error"></label>
 		<label>Movimento<select name="tipo"><option value="INCASSO">Incasso</option><option value="RIMBORSO">Rimborso</option><option value="STORNO">Storno</option></select></label>
-		<input type="hidden" name="rata" value="NON_ASSEGNATO">
+		<label data-installment-label hidden>Versamento<select name="rata"><option value="DEPOSIT">Caparra</option><option value="BALANCE">Saldo</option><option value="FULL">Totale</option></select></label>
 		<label>Riferimento<input name="riferimento" maxlength="120" placeholder="Bonifico o ricevuta"></label>
 		<details class="mi-payment-wide"><summary>Nota amministrativa</summary><textarea name="nota" aria-label="Nota amministrativa" rows="3" maxlength="500"></textarea></details>
 		</div><label class="mi-check"><input type="checkbox" name="conferma" required aria-describedby="mi-payment-error"> Ho verificato prenotazione, importo, tipo e data del movimento.</label></fieldset>

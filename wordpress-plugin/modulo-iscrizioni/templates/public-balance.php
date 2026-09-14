@@ -2,7 +2,7 @@
 
 <!-- ═══════════════════════════════════════════ HTML ═══════════════════════════════════════════ -->
 <div class="page">
-  <h1>Saldo prenotazioni</h1><p style="text-align:center;color:#718096;"><?php echo esc_html( $config['eventTitle'] ); ?></p>
+  <header class="balance-header"><span class="balance-eyebrow">Segreteria parrocchiale S. Eugenio</span><h1>Servizi e saldo</h1><p><?php echo esc_html( $config['eventTitle'] ); ?></p></header>
 
   <!-- Stepper 3 passi -->
   <nav id="stepper" class="stepper" aria-label="Stato procedura">
@@ -17,16 +17,16 @@
     <div class="step" data-step="2">
       <div class="step-dot" aria-hidden="true">2</div>
       <div class="step-label">
-        <div class="step-title">Scegli opzioni</div>
-        <div class="step-desc">Transfer e servizi</div>
+        <div class="step-title">Controlla i servizi</div>
+        <div class="step-desc">Trasferimenti e altre voci</div>
       </div>
     </div>
     <div class="step-sep" aria-hidden="true"></div>
     <div class="step" data-step="3">
       <div class="step-dot" aria-hidden="true">3</div>
       <div class="step-label">
-        <div class="step-title">Conferma e ricevi il riepilogo</div>
-        <div class="step-desc">Invia email e paga</div>
+        <div class="step-title">Conferma il riepilogo</div>
+        <div class="step-desc">Importi e pagamento</div>
       </div>
     </div>
   </nav>
@@ -50,7 +50,7 @@
 
     <!-- COLONNA DESTRA (sidebar) -->
     <aside>
-      <div id="warmupBadge" role="status" aria-live="polite">⏳ Un momento...</div>
+      <div id="warmupBadge" role="status" aria-live="polite">Connessione in corso…</div>
 
       <!-- Shortcut calcola desktop -->
       <div id="desktopCalcShortcut">
@@ -70,17 +70,18 @@
 
       <div id="summaryBox" aria-live="polite">Inserisci cognome per iniziare</div>
 
-      <!-- Breakdown dettaglio costi — visibile live appena caricata la prenotazione -->
-      <div id="breakdownBox">
-        <div style="font-size:.75rem;font-weight:600;color:#718096;text-transform:uppercase;
-                    letter-spacing:.5px;margin-bottom:8px;">Dettaglio costi</div>
-        <div id="costLines"></div>
-        <div class="breakdown-row total"><span>Totale</span><span id="totOpzioni">—</span></div>
-        <div class="breakdown-row caparra" id="rowCaparra"><span>Caparra versata</span><span id="caparraVersata">—</span></div>
-        <div class="breakdown-row" id="rowCaparraDue"><span>Caparra da versare</span><span id="caparraDaVersare">—</span></div>
-        <div class="breakdown-row" id="rowSaldo"><span>Saldo da versare</span><span id="quotaSaldo">—</span></div>
-        <div class="breakdown-row caparra"><span>Versato (esclusi rimborsi effettuati)</span><span id="versatoEffettivo">—</span></div>
-      </div>
+      <!-- Breakdown costi: disponibile su richiesta e chiuso inizialmente. -->
+      <details id="breakdownBox">
+        <summary>Dettaglio dei costi</summary>
+        <div class="breakdown-content">
+          <div id="costLines"></div>
+          <div class="breakdown-row total"><span>Totale</span><span id="totOpzioni">—</span></div>
+          <div class="breakdown-row caparra" id="rowCaparra"><span>Caparra versata</span><span id="caparraVersata">—</span></div>
+          <div class="breakdown-row" id="rowCaparraDue"><span>Caparra da versare</span><span id="caparraDaVersare">—</span></div>
+          <div class="breakdown-row" id="rowSaldo"><span>Saldo da versare</span><span id="quotaSaldo">—</span></div>
+          <div class="breakdown-row caparra"><span>Versato (esclusi rimborsi effettuati)</span><span id="versatoEffettivo">—</span></div>
+        </div>
+      </details>
 
       <!-- Saldo finale -->
       <div id="totalBox">
@@ -105,7 +106,7 @@
       <div id="actionSection" style="display:none; margin-top:12px;">
         <button class="secondary" id="payBtn" type="button" disabled
           style="background:#e67e22; border-color:#e67e22; margin-top:0;">
-          💳 Paga con carta
+          Paga con carta
         </button>
       </div>
 
