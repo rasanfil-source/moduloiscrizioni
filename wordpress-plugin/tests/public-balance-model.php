@@ -1,5 +1,6 @@
 <?php
 define('ABSPATH',__DIR__);define('ARRAY_A','ARRAY_A');
+function wp_parse_url($url,$component=-1){return parse_url($url,$component);}
 define('MI_PLUGIN_DIR',__DIR__.'/../modulo-iscrizioni/');function get_option($key,$default=false){return $default;}function update_option($k,$v,$a=false){}
 function sanitize_text_field($s){return strip_tags($s);} function remove_accents($s){return strtr($s,['è'=>'e','é'=>'e','È'=>'E']);} function absint($n){return abs((int)$n);} function wp_salt($s){return 'test-'.$s;} function wp_json_encode($v){return json_encode($v);} function sanitize_email($s){return $s;} function is_email($s){return filter_var($s,FILTER_VALIDATE_EMAIL);} function get_post_status($id){return $id===42?'publish':'draft';} function get_post_type($id){return 'mi_event';} function esc_url_raw($s,$p=[]){return $s;} function get_the_title($id){return 'Evento prova';} function esc_html($s){return htmlspecialchars($s);} function current_time($a,$b=false){return '2026-09-11 12:00:00';}
 function get_post_meta($id,$key,$single=true){if($key==='_mi_economic_mode')return 'DEPOSIT_BALANCE';if($key==='_mi_payment_methods')return ['BANK_TRANSFER','CARD'];if($key==='_mi_options')return [['code'=>'pullman-a','name'=>'Roma → Fiumicino','category'=>'pullman','scope'=>'TICKET','price_cents'=>1000,'max_quantity'=>1]];return '';}

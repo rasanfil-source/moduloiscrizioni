@@ -139,8 +139,10 @@ test('la pubblicazione notifica sempre la parrocchia e, se assegnato, anche il g
   assert.match(portal, /alla parrocchia e al gestore/);
   assert.match(email, /function accoda_notifica_gestore_evento/);
   assert.match(email, /EVENT_MANAGER_READY/);
-  assert.match(email, /autenticato in Google con questo indirizzo/);
-  assert.match(email, /Apri il foglio Google dell’evento/);
+  assert.match(email, /MI_Modello_Email::crea_istantanea_pubblicazione_evento/);
+  const publicationModel = await read('includes/class-mi-modello-email.php');
+  assert.match(publicationModel, /Congratulazioni! Il tuo evento è stato pubblicato/);
+  assert.match(publicationModel, /Gestisci iscrizioni/);
   assert.match(email, /'PENDING' === \$status/);
 });
 
@@ -661,7 +663,7 @@ test('prova e operativo generano sia la conferma iscritto sia la notifica alla s
 	assert.match(service, /crea_istantanea_nuova_iscrizione_segreteria/);
 	assert.match(service, /email_da_spedire\( \$email_status \) \|\| MI_Spedizione_Email::email_da_spedire\( \$secretariat_status \)/);
 	assert.match(model, /function crea_istantanea_nuova_iscrizione_segreteria/);
-	assert.match(model, /Nuova iscrizione —/);
+	assert.match(model, /Nuova prenotazione —/);
 	assert.match(model, /crea_istantanea_istituzionale/);
 	assert.match(sender, /\$destinatario = \$invio_prova \? \$destinatario_prova : \$riga\['recipient'\]/);
 	assert.match(sender, /Destinatario originale:/);
@@ -1274,12 +1276,12 @@ test('le comunicazioni descrivono il nome dell iscrizione senza chiamarlo refere
   const emailModel = await read('includes/class-mi-modello-email.php');
   const emailSender = await read('includes/class-mi-spedizione-email.php');
   const publicScript = await read('assets/public.js');
-  assert.match(emailModel, /Iscrizione a nome di:/);
+  assert.match(emailModel, /Prenotazione a nome di:/);
   assert.doesNotMatch(emailModel, /Referente:/);
   assert.match(emailSender, /Iscrizione a nome di: Persona Esempio/);
   assert.doesNotMatch(emailSender, /Referente: Persona Esempio/);
   assert.match(emailSender, /REGISTRATION_SECRETARIAT_NOTIFICATION[\s\S]*Iscrizione a nome di:/);
-  assert.match(emailModel, /Gestisci o annulla l’iscrizione/);
+  assert.match(emailModel, /Apri la scheda del primo iscritto/);
   assert.match(emailModel, /Se desideri chiarimenti, puoi contattare la segreteria/);
   assert.match(emailModel, /crea_istantanea_annullamento_iscrizione_iscritto/);
   const registrationService = await read('includes/class-mi-registration-service.php');
@@ -1455,7 +1457,7 @@ test('i tipi personalizzati di comunicazione si aggiungono e si eliminano senza 
   assert.match(portal, /delete_communication_type/);
   assert.match(portal, /mi_manage_all_events/);
   assert.match(portal, /I tipi di sistema non possono essere eliminati/);
-  assert.match(portal, /Modalità ANTEPRIMA/);
+  assert.match(portal, /Comunicazioni preparate senza invio/);
   assert.match(sender, /mi_custom_communication_types/);
   assert.match(sender, /\^CUSTOM_\[A-Z0-9_\]/);
   assert.match(css, /\.mi-communication-types/);
@@ -2040,7 +2042,8 @@ test('il cambio servizi non richiede né mostra un motivo', async () => {
   const service = await read('includes/class-mi-management-service.php');
   assert.doesNotMatch(script, /Vuoi annotare il motivo/);
   assert.doesNotMatch(script, /data-change-options[^;]+textarea name="reason"/);
-  assert.match(script, /mutate\('change_options',\{participant_id:Number\(f\.dataset\.changeOptions\),options,reason:''\}\)/);
+  assert.match(script, /const change=\{participant_id:Number\(f\.dataset\.changeOptions\),options,reason:''\}/);
+  assert.match(script, /request\('options_preview',[\s\S]*await ask\(message,'Salva servizi'\)[\s\S]*await mutate\('change_options',change\)/);
   assert.match(service, /'reason' => sanitize_textarea_field\( \$data\['reason'\] \)/);
   assert.doesNotMatch(service, /Indica il motivo della variazione/);
 });

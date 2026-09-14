@@ -27,10 +27,12 @@ $patterns = @(
 )
 
 $issues = [System.Collections.Generic.List[string]]::new()
-$files = Get-ChildItem -LiteralPath $root -Recurse -File | Where-Object {
-  $relativeParts = $_.FullName.Substring($root.Length).TrimStart('\', '/').Split([char[]]'\/')
-  -not ($relativeParts | Where-Object { $_ -in $excludedDirectories })
-}
+# Il controllo riguarda esattamente i file pubblicati, non backup privati locali.
+$trackedPaths = git -C $root ls-files
+if ($LASTEXITCODE -ne 0) { throw 'Impossibile enumerare i file Git.' }
+$files = $trackedPaths | ForEach-Object { Get-Item -LiteralPath (Join-Path $root $_) -ErrorAction Stop }
+# Identità pubblica del prodotto; non autorizza altri indirizzi dello stesso dominio.
+$publicEmailAddresses = @('info@parrocchiasanteugenio.it', 'wordpress@parrocchiasanteugenio.it')
 
 foreach ($file in $files) {
   $relative = [System.IO.Path]::GetRelativePath($root, $file.FullName)
@@ -48,6 +50,11 @@ foreach ($file in $files) {
 
   $content = Get-Content -LiteralPath $file.FullName -Raw
   foreach ($pattern in $patterns) {
+    if ($pattern.Label -eq 'email non dimostrativa') {
+      $unexpected = [regex]::Matches($content, $pattern.Regex) | Where-Object { $_.Value.ToLowerInvariant() -notin $publicEmailAddresses }
+      if ($unexpected) { $issues.Add("$($pattern.Label): $relative") }
+      continue
+    }
     if ([regex]::IsMatch($content, $pattern.Regex)) {
       $issues.Add("$($pattern.Label): $relative")
     }
