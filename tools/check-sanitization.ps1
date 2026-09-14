@@ -30,7 +30,7 @@ $issues = [System.Collections.Generic.List[string]]::new()
 # Il controllo riguarda esattamente i file pubblicati, non backup privati locali.
 $trackedPaths = git -C $root ls-files
 if ($LASTEXITCODE -ne 0) { throw 'Impossibile enumerare i file Git.' }
-$files = $trackedPaths | ForEach-Object { Get-Item -LiteralPath (Join-Path $root $_) -ErrorAction Stop }
+$files = $trackedPaths | ForEach-Object { Get-Item -LiteralPath (Join-Path $root $_) -Force -ErrorAction Stop }
 # Identità pubblica del prodotto; non autorizza altri indirizzi dello stesso dominio.
 $publicEmailAddresses = @('info@parrocchiasanteugenio.it', 'wordpress@parrocchiasanteugenio.it')
 
