@@ -1,6 +1,6 @@
-# Segreteria eventi — aggiornamento 3.26.82
+# Segreteria eventi — aggiornamento 3.26.99
 
-Il selettore del modello mostra prima tutti gli eventi in corso e poi fino a 10 eventi passati recenti. Include inoltre le correzioni dell’audit grafico della 3.26.81. Nessuna modifica Apps Script richiesta. Caricare lo ZIP per sostituire il plugin esistente.
+Ripristina tutte le modifiche successive alla 3.26.82: scheda d’iscrizione raggruppata, rinuncia esplicita all’alloggio, riepilogo compatto per più partecipanti, controllo immediato e normalizzazione dei cellulari, email correttamente codificate e inviate dalla Segreteria parrocchiale, esclusione completa del saldo dagli eventi gratuiti e interfaccia dei pagamenti riallineata. Il selettore del modello continua a mostrare prima tutti gli eventi in corso e poi fino a 10 eventi passati recenti. Caricare lo ZIP per sostituire il plugin esistente.
 
 ## Note delle versioni precedenti
 

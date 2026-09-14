@@ -444,7 +444,9 @@ final class MI_Registration_Service {
 			$email_snapshot = 'WAITLISTED' === $status
 				? MI_Modello_Email::crea_istantanea_lista_attesa( $event_id, $email_values )
 				: MI_Modello_Email::crea_istantanea( $event_id, $email_values );
-			if ( 'WAITLISTED' !== $status ) $email_snapshot['status_url'] = MI_Portal::status_url( $registration_id, $order_code, $buyer['email'] );
+			if ( 'WAITLISTED' !== $status && in_array( $economic_summary['mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) && (int) $economic_summary['total_cents'] > 0 ) {
+				$email_snapshot['status_url'] = MI_Portal::status_url( $registration_id, $order_code, $buyer['email'] );
+			}
 			if ( $buyer['email'] ) {
 				$email_status = MI_Spedizione_Email::stato_nuova_email( $email_snapshot );
 				$payload_json = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $order_code, 'status' => $status, 'quantity' => $selection['quantity'], 'total_cents' => $economic_summary['total_cents'], 'economic_summary' => $economic_summary, 'email_preview' => $email_snapshot ) );
@@ -452,8 +454,16 @@ final class MI_Registration_Service {
 					throw new RuntimeException( 'Outbox non salvata.' );
 				}
 			}
+			$secretariat_recipient = sanitize_email( (string) get_option( 'mi_email_segreteria_eventi', MI_Modello_Email::EMAIL_SEGRETERIA ) );
+			if ( ! is_email( $secretariat_recipient ) ) $secretariat_recipient = MI_Modello_Email::EMAIL_SEGRETERIA;
+			$secretariat_snapshot = MI_Modello_Email::crea_istantanea_nuova_iscrizione_segreteria( $event_id, $email_values );
+			$secretariat_status = MI_Spedizione_Email::stato_nuova_email( $secretariat_snapshot );
+			$secretariat_payload = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $order_code, 'status' => $status, 'quantity' => $selection['quantity'], 'email_preview' => $secretariat_snapshot ) );
+			if ( false === $secretariat_payload || false === $wpdb->insert( $outbox_table, array( 'registration_id' => $registration_id, 'recipient' => $secretariat_recipient, 'template_type' => 'REGISTRATION_SECRETARIAT_NOTIFICATION', 'payload_json' => $secretariat_payload, 'status' => $secretariat_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) {
+				throw new RuntimeException( 'Notifica alla segreteria non salvata.' );
+			}
 			$wpdb->query( 'COMMIT' );
-			if ( MI_Spedizione_Email::email_da_spedire( $email_status ) ) {
+			if ( MI_Spedizione_Email::email_da_spedire( $email_status ) || MI_Spedizione_Email::email_da_spedire( $secretariat_status ) ) {
 				MI_Spedizione_Email::pianifica_spedizione();
 			}
 			$workspace_status = self::accoda_sincronizzazione_workspace( $registration_id, 'PENDING' );
@@ -757,6 +767,7 @@ final class MI_Registration_Service {
 			'balance_cents'    => $balance,
 			'total_cents'      => $total,
 			'collectible'      => $collectible,
+			'is_free'          => 0 === $total,
 			'payment_methods'  => $collectible ? array_values( array_intersect( array( 'BANK_TRANSFER', 'CARD', 'CASH' ), (array) json_decode( (string) $registration['payment_methods_json'], true ) ) ) : array(),
 			'payment_deadline' => $collectible ? (string) $registration['payment_deadline_at'] : '',
 		);
@@ -809,13 +820,15 @@ final class MI_Registration_Service {
 		$registrations = $wpdb->prefix . 'mi_registrations';
 		$counters = $wpdb->prefix . 'mi_event_counters';
 		$ticket_counters = $wpdb->prefix . 'mi_ticket_counters';
+		$outbox = $wpdb->prefix . 'mi_email_outbox';
 		$participant_id = absint( $participant_id );
+		$secretariat_email_status = '';
 		$wpdb->query( 'START TRANSACTION' );
 		try {
-			$participant = $wpdb->get_row( $wpdb->prepare( "SELECT id,registration_id,ticket_type_code,status FROM {$participants} WHERE id=%d FOR UPDATE", $participant_id ), ARRAY_A );
+			$participant = $wpdb->get_row( $wpdb->prepare( "SELECT id,registration_id,ticket_type_code,first_name,last_name,status FROM {$participants} WHERE id=%d FOR UPDATE", $participant_id ), ARRAY_A );
 			if ( ! $participant ) throw new RuntimeException( 'Partecipante non trovato.' );
 			if ( 'CANCELLED' === $participant['status'] ) { $wpdb->query( 'COMMIT' ); return 'CANCELLED'; }
-			$registration = $wpdb->get_row( $wpdb->prepare( "SELECT id,event_id,status,capacity_released_at FROM {$registrations} WHERE id=%d FOR UPDATE", $participant['registration_id'] ), ARRAY_A );
+			$registration = $wpdb->get_row( $wpdb->prepare( "SELECT id,event_id,order_code,status,capacity_released_at FROM {$registrations} WHERE id=%d FOR UPDATE", $participant['registration_id'] ), ARRAY_A );
 			if ( ! $registration || ! in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'WAITLIST_OFFERED' ), true ) || $registration['capacity_released_at'] ) throw new RuntimeException( 'Partecipazione non annullabile.' );
 			$event_id = (int) $registration['event_id'];
 			$counter_field = in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLIST_OFFERED' ), true ) ? 'confirmed_count' : 'waitlisted_count';
@@ -841,11 +854,19 @@ final class MI_Registration_Service {
 			if ( false === $wpdb->update( $registrations, $registration_update, array( 'id' => $registration['id'] ), $formats, array( '%d' ) ) ) throw new RuntimeException( 'Prenotazione non aggiornata.' );
 			self::mark_workspace_changed_locked( (int) $registration['id'] );
 			if ( ! self::append_registration_event( (int) $registration['id'], 'PARTICIPANT_CANCELLED', $registration['status'], 0 === $remaining ? 'CANCELLED' : $registration['status'], $actor_label, array( 'participant_id' => $participant_id, 'remaining_participants' => $remaining ) ) ) throw new RuntimeException( 'Audit non aggiornato.' );
+			if ( 'PARTICIPANT_LINK' === $actor_label ) {
+				$secretariat_recipient = sanitize_email( (string) get_option( 'mi_email_segreteria_eventi', MI_Modello_Email::EMAIL_SEGRETERIA ) );
+				if ( ! is_email( $secretariat_recipient ) ) $secretariat_recipient = MI_Modello_Email::EMAIL_SEGRETERIA;
+				$secretariat_snapshot = MI_Modello_Email::crea_istantanea_annullamento_partecipazione_segreteria( $event_id, trim( $participant['first_name'] . ' ' . $participant['last_name'] ), $registration['order_code'] );
+				$secretariat_email_status = MI_Spedizione_Email::stato_nuova_email( $secretariat_snapshot );
+				$secretariat_payload = wp_json_encode( array( 'event_title' => get_the_title( $event_id ), 'order_code' => $registration['order_code'], 'status' => 'CANCELLED', 'participant_id' => $participant_id, 'email_preview' => $secretariat_snapshot ) );
+				if ( false === $secretariat_payload || false === $wpdb->insert( $outbox, array( 'registration_id' => $registration['id'], 'recipient' => $secretariat_recipient, 'template_type' => 'PARTICIPANT_CANCELLATION_SECRETARIAT_NOTIFICATION', 'payload_json' => $secretariat_payload, 'status' => $secretariat_email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) throw new RuntimeException( 'Notifica di annullamento alla segreteria non salvata.' );
+			}
 			$promoted = in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLIST_OFFERED' ), true ) ? self::promote_waitlisted_locked( $event_id, $now ) : array();
 			$wpdb->query( 'COMMIT' );
 			self::accoda_sincronizzazione_workspace( (int) $registration['id'], 'PENDING' );
 			foreach ( $promoted as $promoted_id ) self::accoda_sincronizzazione_workspace( $promoted_id, 'PENDING' );
-			if ( $promoted ) MI_Spedizione_Email::pianifica_spedizione();
+			if ( $promoted || MI_Spedizione_Email::email_da_spedire( $secretariat_email_status ) ) MI_Spedizione_Email::pianifica_spedizione();
 			return 'CANCELLED';
 		} catch ( Throwable $error ) {
 			$wpdb->query( 'ROLLBACK' );
@@ -1010,7 +1031,9 @@ final class MI_Registration_Service {
 		}
 		$values['_participant_management'] = $management;
 		$snapshot = MI_Modello_Email::crea_istantanea( (int) $row['event_id'], $values );
-		$snapshot['status_url'] = MI_Portal::status_url( (int) $row['id'], $row['order_code'], $row['buyer_email'] );
+		if ( in_array( $economic['mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) && (int) ( $economic['total_cents'] ?? 0 ) > 0 ) {
+			$snapshot['status_url'] = MI_Portal::status_url( (int) $row['id'], $row['order_code'], $row['buyer_email'] );
+		}
 		$status = MI_Spedizione_Email::stato_nuova_email( $snapshot );
 		$payload_json = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $row['order_code'], 'status' => $target, 'email_preview' => $snapshot ) );
 		if ( false === $payload_json || false === $wpdb->insert( $outbox, array( 'registration_id' => $row['id'], 'recipient' => $row['buyer_email'], 'template_type' => 'WAITLIST_ACCEPTED', 'payload_json' => $payload_json, 'status' => $status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) throw new RuntimeException( 'Email di conferma non accodata.' );
@@ -1338,7 +1361,7 @@ final class MI_Registration_Service {
 			'first_name' => sanitize_text_field( $raw['first_name'] ?? '' ),
 			'last_name'  => sanitize_text_field( $raw['last_name'] ?? '' ),
 			'email'      => sanitize_email( $raw['email'] ?? '' ),
-			'phone'      => preg_replace( '/[^0-9+().\s-]/', '', (string) ( $raw['phone'] ?? '' ) ),
+			'phone'      => MI_Field_Schema::normalize_phone( $raw['phone'] ?? '' ),
 		);
 		if ( ! $buyer['first_name'] || ! $buyer['last_name'] || ( $buyer['email'] && ! is_email( $buyer['email'] ) ) || ! preg_match( '/^\+[1-9][0-9().\s-]{6,30}$/', $buyer['phone'] ) ) {
 			return new WP_Error( 'mi_buyer_invalid', 'Controlla le informazioni di contatto.', array( 'status' => 400 ) );

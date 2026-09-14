@@ -108,6 +108,10 @@ final class MI_Workspace_Client {
 		if ( ! is_array( $decoded ) || empty( $decoded['ok'] ) ) {
 			$remote_code = is_array( $decoded ) ? strtoupper( sanitize_key( (string) ( $decoded['error'] ?? '' ) ) ) : '';
 			$motivi = array(
+				'EMAIL_SENDER_NOT_AUTHORIZED' => 'distribuisci Apps Script con l’account info@parrocchiasanteugenio.it; nessun invio eseguito',
+				'EMAIL_DELIVERY_UNCERTAIN' => 'esito invio incerto: verificare il Registro invii email e i log Google prima di ritentare; reinvio automatico bloccato',
+				'EMAIL_QUOTA_EXCEEDED' => 'quota giornaliera Google esaurita',
+				'EMAIL_BUSY' => 'un altro invio è in corso',
 				'EVENT_BUSY' => 'è in corso un aggiornamento Google; riprova tra poco',
 				'DELETION_CONFLICT' => 'esiste una cancellazione con identificativo o scelta differenti',
 				'INVALID_DELETION' => 'i parametri della cancellazione non sono validi',

@@ -754,7 +754,9 @@ final class MI_Admin {
 		}
 		$screen = get_current_screen();
 		if ( $screen && in_array( $screen->post_type, array( MI_Event_Post_Type::EVENT_TYPE, MI_Event_Post_Type::ACTIVITY_TYPE ), true ) ) {
-			echo '<div class="notice notice-info"><p><strong>Spedizione email:</strong> la modalità iniziale è Anteprima; l’amministratore può collaudare un messaggio sintetico prima di abilitare le conferme operative.</p></div>';
+			$mode = MI_Spedizione_Email::modalita();
+			$description = 'PROVA' === $mode ? 'Prova — invio esclusivamente a ' . sanitize_email( get_option( MI_Spedizione_Email::OPZIONE_DESTINATARIO_PROVA, '' ) ) : ( 'OPERATIVO' === $mode ? 'Operativo — invio ai destinatari reali, subordinato al collaudo verificato.' : 'Anteprima — nessuna email viene spedita.' );
+			echo '<div class="notice notice-info"><p><strong>Modalità email attuale:</strong> ' . esc_html( $description ) . '</p></div>';
 		}
 	}
 }

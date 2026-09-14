@@ -21,7 +21,7 @@ assert.match(model, /margin:24px 0 0;[^']*<strong>Conserva questa email:<\/stron
 assert.match(model, /function uniforma_grafica_corpo/);
 assert.match(model, /Quando:\|Dove:\|Codice iscrizione:\|Stato:/);
 assert.match(model, /\$settings\['html'\] = self::uniforma_grafica_corpo/);
-assert.match(model, /uniforma_grafica_corpo\( self::sanitizza_html_email\( wpautop/);
+assert.match(model, /uniforma_grafica_corpo\( self::testo_email_in_html/);
 assert.match(model, /font-size:17px;line-height:1\.68/);
 assert.match(readFileSync(new URL('../modulo-iscrizioni/includes/class-mi-public-balance.php', import.meta.url), 'utf8'), /font-size:17px;line-height:1\.68/);
 assert.match(shipment, /crea_istantanea_istituzionale/);

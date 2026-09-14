@@ -136,6 +136,11 @@
 .mi-management form[data-person] fieldset{padding:16px;border:1px solid #c9d3e1;border-radius:var(--radius-control,10px);background:#fff;box-shadow:none}
 .mi-management form[data-person] legend{padding:0 6px;color:#111827;font-weight:600}
 .mi-management form[data-person] .mi-management-grid{gap:10px 14px}
+.mi-management .mi-person-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:12px 0 16px}
+.mi-management .mi-person-option-group{min-width:0;margin:0;padding:12px 14px;border:1px solid var(--line,#d7dde6);border-radius:var(--radius-control,10px);background:var(--bg,#f5f7fa)}
+.mi-management .mi-person-option-group :is(h4,legend){margin:0 0 5px;color:var(--navy,#17224a);font-size:.875rem;font-weight:600}
+.mi-management .mi-person-option-group p{margin:0;overflow-wrap:anywhere}
+.mi-management form[data-change-options] .mi-person-option-group{margin:10px 0}
 .mi-management form[data-person] label{gap:4px;margin:4px 0;color:#111827;font-weight:500}
 .mi-management form[data-person] :is(input,select,textarea){min-height:44px;border:1px solid #c9d3e1;border-radius:var(--radius-control,10px);background:#fff;box-shadow:none;font-weight:400}
 .mi-management form[data-person] textarea{min-height:88px}

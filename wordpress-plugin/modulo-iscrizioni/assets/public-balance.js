@@ -931,6 +931,17 @@ function showAmounts(result,lines) {
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 addPersonCard();
 
+if (MIBalance.prefill?.cognome) {
+  const person = persone[0];
+  const card = person?.cardEl;
+  if (card) {
+    card.querySelector('.person-cognome').value = MIBalance.prefill.cognome;
+    card.querySelector('.person-nome').value = MIBalance.prefill.nome || '';
+    person.candidate = Number(MIBalance.prefill.row) || null;
+    lookupPersona(card, person.index);
+  }
+}
+
 btnAdd.addEventListener('click', addPersonCard);
 btnCalc.addEventListener('click', confermaEInvia);
 btnCalcDesktop?.addEventListener('click', confermaEInvia);

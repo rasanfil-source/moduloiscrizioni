@@ -52,6 +52,8 @@ Si usa il carattere di sistema già adottato dal portale, con testi e comandi ri
 
 ## Layout
 
+Nel modulo pubblico, disponibilità e conferma finale condividono una colonna centrata di massimo 700px, con margini laterali minimi di 16px sugli schermi stretti. La regola comune in public.css conserva l’allineamento dei bordi e permette agli indirizzi email lunghi di andare a capo.
+
 Sotto i 480px, i link dell’evento dedicano una riga intera all’indirizzo e la riga successiva a Copia, Condividi e Apri; l’icona Condividi mantiene 44×44px. La scheda prenotazione mobile raccoglie frecce e chiusura in una barra superiore separata dal contenuto scorrevole, con margini laterali di 16px. I selettori numero camera hanno altezza minima 44px. Lo storico movimenti usa intestazioni, righe alternate sobrie e scorrimento locale accessibile da tastiera; data, tipo, importo e metodo non vengono spezzati, riferimenti e note lunghi vanno a capo.
 
 Su mobile il riepilogo operativo dispone i conteggi in due colonne, con spazi ridotti e comandi di almeno 44px. Camere, presenze e report condividono bordi, intestazioni e spazi interni; le tabelle larghe conservano lo scorrimento locale. Caricamento, errore ed esito confermato hanno superfici semantiche con messaggi testuali; l’assenza di risultati resta uno stato neutro. Verifica sintetica completa disponibile in `tools/test-management-full-event-browser.cjs`, inclusi viewport da 320 e 390px e recupero dopo errore.
@@ -114,6 +116,8 @@ La gestione web riunisce scheda prenotazione, dati mancanti, camere e accesso al
 
 Le categorie dei servizi usano variazioni di blu: alloggio #e3edf7, pullman #edf3f9, pranzo #d5e5f3 e altre voci #f2f6fa. Le etichette restano sempre visibili: il colore è un aiuto alla scansione. Le definizioni delle voci sono condivise dal modulo pubblico e dalla proiezione Google. I relativi selettori runtime sono data-service-category in public.css e le classi dei gruppi nel wizard in portal.css.
 
+Nella scheda dell’iscritto, servizi e sistemazioni sono raggruppati in Alloggio, Supplementi, Trasferimenti, Pasti e Altro. Un gruppo compare soltanto quando l’evento prevede una voce pertinente; nel riepilogo personale compare soltanto se la persona l’ha scelta. Colazione e assicurazioni appartengono ai Supplementi, mentre le tratte in pullman appartengono ai Trasferimenti.
+
 La lista d’attesa separa tre momenti: richiesta registrata, proposta temporanea e prenotazione accettata. La prima email precisa che non occorre pagare o agire; quando si libera posto, il sistema lo riserva per 48 ore salvo diversa configurazione dell’evento e invia un collegamento personale. La pagina collegata offre due azioni esplicite, «Accetta il posto» e «Rinuncia». Solo dopo l’accettazione vengono comunicate conferma e, se applicabili, istruzioni e scadenza di pagamento.
 
 La schermata Operatori rende visibile l’ambito prima del salvataggio. Il Gestore iscrizioni non mostra selettori perché opera sull’intero servizio; il Gestore gruppo mostra i gruppi assegnabili; il Gestore evento mostra soltanto gli eventi in corso assegnabili. Ruolo e ambito sono sempre riepilogati nella tessera dell’utente.
@@ -134,5 +138,17 @@ Tutte le email — conferma, promemoria saldo, annullamento, informazioni operat
 Nelle tessere degli eventi pubblicati con iscrizioni future, «Attivo» conserva il grassetto attuale; sotto compare «dal 12/10/2026», con data numerica giorno/mese/anno senza orario, nel corpo piccolo esistente e in grassetto. La data usa il fuso del sito.
 
 Nella seconda schermata pubblica, i servizi con massimo una unità per partecipante (pullman, pranzo, rimborso spese) usano caselle di spunta nella scheda di ciascun iscritto. Gli alloggi conservano la scelta esclusiva; le opzioni configurate con quantità multiple conservano il controllo numerico.
+
+Quando sono previsti alloggi, “Non desidero alloggio” è una spunta separata dalle alternative di sistemazione. La spunta e le sistemazioni sono reciprocamente esclusive; l’avviso prima di proseguire resta riservato a chi non ha espresso nessuna delle due decisioni. La rinuncia non viene registrata come servizio né entra nel calcolo economico.
+
+La conferma di una prenotazione con più partecipanti e costi apre con un riepilogo per persona: nome, totale individuale e descrizione sintetica per categorie. Totale, caparra e saldo seguono immediatamente. Le singole voci economiche restano in “Dettaglio dei costi”, un elemento `details` chiuso inizialmente. Per una sola persona o in assenza di costi rimane il riepilogo diretto.
+
+I cellulari del referente e dei partecipanti vengono verificati nel passaggio in cui sono inseriti. Dopo la prima uscita da un campo non valido compare un messaggio accanto al controllo; le correzioni vengono rivalutate durante la digitazione. Il passaggio alla conferma convalida di nuovo tutti i cellulari visibili e porta il focus sul primo errore, senza perdere gli altri dati compilati.
+
+I cellulari italiani completi inseriti senza prefisso (`333…`, `39 333…` o `0039 333…`) vengono completati automaticamente nel formato `+39 333…`. Il passaggio viene bloccato soltanto quando il numero è incompleto o non riconoscibile.
+
+Le email operative partono con l’identità `Segreteria parrocchiale S. Eugenio <info@parrocchiasanteugenio.it>` e usano lo stesso indirizzo per le risposte e il mittente di busta. I modelli testuali convertono gli a capo letterali e il Markdown essenziale (grassetto e collegamenti) in HTML compatibile con i client email; le istantanee già accodate vengono riparate al momento dell’invio.
+
+Le conferme degli eventi gratuiti non contengono collegamenti, pulsanti o testi relativi a stato dei pagamenti e saldo. La regola viene verificata nuovamente al momento dell’invio per proteggere anche le email già accodate. Un vecchio collegamento firmato mostra soltanto evento, codice e stato dell’iscrizione; l’interfaccia pubblica di saldo rifiuta gli eventi senza un flusso di pagamento.
 
 Gli avvisi mi-action-progress usano fondo giallo chiaro #fff4ce, testo #604b13 e bordo #e5cf83. Le righe delle voci aggiuntive allineano i controlli al margine inferiore anche con etichette su due righe. La categoria visibile «Pasti» conserva il codice interno pranzo. In Gestione il periodo precede la scelta evento e inizialmente mostra gli attivi; i collegamenti diretti a un evento passato selezionano il periodo corrispondente.

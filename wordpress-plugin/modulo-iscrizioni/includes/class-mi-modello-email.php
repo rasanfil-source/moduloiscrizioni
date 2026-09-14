@@ -4,19 +4,21 @@ defined( 'ABSPATH' ) || exit;
 
 final class MI_Modello_Email {
 	const OPZIONE_STILE_DEFAULT = 'mi_email_stile_default';
+	const EMAIL_SEGRETERIA = 'info@parrocchiasanteugenio.it';
+	const NOME_SEGRETERIA = 'Segreteria parrocchiale S. Eugenio';
 
 	/** Token sempre disponibili: le configurazioni di gruppo ed evento contengono solo override. */
 	public static function stile_default() {
 		$defaults = array(
 			'identity_name'   => get_bloginfo( 'name' ) ?: 'Parrocchia Sant’Eugenio',
 			'identity_detail' => 'Viale delle Belle Arti 10, Roma',
-			'contact_email'   => sanitize_email( get_option( 'admin_email', '' ) ),
+			'contact_email'   => self::EMAIL_SEGRETERIA,
 			'logo_url'        => '',
 			'logo_enabled'    => false,
 			'banner_url'      => defined( 'MI_PLUGIN_URL' ) ? MI_PLUGIN_URL . 'assets/email-banner-default.svg' : '',
 			'primary_color'   => '#151b38',
 			'secondary_color' => '#337ab7',
-			'signature'       => 'Segreteria parrocchiale',
+			'signature'       => self::NOME_SEGRETERIA,
 		);
 		$saved = get_option( self::OPZIONE_STILE_DEFAULT, array() );
 		return self::sanitizza_stile( array_merge( $defaults, is_array( $saved ) ? $saved : array() ), false );
@@ -100,8 +102,8 @@ final class MI_Modello_Email {
 	public static function impostazioni( $event_id ) {
 		$defaults = array(
 			'enabled'   => '1',
-			'sender_name' => '',
-			'reply_to'    => '',
+			'sender_name' => self::NOME_SEGRETERIA,
+			'reply_to'    => self::EMAIL_SEGRETERIA,
 			'internal_recipients' => array(),
 			'subject'   => 'Iscrizione confermata — {{evento.titolo}}',
 			'preheader' => 'La tua iscrizione è stata registrata. Qui trovi il riepilogo e le prossime indicazioni.',
@@ -111,6 +113,9 @@ final class MI_Modello_Email {
 		);
 		$saved = get_post_meta( $event_id, '_mi_email_template', true );
 		$settings = self::aggiorna_segnaposto( array_merge( $defaults, is_array( $saved ) ? $saved : array() ) );
+		if ( empty( $settings['sender_name'] ) ) $settings['sender_name'] = self::NOME_SEGRETERIA;
+		if ( empty( $settings['reply_to'] ) || 'wordpress@parrocchiasanteugenio.it' === strtolower( $settings['reply_to'] ) ) $settings['reply_to'] = self::EMAIL_SEGRETERIA;
+		$settings = self::ripara_modello_testuale( $settings );
 		$settings['html'] = self::uniforma_grafica_corpo( $settings['html'] );
 		return $settings;
 	}
@@ -118,7 +123,7 @@ final class MI_Modello_Email {
 	/** Uniforma anche i modelli storici senza modificarne il testo personalizzato. */
 	private static function uniforma_grafica_corpo( $html ) {
 		$html = (string) $html;
-		$etichette = 'Quando:|Dove:|Codice iscrizione:|Stato:';
+		$etichette = 'Quando:|Dove:|Codice iscrizione:|Stato:|Partecipazione:';
 		$html = (string) preg_replace( '#(?<!<strong>)(' . $etichette . ')(?!</strong>)#u', '<strong>$1</strong>', $html );
 		return (string) preg_replace_callback( '#<p\b([^>]*)>(.*?)</p>#is', static function ( $match ) {
 			$attributes = $match[1];
@@ -233,8 +238,9 @@ final class MI_Modello_Email {
 			'cover_url' => esc_url_raw( (string) $style['banner_url'], array( 'https' ) ),
 		);
 		$snapshot['identita_email'] = array(
-			'nome_mittente'        => $settings['sender_name'],
-			'indirizzo_risposte'   => $settings['reply_to'],
+			'nome_mittente'        => $settings['sender_name'] ?: self::NOME_SEGRETERIA,
+			'indirizzo_mittente'   => self::EMAIL_SEGRETERIA,
+			'indirizzo_risposte'   => $settings['reply_to'] ?: self::EMAIL_SEGRETERIA,
 			'destinatari_interni'  => array_values( (array) $settings['internal_recipients'] ),
 		);
 		$identifier_mode = strtoupper( (string) get_post_meta( $event_id, '_mi_identifier_display', true ) );
@@ -327,6 +333,30 @@ final class MI_Modello_Email {
 		return $snapshot;
 	}
 
+	/** Notifica interna che accompagna ogni nuova iscrizione senza riutilizzare il testo rivolto all'iscritto. */
+	public static function crea_istantanea_nuova_iscrizione_segreteria( $event_id, $values ) {
+		$event_title = sanitize_text_field( (string) ( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) ) );
+		$order_code = sanitize_text_field( (string) ( $values['{{ordine.codice}}'] ?? '' ) );
+		$buyer_name = sanitize_text_field( (string) ( $values['{{sottoscrittore.nome_completo}}'] ?? '' ) );
+		$status = sanitize_text_field( (string) ( $values['{{ordine.stato}}'] ?? '' ) );
+		$summary = sanitize_textarea_field( (string) ( $values['{{ordine.riepilogo}}'] ?? '' ) );
+		$subject = 'Nuova iscrizione — ' . $event_title;
+		$body = '<p>È stata registrata una nuova iscrizione per <strong>' . esc_html( $event_title ) . '</strong>.</p><p><strong>Iscrizione a nome di:</strong> ' . esc_html( $buyer_name ) . '<br><strong>Codice:</strong> ' . esc_html( $order_code ) . '<br><strong>Stato:</strong> ' . esc_html( $status ) . '</p>' . ( $summary ? '<p><strong>Riepilogo:</strong><br>' . nl2br( esc_html( $summary ) ) . '</p>' : '' );
+		$text = "È stata registrata una nuova iscrizione per {$event_title}.\n\nIscrizione a nome di: {$buyer_name}\nCodice: {$order_code}\nStato: {$status}" . ( $summary ? "\n\nRiepilogo:\n{$summary}" : '' );
+		return self::crea_istantanea_istituzionale( $event_id, $subject, 'Una nuova iscrizione è stata registrata.', $body, $text );
+	}
+
+	/** Avvisa la segreteria quando una persona annulla autonomamente la propria partecipazione. */
+	public static function crea_istantanea_annullamento_partecipazione_segreteria( $event_id, $participant_name, $order_code ) {
+		$event_title = sanitize_text_field( get_the_title( absint( $event_id ) ) );
+		$participant_name = sanitize_text_field( (string) $participant_name );
+		$order_code = sanitize_text_field( (string) $order_code );
+		$subject = 'Partecipazione annullata — ' . $event_title;
+		$body = '<p>È stata annullata una partecipazione a <strong>' . esc_html( $event_title ) . '</strong>.</p><p><strong>Persona iscritta:</strong> ' . esc_html( $participant_name ) . '<br><strong>Codice:</strong> ' . esc_html( $order_code ) . '</p>';
+		$text = "È stata annullata una partecipazione a {$event_title}.\n\nPersona iscritta: {$participant_name}\nCodice: {$order_code}";
+		return self::crea_istantanea_istituzionale( $event_id, $subject, 'Una partecipazione è stata annullata.', $body, $text );
+	}
+
 	/** Le notifiche alla parrocchia non devono mai ereditare asset o colori dell'evento. */
 	public static function crea_istantanea_istituzionale( $event_id, $subject, $preheader, $body_html, $body_text, $actions = array() ) {
 		$event_title = sanitize_text_field( get_the_title( absint( $event_id ) ) );
@@ -344,7 +374,7 @@ final class MI_Modello_Email {
 				$label = sanitize_text_field( (string) ( $action['label'] ?? '' ) );
 				return $url && $label ? array( 'url' => $url, 'label' => $label ) : null;
 			}, (array) $actions ) ) ),
-			'identita_email' => array(),
+			'identita_email' => array( 'nome_mittente' => self::NOME_SEGRETERIA, 'indirizzo_mittente' => self::EMAIL_SEGRETERIA, 'indirizzo_risposte' => self::EMAIL_SEGRETERIA ),
 			'identificativo' => array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' ),
 		);
 	}
@@ -355,7 +385,7 @@ final class MI_Modello_Email {
 			$name = sanitize_text_field( (string) ( $item['name'] ?? $item['code'] ?? '' ) );
 			$item_quantity = absint( $item['quantity'] ?? 0 );
 			if ( $name && $item_quantity ) {
-				$summary_lines[] = $item_quantity . ' × ' . $name;
+				$summary_lines[] = 1 === $item_quantity ? $name : $item_quantity . ' — ' . $name;
 			}
 		}
 		if ( ! $summary_lines ) {
@@ -441,11 +471,15 @@ final class MI_Modello_Email {
 		$reply_to = ! empty( $email_identity['indirizzo_risposte'] ) && is_email( $email_identity['indirizzo_risposte'] ) ? sanitize_email( $email_identity['indirizzo_risposte'] ) : '';
 		$assistance = $reply_to ? 'Per domande o variazioni scrivi a <a href="mailto:' . esc_attr( $reply_to ) . '" style="color:' . esc_attr( $primary ) . ';text-decoration:none;font-weight:700;">' . esc_html( $reply_to ) . '</a>.' : 'Per domande o variazioni, rispondi direttamente a questa email.';
 		$activity_name = sanitize_text_field( (string) ( $identity['nome_attivita'] ?? '' ) );
-		$body = self::sanitizza_html_email( $istantanea['html'] ?? '' );
+		$body = self::evidenzia_titolo_evento( self::sanitizza_html_email( $istantanea['html'] ?? '' ), $title );
 		$management_html = '';
 		if ( ! empty( $istantanea['gestione_partecipanti'] ) && is_array( $istantanea['gestione_partecipanti'] ) ) {
-			$management_html = '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin-top:20px;border-top:1px solid #e4e8ef;"><tr><td style="padding-top:18px"><div style="font-size:15px;font-weight:700;margin-bottom:8px;">Gestisci le partecipazioni</div><div style="font-size:13px;color:#666;margin-bottom:10px;">Ogni collegamento riguarda una sola persona e richiede una conferma.</div>';
-			foreach ( $istantanea['gestione_partecipanti'] as $item ) $management_html .= '<div style="margin:8px 0"><a href="' . esc_url( $item['url'] ?? '' ) . '" style="color:' . esc_attr( $secondary ) . ';font-weight:700;text-decoration:none;">Annulla la partecipazione di ' . esc_html( $item['nome'] ?? '' ) . '</a></div>';
+			$single_management = 1 === count( $istantanea['gestione_partecipanti'] );
+			$management_html = '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:18px;"><tr><td>';
+			foreach ( $istantanea['gestione_partecipanti'] as $item ) {
+				$management_label = $single_management ? 'Annulla la tua iscrizione' : 'Annulla l’iscrizione di ' . sanitize_text_field( $item['nome'] ?? '' );
+				$management_html .= '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:7px 0;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:8px;"><a href="' . esc_url( $item['url'] ?? '' ) . '" style="display:inline-block;padding:9px 14px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.3;color:' . esc_attr( $secondary_text ) . ';font-weight:700;text-decoration:none;border-radius:8px;">' . esc_html( $management_label ) . '</a></td></tr></table>';
+			}
 			$management_html .= '</td></tr></table>';
 		}
 		$status_html = ! empty( $istantanea['status_url'] ) ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . esc_url( $istantanea['status_url'] ) . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">Controlla stato e saldo</a></td></tr></table>' : '';
@@ -499,20 +533,77 @@ final class MI_Modello_Email {
 		$email_identity = isset( $istantanea['identita_email'] ) && is_array( $istantanea['identita_email'] ) ? $istantanea['identita_email'] : array();
 		$event = isset( $istantanea['evento'] ) && is_array( $istantanea['evento'] ) ? $istantanea['evento'] : array();
 		$management_lines = array();
-		foreach ( (array) ( $istantanea['gestione_partecipanti'] ?? array() ) as $item ) if ( ! empty( $item['nome'] ) && ! empty( $item['url'] ) ) $management_lines[] = 'Annulla la partecipazione di ' . sanitize_text_field( $item['nome'] ) . ': ' . esc_url_raw( $item['url'] );
+		$management_items = (array) ( $istantanea['gestione_partecipanti'] ?? array() );
+		$single_management = 1 === count( $management_items );
+		foreach ( $management_items as $item ) if ( ! empty( $item['nome'] ) && ! empty( $item['url'] ) ) $management_lines[] = ( $single_management ? 'Annulla la tua iscrizione' : 'Annulla l’iscrizione di ' . sanitize_text_field( $item['nome'] ) ) . ': ' . esc_url_raw( $item['url'] );
 		$parts = array_filter( array(
 			sanitize_text_field( (string) ( $event['titolo'] ?? '' ) ),
 			sanitize_text_field( (string) ( $identity['nome_attivita'] ?? '' ) ),
 			sanitize_textarea_field( (string) ( $istantanea['testo'] ?? '' ) ),
-			! empty( $istantanea['identificativo']['codice'] ) ? 'Codice: ' . sanitize_text_field( $istantanea['identificativo']['codice'] ) : '',
 			! empty( $event['url'] ) ? 'Pagina evento: ' . esc_url_raw( $event['url'] ) : '',
-			$management_lines ? "Gestisci le partecipazioni:\n" . implode( "\n", $management_lines ) : '',
+			$management_lines ? implode( "\n", $management_lines ) : '',
 			! empty( $istantanea['status_url'] ) ? 'Controlla stato e saldo: ' . esc_url_raw( $istantanea['status_url'] ) : '',
 			! empty( $istantanea['action_url'] ) ? sanitize_text_field( (string) ( $istantanea['action_label'] ?? 'Apri' ) ) . ': ' . esc_url_raw( $istantanea['action_url'] ) : '',
 			! empty( $email_identity['indirizzo_risposte'] ) ? 'Assistenza: ' . sanitize_email( $email_identity['indirizzo_risposte'] ) : 'Assistenza: rispondi a questa email.',
 			sanitize_textarea_field( (string) ( $istantanea['footer'] ?? '' ) ),
 		) );
 		return implode( "\n\n", $parts );
+	}
+
+	/** Ripara modelli e istantanee storiche che contengono a capo o Markdown letterali. */
+	public static function ripara_istantanea_codifica( $istantanea ) {
+		$istantanea = is_array( $istantanea ) ? $istantanea : array();
+		$originale = (string) ( $istantanea['testo'] ?? '' );
+		$testo = self::ripara_interruzioni_testo( $originale );
+		$markup = false !== strpos( $testo, '**' ) || preg_match( '/\[[^\]]+\]\(https?:\/\/[^)]+\)/u', $testo );
+		$html_corrotto = false !== strpos( (string) ( $istantanea['html'] ?? '' ), '**' );
+		if ( $markup || $html_corrotto ) {
+			$istantanea['html'] = self::testo_email_in_html( $testo );
+		} else {
+			$istantanea['html'] = self::uniforma_grafica_corpo( self::sanitizza_html_email( (string) ( $istantanea['html'] ?? '' ) ) );
+		}
+		$istantanea['testo'] = self::rimuovi_markdown_testo( $testo );
+		return $istantanea;
+	}
+
+	private static function ripara_modello_testuale( $settings ) {
+		$originale = (string) ( $settings['text'] ?? '' );
+		$testo = self::ripara_interruzioni_testo( $originale );
+		$markup = false !== strpos( $testo, '**' ) || preg_match( '/\[[^\]]+\]\(https?:\/\/[^)]+\)/u', $testo );
+		if ( $markup || false !== strpos( (string) ( $settings['html'] ?? '' ), '**' ) ) $settings['html'] = self::testo_email_in_html( $testo );
+		$settings['text'] = $testo;
+		return $settings;
+	}
+
+	private static function ripara_interruzioni_testo( $testo ) {
+		$testo = str_replace( array( "\\r\\n", "\\n", "\\r" ), "\n", (string) $testo );
+		$testo = html_entity_decode( $testo, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		$testo = str_replace( array( "\xC2\xA0", "\xE2\x80\x8B" ), array( ' ', '' ), $testo );
+		$testo = (string) preg_replace( '/(?<=[.!?,;:])nn(?=\*{0,2}[\p{L}])/u', "\n\n", $testo );
+		$testo = (string) preg_replace( '/n(?=\*{0,2}(?:Quando|Dove|Codice iscrizione|Stato|Partecipazione):)/u', "\n", $testo );
+		return trim( (string) preg_replace( "/\n{3,}/", "\n\n", $testo ) );
+	}
+
+	private static function testo_email_in_html( $testo ) {
+		$html = esc_html( (string) $testo );
+		$html = (string) preg_replace_callback( '/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/u', static function ( $match ) {
+			$url = esc_url( html_entity_decode( $match[2], ENT_QUOTES, 'UTF-8' ) );
+			return $url ? '<a href="' . $url . '">' . $match[1] . '</a>' : $match[1];
+		}, $html );
+		$html = (string) preg_replace( '/\*\*([^*\r\n]+)\*\*/u', '<strong>$1</strong>', $html );
+		return self::sanitizza_html_email( wpautop( $html ) );
+	}
+
+	private static function rimuovi_markdown_testo( $testo ) {
+		$testo = (string) preg_replace( '/\*\*([^*\r\n]+)\*\*/u', '$1', (string) $testo );
+		return (string) preg_replace( '/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/u', '$1: $2', $testo );
+	}
+
+	private static function evidenzia_titolo_evento( $html, $title ) {
+		$title = trim( (string) $title );
+		if ( '' === $title ) return (string) $html;
+		$escaped_title = esc_html( $title );
+		return (string) preg_replace( '#(?<!<strong>)(' . preg_quote( $escaped_title, '#' ) . ')(?!</strong>)#u', '<strong>$1</strong>', (string) $html );
 	}
 
 	private static function url_pubblica_evento( $event_id ) {
@@ -600,8 +691,9 @@ final class MI_Modello_Email {
 		$settings['enabled'] = '1';
 		$settings['subject'] = self::pulisci_riga( $subject, 180 );
 		$settings['text'] = mb_substr( sanitize_textarea_field( wp_unslash( $text ) ), 0, 5000 );
+		$settings['text'] = self::ripara_interruzioni_testo( $settings['text'] );
 		if ( 'ZERO' === strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ) ) $settings['text'] = self::rimuovi_riferimenti_pagamento_gratuito( $settings['text'] );
-		$settings['html'] = self::uniforma_grafica_corpo( self::sanitizza_html_email( wpautop( esc_html( $settings['text'] ) ) ) );
+		$settings['html'] = self::uniforma_grafica_corpo( self::testo_email_in_html( $settings['text'] ) );
 		if ( ! $settings['subject'] || ! $settings['text'] ) return new WP_Error( 'mi_email_vuota', 'Oggetto e testo dell’email non possono essere vuoti.' );
 		$settings = self::aggiorna_segnaposto( $settings );
 		$unknown = self::trova_segnaposto_non_ammessi( $settings );

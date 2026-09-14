@@ -14,6 +14,9 @@ final class MI_Public_Balance {
 	private static function token( $event, $id ) { return hash_hmac( 'sha256', 'balance-person|' . $event . '|' . $id, wp_salt( 'auth' ) ); }
 	private static function event( $event ) {
 		if ( ! $event || 'publish' !== get_post_status( $event ) || MI_Event_Post_Type::EVENT_TYPE !== get_post_type( $event ) || get_post_meta( $event, '_mi_event_cancelled_at', true ) ) throw new InvalidArgumentException( 'Evento non disponibile.' );
+		$pricing_mode = strtoupper( (string) get_post_meta( $event, '_mi_pricing_mode', true ) );
+		$economic_mode = strtoupper( (string) get_post_meta( $event, '_mi_economic_mode', true ) );
+		if ( 'ZERO' === $pricing_mode || ! in_array( $economic_mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) throw new InvalidArgumentException( 'Per questo evento non è previsto alcun pagamento.' );
 	}
 	public static function payment_config( $event ) {
 		$defaults = (array) get_option( 'mi_public_balance_payment', array() );
@@ -238,13 +241,14 @@ final class MI_Public_Balance {
 		foreach ( $bundles as $rid => $b ) try { MI_Registration_Service::accoda_iscrizione_workspace( $rid ); } catch ( Throwable $error ) { /* Durable workspace queue will retry. */ }
 		return $receipt;
 	}
-	public static function render( $event ) {
+	public static function render( $event, $prefill = array() ) {
 		try { self::event( $event ); } catch ( Throwable $error ) { wp_die( esc_html( $error->getMessage() ) ); }
 		nocache_headers();
-		$config = array_merge( self::payment_config( $event ), array( 'eventTitle' => get_the_title( $event ), 'endpoint' => add_query_arg( 'mi_public_balance', $event, home_url( '/' ) ), 'nonce' => wp_create_nonce( 'mi_public_balance_' . $event ) ) );
+		$prefill = is_array( $prefill ) ? array( 'row' => absint( $prefill['row'] ?? 0 ), 'nome' => sanitize_text_field( (string) ( $prefill['nome'] ?? '' ) ), 'cognome' => sanitize_text_field( (string) ( $prefill['cognome'] ?? '' ) ) ) : array();
+		$config = array_merge( self::payment_config( $event ), array( 'eventTitle' => get_the_title( $event ), 'endpoint' => add_query_arg( 'mi_public_balance', $event, home_url( '/' ) ), 'nonce' => wp_create_nonce( 'mi_public_balance_' . $event ), 'prefill' => $prefill ) );
 		$asset = MI_PLUGIN_URL . 'assets/';
 		header( 'Content-Type: text/html; charset=UTF-8' );
-		echo '<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><title>Saldo — ' . esc_html( get_the_title( $event ) ) . '</title><link rel="stylesheet" href="' . esc_url( $asset . 'public-balance.css?ver=' . MI_VERSION ) . '"></head><body>';
+		echo '<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><title>Servizi e saldo — ' . esc_html( get_the_title( $event ) ) . '</title><link rel="stylesheet" href="' . esc_url( $asset . 'public-balance.css?ver=' . MI_VERSION ) . '"></head><body>';
 		include MI_PLUGIN_DIR . 'templates/public-balance.php';
 		echo '<script>window.MIBalance=' . wp_json_encode( $config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT ) . ';</script><script src="' . esc_url( $asset . 'public-balance.js?ver=' . MI_VERSION ) . '"></script></body></html>';
 	}

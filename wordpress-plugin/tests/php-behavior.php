@@ -142,6 +142,9 @@ expect( is_wp_error( $fractional_option ), 'quantità opzione frazionaria accett
 $buyer = invoke_private( 'validate_buyer', array( array( 'first_name' => 'Referente', 'last_name' => 'Demo', 'email' => 'referente@example.invalid', 'phone' => '+39 000 0000000' ) ) );
 expect( ! is_wp_error( $buyer ), 'referente dimostrativo valido rifiutato' );
 
+$local_buyer = invoke_private( 'validate_buyer', array( array( 'first_name' => 'Referente', 'last_name' => 'Demo', 'email' => 'referente@example.invalid', 'phone' => '333 1234567' ) ) );
+expect( ! is_wp_error( $local_buyer ) && '+39 333 1234567' === $local_buyer['phone'], 'prefisso italiano del referente non completato' );
+
 $bad_buyer = invoke_private( 'validate_buyer', array( array( 'first_name' => 'Referente', 'last_name' => 'Demo', 'email' => 'non-valida', 'phone' => '123' ) ) );
 expect( is_wp_error( $bad_buyer ), 'referente non valido accettato' );
 
@@ -181,5 +184,10 @@ expect( false !== strpos( $email_html, '<meta name="viewport"' ) && false !== st
 expect( false !== strpos( $email_html, 'role="presentation"' ) && false !== strpos( $email_html, 'cellpadding="0"' ) && false !== strpos( $email_html, 'bgcolor="#151b38"' ), 'markup email-safe incompleto' );
 expect( false !== strpos( $email_html, 'Assistenza' ) && false !== strpos( $email_html, 'border-radius:12px' ) && false !== strpos( $email_html, 'font-style:italic' ), 'componenti del restyling email assenti' );
 expect( false !== strpos( $email_html, 'https://example.invalid/copertina.jpg' ) && false !== strpos( $email_html, 'font-size:16px' ), 'banner evento o testo leggibile assenti nell email' );
+
+$repaired_email = MI_Modello_Email::ripara_istantanea_codifica( array( 'testo' => 'Carissimo,nnla tua iscrizione è registrata.nn**Quando:** 18/10/2026n**Dove:** Roma. I dati saranno cancellati dopo un anno.&#x20;', 'html' => '<p>Carissimo,nnla tua iscrizione è registrata.nn**Quando:** 18/10/2026n**Dove:** Roma. I dati saranno cancellati dopo un anno.&#x20;</p>' ) );
+expect( false === strpos( $repaired_email['html'], '**' ) && false !== strpos( $repaired_email['html'], '<strong>Quando:</strong>' ), 'Markdown email non convertito' );
+expect( false !== strpos( $repaired_email['testo'], "\n\n" ) && false === strpos( $repaired_email['testo'], '**' ) && false === strpos( $repaired_email['testo'], '&#x20;' ), 'a capo o entità email storici non riparati' );
+expect( false !== strpos( $repaired_email['testo'], 'saranno' ) && false !== strpos( $repaired_email['testo'], 'anno' ), 'le doppie n delle parole italiane sono state alterate' );
 
 fwrite( STDOUT, "PHP behavior tests: OK\n" );

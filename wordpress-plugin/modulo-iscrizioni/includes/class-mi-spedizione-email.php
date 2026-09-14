@@ -7,6 +7,7 @@ final class MI_Spedizione_Email {
 	const OPZIONE_DESTINATARIO_PROVA = 'mi_destinatario_prova_email';
 	const OPZIONE_PROVA_VERIFICATA = 'mi_prova_email_verificata';
 	private static $nome_mittente = '';
+	private static $indirizzo_mittente = '';
 	private static $codice_incorporato = '';
 	private static $corpo_testo = '';
 
@@ -227,8 +228,8 @@ final class MI_Spedizione_Email {
 		$oggetto = 'Prova Modulo Iscrizioni — ' . wp_date( 'd/m/Y H:i' );
 		$istantanea = array(
 			'preheader' => 'Anteprima sintetica del nuovo modello email.',
-			'html' => '<p>Questa è una <strong>email sintetica di prova</strong> del Modulo Iscrizioni.</p><p>Evento: Evento dimostrativo<br>Codice: MI-PROVA-0001<br>Referente: Persona Esempio</p><p>Nessun dato di un’iscrizione reale è stato utilizzato.</p>',
-			'testo' => "Questa è una email sintetica di prova del Modulo Iscrizioni.\nEvento: Evento dimostrativo\nCodice: MI-PROVA-0001\nReferente: Persona Esempio\nNessun dato di un’iscrizione reale è stato utilizzato.",
+			'html' => '<p>Questa è una <strong>email sintetica di prova</strong> del Modulo Iscrizioni.</p><p>Evento: Evento dimostrativo<br>Codice: MI-PROVA-0001<br>Iscrizione a nome di: Persona Esempio</p><p>Nessun dato di un’iscrizione reale è stato utilizzato.</p>',
+			'testo' => "Questa è una email sintetica di prova del Modulo Iscrizioni.\nEvento: Evento dimostrativo\nCodice: MI-PROVA-0001\nIscrizione a nome di: Persona Esempio\nNessun dato di un’iscrizione reale è stato utilizzato.",
 			'footer' => 'Un saluto dall’organizzazione.',
 			'identita' => array( 'nome_attivita' => 'Attività dimostrativa', 'primary_color' => '#151b38', 'secondary_color' => '#337ab7', 'primary_text_color' => '#ffffff', 'secondary_text_color' => '#ffffff' ),
 			'identita_email' => array(),
@@ -294,13 +295,18 @@ final class MI_Spedizione_Email {
 			}
 			$payload = json_decode( (string) $riga['payload_json'], true );
 			$istantanea = is_array( $payload ) && isset( $payload['email_preview'] ) && is_array( $payload['email_preview'] ) ? $payload['email_preview'] : array();
+			if ( ! empty( $riga['registration_id'] ) ) {
+				$economia = $wpdb->get_row( $wpdb->prepare( "SELECT economic_mode,total_cents FROM {$wpdb->prefix}mi_registrations WHERE id=%d", $riga['registration_id'] ), ARRAY_A );
+				if ( is_array( $economia ) && ( ! in_array( $economia['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) || (int) $economia['total_cents'] <= 0 ) ) unset( $istantanea['status_url'] );
+			}
 			$destinatario = $invio_prova ? $destinatario_prova : $riga['recipient'];
 			if ( $invio_prova ) $istantanea = self::prepara_istantanea_prova( $istantanea, $riga['recipient'] );
-			if ( self::invia_istantanea( $destinatario, $istantanea ) ) {
+			$esito = self::invia_istantanea( $destinatario, $istantanea, hash( 'sha256', home_url() . '|outbox|' . $id ), $invio_prova );
+			if ( ! is_wp_error( $esito ) && $esito ) {
 				$wpdb->update( $table, array( 'status' => 'SENT', 'last_error' => null, 'sent_at' => current_time( 'mysql', true ), 'processing_started_at' => null ), array( 'id' => $id ), array( '%s', '%s', '%s', '%s' ), array( '%d' ) );
 			} else {
 				$tentativi = (int) $riga['attempts'] + 1;
-				$wpdb->update( $table, array( 'status' => $tentativi >= 5 ? ( $invio_prova ? 'TEST_FAILED' : 'FAILED' ) : ( $invio_prova ? 'TEST_PENDING' : 'PENDING' ), 'last_error' => 'wp_mail non ha accettato il messaggio.', 'processing_started_at' => null ), array( 'id' => $id ), array( '%s', '%s', '%s' ), array( '%d' ) );
+				$wpdb->update( $table, array( 'status' => $tentativi >= 5 ? ( $invio_prova ? 'TEST_FAILED' : 'FAILED' ) : ( $invio_prova ? 'TEST_PENDING' : 'PENDING' ), 'last_error' => is_wp_error( $esito ) ? sanitize_text_field( $esito->get_error_message() ) : 'Workspace non ha confermato l’accettazione.', 'processing_started_at' => null ), array( 'id' => $id ), array( '%s', '%s', '%s' ), array( '%d' ) );
 			}
 		}
 		if ( (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status IN ('PENDING','TEST_PENDING') AND attempts < 5" ) > 0 ) {
@@ -318,41 +324,41 @@ final class MI_Spedizione_Email {
 		return $istantanea;
 	}
 
-	private static function invia_istantanea( $destinatario, $istantanea ) {
+	private static function invia_istantanea( $destinatario, $istantanea, $delivery_key, $invio_prova ) {
 		if ( ! is_email( $destinatario ) || empty( $istantanea['attivo'] ) || empty( $istantanea['oggetto'] ) ) {
 			return false;
 		}
+		$istantanea = MI_Modello_Email::ripara_istantanea_codifica( $istantanea );
 		$identita = isset( $istantanea['identita_email'] ) && is_array( $istantanea['identita_email'] ) ? $istantanea['identita_email'] : array();
 		$intestazioni = array( 'Content-Type: text/html; charset=UTF-8' );
-		if ( ! empty( $identita['indirizzo_risposte'] ) && is_email( $identita['indirizzo_risposte'] ) ) {
-			$intestazioni[] = 'Reply-To: ' . sanitize_email( $identita['indirizzo_risposte'] );
-		}
+		$reply_to = ! empty( $identita['indirizzo_risposte'] ) && is_email( $identita['indirizzo_risposte'] ) ? sanitize_email( $identita['indirizzo_risposte'] ) : MI_Modello_Email::EMAIL_SEGRETERIA;
+		$intestazioni[] = 'Reply-To: ' . $reply_to;
 		$codice_html = '';
-		if ( isset( $istantanea['identificativo'] ) && is_array( $istantanea['identificativo'] ) && in_array( $istantanea['identificativo']['modalita'] ?? 'NONE', array( 'TEXT', 'QR', 'BARCODE' ), true ) ) {
-			$codice_html = '<p style="margin-top:20px;"><strong>Codice:</strong> <code>' . esc_html( $istantanea['identificativo']['codice'] ?? '' ) . '</code></p>';
-			if ( in_array( $istantanea['identificativo']['modalita'], array( 'QR', 'BARCODE' ), true ) ) {
+		if ( isset( $istantanea['identificativo'] ) && is_array( $istantanea['identificativo'] ) && in_array( $istantanea['identificativo']['modalita'] ?? 'NONE', array( 'QR', 'BARCODE' ), true ) ) {
 				$code_payload = 'QR' === $istantanea['identificativo']['modalita'] ? ( $istantanea['identificativo']['payload_qr'] ?? '' ) : ( $istantanea['identificativo']['codice'] ?? '' );
 				self::$codice_incorporato = MI_Code_Image::svg( $istantanea['identificativo']['modalita'], $code_payload );
-				$codice_html .= '<p><img src="cid:mi-registration-code" alt="Codice grafico dell’iscrizione" style="display:block;max-width:280px;height:auto;border:0;"></p>';
-			}
+				$codice_html = '<p><img src="cid:mi-registration-code" alt="Codice grafico dell’iscrizione" style="display:block;max-width:280px;height:auto;border:0;"></p>';
 		}
 		$corpo = MI_Modello_Email::componi_html( $istantanea, $codice_html );
 		self::$corpo_testo = MI_Modello_Email::componi_testo( $istantanea );
-		add_action( 'phpmailer_init', array( __CLASS__, 'incorpora_codice' ) );
-		self::$nome_mittente = sanitize_text_field( $identita['nome_mittente'] ?? '' );
-		if ( self::$nome_mittente ) {
-			add_filter( 'wp_mail_from_name', array( __CLASS__, 'filtra_nome_mittente' ) );
-		}
-		$inviata = wp_mail( sanitize_email( $destinatario ), sanitize_text_field( $istantanea['oggetto'] ), $corpo, $intestazioni );
-		remove_action( 'phpmailer_init', array( __CLASS__, 'incorpora_codice' ) );
-		remove_filter( 'wp_mail_from_name', array( __CLASS__, 'filtra_nome_mittente' ) );
+		$inviata = MI_Workspace_Client::request( 'INVIA_EMAIL_CONFERMA', array(
+			'delivery_key' => $delivery_key,
+			'mode' => $invio_prova ? 'PROVA' : 'OPERATIVO',
+			'destinatario' => sanitize_email( $destinatario ),
+			'oggetto' => html_entity_decode( sanitize_text_field( $istantanea['oggetto'] ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ),
+			'html' => $corpo,
+			'testo' => self::$corpo_testo,
+			'codice_svg' => self::$codice_incorporato,
+		) );
 		self::$nome_mittente = '';
+		self::$indirizzo_mittente = '';
 		self::$codice_incorporato = '';
 		self::$corpo_testo = '';
-		return $inviata;
+		return is_wp_error( $inviata ) ? $inviata : ( ! empty( $inviata['ok'] ) && 'GOOGLE_WORKSPACE' === ( $inviata['channel'] ?? '' ) );
 	}
 
 	public static function incorpora_codice( $phpmailer ) {
+		if ( self::$indirizzo_mittente && property_exists( $phpmailer, 'Sender' ) ) $phpmailer->Sender = self::$indirizzo_mittente;
 		if ( self::$corpo_testo && property_exists( $phpmailer, 'AltBody' ) ) {
 			$phpmailer->AltBody = self::$corpo_testo;
 		}
@@ -363,6 +369,10 @@ final class MI_Spedizione_Email {
 
 	public static function filtra_nome_mittente( $nome_corrente ) {
 		return self::$nome_mittente ?: $nome_corrente;
+	}
+
+	public static function filtra_indirizzo_mittente( $indirizzo_corrente ) {
+		return self::$indirizzo_mittente ?: $indirizzo_corrente;
 	}
 
 	private static function prova_verificata( $destinatario = null ) {
