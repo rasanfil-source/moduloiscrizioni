@@ -7,7 +7,7 @@ function get_post_meta($id,$key,$single=true){if($key==='_mi_economic_mode')retu
 class MI_Event_Post_Type{const EVENT_TYPE='mi_event';}
 class MI_Management_Service{static function lock_room_event($id){}}
 class MI_Modello_Email{static function crea_istantanea($id,$values){return [];}}
-class MI_Spedizione_Email{static function stato_nuova_email($s){return 'PREVIEW';}static function email_da_spedire($status){return in_array($status,['PENDING','TEST_PENDING'],true);}static function pianifica_spedizione(){}}
+class MI_Spedizione_Email{static function destinatario_evento($id){return 'segreteria@example.invalid';}static function destinatario_segreteria(){return 'segreteria@example.invalid';}static function stato_nuova_email($s){return 'PREVIEW';}static function email_da_spedire($status){return in_array($status,['PENDING','TEST_PENDING'],true);}static function pianifica_spedizione(){}}
 class MI_Registration_Service{static function mark_workspace_changed_locked($id){}static function accoda_iscrizione_workspace($id){}static function append_registration_event($id,$type,$from,$to,$key,$data){global $wpdb;$wpdb->events[$key]=$data;return true;}}
 class BalanceDB{
  public $prefix='wp_',$last_error='',$events=[],$writes=0,$reg,$persons,$payments=[],$backup;

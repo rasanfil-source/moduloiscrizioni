@@ -30,6 +30,7 @@ preg_match('/CREATE TABLE \{\$items\} \((.*?)\) ENGINE=InnoDB/s',$schema,$item_s
 $wpdb->query('DROP TABLE IF EXISTS wp_mi_registration_items');
 check(false!==$wpdb->query('CREATE TABLE wp_mi_registration_items ('.$item_schema[1].') ENGINE=InnoDB'),$wpdb->last_error);
 function inventory_version(){global $wpdb;$method=new ReflectionMethod(MI_Management_Service::class,'rooms');return hash('sha256',wp_json_encode($method->invoke(null,42)));}
+function php_worker_command(array $arguments){$command=[PHP_BINARY];if(PHP_OS_FAMILY==='Windows')array_push($command,'-d','extension_dir='.dirname(PHP_BINARY).'/ext','-d','extension=mbstring','-d','extension=mysqli');return array_merge($command,$arguments);}
 $empty_version=inventory_version();$inventory_data=['code'=>'PRE','name'=>'Prima camera','capacity'=>2];
 $r=MI_Management_Service::save_event_room(42,'room_save',$inventory_data,$empty_version,'wp_7_12345678-1234-4234-8234-123456789ac1');check(!empty($r['saved']),'Inventario senza prenotazioni non salvato');
 $r=MI_Management_Service::save_event_room(42,'room_save',$inventory_data,$empty_version,'wp_7_12345678-1234-4234-8234-123456789ac1');check(!empty($r['replayed']),'Retry inventario non idempotente');
@@ -44,8 +45,8 @@ $v=booking_version(1);$room=['code'=>'A','name'=>'Camera A','capacity'=>1];
 $r=save_change(1,'room_save',$room,'123456789aaa',$v);check(!empty($r['saved']),'Camera non salvata');
 $r=save_change(1,'room_save',$room,'123456789aaa',$v);check(!empty($r['replayed']),'Retry camera non idempotente');
 $room['capacity']=2;$r=save_change(1,'room_save',$room,'123456789aaa',$v);check(!empty($r['rejected']),'Richiesta diversa accettata');
-$processes=[];$php=PHP_BINARY;$ext=dirname($php).'/ext';
-foreach([1,2]as $id){$cmd=[$php,'-d','extension_dir='.$ext,'-d','extension=mbstring','-d','extension=mysqli',__FILE__,'worker',(string)$id,booking_version($id)];$pipes=[];$proc=proc_open($cmd,[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);fclose($pipes[0]);$processes[]=[$proc,$pipes];}
+$processes=[];
+foreach([1,2]as $id){$cmd=php_worker_command([__FILE__,'worker',(string)$id,booking_version($id)]);$pipes=[];$proc=proc_open($cmd,[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);fclose($pipes[0]);$processes[]=[$proc,$pipes];}
 $success=0;
 foreach($processes as [$proc,$pipes]){$out=stream_get_contents($pipes[1]);$err=stream_get_contents($pipes[2]);fclose($pipes[1]);fclose($pipes[2]);check(proc_close($proc)===0,$err);$r=json_decode($out,true);check(is_array($r),$out);if(!empty($r['saved']))$success++;}
 check($success===1,'Due assegnazioni hanno consumato un solo posto');
@@ -192,7 +193,7 @@ seed_auto_rooms(18,['singola'],'WAITLISTED');run_auto_rooms(18);check(assigned_r
 $wpdb->query("UPDATE wp_mi_registrations SET status='CONFIRMED' WHERE id=18");run_auto_rooms(18);check(assigned_rooms(18)===['S5'],'Assegnazione dopo ammissione assente');
 echo "Automatismi: progressivi S/M, coppia DM anche in prenotazioni miste, gruppi DS/T, esclusione di tre o più richieste DM e lista attesa verificati.\n";
 seed_auto_rooms(19,['singola']);seed_auto_rooms(20,['singola']);$processes=[];
-foreach([19,20]as $id){$pipes=[];$proc=proc_open([PHP_BINARY,'-d','extension_dir='.dirname(PHP_BINARY).'/ext','-d','extension=mbstring','-d','extension=mysqli',__FILE__,'auto-worker',(string)$id],[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);fclose($pipes[0]);$processes[]=[$proc,$pipes];}
+foreach([19,20]as $id){$pipes=[];$proc=proc_open(php_worker_command([__FILE__,'auto-worker',(string)$id]),[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);fclose($pipes[0]);$processes[]=[$proc,$pipes];}
 foreach($processes as [$proc,$pipes]){$out=stream_get_contents($pipes[1]);$err=stream_get_contents($pipes[2]);fclose($pipes[1]);fclose($pipes[2]);check(proc_close($proc)===0&&$out==='ok','Automatismo concorrente fallito: '.$out.$err);}
 $codes=array_merge(assigned_rooms(19),assigned_rooms(20));sort($codes);check($codes===['S6','S7'],'Numeri automatici duplicati in concorrenza');
 echo "Progressivi automatici concorrenti: nessuna duplicazione.\n";
