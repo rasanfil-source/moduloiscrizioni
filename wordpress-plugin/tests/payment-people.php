@@ -24,5 +24,7 @@ $old=MI_Payment_People::calculate($r,$people,$items,[['transaction_kind'=>'PAYME
 check(!MI_Payment_People::summary($old)['known'],'aggregate legacy movements use safe fallback');
 $overpaid=MI_Payment_People::calculate($r,$people,$items,[['transaction_kind'=>'PAYMENT','amount_cents'=>60000,'participant_allocations_json'=>'[{"participant_id":1,"amount_cents":60000}]']]);
 $summary=MI_Payment_People::summary($overpaid);check($summary['balance']===30000&&$summary['credit']===30000,'one person credit never cancels another debt');
+$cancelled=$people;$cancelled[1]['status']='CANCELLED';$cancelledPosition=MI_Payment_People::calculate($r,$cancelled,$items,[]);$cancelledSummary=MI_Payment_People::summary($cancelledPosition);
+check($cancelledSummary['people_count']===2&&$cancelledSummary['active_count']===1&&$cancelledSummary['total']===30000&&$cancelledSummary['balance']===30000,'cancelled person stays historical but not economically active');
 $single=$r;$single['economic_mode']='FULL_PAYMENT';$p=MI_Payment_People::calculate($single,$people,$items,[]);reject(fn()=>MI_Payment_People::plan($p,[1],'DEPOSIT',10000));
 echo "PASS: caparra, saldo successivo, totale, selezioni isolate, importi esatti, duplicati, persone estranee e storico non attribuito.\n";

@@ -21,8 +21,8 @@
   },
   "portal-management.js": {
     "file": "min/portal-management.js",
-    "source": "c4b8245b9148f903c082a73d1be8053ba69aea12aa5db1685aa435419e15c3e9",
-    "hash": "950e9ce4cec243d94104c8370f7751b36c9ec1e45da5a6a213c81b4221533ff2"
+    "source": "7bfa1dba2b43a4467a867773b472ace9f4dfae469ddbcc6c7c327b96715bad70",
+    "hash": "813f33a14b1a9cdf835d1911f906d06bb65ab7d34dbb03fdd675af4fb5a3786d"
   },
   "portal-payments.css": {
     "file": "min/portal-payments.css",
@@ -61,8 +61,8 @@
   },
   "public.js": {
     "file": "min/public.js",
-    "source": "c46035afc6d91cbfe9619ed38ca44945231920cfa9d96c6d4f82aad8482e6ff4",
-    "hash": "7cdae8cd44ff378754be70ba7ca575645f0eece47a0d912dac5d173532f8b2df"
+    "source": "6ec5aab82f212bdfd5c908a750ba9cfc460ce052f7acb9b9d5b7287ce4b43641",
+    "hash": "68a869b77722acd36d7b06094a9625ecbb7df7be79be467657460c90ee6f5715"
   },
   "qrcode-generator-2.0.4.js": {
     "file": "min/qrcode-generator-2.0.4.js",

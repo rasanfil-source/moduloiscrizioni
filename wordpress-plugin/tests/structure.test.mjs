@@ -475,12 +475,15 @@ test('ogni partecipante dispone di annullamento individuale confermato e auditab
   assert.match(service, /PARTICIPANT_CANCELLED/);
   assert.match(service, /GREATEST\(0,\{\$counter_field\}-1\)/);
   assert.match(service, /remaining_participants/);
-  assert.match(service, /promote_waitlisted_locked/);
+	assert.match(service, /'total_qty' => \$remaining/);
+	assert.match(service, /'status' => \$target_status, 'total_qty' => 0/);
+	assert.match(service, /promote_waitlisted_locked/);
   assert.match(portal, /cancel_participant_public/);
   assert.match(portal, /Referrer-Policy: no-referrer/);
   assert.match(service, /cancellation_token_hash=NULL/);
   assert.match(service, /status = 'ACTIVE' GROUP BY ticket_type_code/);
-  assert.match(portal, /cancel_participant_portal/);
+	assert.match(portal, /cancel_participant_portal/);
+	assert.match(portal, /Partecipazione annullata/);
 	assert.match(await read('assets/portal-management.js'), /data-cancel/);
   assert.match(portal, /Conferma richiesta/);
   assert.match(portal, /Se hai già effettuato un pagamento, contatta la segreteria per ricevere informazioni sull’eventuale rimborso/);

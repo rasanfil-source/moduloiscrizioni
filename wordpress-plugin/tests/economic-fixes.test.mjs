@@ -8,6 +8,9 @@ const ledger = read('../modulo-iscrizioni/includes/class-mi-payment-ledger.php')
 const management = read('../modulo-iscrizioni/includes/class-mi-management-service.php');
 const paymentsUi = read('../modulo-iscrizioni/assets/portal-payments.js');
 const managementUi = read('../modulo-iscrizioni/assets/portal-management.js');
+const admin = read('../modulo-iscrizioni/includes/class-mi-admin.php');
+const registration = read('../modulo-iscrizioni/includes/class-mi-registration-service.php');
+const publicUi = read('../modulo-iscrizioni/assets/public.js');
 
 test('rimborsi e storni mantengono la primazia della persona', () => {
   assert.match(people, /function refund_plan/);
@@ -30,6 +33,7 @@ test('la caparra percentuale viene ricalcolata senza cambiare la caparra fissa',
 	assert.match(people, /'PERCENTAGE' !== strtoupper/);
 	assert.match(people, /round\( \$sum \* \$percentage \/ 100 \)/);
   assert.match(management, /'deposits' => null !== \$deposits/);
+	assert.match(managementUi, /caparra è percentuale viene ricalcolata sulle quote individuali/);
 });
 
 test('la variazione dei servizi richiede il permesso pagamenti nel backend e nella UI', () => {
@@ -37,4 +41,17 @@ test('la variazione dei servizi richiede il permesso pagamenti nel backend e nel
   assert.match(management, /function options_preview[\s\S]*?mi_options_permission/);
   assert.match(management, /can_change_options/);
   assert.match(managementUi, /b\.can_change_options&&/);
+});
+
+test('il riepilogo per metodo sottrae rimborsi e storni dal relativo incasso', () => {
+  for (const source of ['BANK_TRANSFER', 'CARD', 'CASH']) {
+    assert.match(admin, new RegExp(`payment_source='${source}' THEN CASE WHEN p\\.transaction_kind='REFUND' THEN -p\\.amount_cents ELSE p\\.amount_cents END`));
+  }
+  assert.match(admin, /formatta_importo_firmato\( \$summary\['BANK_TRANSFER'\] \)/);
+});
+
+test('le opzioni a pagamento valgono anche con prezzo NONE, mentre ZERO resta gratuito', () => {
+  assert.match(registration, /'ZERO' === \( \$event\['pricing_mode'\] \?\? '' \) \? 0 : self::options_total/);
+  assert.doesNotMatch(registration, /in_array\( \$event\['pricing_mode'\], array\( 'FIXED', 'CALCULATED' \)/);
+  assert.match(publicUi, /config\.event\.pricing_mode === 'ZERO'\s*\? \{\}/);
 });

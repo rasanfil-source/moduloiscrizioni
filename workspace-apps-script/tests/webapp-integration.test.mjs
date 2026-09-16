@@ -137,7 +137,22 @@ test('APPEND_REGISTRATION riconcilia retry e ripara una proiezione partecipanti 
 
   const cancelled = context.aggiungiIscrizione_(payload({ status: 'CANCELLED' }));
   assert.equal(cancelled.ok, true);
+	assert.equal(sheets.Iscrizioni.rows[1][8], 0);
+	assert.equal(sheets.Partecipanti.rows.length, 3);
   assert.equal(JSON.parse(sheets['Coda email'].rows[1][4]).status, 'CONFIRMED');
+});
+
+test('la prenotazione conserva gli annullati ma conta soltanto i partecipanti attivi', () => {
+  const { context, sheets } = environment();
+  const participants = [
+    { ticket_type_code: 'standard', ticket_index: 1, first_name: 'Persona', last_name: 'Uno', status: 'ACTIVE', fields: {}, options: [] },
+    { ticket_type_code: 'standard', ticket_index: 2, first_name: 'Persona', last_name: 'Due', status: 'CANCELLED', cancelled_at: '2026-09-16 10:00:00', fields: {}, options: [] }
+  ];
+  const response = context.aggiungiIscrizione_(payload({ workspace_revision: '2', participants }));
+  assert.equal(response.complete, true);
+  assert.equal(sheets.Iscrizioni.rows[1][8], 1);
+  assert.equal(sheets.Partecipanti.rows.length, 3);
+  assert.equal(sheets.Partecipanti.rows[2][8], 'CANCELLED');
 });
 
 test('APPEND_REGISTRATION rifiuta conflitti e mapping partecipanti non biunivoci', () => {

@@ -164,7 +164,9 @@
 
     function totalCents() {
 	  const prices = Object.fromEntries((config.event.ticket_types || []).map((ticket) => [ticket.code, config.event.pricing_mode === 'FIXED' ? Number(config.event.fixed_price_cents) || 0 : Number(ticket.price_cents) || 0]));
-      const optionPrices = Object.fromEntries((config.event.options || []).map((option) => [option.code, Number(option.price_cents) || 0]));
+      const optionPrices = config.event.pricing_mode === 'ZERO'
+        ? {}
+        : Object.fromEntries((config.event.options || []).map((option) => [option.code, Number(option.price_cents) || 0]));
       const ticketTotal = Object.entries(ticketSelection()).reduce((total, [code, quantity]) => total + (prices[code] || 0) * quantity, 0);
       const orderTotal = Object.entries(orderOptionSelection()).reduce((total, [code, quantity]) => total + (optionPrices[code] || 0) * quantity, 0);
       const participantTotal = Array.from(participantsRoot.querySelectorAll('[data-mi-participant-option]')).reduce((total, input) => total + (optionPrices[input.dataset.miParticipantOption] || 0) * participantOptionQuantity(input), 0);

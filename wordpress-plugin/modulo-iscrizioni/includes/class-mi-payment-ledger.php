@@ -45,7 +45,7 @@ final class MI_Payment_Ledger {
 			$summary = MI_Payment_People::summary( $individual );
 			$position['individual'] = $individual;
 			$position['individual_known'] = $summary['known'];
-			foreach ( array( 'total', 'paid', 'balance', 'credit', 'deposit_due', 'deposit_missing' ) as $field ) $position['individual_' . $field] = $summary[$field];
+			foreach ( array( 'people_count', 'active_count', 'total', 'paid', 'balance', 'credit', 'deposit_due', 'deposit_missing' ) as $field ) $position['individual_' . $field] = $summary[$field];
 			$position['effective_total'] = $summary['known'] ? $summary['total'] : $position['total'];
 			$position['effective_paid'] = $summary['known'] ? $summary['paid'] : $position['paid'];
 			$position['effective_balance'] = $summary['known'] ? $summary['balance'] : $position['balance'];

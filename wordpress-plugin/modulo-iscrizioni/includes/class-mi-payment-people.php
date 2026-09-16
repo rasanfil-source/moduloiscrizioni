@@ -9,7 +9,7 @@ final class MI_Payment_People {
 		$event = $snapshot['event'] ?? array();
 		if ( 'DEPOSIT_BALANCE' !== ( $registration['economic_mode'] ?? '' ) || 'PERCENTAGE' !== strtoupper( (string) ( $event['deposit_mode'] ?? '' ) ) || empty( $position['quotes_known'] ) ) return null;
 		$totals = array(); $sum = 0;
-		foreach ( $position['people'] as $person ) {
+		foreach ( (array) ( $position['people'] ?? array() ) as $person ) {
 			$id = (int) $person['id']; $total = (int) $person['total'] + (int) ( $deltas[$id] ?? 0 );
 			if ( $total < 0 ) return null;
 			$totals[$id] = $total; $sum += $total;
@@ -41,10 +41,11 @@ final class MI_Payment_People {
 	/** Totali operativi delle sole persone attive. I crediti individuali non compensano i debiti altrui. */
 	public static function summary( array $position ) {
 		$known = ! empty( $position['quotes_known'] ) && ! empty( $position['payments_known'] );
-		$summary = array( 'known' => $known, 'total' => 0, 'paid' => 0, 'balance' => 0, 'credit' => 0, 'deposit_due' => 0, 'deposit_missing' => 0 );
-		if ( ! $known ) return $summary;
+		$summary = array( 'known' => $known, 'people_count' => count( $position['people'] ?? array() ), 'active_count' => 0, 'total' => 0, 'paid' => 0, 'balance' => 0, 'credit' => 0, 'deposit_due' => 0, 'deposit_missing' => 0 );
 		foreach ( $position['people'] as $person ) {
 			if ( empty( $person['active'] ) ) continue;
+			$summary['active_count']++;
+			if ( ! $known ) continue;
 			$summary['total'] += max( 0, (int) $person['total'] );
 			$summary['paid'] += (int) $person['paid'];
 			$summary['balance'] += max( 0, (int) $person['balance'] );

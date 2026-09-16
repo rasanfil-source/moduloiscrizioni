@@ -322,7 +322,7 @@ final class MI_Registration_Service {
 		$outbox_table = $wpdb->prefix . 'mi_email_outbox';
 		$now = current_time( 'mysql', true );
 		$order_code = '';
-		$options_total = in_array( $event['pricing_mode'], array( 'FIXED', 'CALCULATED' ), true ) ? self::options_total( $order_options, $participants ) : 0;
+		$options_total = 'ZERO' === ( $event['pricing_mode'] ?? '' ) ? 0 : self::options_total( $order_options, $participants );
 		if ( $selection['total_cents'] + $options_total > 100000000 ) {
 			return new WP_Error( 'mi_total_limit', 'Il totale dell’iscrizione supera il limite di 1.000.000 €. Riduci le quantità o contatta la segreteria.', array( 'status' => 400 ) );
 		}
@@ -897,8 +897,10 @@ final class MI_Registration_Service {
 			$participant_updated = $wpdb->query( $wpdb->prepare( "UPDATE {$participants} SET status='CANCELLED',cancelled_at=%s,cancellation_actor=%s,cancellation_token_hash=NULL WHERE id=%d AND status='ACTIVE'", $now, $actor_label, $participant_id ) );
 			if ( 1 !== $participant_updated ) throw new RuntimeException( 'Partecipante non aggiornato.' );
 			$remaining = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$participants} WHERE registration_id=%d AND status='ACTIVE'", $registration['id'] ) );
-			$registration_update = array( 'workspace_status' => 'PENDING', 'workspace_last_error' => 'participant_cancelled' );
-			$formats = array( '%s', '%s' );
+			// total_qty rappresenta le persone ancora attive; le righe annullate restano
+			// nello storico dei partecipanti e nella replica Workspace.
+			$registration_update = array( 'total_qty' => $remaining, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'participant_cancelled' );
+			$formats = array( '%d', '%s', '%s' );
 			if ( 0 === $remaining ) {
 				$registration_update['status'] = 'CANCELLED';
 				$registration_update['capacity_released_at'] = $now;
@@ -983,7 +985,7 @@ final class MI_Registration_Service {
 			foreach ( $items as $item ) {
 				if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$ticket_counters} SET {$counter_field} = GREATEST(0, {$counter_field} - %d), updated_at = %s WHERE event_id = %d AND ticket_type_code = %s", $item['quantity'], $now, $event_id, $item['ticket_type_code'] ) ) ) throw new RuntimeException( 'Contatore quota non aggiornato.' );
 			}
-			$updated = $wpdb->update( $registrations, array( 'status' => $target_status, 'capacity_released_at' => $now, 'waitlist_offer_token_hash' => null, 'waitlist_offer_expires_at' => null, 'expires_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'status_changed' ), array( 'id' => $registration_id ), array( '%s', '%s', '%s', '%s', '%s', '%s', '%s' ), array( '%d' ) );
+			$updated = $wpdb->update( $registrations, array( 'status' => $target_status, 'total_qty' => 0, 'capacity_released_at' => $now, 'waitlist_offer_token_hash' => null, 'waitlist_offer_expires_at' => null, 'expires_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'status_changed' ), array( 'id' => $registration_id ), array( '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s' ), array( '%d' ) );
 			if ( false === $updated || ! self::append_registration_event( $registration_id, $target_status, $registration['status'], $target_status, $actor_label ) ) {
 				throw new RuntimeException( 'Stato non aggiornato.' );
 			}

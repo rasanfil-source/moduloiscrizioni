@@ -239,7 +239,8 @@ final class MI_Spedizione_Email {
 					if ( 'BALANCE_REMINDER' === $template_type && $balance < 1 ) continue;
 					$economic = array( 'total_cents' => (int) $position['effective_total'], 'initial_due_cents' => $position['individual_known'] ? (int) $position['individual_deposit_due'] : (int) $registration['initial_due_cents'], 'balance_cents' => $balance, 'payment_methods' => json_decode( (string) $registration['payment_methods_json'], true ) ?: array() );
 					$status_labels = array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'Da pagare', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto' );
-					$values = MI_Modello_Email::valori_ordine( $event, $registration['order_code'], $status_labels[ $registration['status'] ] ?? $registration['status'], (int) $registration['total_qty'], trim( $registration['buyer_first_name'] . ' ' . $registration['buyer_last_name'] ), $economic );
+					$participant_count = (int) $position['individual_people_count'] > 0 ? (int) $position['individual_active_count'] : (int) $registration['total_qty'];
+					$values = MI_Modello_Email::valori_ordine( $event, $registration['order_code'], $status_labels[ $registration['status'] ] ?? $registration['status'], $participant_count, trim( $registration['buyer_first_name'] . ' ' . $registration['buyer_last_name'] ), $economic );
 					$status_url = MI_Portal::status_url( $registration['id'], $registration['order_code'], $registration['buyer_email'] );
 					if ( 'BALANCE_REMINDER' === $template_type ) $status_url = MI_Portal::balance_url( $registration['id'], $registration['order_code'], $registration['buyer_email'] );
 					$snapshot = MI_Modello_Email::crea_istantanea_operativa( $event_id, $values, $template_type, $message, $status_url );
