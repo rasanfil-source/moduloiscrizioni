@@ -106,6 +106,7 @@ echo "Rettifiche: importi precedenti, motivazione, retry, piano coerente e assen
 
 // Load the production validator under a test alias, keeping queue fixture stubs.
 $source=file_get_contents(__DIR__.'/../modulo-iscrizioni/includes/class-mi-registration-service.php');
+$source=preg_replace("/^require_once __DIR__ \\. '\/class-mi-payment-people\\.php';\\R/m",'', $source);
 $source=preg_replace('/^<\?php\s*/','',$source);$source=str_replace('class MI_Registration_Service','class MI_Registration_Validation_Test',$source);eval($source);
 $definitions=[['code'=>'single','name'=>'Singola','scope'=>'TICKET','price_cents'=>5000,'max_quantity'=>1,'choice_group'=>'room'],['code'=>'double','name'=>'Doppia','scope'=>'TICKET','price_cents'=>3000,'max_quantity'=>1,'choice_group'=>'room']];
 $snapshot=json_encode(['event'=>['options'=>$definitions,'participant_extra_scope'=>'ALL']]);
