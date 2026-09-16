@@ -128,10 +128,8 @@ final class MI_Payment_Ledger {
 				$covered = $paid >= (int) $r['initial_due_cents'];
 				$updated_history = $history; $updated_history[] = $payment;
 				$updated_individual = MI_Payment_People::read( $r, $updated_history );
-				if ( ! empty( $updated_individual['quotes_known'] ) && ! empty( $updated_individual['payments_known'] ) ) {
-					$field = 'DEPOSIT_BALANCE' === $r['economic_mode'] ? 'deposit_missing' : 'balance'; $covered = true;
-					foreach ( $updated_individual['people'] as $person ) if ( $person['active'] && (int) $person[$field] > 0 ) { $covered = false; break; }
-				}
+				$individual_covered = MI_Payment_People::covered( $updated_individual, $r['economic_mode'] );
+				if ( null !== $individual_covered ) $covered = $individual_covered;
 				$status = $covered ? 'CONFIRMED' : 'PENDING_PAYMENT';
 				$changes['status'] = $status; $changes['expires_at'] = 'CONFIRMED' === $status ? null : $r['payment_deadline_at'];
 			}

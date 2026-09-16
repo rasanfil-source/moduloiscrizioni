@@ -1,5 +1,6 @@
 <?php
 defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/class-mi-payment-people.php';
 
 /** Public participant workflow adapted from the supplied Cammino balance model. */
 final class MI_Public_Balance {
@@ -84,15 +85,11 @@ final class MI_Public_Balance {
 		global $wpdb;
 		$reg = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND id=(SELECT registration_id FROM {$wpdb->prefix}mi_participants WHERE id=%d)" . ( $lock ? ' FOR UPDATE' : '' ), $event, $id ), ARRAY_A ); self::check();
 		if ( ! $reg || ! in_array( $reg['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ) throw new InvalidArgumentException( 'Iscrizione non disponibile. Ricarica la pagina.' );
-		$people = $wpdb->get_results( $wpdb->prepare( "SELECT id,first_name,last_name,status,room_code,options_json,extra_json FROM {$wpdb->prefix}mi_participants WHERE registration_id=%d ORDER BY id" . ( $lock ? ' FOR UPDATE' : '' ), $reg['id'] ), ARRAY_A ); self::check();
-		$payments = $wpdb->get_results( $wpdb->prepare( "SELECT id,amount_cents,transaction_kind FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d ORDER BY id" . ( $lock ? ' FOR UPDATE' : '' ), $reg['id'] ), ARRAY_A ); self::check();
+		$people = $wpdb->get_results( $wpdb->prepare( "SELECT id,ticket_type_code,first_name,last_name,status,room_code,options_json,extra_json,deposit_due_cents FROM {$wpdb->prefix}mi_participants WHERE registration_id=%d ORDER BY id" . ( $lock ? ' FOR UPDATE' : '' ), $reg['id'] ), ARRAY_A ); self::check();
+		$payments = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d ORDER BY id" . ( $lock ? ' FOR UPDATE' : '' ), $reg['id'] ), ARRAY_A ); self::check();
 		$paid = 0; foreach ( $payments as $payment ) $paid += ( 'REFUND' === $payment['transaction_kind'] ? -1 : 1 ) * (int) $payment['amount_cents'];
 		$version = hash( 'sha256', wp_json_encode( array( $reg['status'], $reg['total_cents'], $reg['initial_due_cents'], $people, $payments ) ) );
-		return array( 'registration' => $reg, 'people' => $people, 'paid' => $paid, 'version' => $version );
-	}
-	private static function split( $amount, $count, $index ) {
-		$base = intdiv( $amount, $count ); $remainder = $amount % $count;
-		return $base + ( $index < abs( $remainder ) ? ( $remainder < 0 ? -1 : 1 ) : 0 );
+		return array( 'registration' => $reg, 'people' => $people, 'payments' => $payments, 'individual' => MI_Payment_People::read( $reg, $payments ), 'paid' => $paid, 'version' => $version );
 	}
 	private static function option_total( $options ) { $sum = 0; foreach ( $options as $o ) $sum += (int) ( $o['quantity'] ?? 0 ) * (int) ( $o['unit_price_cents'] ?? 0 ); return $sum; }
 	public static function payment_position( $total, $deposit, $paid ) {
@@ -114,18 +111,19 @@ final class MI_Public_Balance {
 		$editable = array(); $locked = array(); $selected = array_column( $opts, null, 'code' );
 		$snapshot = self::decode( $r['snapshot_json'] );
 		$can_edit = 'ALL' === ( $snapshot['event']['participant_extra_scope'] ?? 'ONE' ) || (int) $b['people'][0]['id'] === $id;
-		$managed = in_array( get_post_meta( $event, '_mi_economic_mode', true ), array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
+		$managed = in_array( $r['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
+		$individual = array_column( $b['individual']['people'], null, 'id' )[$id] ?? null;
+		if ( $managed && ( ! $individual || empty( $b['individual']['quotes_known'] ) || empty( $b['individual']['payments_known'] ) ) ) throw new InvalidArgumentException( $b['individual']['message'] ?: 'La posizione individuale deve essere verificata dalla segreteria prima di modificare i servizi.' );
 		foreach ( $definitions as $code => $o ) if ( $can_edit && $managed && 'TICKET' === ( $o['scope'] ?? '' ) && ( 'pullman' === ( $o['category'] ?? '' ) || 0 === strpos( $code, 'pullman-' ) ) ) {
 			$direction = preg_match( '/ritorno|fiumicino.{0,5}roma|santiago.{0,5}a coru/i', $o['name'] ) ? 'Al ritorno' : ( preg_match( '/andata|roma.{0,5}fiumicino|porto.{0,5}tui/i', $o['name'] ) ? 'All’andata' : 'Trasferimenti' );
 			$editable[] = array( 'code' => $code, 'name' => $o['name'], 'price' => isset( $selected[$code] ) ? (int) $selected[$code]['unit_price_cents'] : (int) $o['price_cents'], 'selected' => ! empty( $selected[$code]['quantity'] ), 'group' => $o['choice_group'] ?? '', 'direction' => $direction );
 		}
 		$editable_codes = array_column( $editable, 'code' );
 		foreach ( $opts as $o ) if ( ! in_array( $o['code'], $editable_codes, true ) && ! empty( $o['quantity'] ) ) $locked[] = array( 'name' => $o['name'], 'accommodation' => 0 === strpos( $o['code'], 'alloggio-' ) || 'alloggio' === ( $definitions[$o['code']]['category'] ?? '' ), 'price' => (int) $o['unit_price_cents'] * (int) $o['quantity'] );
-		$all_options = 0; foreach ( $active as $a ) $all_options += self::option_total( self::decode( $a['options_json'] ) );
-		$base = self::split( (int) $r['total_cents'] - $all_options, count( $active ), $index );
-		$fixed = $base + array_sum( array_column( $locked, 'price' ) );
+		$editable_selected = 0; foreach ( $opts as $option ) if ( in_array( $option['code'] ?? '', $editable_codes, true ) ) $editable_selected += (int) ( $option['unit_price_cents'] ?? 0 ) * (int) ( $option['quantity'] ?? 0 );
+		$fixed = $managed ? (int) $individual['total'] - $editable_selected : 0;
 		$extra = self::decode( $p['extra_json'] ); $email = sanitize_email( $extra['email'] ?? $r['buyer_email'] );
-		return array( 'success' => true, 'row' => $id, 'persona' => array( 'nome' => $p['first_name'], 'cognome' => $p['last_name'], 'email' => $email, 'siglaAlloggio' => $p['room_code'], 'alloggio' => $p['room_code'], 'locked' => $locked, 'services' => $editable, 'fixed' => $managed ? $fixed : 0, 'paid' => $managed ? self::split( max( 0, $b['paid'] ), count( $active ), $index ) : 0, 'deposit' => $managed && 'DEPOSIT_BALANCE' === $r['economic_mode'] ? self::split( (int) $r['initial_due_cents'], count( $active ), $index ) : 0, 'managed' => $managed, 'shared' => count( $active ) > 1, 'token' => self::token( $event, $id ), 'version' => $b['version'] ) );
+		return array( 'success' => true, 'row' => $id, 'persona' => array( 'nome' => $p['first_name'], 'cognome' => $p['last_name'], 'email' => $email, 'siglaAlloggio' => $p['room_code'], 'alloggio' => $p['room_code'], 'locked' => $locked, 'services' => $editable, 'fixed' => $fixed, 'paid' => $managed ? (int) $individual['paid'] : 0, 'deposit' => $managed && 'DEPOSIT_BALANCE' === $r['economic_mode'] ? (int) $individual['deposit'] : 0, 'managed' => $managed, 'shared' => count( $active ) > 1, 'token' => self::token( $event, $id ), 'version' => $b['version'] ) );
 	}
 	private static function queue_email( $event, $receipt, $key, $registration ) {
 		global $wpdb;
@@ -195,7 +193,7 @@ final class MI_Public_Balance {
 				$prior = $wpdb->get_var( $wpdb->prepare( "SELECT detail_json FROM {$wpdb->prefix}mi_registration_events WHERE event_type='public_balance' AND actor_label=%s LIMIT 1", $key ) ); self::check();
 				if ( $prior ) { $prior = self::decode( $prior ); if ( ! hash_equals( $hash, $prior['hash'] ) ) throw new InvalidArgumentException( 'Richiesta già utilizzata con dati diversi.' ); $wpdb->query( 'COMMIT' ); return $prior['receipt']; }
 			}
-			$bundles = array(); $changes = array(); $deltas = array(); $receipt = array( 'success' => true, 'people' => array(), 'total' => 0, 'paid' => 0, 'email' => $email, 'deposit' => 0, 'depositPaid' => 0, 'depositDue' => 0, 'saldoDue' => 0, 'balance' => 0 );
+			$bundles = array(); $changes = array(); $deltas = array(); $person_deltas = array(); $receipt = array( 'success' => true, 'people' => array(), 'total' => 0, 'paid' => 0, 'email' => $email, 'deposit' => 0, 'depositPaid' => 0, 'depositDue' => 0, 'saldoDue' => 0, 'balance' => 0 );
 			foreach ( $people as $person ) {
 				$id = (int) $person['row']; $b = self::bundle( $event, $id, true ); $r = $b['registration']; $rid = (int) $r['id'];
 				if ( ! hash_equals( $b['version'], (string) ( $person['version'] ?? '' ) ) ) throw new InvalidArgumentException( 'Iscrizione o pagamenti aggiornati dalla segreteria. Premi Cambia e carica nuovamente le persone.' );
@@ -217,6 +215,7 @@ final class MI_Public_Balance {
 				if ( $sum < 0 ) throw new InvalidArgumentException( 'La rettifica presente richiede una verifica della segreteria.' );
 				$delta = self::option_total( $options ) - self::option_total( $original );
 				$deltas[$rid] = ( $deltas[$rid] ?? 0 ) + $delta;
+				$person_deltas[$rid][$id] = $delta;
 				$changes[$id] = array( 'before' => $original, 'after' => $options );
 				$person_row = array_column( $b['people'], null, 'id' )[$id]; $fields = self::decode( $person_row['extra_json'] ); $snapshot = self::decode( $r['snapshot_json'] ); $missing = array();
 				if ( 'ALL' === ( $snapshot['event']['participant_extra_scope'] ?? 'ONE' ) || (int) $b['people'][0]['id'] === $id ) foreach ( $snapshot['event']['participant_fields'] ?? array() as $field ) {
@@ -224,11 +223,22 @@ final class MI_Public_Balance {
 				}
 				$deadline = (string) ( $r['payment_deadline_at'] ?? '' );
 				if ( $deadline && function_exists( 'get_date_from_gmt' ) ) $deadline = get_date_from_gmt( $deadline, 'd/m/Y H:i' );
-				$receipt['people'][] = array( 'row' => $id, 'name' => $view['cognome'] . ' ' . $view['nome'], 'lines' => $lines, 'total' => $sum, 'paid' => $view['paid'], 'missing' => $missing, 'deadline' => $deadline );
-				$position = self::payment_position( $sum, $view['deposit'], $view['paid'] );
-				foreach ( $position as $field => $amount ) $receipt[$field] += $amount;
+				$receipt['people'][] = array( 'row' => $id, 'registration_id' => $rid, 'name' => $view['cognome'] . ' ' . $view['nome'], 'lines' => $lines, 'total' => $sum, 'paid' => $view['paid'], 'deposit' => $view['deposit'], 'missing' => $missing, 'deadline' => $deadline );
 				$receipt['total'] += $sum; $receipt['paid'] += $view['paid'];
 			}
+			$projected_by_registration = array();
+			foreach ( $bundles as $rid => $bundle ) {
+				$new_total = (int) $bundle['registration']['total_cents'] + (int) ( $deltas[$rid] ?? 0 );
+				$projected = MI_Payment_People::projected_deposits( $bundle['registration'], $bundle['individual'], $person_deltas[$rid] ?? array(), $new_total );
+				if ( null === $projected && 'DEPOSIT_BALANCE' === $bundle['registration']['economic_mode'] ) { $projected = array(); foreach ( $bundle['individual']['people'] as $person_position ) $projected[(int) $person_position['id']] = min( (int) $person_position['deposit'], max( 0, (int) $person_position['total'] + (int) ( $person_deltas[$rid][(int) $person_position['id']] ?? 0 ) ) ); }
+				$projected_by_registration[$rid] = $projected ?: array();
+			}
+			foreach ( array( 'deposit', 'depositPaid', 'depositDue', 'saldoDue', 'balance' ) as $field ) $receipt[$field] = 0;
+			foreach ( $receipt['people'] as &$receipt_person ) {
+				$deposit = (int) ( $projected_by_registration[(int) $receipt_person['registration_id']][(int) $receipt_person['row']] ?? $receipt_person['deposit'] );
+				$receipt_person['deposit'] = $deposit;
+				foreach ( self::payment_position( $receipt_person['total'], $deposit, $receipt_person['paid'] ) as $field => $amount ) $receipt[$field] += $amount;
+			} unset( $receipt_person );
 			$receipt['causale'] = 'Saldo ' . get_the_title( $event ) . ' — ' . implode( ', ', array_column( $receipt['people'], 'name' ) );
 			$receipt['fingerprint'] = hash( 'sha256', wp_json_encode( $receipt ) );
 			if ( $preview ) { $wpdb->query( 'ROLLBACK' ); return $receipt; }
@@ -236,9 +246,14 @@ final class MI_Public_Balance {
 			foreach ( $changes as $id => $change ) if ( $change['before'] !== $change['after'] && false === $wpdb->update( $wpdb->prefix . 'mi_participants', array( 'options_json' => wp_json_encode( $change['after'] ) ), array( 'id' => $id ) ) ) throw new RuntimeException( 'Servizi non salvati.' );
 			foreach ( $bundles as $rid => $b ) {
 				$r = $b['registration']; $total = (int) $r['total_cents'] + $deltas[$rid]; if ( $total < 0 ) throw new InvalidArgumentException( 'La rettifica presente richiede una verifica della segreteria.' );
-				$initial = 'FULL_PAYMENT' === $r['economic_mode'] ? $total : min( $total, (int) $r['initial_due_cents'] );
-				$status = in_array( $r['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ? ( $b['paid'] >= $initial ? 'CONFIRMED' : 'PENDING_PAYMENT' ) : $r['status'];
+				$deposits = MI_Payment_People::projected_deposits( $r, $b['individual'], $person_deltas[$rid] ?? array(), $total );
+				if ( null === $deposits && 'DEPOSIT_BALANCE' === $r['economic_mode'] ) { $deposits = array(); foreach ( $b['individual']['people'] as $person_position ) $deposits[(int) $person_position['id']] = min( (int) $person_position['deposit'], max( 0, (int) $person_position['total'] + (int) ( $person_deltas[$rid][(int) $person_position['id']] ?? 0 ) ) ); }
+				$initial = 'FULL_PAYMENT' === $r['economic_mode'] ? $total : array_sum( $deposits ?: array() );
+				$covered = MI_Payment_People::covered( $b['individual'], $r['economic_mode'], $person_deltas[$rid] ?? array(), $deposits ?: array() );
+				if ( null === $covered ) $covered = $b['paid'] >= $initial;
+				$status = in_array( $r['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ? ( $covered ? 'CONFIRMED' : 'PENDING_PAYMENT' ) : $r['status'];
 				if ( false === $wpdb->update( $wpdb->prefix . 'mi_registrations', array( 'total_cents' => $total, 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial, 'status' => $status, 'expires_at' => 'CONFIRMED' === $status ? null : $r['payment_deadline_at'] ), array( 'id' => $rid ) ) ) throw new RuntimeException( 'Importi non salvati.' );
+				foreach ( $deposits ?: array() as $participant_id => $deposit_due ) if ( false === $wpdb->update( $wpdb->prefix . 'mi_participants', array( 'deposit_due_cents' => (int) $deposit_due ), array( 'id' => (int) $participant_id, 'registration_id' => $rid ), array( '%d' ), array( '%d', '%d' ) ) ) throw new RuntimeException( 'Caparre individuali non salvate.' );
 				MI_Registration_Service::mark_workspace_changed_locked( $rid );
 			}
 			$receipt['emailQueued'] = self::queue_email( $event, $receipt, $key, (int) array_key_first( $bundles ) );

@@ -3,6 +3,41 @@ defined( 'ABSPATH' ) || exit;
 
 /** Quote individuali e attribuzioni: nessuna ripartizione implicita dei versamenti storici. */
 final class MI_Payment_People {
+	/** Project percentage deposits after person-scoped price changes. Null means the plan is not percentage-based or quotes are not attributable. */
+	public static function projected_deposits( array $registration, array $position, array $deltas, $new_total ) {
+		$snapshot = json_decode( $registration['snapshot_json'] ?? '{}', true ) ?: array();
+		$event = $snapshot['event'] ?? array();
+		if ( 'DEPOSIT_BALANCE' !== ( $registration['economic_mode'] ?? '' ) || 'PERCENTAGE' !== strtoupper( (string) ( $event['deposit_mode'] ?? '' ) ) || empty( $position['quotes_known'] ) ) return null;
+		$totals = array(); $sum = 0;
+		foreach ( $position['people'] as $person ) {
+			$id = (int) $person['id']; $total = (int) $person['total'] + (int) ( $deltas[$id] ?? 0 );
+			if ( $total < 0 ) return null;
+			$totals[$id] = $total; $sum += $total;
+		}
+		if ( $sum !== (int) $new_total ) return null;
+		$percentage = min( 99, max( 1, absint( $event['deposit_percentage'] ?? 30 ) ) );
+		$target = (int) round( $sum * $percentage / 100 );
+		$deposits = array(); $remainders = array(); $assigned = 0;
+		foreach ( $totals as $id => $total ) {
+			$product = $total * $target; $deposits[$id] = $sum ? intdiv( $product, $sum ) : 0;
+			$remainders[$id] = $sum ? $product % $sum : 0; $assigned += $deposits[$id];
+		}
+		arsort( $remainders, SORT_NUMERIC );
+		foreach ( $remainders as $id => $remainder ) { if ( $assigned >= $target ) break; $deposits[$id]++; $assigned++; }
+		return $deposits;
+	}
+	/** True/false when person coverage is knowable, null for legacy or aggregate-only histories. */
+	public static function covered( array $position, $economic_mode, array $total_deltas = array(), array $projected_deposits = array() ) {
+		if ( empty( $position['quotes_known'] ) || empty( $position['payments_known'] ) ) return null;
+		$field = 'DEPOSIT_BALANCE' === $economic_mode ? 'deposit' : 'total';
+		foreach ( $position['people'] as $person ) {
+			if ( empty( $person['active'] ) ) continue;
+			$id = (int) $person['id'];
+			$required = 'deposit' === $field ? (int) ( $projected_deposits[$id] ?? $person['deposit'] ) : (int) $person['total'] + (int) ( $total_deltas[$id] ?? 0 );
+			if ( (int) $person['paid'] < max( 0, $required ) ) return false;
+		}
+		return true;
+	}
 	public static function read( array $registration, array $payments ) {
 		global $wpdb;
 		$id = (int) $registration['id'];

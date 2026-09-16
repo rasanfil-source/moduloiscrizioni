@@ -19,15 +19,16 @@ test('rimborsi e storni mantengono la primazia della persona', () => {
 });
 
 test('la conferma richiede la copertura personale e non il solo totale aggregato', () => {
-  assert.match(ledger, /\$updated_individual = MI_Payment_People::read/);
-  assert.match(ledger, /'DEPOSIT_BALANCE' === \$r\['economic_mode'\] \? 'deposit_missing' : 'balance'/);
-  assert.match(ledger, /\$person\['active'\] && \(int\) \$person\[\$field\] > 0/);
+	assert.match(ledger, /\$updated_individual = MI_Payment_People::read/);
+	assert.match(ledger, /MI_Payment_People::covered\( \$updated_individual, \$r\['economic_mode'\] \)/);
+	assert.match(people, /if \( empty\( \$person\['active'\] \) \) continue/);
 });
 
 test('la caparra percentuale viene ricalcolata senza cambiare la caparra fissa', () => {
-  assert.match(management, /function percentage_deposits/);
-  assert.match(management, /'PERCENTAGE' !== strtoupper/);
-  assert.match(management, /round\( \$sum \* \$percentage \/ 100 \)/);
+	assert.match(management, /function percentage_deposits/);
+	assert.match(management, /MI_Payment_People::projected_deposits/);
+	assert.match(people, /'PERCENTAGE' !== strtoupper/);
+	assert.match(people, /round\( \$sum \* \$percentage \/ 100 \)/);
   assert.match(management, /'deposits' => null !== \$deposits/);
 });
 

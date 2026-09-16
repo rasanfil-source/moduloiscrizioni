@@ -43,7 +43,7 @@ function elencaPagamenti_(payload) {
   const allowed = {};
   orderCodes.forEach(function (code) { allowed[code] = true; });
   const payments = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS)).filter(function (row) { return allowed[String(row.codice_ordine)] && String(row.canale_registrazione).toUpperCase() !== 'WORDPRESS'; }).slice(0, 500).map(function (row) {
-    return { id_pagamento: normalizzaTesto_(row.id_pagamento, 64), codice_ordine: normalizzaTesto_(row.codice_ordine, 64), tipo_movimento: normalizzaTesto_(row.tipo_movimento, 24), tipo_rata: normalizzaTesto_(row.tipo_rata, 24), data_effettiva: row.data_effettiva instanceof Date ? row.data_effettiva.toISOString() : normalizzaTesto_(row.data_effettiva, 40), importo_centesimi: Math.max(0, Math.round(Number(row.importo_centesimi) || 0)), fonte_pagamento: normalizzaTesto_(row.fonte_pagamento, 24), riferimento_esterno: normalizzaTesto_(row.riferimento_esterno, 120), etichetta_operatore: normalizzaTesto_(row.etichetta_operatore, 100), nota_amministrativa: normalizzaTesto_(row.nota_amministrativa, 500) };
+    return { id_pagamento: normalizzaTesto_(row.id_pagamento, 64), codice_ordine: normalizzaTesto_(row.codice_ordine, 64), tipo_movimento: normalizzaTesto_(row.tipo_movimento, 24), tipo_rata: normalizzaTesto_(row.tipo_rata, 24), data_effettiva: row.data_effettiva instanceof Date ? row.data_effettiva.toISOString() : normalizzaTesto_(row.data_effettiva, 40), importo_centesimi: Math.max(0, Math.round(Number(row.importo_centesimi) || 0)), fonte_pagamento: normalizzaTesto_(row.fonte_pagamento, 24), riferimento_esterno: normalizzaTesto_(row.riferimento_esterno, 120), etichetta_operatore: normalizzaTesto_(row.etichetta_operatore, 100), nota_amministrativa: normalizzaTesto_(row.nota_amministrativa, 500), attribuzioni_partecipanti_json: normalizzaTesto_(row.attribuzioni_partecipanti_json, 10000) };
   });
   return { ok: true, payments: payments };
 }
@@ -334,8 +334,22 @@ function sincronizzaPagamenti_(orderCode, payments) {
     const kind = kindMap[String(payment.movement_kind || payment.transaction_kind || '').toUpperCase()];
     const source = sourceMap[String(payment.payment_source || '').toUpperCase()];
     const installment = installmentMap[String(payment.installment_kind || '').toUpperCase()] || 'NON_ASSEGNATO';
-    const amount = Math.max(0, Math.round(Number(payment.amount_cents) || 0));
-    if (!kind || !source || amount < 1) throw new Error('INVALID_PAYMENT');
+	const amount = Math.max(0, Math.round(Number(payment.amount_cents) || 0));
+	if (!kind || !source || amount < 1) throw new Error('INVALID_PAYMENT');
+	let allocations = payment.participant_allocations_json || [];
+	try { if (typeof allocations === 'string') allocations = allocations ? JSON.parse(allocations) : []; } catch (error) { throw new Error('INVALID_PAYMENT_ALLOCATIONS'); }
+	if (!Array.isArray(allocations)) throw new Error('INVALID_PAYMENT_ALLOCATIONS');
+	const participantIds = new Set();
+	let allocated = 0;
+	allocations = allocations.map(function (allocation) {
+	  const participantId = Math.round(Number(allocation && allocation.participant_id));
+	  const allocatedAmount = Math.round(Number(allocation && allocation.amount_cents));
+	  if (participantId < 1 || allocatedAmount < 1 || participantIds.has(participantId)) throw new Error('INVALID_PAYMENT_ALLOCATIONS');
+	  participantIds.add(participantId); allocated += allocatedAmount;
+	  return { participant_id: participantId, name: normalizzaTesto_(allocation.name, 200), amount_cents: allocatedAmount };
+	});
+	if (allocations.length && allocated !== amount) throw new Error('INVALID_PAYMENT_ALLOCATIONS');
+	const allocationsJson = allocations.length ? JSON.stringify(allocations) : '';
     const effective = normalizzaTesto_(payment.effective_at, 40);
     const effectiveDate = effective ? new Date(stableId && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(effective) ? effective.replace(' ', 'T') + 'Z' : effective) : new Date();
     if (isNaN(effectiveDate.getTime())) {
@@ -346,10 +360,10 @@ function sincronizzaPagamenti_(orderCode, payments) {
     const origin = stableId ? 'MYSQL|' + orderCode + '|' + stableId : 'WP|' + orderCode + '|' + kind + '|' + installment + '|' + effective + '|' + amount + '|' + source + '|' + reference;
     const duplicate = existing.find(function (row) { return String(row.id_inserimento_origine) === origin; });
     if (duplicate) {
-      if (stableId && (String(duplicate.tipo_movimento) !== kind || Number(duplicate.importo_centesimi) !== amount || String(duplicate.fonte_pagamento) !== source || new Date(duplicate.data_effettiva).getTime() !== effectiveDate.getTime())) throw new Error('PAYMENT_ID_CONFLICT');
-      return;
-    }
-    sheet.appendRow([creaIdentificativoOpaco_('pay'), neutralizzaFormula_(orderCode, 64), kind, installment, effectiveDate, amount, 'EUR', source, neutralizzaFormula_(reference, 120), neutralizzaFormula_(payment.operator_label, 100), 'WORDPRESS', origin, new Date(), neutralizzaFormula_(payment.administrative_note, 500)]);
-    existing.push({ id_inserimento_origine: origin, tipo_movimento: kind, importo_centesimi: amount, fonte_pagamento: source, data_effettiva: effectiveDate });
+	  if (stableId && (String(duplicate.tipo_movimento) !== kind || Number(duplicate.importo_centesimi) !== amount || String(duplicate.fonte_pagamento) !== source || new Date(duplicate.data_effettiva).getTime() !== effectiveDate.getTime() || String(duplicate.attribuzioni_partecipanti_json || '') !== allocationsJson)) throw new Error('PAYMENT_ID_CONFLICT');
+	  return;
+	}
+	sheet.appendRow([creaIdentificativoOpaco_('pay'), neutralizzaFormula_(orderCode, 64), kind, installment, effectiveDate, amount, 'EUR', source, neutralizzaFormula_(reference, 120), neutralizzaFormula_(payment.operator_label, 100), 'WORDPRESS', origin, new Date(), neutralizzaFormula_(payment.administrative_note, 500), allocationsJson]);
+	existing.push({ id_inserimento_origine: origin, tipo_movimento: kind, importo_centesimi: amount, fonte_pagamento: source, data_effettiva: effectiveDate, attribuzioni_partecipanti_json: allocationsJson });
   });
 }

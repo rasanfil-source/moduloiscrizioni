@@ -6,7 +6,7 @@ import vm from 'node:vm';
 const source = (await Promise.all(['Config.gs', 'Core.gs', 'Payments.gs', 'PagamentiPortale.gs'].map(n => readFile(new URL('../src/' + n, import.meta.url), 'utf8')))).join('\n');
 function env() {
   const payments = [], orders = [{codice_ordine:'ORD-DEMO',id_evento:'42',stato:'CONFIRMED',totale_centesimi:10000}];
-  const headers = ['id_pagamento','codice_ordine','tipo_movimento','tipo_rata','data_effettiva','importo_centesimi','valuta','fonte_pagamento','riferimento_esterno','etichetta_operatore','canale_registrazione','id_inserimento_origine','data_creazione','nota_amministrativa'];
+	const headers = ['id_pagamento','codice_ordine','tipo_movimento','tipo_rata','data_effettiva','importo_centesimi','valuta','fonte_pagamento','riferimento_esterno','etichetta_operatore','canale_registrazione','id_inserimento_origine','data_creazione','nota_amministrativa','attribuzioni_partecipanti_json'];
   let uuid = 0;
   const context = vm.createContext({Date, console, Utilities:{getUuid:()=>`id-${++uuid}`,parseDate:s=>new Date(s+'T00:00:00Z'),formatDate:d=>d.toISOString().slice(0,10)},LockService:{getScriptLock:()=>({waitLock(){},releaseLock(){}})}});
   vm.runInContext(source,context);

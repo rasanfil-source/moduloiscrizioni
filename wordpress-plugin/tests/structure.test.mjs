@@ -220,7 +220,7 @@ test('le iscrizioni vengono replicate con idempotenza senza perdere il salvatagg
   assert.match(service, /sync_pending_workspace/);
   assert.match(service, /ORDER BY workspace_attempts,id LIMIT 10/);
   assert.match(service, /\$payments_table\s*=\s*\$wpdb->prefix\s*\.\s*'mi_payments'/);
-  assert.match(service, /administrative_note FROM \{\$payments_table\}/);
+	assert.match(service, /administrative_note, participant_allocations_json FROM \{\$payments_table\}/);
   assert.match(activator, /workspace_status varchar\(24\)/);
   assert.match(activator, /workspace_attempts/);
   assert.match(activator, /wp_schedule_event/);
@@ -1062,7 +1062,7 @@ test('rimborsi concorrenti e codici grafici email hanno protezioni dedicate', as
   const images = await read('includes/class-mi-code-image.php');
   const publicScript = await read('assets/public.js');
 	const service = await read('includes/class-mi-registration-service.php');
-	assert.match(service, /'EXPIRED' === \$target_status[\s\S]+SUM\(CASE WHEN transaction_kind = 'REFUND'/);
+	assert.match(service, /'EXPIRED' === \$target_status[\s\S]+payment_coverage\( \$registration \)/);
   assert.match(sender, /addStringEmbeddedImage/);
   assert.match(images, /reed_solomon/);
   assert.match(images, /barcode_svg/);
@@ -1263,7 +1263,7 @@ test('le prenotazioni a pagamento attendono il versamento prima della conferma',
   const admin = await read('includes/class-mi-admin.php');
   const script = await read('assets/public.js');
   assert.match(service, /'PENDING_PAYMENT'/);
-  assert.match(service, /WHERE r\.status = 'PENDING_PAYMENT'/);
+	assert.match(service, /WHERE status = 'PENDING_PAYMENT'/);
   assert.match(service, /PAYMENT_STATUS_CHANGED/);
   assert.match(admin, /'PENDING_PAYMENT'.*'CONFIRMED'/s);
   assert.match(admin, /Da pagare/);

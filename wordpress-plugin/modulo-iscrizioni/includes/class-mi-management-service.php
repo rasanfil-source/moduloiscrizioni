@@ -1,5 +1,6 @@
 <?php
 defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/class-mi-payment-people.php';
 
 /** Operational records in MySQL. Google receives a projection of these records. */
 final class MI_Management_Service {
@@ -28,26 +29,11 @@ final class MI_Management_Service {
 	}
 	/** Recalculate percentage deposits on the new individual totals, preserving exact cents. */
 	private static function percentage_deposits( array $registration, array $position, array $deltas, $new_total ) {
-		$snapshot = self::decode( $registration['snapshot_json'] ?? '' );
-		$event = $snapshot['event'] ?? array();
-		if ( 'DEPOSIT_BALANCE' !== ( $registration['economic_mode'] ?? '' ) || 'PERCENTAGE' !== strtoupper( (string) ( $event['deposit_mode'] ?? '' ) ) || empty( $position['quotes_known'] ) ) return null;
-		$totals = array(); $sum = 0;
-		foreach ( $position['people'] as $person ) {
-			$id = (int) $person['id']; $total = (int) $person['total'] + (int) ( $deltas[$id] ?? 0 );
-			if ( $total < 0 ) return null;
-			$totals[$id] = $total; $sum += $total;
-		}
-		if ( $sum !== (int) $new_total ) return null;
-		$percentage = min( 99, max( 1, absint( $event['deposit_percentage'] ?? 30 ) ) );
-		$target = (int) round( $sum * $percentage / 100 );
-		$deposits = array(); $remainders = array(); $assigned = 0;
-		foreach ( $totals as $id => $total ) {
-			$product = $total * $target; $deposits[$id] = $sum ? intdiv( $product, $sum ) : 0;
-			$remainders[$id] = $sum ? $product % $sum : 0; $assigned += $deposits[$id];
-		}
-		arsort( $remainders, SORT_NUMERIC );
-		foreach ( $remainders as $id => $remainder ) { if ( $assigned >= $target ) break; $deposits[$id]++; $assigned++; }
-		return $deposits;
+		return MI_Payment_People::projected_deposits( $registration, $position, $deltas, $new_total );
+	}
+	private static function covered_after_change( array $registration, array $position, array $deltas, array $deposits, $paid, $initial ) {
+		$covered = MI_Payment_People::covered( $position, $registration['economic_mode'] ?? '', $deltas, $deposits );
+		return null === $covered ? (int) $paid >= (int) $initial : $covered;
 	}
 	private static function visible_special_requests( $value ) {
 		$value = trim( (string) $value );
@@ -161,11 +147,15 @@ final class MI_Management_Service {
 		try {
 			$orders = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d ORDER BY id", $event_id ), ARRAY_A );
 			self::check_database();
-			$people = $wpdb->get_results( $wpdb->prepare( "SELECT p.id,p.registration_id,p.first_name,p.last_name,p.extra_json,p.options_json,p.room_code,p.status FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d ORDER BY p.id", $event_id ), ARRAY_A );
+			$people = $wpdb->get_results( $wpdb->prepare( "SELECT p.id,p.registration_id,p.ticket_type_code,p.first_name,p.last_name,p.extra_json,p.options_json,p.room_code,p.status,p.deposit_due_cents FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d ORDER BY p.id", $event_id ), ARRAY_A );
 			self::check_database();
-			$payments = $wpdb->get_results( $wpdb->prepare( "SELECT p.registration_id,SUM(CASE WHEN p.transaction_kind='REFUND' THEN -p.amount_cents ELSE p.amount_cents END) AS paid FROM {$wpdb->prefix}mi_payments p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d GROUP BY p.registration_id", $event_id ), ARRAY_A );
+			$payments = $wpdb->get_results( $wpdb->prepare( "SELECT p.* FROM {$wpdb->prefix}mi_payments p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d ORDER BY p.registration_id,p.id", $event_id ), ARRAY_A );
 			self::check_database();
-			$paid = array_column( $payments, 'paid', 'registration_id' );
+			$registration_items = $wpdb->get_results( $wpdb->prepare( "SELECT i.* FROM {$wpdb->prefix}mi_registration_items i JOIN {$wpdb->prefix}mi_registrations r ON r.id=i.registration_id WHERE r.event_id=%d ORDER BY i.registration_id,i.id", $event_id ), ARRAY_A );
+			self::check_database();
+			$paid = array(); $payments_by_registration = array(); $items_by_registration = array();
+			foreach ( $payments as $payment ) { $rid = (int) $payment['registration_id']; $payments_by_registration[$rid][] = $payment; $paid[$rid] = ( $paid[$rid] ?? 0 ) + ( 'REFUND' === $payment['transaction_kind'] ? -1 : 1 ) * (int) $payment['amount_cents']; }
+			foreach ( $registration_items as $item ) $items_by_registration[(int) $item['registration_id']][] = $item;
 			$review_rows = $wpdb->get_results( $wpdb->prepare( "SELECT a.* FROM {$wpdb->prefix}mi_registration_events a JOIN {$wpdb->prefix}mi_registrations r ON r.id=a.registration_id WHERE r.event_id=%d AND a.event_type='MANAGEMENT_request_review' AND a.id=(SELECT MAX(b.id) FROM {$wpdb->prefix}mi_registration_events b WHERE b.registration_id=a.registration_id AND b.event_type='MANAGEMENT_request_review')", $event_id ), ARRAY_A );
 			self::check_database(); $reviews = array_column( $review_rows, null, 'registration_id' );
             $attendance_rows = $wpdb->get_results( $wpdb->prepare( "SELECT a.detail_json,a.actor_label,a.created_at FROM {$wpdb->prefix}mi_registration_events a JOIN {$wpdb->prefix}mi_registrations r ON r.id=a.registration_id WHERE r.event_id=%d AND a.event_type='MANAGEMENT_attendance' ORDER BY a.id", $event_id ), ARRAY_A );
@@ -193,13 +183,17 @@ final class MI_Management_Service {
 				}
 				$sum = (int) ( $paid[$order['id']] ?? 0 );
 				$position = MI_Payment_Ledger::position( $order, $sum );
+				$individual_position = MI_Payment_People::calculate( $order, $all_participants, $items_by_registration[(int) $order['id']] ?? array(), $payments_by_registration[(int) $order['id']] ?? array() );
+				$individual_economics = array_column( $individual_position['people'], null, 'id' );
 				$deposit = array_intersect_key( $position, array_flip( array( 'deposit_plan', 'deposit_due', 'deposit_missing', 'deposit_covered', 'balance' ) ) );
 				$deposit['paid'] = $sum;
 				$collectible = $position['managed'] && in_array( $order['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true );
 				foreach ( $all_participants as $number => $person ) {
 					$fields = self::decode( $person['extra_json'] ); $missing_fields = array();
 					if ( (int) $person['id'] === $first_person_id || 'ALL' === ( $snapshot['event']['participant_extra_scope'] ?? '' ) ) foreach ( $definitions as $f ) if ( $f['required'] && '' === trim( (string) ( $fields[$f['key']] ?? '' ) ) ) $missing_fields[] = $f['label'];
-					$individuals[] = $deposit + array( 'is_buyer' => (int) $person['id'] === $buyer_participant_id, 'id' => (int) $person['id'], 'number' => $number + 1, 'attendance' => $attendance[$person['id']]['state'] ?? 'UNRECORDED', 'code' => $order['order_code'], 'name' => trim( ( $person['last_name'] ?? '' ) . ' ' . ( $person['first_name'] ?? '' ) ), 'buyer' => trim( $order['buyer_last_name'] . ' ' . $order['buyer_first_name'] ), 'email' => self::participant_contact( $fields, $definitions, 'email', $order['buyer_email'] ?? '' ), 'phone' => self::participant_contact( $fields, $definitions, 'phone', $order['buyer_phone'] ?? '' ), 'status' => 'CANCELLED' === $person['status'] ? 'CANCELLED' : $order['status'], 'room' => $person['room_code'], 'fields' => $fields, 'missing' => $missing_fields, 'unassigned' => $needs_room( $person ) && ! $person['room_code'], 'collectible' => $collectible && $position['balance'] > 0, 'requests' => self::visible_special_requests( $order['special_requests'] ?? '' ), 'requests_reviewed' => $request_review['reviewed'], 'offer_expires_at' => $order['waitlist_offer_expires_at'] ?? '', 'options' => self::decode( $person['options_json'] ?? '' ) );
+					$economic = $individual_economics[(int) $person['id']] ?? array( 'total' => 0, 'deposit' => 0, 'paid' => 0, 'balance' => 0, 'deposit_missing' => 0 );
+					$person_deposit = array( 'deposit_plan' => 'DEPOSIT_BALANCE' === ( $order['economic_mode'] ?? '' ), 'deposit_due' => (int) $economic['deposit'], 'deposit_missing' => (int) $economic['deposit_missing'], 'deposit_covered' => 'DEPOSIT_BALANCE' === ( $order['economic_mode'] ?? '' ) && (int) $economic['deposit'] > 0 && (int) $economic['deposit_missing'] <= 0, 'paid' => (int) $economic['paid'], 'balance' => (int) $economic['balance'] );
+					$individuals[] = $person_deposit + array( 'economics_known' => ! empty( $individual_position['quotes_known'] ) && ! empty( $individual_position['payments_known'] ), 'is_buyer' => (int) $person['id'] === $buyer_participant_id, 'id' => (int) $person['id'], 'number' => $number + 1, 'attendance' => $attendance[$person['id']]['state'] ?? 'UNRECORDED', 'code' => $order['order_code'], 'name' => trim( ( $person['last_name'] ?? '' ) . ' ' . ( $person['first_name'] ?? '' ) ), 'buyer' => trim( $order['buyer_last_name'] . ' ' . $order['buyer_first_name'] ), 'email' => self::participant_contact( $fields, $definitions, 'email', $order['buyer_email'] ?? '' ), 'phone' => self::participant_contact( $fields, $definitions, 'phone', $order['buyer_phone'] ?? '' ), 'status' => 'CANCELLED' === $person['status'] ? 'CANCELLED' : $order['status'], 'room' => $person['room_code'], 'fields' => $fields, 'missing' => $missing_fields, 'unassigned' => $needs_room( $person ) && ! $person['room_code'], 'collectible' => $collectible && (int) $economic['balance'] > 0, 'requests' => self::visible_special_requests( $order['special_requests'] ?? '' ), 'requests_reviewed' => $request_review['reviewed'], 'offer_expires_at' => $order['waitlist_offer_expires_at'] ?? '', 'options' => self::decode( $person['options_json'] ?? '' ) );
 				}
 				$items[] = $deposit + array( 'code' => $order['order_code'], 'name' => trim( $order['buyer_last_name'] . ' ' . $order['buyer_first_name'] ), 'status' => $order['status'], 'active' => ! in_array( $order['status'], array( 'CANCELLED','EXPIRED' ), true ), 'participants' => count( $participants ), 'total' => (int) $order['total_cents'], 'paid' => $sum, 'balance' => $position['balance'], 'collectible' => $collectible, 'missing' => $missing, 'unassigned' => $unassigned, 'requests' => self::visible_special_requests( $order['special_requests'] ?? '' ), 'requests_reviewed' => $request_review['reviewed'], 'offer_expires_at' => $order['waitlist_offer_expires_at'] ?? '', 'order_options' => self::decode( $order['order_options_json'] ?? '' ) );
 			}
@@ -298,9 +292,10 @@ final class MI_Management_Service {
 			foreach ( $plan['people'] as $changed_person ) if ( $changed_person['registration_id'] === (int) $row['id'] ) $person_deltas[(int) $changed_person['id']] = (int) $changed_person['delta'];
 			$position = MI_Payment_People::read( $row, $movements );
 			$deposits = self::percentage_deposits( $row, $position, $person_deltas, $total );
+			if ( null === $deposits && 'DEPOSIT_BALANCE' === $row['economic_mode'] && ! empty( $position['quotes_known'] ) ) { $deposits = array(); foreach ( $position['people'] as $person_position ) $deposits[(int) $person_position['id']] = min( (int) $person_position['deposit'], max( 0, (int) $person_position['total'] + (int) ( $person_deltas[(int) $person_position['id']] ?? 0 ) ) ); }
 			$initial = 'FULL_PAYMENT' === $row['economic_mode'] ? $total : ( null !== $deposits ? array_sum( $deposits ) : min( (int) $row['initial_due_cents'], $total ) );
 			$changes = array( 'total_cents' => $total );
-			if ( $managed ) { $changes += array( 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial, 'status' => $paid >= $initial ? 'CONFIRMED' : 'PENDING_PAYMENT', 'expires_at' => $paid >= $initial ? null : $row['payment_deadline_at'] ); }
+			if ( $managed ) { $covered = self::covered_after_change( $row, $position, $person_deltas, null !== $deposits ? $deposits : array(), $paid, $initial ); $changes += array( 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial, 'status' => $covered ? 'CONFIRMED' : 'PENDING_PAYMENT', 'expires_at' => $covered ? null : $row['payment_deadline_at'] ); }
 			$plan['orders'][] = array( 'id' => (int) $row['id'], 'code' => $code, 'before_total' => (int) $row['total_cents'], 'after_total' => $total, 'delta' => $delta, 'paid' => $paid, 'due' => $managed ? max( 0, $total - $paid ) : 0, 'refund' => $managed ? max( 0, $paid - $total ) : 0, 'changes' => $changes, 'deposits' => null !== $deposits ? $deposits : array() );
 		}
 		foreach ( $occupancy as $code => $count ) if ( $count > ( $inventory[$code]['capacity'] ?? $plan['new_rooms'][$code]['capacity'] ?? 0 ) ) throw new InvalidArgumentException( 'Capienza superata per ' . $code . '. Scegli un’altra camera.' );
@@ -475,7 +470,7 @@ final class MI_Management_Service {
 		$initial = 'FULL_PAYMENT' === $locked['economic_mode'] ? $total : ( $position['quotes_known'] ? array_sum( $deposits ) : min( (int) $locked['initial_due_cents'], $total ) );
 		$paid = 0; foreach ( $history as $movement ) $paid += ( 'REFUND' === $movement['transaction_kind'] ? -1 : 1 ) * (int) $movement['amount_cents'];
 		$changes = array( 'total_cents' => $total, 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial );
-		if ( in_array( $locked['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) $changes += array( 'status' => $paid >= $initial ? 'CONFIRMED' : 'PENDING_PAYMENT', 'expires_at' => $paid >= $initial ? null : $locked['payment_deadline_at'] );
+		if ( in_array( $locked['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) { $covered = self::covered_after_change( $locked, $position, $person ? array( $person['id'] => $delta ) : array(), $deposits, $paid, $initial ); $changes += array( 'status' => $covered ? 'CONFIRMED' : 'PENDING_PAYMENT', 'expires_at' => $covered ? null : $locked['payment_deadline_at'] ); }
 		return array( 'participant_id' => $person ? $person['id'] : 0, 'before_options' => $current_options, 'after_options' => $options, 'reason' => sanitize_textarea_field( $data['reason'] ), 'delta' => $delta, 'before_total' => $individual && $position['quotes_known'] ? $individual['total'] : null, 'after_total' => $individual && $position['quotes_known'] ? $individual['total'] + $delta : null, 'credit' => $individual && $position['payments_known'] && $position['quotes_known'] ? max( 0, $individual['paid'] - $individual['total'] - $delta ) : null, 'changes' => $changes, 'deposits' => $position['quotes_known'] ? $deposits : array() );
 	}
 	public static function options_preview( $id, $data, $version ) {
@@ -538,8 +533,17 @@ final class MI_Management_Service {
 				$initial = 'FULL_PAYMENT' === $locked['economic_mode'] ? $data['total_cents'] : min( (int) $locked['initial_due_cents'], $data['total_cents'] );
 				$changes = array( 'total_cents' => $data['total_cents'], 'initial_due_cents' => $initial, 'balance_cents' => $data['total_cents'] - $initial );
 				if ( in_array( $locked['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ) {
-					$paid = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(CASE WHEN transaction_kind='REFUND' THEN -amount_cents ELSE amount_cents END),0) FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d", $id ) ); self::check_database();
-					$changes['status'] = $paid >= $initial ? 'CONFIRMED' : 'PENDING_PAYMENT';
+					$history = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d ORDER BY id", $id ), ARRAY_A ); self::check_database();
+					$paid = 0; foreach ( $history as $movement ) $paid += ( 'REFUND' === $movement['transaction_kind'] ? -1 : 1 ) * (int) $movement['amount_cents'];
+					$position = MI_Payment_People::read( $locked, $history ); $deltas = array(); $covered = null;
+					$active = array_values( array_filter( $position['people'], static function ( $person ) { return ! empty( $person['active'] ); } ) );
+					if ( 'FULL_PAYMENT' === $locked['economic_mode'] && $data['total_cents'] > (int) $locked['total_cents'] ) {
+						if ( 1 === count( $active ) ) $deltas[(int) $active[0]['id']] = $data['total_cents'] - (int) $locked['total_cents'];
+						else $covered = false;
+					}
+					if ( null === $covered ) $covered = MI_Payment_People::covered( $position, $locked['economic_mode'], $deltas );
+					if ( null === $covered ) $covered = $paid >= $initial;
+					$changes['status'] = $covered ? 'CONFIRMED' : 'PENDING_PAYMENT';
 					$changes['expires_at'] = 'CONFIRMED' === $changes['status'] ? null : $locked['payment_deadline_at'];
 				}
 				if ( false === $wpdb->update( $wpdb->prefix . 'mi_registrations', $changes, array( 'id' => $id ) ) ) throw new RuntimeException( 'Rettifica non salvata.' );

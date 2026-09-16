@@ -32,7 +32,7 @@ function environment() {
   const headers = {
     Iscrizioni: ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'richieste_particolari', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'hash_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'versione_informativa_privacy', 'data_accettazione_privacy', 'biglietti_json', 'id_consenso_marketing', 'data_accettazione_marketing', 'opzioni_ordine_json', 'workspace_revision'],
     Partecipanti: ['codice_ordine', 'numero_partecipante', 'codice_tipologia', 'indice_tipologia', 'nome', 'cognome', 'dati_aggiuntivi_json', 'opzioni_json'],
-    Pagamenti: ['id_pagamento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo_centesimi', 'valuta', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'canale_registrazione', 'id_inserimento_origine', 'data_creazione', 'nota_amministrativa'],
+    Pagamenti: ['id_pagamento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo_centesimi', 'valuta', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'canale_registrazione', 'id_inserimento_origine', 'data_creazione', 'nota_amministrativa', 'attribuzioni_partecipanti_json'],
     'Coda email': ['id_messaggio', 'codice_ordine', 'destinatario', 'tipo_modello', 'contenuto_json', 'stato', 'data_creazione'],
     'Registro controlli': ['id_controllo', 'data_evento', 'canale', 'azione', 'tipo_entita', 'riferimento_entita', 'esito', 'etichetta_attore', 'codice_dettaglio']
   };
@@ -56,14 +56,16 @@ function environment() {
 
 test('replica MySQL conserva movimenti identici distinti, oltre 100 righe e revisione', () => {
   const {context,sheets}=environment();
-  const payments=Array.from({length:105},(_,i)=>({payment_id:String(i+1),transaction_kind:'PAYMENT',movement_kind:'INCASSO',installment_kind:'OTHER',effective_at:'2026-09-09 08:00:00',amount_cents:10,payment_source:'CASH',external_reference:'',operator_label:'Test',administrative_note:''}));
+	const payments=Array.from({length:105},(_,i)=>({payment_id:String(i+1),transaction_kind:'PAYMENT',movement_kind:'INCASSO',installment_kind:'OTHER',effective_at:'2026-09-09 08:00:00',amount_cents:10,payment_source:'CASH',external_reference:'',operator_label:'Test',administrative_note:'',participant_allocations_json:JSON.stringify([{participant_id:1,name:'Persona Uno',amount_cents:10}])}));
   const p=payload({payments,workspace_revision:'9'});
   assert.equal(context.aggiungiIscrizione_(p).workspace_revision,'9');
   assert.equal(sheets.Pagamenti.rows.length,106);
   assert.equal(context.aggiungiIscrizione_(p).complete,true);
   assert.equal(sheets.Pagamenti.rows.length,106);
-  assert.equal(sheets.Pagamenti.rows[1][4].toISOString(),'2026-09-09T08:00:00.000Z');
-  payments[0].amount_cents=11;
+	assert.equal(sheets.Pagamenti.rows[1][4].toISOString(),'2026-09-09T08:00:00.000Z');
+	assert.deepEqual(JSON.parse(sheets.Pagamenti.rows[1][14]),[{participant_id:1,name:'Persona Uno',amount_cents:10}]);
+	payments[0].amount_cents=11;
+	payments[0].participant_allocations_json=JSON.stringify([{participant_id:1,name:'Persona Uno',amount_cents:11}]);
   assert.throws(()=>context.aggiungiIscrizione_(p),/PAYMENT_ID_CONFLICT/);
 });
 

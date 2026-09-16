@@ -1,8 +1,19 @@
 <?php
 
 defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/class-mi-payment-people.php';
 
 final class MI_Registration_Service {
+	private static function payment_coverage( array $registration ) {
+		global $wpdb;
+		$payments = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d ORDER BY id", $registration['id'] ), ARRAY_A );
+		if ( $wpdb->last_error ) throw new RuntimeException( 'Movimenti non disponibili.' );
+		$paid = 0; foreach ( $payments as $payment ) $paid += ( 'REFUND' === $payment['transaction_kind'] ? -1 : 1 ) * (int) $payment['amount_cents'];
+		$position = MI_Payment_People::read( $registration, $payments );
+		$covered = MI_Payment_People::covered( $position, $registration['economic_mode'] ?? '' );
+		if ( null === $covered ) $covered = $paid >= (int) ( $registration['initial_due_cents'] ?? 0 );
+		return array( 'covered' => $covered, 'paid' => $paid, 'position' => $position );
+	}
 	public static function ensure_published_revision( $event_id, $force = false ) {
 		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( $event_id ); if ( is_wp_error( $lease ) ) return $lease; }
 		global $wpdb;
@@ -550,7 +561,7 @@ final class MI_Registration_Service {
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code, ticket_index, first_name, last_name, extra_json, room_code, options_json, status, cancelled_at FROM {$participants_table} WHERE registration_id = %d ORDER BY id", $registration_id ), ARRAY_A );
 		if ( $wpdb->last_error ) return 'PENDING';
 		// I movimenti acquisiti da DB_MODULI sono già nel registro centrale: non rimandarli come nuovi versamenti.
-		$payments = $wpdb->get_results( $wpdb->prepare( "SELECT id AS payment_id, transaction_kind, movement_kind, installment_kind, effective_at, amount_cents, payment_source, external_reference, operator_label, administrative_note FROM {$payments_table} WHERE registration_id = %d AND origin_channel <> 'WORKSPACE' ORDER BY effective_at, id", $registration_id ), ARRAY_A );
+		$payments = $wpdb->get_results( $wpdb->prepare( "SELECT id AS payment_id, transaction_kind, movement_kind, installment_kind, effective_at, amount_cents, payment_source, external_reference, operator_label, administrative_note, participant_allocations_json FROM {$payments_table} WHERE registration_id = %d AND origin_channel <> 'WORKSPACE' ORDER BY effective_at, id", $registration_id ), ARRAY_A );
 		if ( $wpdb->last_error ) return 'PENDING';
 		// Include anche i movimenti originati da Workspace, esclusi dalla replica sopra.
 		try {
@@ -661,7 +672,12 @@ final class MI_Registration_Service {
 				'privacy_accepted_at' => $privacy_accepted_at,
 				'marketing_consent_id' => (string) $registration['marketing_consent_id'],
 				'marketing_accepted_at' => (string) $registration['marketing_accepted_at'],
-				'payments'       => array_map( static function ( $payment ) { return array_map( 'sanitize_text_field', $payment ); }, $payments ),
+				'payments'       => array_map( static function ( $payment ) {
+					$allocations = json_decode( (string) ( $payment['participant_allocations_json'] ?? '' ), true );
+					$payment = array_map( 'sanitize_text_field', $payment );
+					$payment['participant_allocations_json'] = is_array( $allocations ) && $allocations ? wp_json_encode( $allocations ) : '';
+					return $payment;
+				}, $payments ),
 			)
 		);
 		if ( is_wp_error( $result ) || empty( $result['complete'] ) || (string) ( $result['workspace_revision'] ?? '' ) !== (string) $registration['workspace_revision'] ) {
@@ -693,19 +709,15 @@ final class MI_Registration_Service {
 	public static function expire_due_registrations() {
 		global $wpdb;
 		$registrations = $wpdb->prefix . 'mi_registrations';
-		$payments = $wpdb->prefix . 'mi_payments';
 		$now = current_time( 'mysql', true );
 		// La riconciliazione migliora la coerenza con Workspace, ma un endpoint GAS
 		// temporaneamente non aggiornato non deve sospendere le scadenze WordPress.
 		// I pagamenti autorevoli sono locali: Google non interviene nelle scadenze.
 		$ids = $wpdb->get_col(
 			$wpdb->prepare(
-				"SELECT r.id FROM {$registrations} r
-				 LEFT JOIN {$payments} p ON p.registration_id = r.id
-				 WHERE r.status = 'PENDING_PAYMENT' AND r.capacity_released_at IS NULL AND r.expires_at IS NOT NULL AND r.expires_at <= %s
-				 GROUP BY r.id, r.initial_due_cents
-				 HAVING COALESCE(SUM(CASE WHEN p.transaction_kind = 'REFUND' THEN -p.amount_cents ELSE p.amount_cents END), 0) < r.initial_due_cents
-				 ORDER BY r.id LIMIT 50",
+				"SELECT id FROM {$registrations}
+				 WHERE status = 'PENDING_PAYMENT' AND capacity_released_at IS NULL AND expires_at IS NOT NULL AND expires_at <= %s
+				 ORDER BY id LIMIT 50",
 				$now
 			)
 		);
@@ -786,16 +798,17 @@ final class MI_Registration_Service {
 	private static function reconcile_payment_status( $registration_id, $actor_label ) {
 		global $wpdb;
 		$registrations = $wpdb->prefix . 'mi_registrations';
-		$payments = $wpdb->prefix . 'mi_payments';
 		$wpdb->query( 'START TRANSACTION' );
 		try {
-			$registration = $wpdb->get_row( $wpdb->prepare( "SELECT id, status, initial_due_cents, payment_deadline_at FROM {$registrations} WHERE id = %d FOR UPDATE", $registration_id ), ARRAY_A );
+			$registration = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$registrations} WHERE id = %d FOR UPDATE", $registration_id ), ARRAY_A );
 			if ( ! $registration || ! in_array( $registration['status'], array( 'PENDING_PAYMENT', 'CONFIRMED' ), true ) || (int) $registration['initial_due_cents'] < 1 ) { $wpdb->query( 'COMMIT' ); return; }
-			$paid = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(CASE WHEN transaction_kind = 'REFUND' THEN -amount_cents ELSE amount_cents END),0) FROM {$payments} WHERE registration_id = %d", $registration_id ) );
-			$new_status = $paid >= (int) $registration['initial_due_cents'] ? 'CONFIRMED' : 'PENDING_PAYMENT';
+			$coverage = self::payment_coverage( $registration );
+			$paid = (int) $coverage['paid'];
+			$new_status = $coverage['covered'] ? 'CONFIRMED' : 'PENDING_PAYMENT';
 			if ( $new_status === $registration['status'] ) { $wpdb->query( 'COMMIT' ); return; }
 			$expires_at = 'CONFIRMED' === $new_status ? null : $registration['payment_deadline_at'];
 			if ( false === $wpdb->update( $registrations, array( 'status' => $new_status, 'expires_at' => $expires_at, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_status_changed' ), array( 'id' => $registration_id ), array( '%s', '%s', '%s', '%s' ), array( '%d' ) ) || ! self::append_registration_event( $registration_id, 'PAYMENT_STATUS_CHANGED', $registration['status'], $new_status, $actor_label, array( 'net_paid_cents' => $paid, 'initial_due_cents' => (int) $registration['initial_due_cents'] ) ) ) throw new RuntimeException( 'Stato pagamento non aggiornato.' );
+			self::mark_workspace_changed_locked( $registration_id );
 			$wpdb->query( 'COMMIT' );
 		} catch ( Throwable $error ) {
 			$wpdb->query( 'ROLLBACK' );
@@ -856,15 +869,15 @@ final class MI_Registration_Service {
 			$participant = $wpdb->get_row( $wpdb->prepare( "SELECT id,registration_id,ticket_type_code,first_name,last_name,status FROM {$participants} WHERE id=%d FOR UPDATE", $participant_id ), ARRAY_A );
 			if ( ! $participant ) throw new RuntimeException( 'Partecipante non trovato.' );
 			if ( 'CANCELLED' === $participant['status'] ) { $wpdb->query( 'COMMIT' ); return 'CANCELLED'; }
-			$registration = $wpdb->get_row( $wpdb->prepare( "SELECT id,event_id,order_code,status,capacity_released_at FROM {$registrations} WHERE id=%d FOR UPDATE", $participant['registration_id'] ), ARRAY_A );
+			$registration = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$registrations} WHERE id=%d FOR UPDATE", $participant['registration_id'] ), ARRAY_A );
 			if ( ! $registration || ! in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'WAITLIST_OFFERED' ), true ) || $registration['capacity_released_at'] ) throw new RuntimeException( 'Partecipazione non annullabile.' );
 			$event_id = (int) $registration['event_id'];
 			$counter_field = in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLIST_OFFERED' ), true ) ? 'confirmed_count' : 'waitlisted_count';
 			$wpdb->get_row( $wpdb->prepare( "SELECT event_id FROM {$counters} WHERE event_id=%d FOR UPDATE", $event_id ), ARRAY_A );
 			$wpdb->get_row( $wpdb->prepare( "SELECT event_id FROM {$ticket_counters} WHERE event_id=%d AND ticket_type_code=%s FOR UPDATE", $event_id, $participant['ticket_type_code'] ), ARRAY_A );
 			$now = current_time( 'mysql', true );
-			$wpdb->query( $wpdb->prepare( "UPDATE {$counters} SET {$counter_field}=GREATEST(0,{$counter_field}-1),updated_at=%s WHERE event_id=%d", $now, $event_id ) );
-			$wpdb->query( $wpdb->prepare( "UPDATE {$ticket_counters} SET {$counter_field}=GREATEST(0,{$counter_field}-1),updated_at=%s WHERE event_id=%d AND ticket_type_code=%s", $now, $event_id, $participant['ticket_type_code'] ) );
+			if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$counters} SET {$counter_field}=GREATEST(0,{$counter_field}-1),updated_at=%s WHERE event_id=%d", $now, $event_id ) ) ) throw new RuntimeException( 'Contatore evento non aggiornato.' );
+			if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$ticket_counters} SET {$counter_field}=GREATEST(0,{$counter_field}-1),updated_at=%s WHERE event_id=%d AND ticket_type_code=%s", $now, $event_id, $participant['ticket_type_code'] ) ) ) throw new RuntimeException( 'Contatore quota non aggiornato.' );
 			$actor_label = substr( sanitize_text_field( $actor_label ), 0, 120 );
 			$participant_updated = $wpdb->query( $wpdb->prepare( "UPDATE {$participants} SET status='CANCELLED',cancelled_at=%s,cancellation_actor=%s,cancellation_token_hash=NULL WHERE id=%d AND status='ACTIVE'", $now, $actor_label, $participant_id ) );
 			if ( 1 !== $participant_updated ) throw new RuntimeException( 'Partecipante non aggiornato.' );
@@ -878,10 +891,16 @@ final class MI_Registration_Service {
 				$registration_update['waitlist_offer_expires_at'] = null;
 				$registration_update['expires_at'] = null;
 				$formats = array_merge( $formats, array( '%s', '%s', '%s', '%s', '%s' ) );
+			} elseif ( in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) && in_array( $registration['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) {
+				$coverage = self::payment_coverage( $registration );
+				$registration_update['status'] = $coverage['covered'] ? 'CONFIRMED' : 'PENDING_PAYMENT';
+				$registration_update['expires_at'] = $coverage['covered'] ? null : $registration['payment_deadline_at'];
+				$formats = array_merge( $formats, array( '%s', '%s' ) );
 			}
 			if ( false === $wpdb->update( $registrations, $registration_update, array( 'id' => $registration['id'] ), $formats, array( '%d' ) ) ) throw new RuntimeException( 'Prenotazione non aggiornata.' );
 			self::mark_workspace_changed_locked( (int) $registration['id'] );
-			if ( ! self::append_registration_event( (int) $registration['id'], 'PARTICIPANT_CANCELLED', $registration['status'], 0 === $remaining ? 'CANCELLED' : $registration['status'], $actor_label, array( 'participant_id' => $participant_id, 'remaining_participants' => $remaining ) ) ) throw new RuntimeException( 'Audit non aggiornato.' );
+			$new_registration_status = $registration_update['status'] ?? $registration['status'];
+			if ( ! self::append_registration_event( (int) $registration['id'], 'PARTICIPANT_CANCELLED', $registration['status'], $new_registration_status, $actor_label, array( 'participant_id' => $participant_id, 'remaining_participants' => $remaining ) ) ) throw new RuntimeException( 'Audit non aggiornato.' );
 			{
 				$secretariat_recipient = MI_Spedizione_Email::destinatario_evento( $event_id );
 				$secretariat_snapshot = MI_Modello_Email::crea_istantanea_annullamento_partecipazione_segreteria( $event_id, trim( $participant['first_name'] . ' ' . $participant['last_name'] ), $registration['order_code'] );
@@ -909,14 +928,13 @@ final class MI_Registration_Service {
 		$participants = $wpdb->prefix . 'mi_participants';
 		$counters = $wpdb->prefix . 'mi_event_counters';
 		$ticket_counters = $wpdb->prefix . 'mi_ticket_counters';
-		$payments = $wpdb->prefix . 'mi_payments';
 		$target_status = strtoupper( sanitize_key( $target_status ) );
 		if ( ! in_array( $target_status, array( 'CANCELLED', 'EXPIRED' ), true ) ) {
 			return new WP_Error( 'mi_status_invalid', 'Stato non valido.' );
 		}
 		$wpdb->query( 'START TRANSACTION' );
 		try {
-			$registration = $wpdb->get_row( $wpdb->prepare( "SELECT id, event_id, status, total_qty, initial_due_cents, capacity_released_at FROM {$registrations} WHERE id = %d FOR UPDATE", $registration_id ), ARRAY_A );
+			$registration = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$registrations} WHERE id = %d FOR UPDATE", $registration_id ), ARRAY_A );
 			if ( ! $registration ) {
 				throw new RuntimeException( 'Iscrizione non trovata.' );
 			}
@@ -928,11 +946,13 @@ final class MI_Registration_Service {
 				throw new RuntimeException( 'Iscrizione non annullabile.' );
 			}
 			if ( 'EXPIRED' === $target_status ) {
-				$paid_cents = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(CASE WHEN transaction_kind = 'REFUND' THEN -amount_cents ELSE amount_cents END), 0) FROM {$payments} WHERE registration_id = %d", $registration_id ) );
-				if ( $paid_cents >= (int) $registration['initial_due_cents'] ) {
-					$wpdb->update( $registrations, array( 'expires_at' => null ), array( 'id' => $registration_id ), array( '%s' ), array( '%d' ) );
+				$coverage = self::payment_coverage( $registration );
+				if ( $coverage['covered'] ) {
+					if ( false === $wpdb->update( $registrations, array( 'status' => 'CONFIRMED', 'expires_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_status_changed' ), array( 'id' => $registration_id ), array( '%s', '%s', '%s', '%s' ), array( '%d' ) ) ) throw new RuntimeException( 'Stato pagamento non aggiornato.' );
+					self::mark_workspace_changed_locked( $registration_id );
+					if ( 'CONFIRMED' !== $registration['status'] && ! self::append_registration_event( $registration_id, 'PAYMENT_STATUS_CHANGED', $registration['status'], 'CONFIRMED', $actor_label, array( 'net_paid_cents' => (int) $coverage['paid'], 'initial_due_cents' => (int) $registration['initial_due_cents'] ) ) ) throw new RuntimeException( 'Audit pagamento non aggiornato.' );
 					$wpdb->query( 'COMMIT' );
-					return $registration['status'];
+					return 'CONFIRMED';
 				}
 			}
 			$event_id = (int) $registration['event_id'];
@@ -944,9 +964,9 @@ final class MI_Registration_Service {
 				$wpdb->get_row( $wpdb->prepare( "SELECT event_id FROM {$ticket_counters} WHERE event_id = %d AND ticket_type_code = %s FOR UPDATE", $event_id, $item['ticket_type_code'] ), ARRAY_A );
 			}
 			$now = current_time( 'mysql', true );
-			$wpdb->query( $wpdb->prepare( "UPDATE {$counters} SET {$counter_field} = GREATEST(0, {$counter_field} - %d), updated_at = %s WHERE event_id = %d", $remaining_qty, $now, $event_id ) );
+			if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$counters} SET {$counter_field} = GREATEST(0, {$counter_field} - %d), updated_at = %s WHERE event_id = %d", $remaining_qty, $now, $event_id ) ) ) throw new RuntimeException( 'Contatore evento non aggiornato.' );
 			foreach ( $items as $item ) {
-				$wpdb->query( $wpdb->prepare( "UPDATE {$ticket_counters} SET {$counter_field} = GREATEST(0, {$counter_field} - %d), updated_at = %s WHERE event_id = %d AND ticket_type_code = %s", $item['quantity'], $now, $event_id, $item['ticket_type_code'] ) );
+				if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$ticket_counters} SET {$counter_field} = GREATEST(0, {$counter_field} - %d), updated_at = %s WHERE event_id = %d AND ticket_type_code = %s", $item['quantity'], $now, $event_id, $item['ticket_type_code'] ) ) ) throw new RuntimeException( 'Contatore quota non aggiornato.' );
 			}
 			$updated = $wpdb->update( $registrations, array( 'status' => $target_status, 'capacity_released_at' => $now, 'waitlist_offer_token_hash' => null, 'waitlist_offer_expires_at' => null, 'expires_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'status_changed' ), array( 'id' => $registration_id ), array( '%s', '%s', '%s', '%s', '%s', '%s', '%s' ), array( '%d' ) );
 			if ( false === $updated || ! self::append_registration_event( $registration_id, $target_status, $registration['status'], $target_status, $actor_label ) ) {
