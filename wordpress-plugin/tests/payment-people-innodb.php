@@ -29,4 +29,11 @@ $detail=MI_Payment_Ledger::detail(1)['saldo'];$people=array_column($detail['indi
 check($people[1]['paid']===10000&&$people[2]['paid']===25000&&$people[2]['balance']===5000,'rimborso attribuito solo alla persona scelta');
 $refund['request_id']='wp_7_12345678-1234-4234-8234-123456789ac0';$refund['importo']='260';check(empty(MI_Payment_Ledger::save(1,$refund)['saved']),'rimborso superiore al versato personale rifiutato');
 $refund['request_id']='wp_7_12345678-1234-4234-8234-123456789ac1';$refund['importo']='10';$refund['participant_ids']='[1,2]';check(empty(MI_Payment_Ledger::save(1,$refund)['saved']),'rimborso ambiguo su più persone rifiutato');
+$full=MI_Payment_People::calculate(
+	['id'=>2,'economic_mode'=>'FULL_PAYMENT','total_cents'=>30000,'initial_due_cents'=>0,'snapshot_json'=>'{}'],
+	[['id'=>3,'ticket_type_code'=>'base','first_name'=>'Quota','last_name'=>'Intera','status'=>'ACTIVE','options_json'=>'[]','deposit_due_cents'=>10000]],
+	[['ticket_type_code'=>'base','unit_price_cents'=>30000]],
+	[]
+);
+check(!$full['deposit_plan']&&$full['people'][0]['deposit']===0&&$full['people'][0]['deposit_missing']===0&&$full['people'][0]['saldo']===30000,'caparra residua applicata fuori dal piano caparra/saldo');
 echo "PASS InnoDB: attribuzione atomica, caparra e saldo, isolamento persone, rimborso individuale, retry e rifiuto duplicati.\n";

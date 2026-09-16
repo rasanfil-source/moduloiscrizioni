@@ -46,9 +46,6 @@ final class MI_Payment_People {
 			if ( $remainders ) { arsort( $remainders, SORT_NUMERIC ); foreach ( $remainders as $id => $remainder ) { if ( $assigned >= $deposit_total ) break; $rows[$id]['deposit']++; $assigned++; } }
 			if ( $assigned !== $deposit_total ) $issue = 'La caparra complessiva non coincide con le quote individuali. Verifica la prenotazione.';
 		}
-		$deposits = array_column( $people, 'deposit_due_cents', 'id' );
-		foreach ( $rows as $id => &$row ) if ( isset( $deposits[$id] ) ) $row['deposit'] = min( $row['total'], (int) $deposits[$id] );
-		unset( $row );
 		$payments_known = true;
 		$has_allocated_payments = false;
 		$unassigned = 0;
