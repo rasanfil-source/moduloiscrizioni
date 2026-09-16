@@ -570,6 +570,7 @@ final class MI_Registration_Service {
 			$position = MI_Payment_Ledger::position( $registration, MI_Payment_Ledger::net_paid( $registration_id ) );
 			$individual = MI_Payment_People::calculate( $registration, $rows, $items, $all_payments );
 			$individual_summary = MI_Payment_People::summary( $individual );
+			$individual_by_id = array_column( $individual['people'], null, 'id' );
 		} catch ( Throwable $error ) {
 			return 'PENDING';
 		}
@@ -583,9 +584,10 @@ final class MI_Registration_Service {
 		$current_event_revision = $wpdb->get_var( $wpdb->prepare( "SELECT revision FROM {$wpdb->prefix}mi_management_state WHERE event_id=%d", $registration['event_id'] ) );
 		if ( $wpdb->last_error || (string) $current_event_revision !== (string) $event_revision ) return 'PENDING';
 		$participants = array_map(
-			static function ( $row ) {
+			static function ( $row ) use ( $individual_by_id, $individual_summary ) {
 				$fields = json_decode( (string) $row['extra_json'], true );
 				$options = json_decode( (string) $row['options_json'], true );
+				$economic = $individual_by_id[(int) $row['id']] ?? array();
 				return array(
 					'ticket_type_code' => $row['ticket_type_code'],
 					'ticket_index' => (int) $row['ticket_index'],
@@ -595,6 +597,11 @@ final class MI_Registration_Service {
 					'options'    => is_array( $options ) ? $options : array(),
 					'status'     => $row['status'] ?: 'ACTIVE',
 					'cancelled_at' => $row['cancelled_at'],
+					'total_cents' => $individual_summary['known'] ? max( 0, (int) ( $economic['total'] ?? 0 ) ) : null,
+					'paid_cents' => $individual_summary['known'] ? max( 0, (int) ( $economic['paid'] ?? 0 ) ) : null,
+					'balance_cents' => $individual_summary['known'] ? max( 0, (int) ( $economic['balance'] ?? 0 ) ) : null,
+					'deposit_due_cents' => $individual_summary['known'] ? max( 0, (int) ( $economic['deposit'] ?? 0 ) ) : null,
+					'deposit_missing_cents' => $individual_summary['known'] ? max( 0, (int) ( $economic['deposit_missing'] ?? 0 ) ) : null,
 				);
 			},
 			$rows

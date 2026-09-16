@@ -184,9 +184,16 @@ final class MI_Management_Service {
 				$sum = (int) ( $paid[$order['id']] ?? 0 );
 				$position = MI_Payment_Ledger::position( $order, $sum );
 				$individual_position = MI_Payment_People::calculate( $order, $all_participants, $items_by_registration[(int) $order['id']] ?? array(), $payments_by_registration[(int) $order['id']] ?? array() );
+				$individual_summary = MI_Payment_People::summary( $individual_position );
 				$individual_economics = array_column( $individual_position['people'], null, 'id' );
 				$deposit = array_intersect_key( $position, array_flip( array( 'deposit_plan', 'deposit_due', 'deposit_missing', 'deposit_covered', 'balance' ) ) );
-				$deposit['paid'] = $sum;
+				if ( $individual_summary['known'] ) {
+					$deposit['deposit_due'] = $individual_summary['deposit_due'];
+					$deposit['deposit_missing'] = $individual_summary['deposit_missing'];
+					$deposit['deposit_covered'] = $position['deposit_plan'] && $individual_summary['deposit_due'] > 0 && 0 === $individual_summary['deposit_missing'];
+					$deposit['balance'] = $individual_summary['balance'];
+				}
+				$deposit['paid'] = $individual_summary['known'] ? $individual_summary['paid'] : $sum;
 				$collectible = $position['managed'] && in_array( $order['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true );
 				foreach ( $all_participants as $number => $person ) {
 					$fields = self::decode( $person['extra_json'] ); $missing_fields = array();
@@ -195,7 +202,7 @@ final class MI_Management_Service {
 					$person_deposit = array( 'deposit_plan' => 'DEPOSIT_BALANCE' === ( $order['economic_mode'] ?? '' ), 'deposit_due' => (int) $economic['deposit'], 'deposit_missing' => (int) $economic['deposit_missing'], 'deposit_covered' => 'DEPOSIT_BALANCE' === ( $order['economic_mode'] ?? '' ) && (int) $economic['deposit'] > 0 && (int) $economic['deposit_missing'] <= 0, 'paid' => (int) $economic['paid'], 'balance' => (int) $economic['balance'] );
 					$individuals[] = $person_deposit + array( 'economics_known' => ! empty( $individual_position['quotes_known'] ) && ! empty( $individual_position['payments_known'] ), 'is_buyer' => (int) $person['id'] === $buyer_participant_id, 'id' => (int) $person['id'], 'number' => $number + 1, 'attendance' => $attendance[$person['id']]['state'] ?? 'UNRECORDED', 'code' => $order['order_code'], 'name' => trim( ( $person['last_name'] ?? '' ) . ' ' . ( $person['first_name'] ?? '' ) ), 'buyer' => trim( $order['buyer_last_name'] . ' ' . $order['buyer_first_name'] ), 'email' => self::participant_contact( $fields, $definitions, 'email', $order['buyer_email'] ?? '' ), 'phone' => self::participant_contact( $fields, $definitions, 'phone', $order['buyer_phone'] ?? '' ), 'status' => 'CANCELLED' === $person['status'] ? 'CANCELLED' : $order['status'], 'room' => $person['room_code'], 'fields' => $fields, 'missing' => $missing_fields, 'unassigned' => $needs_room( $person ) && ! $person['room_code'], 'collectible' => $collectible && (int) $economic['balance'] > 0, 'requests' => self::visible_special_requests( $order['special_requests'] ?? '' ), 'requests_reviewed' => $request_review['reviewed'], 'offer_expires_at' => $order['waitlist_offer_expires_at'] ?? '', 'options' => self::decode( $person['options_json'] ?? '' ) );
 				}
-				$items[] = $deposit + array( 'code' => $order['order_code'], 'name' => trim( $order['buyer_last_name'] . ' ' . $order['buyer_first_name'] ), 'status' => $order['status'], 'active' => ! in_array( $order['status'], array( 'CANCELLED','EXPIRED' ), true ), 'participants' => count( $participants ), 'total' => (int) $order['total_cents'], 'paid' => $sum, 'balance' => $position['balance'], 'collectible' => $collectible, 'missing' => $missing, 'unassigned' => $unassigned, 'requests' => self::visible_special_requests( $order['special_requests'] ?? '' ), 'requests_reviewed' => $request_review['reviewed'], 'offer_expires_at' => $order['waitlist_offer_expires_at'] ?? '', 'order_options' => self::decode( $order['order_options_json'] ?? '' ) );
+				$items[] = $deposit + array( 'code' => $order['order_code'], 'name' => trim( $order['buyer_last_name'] . ' ' . $order['buyer_first_name'] ), 'status' => $order['status'], 'active' => ! in_array( $order['status'], array( 'CANCELLED','EXPIRED' ), true ), 'participants' => count( $participants ), 'total' => $individual_summary['known'] ? $individual_summary['total'] : (int) $order['total_cents'], 'paid' => $individual_summary['known'] ? $individual_summary['paid'] : $sum, 'balance' => $individual_summary['known'] ? $individual_summary['balance'] : $position['balance'], 'collectible' => $collectible, 'missing' => $missing, 'unassigned' => $unassigned, 'requests' => self::visible_special_requests( $order['special_requests'] ?? '' ), 'requests_reviewed' => $request_review['reviewed'], 'offer_expires_at' => $order['waitlist_offer_expires_at'] ?? '', 'order_options' => self::decode( $order['order_options_json'] ?? '' ) );
 			}
 			$options = function_exists( 'get_post_meta' ) ? (array) get_post_meta( $event_id, '_mi_options', true ) : array();
 			$mode = function_exists( 'get_post_meta' ) ? get_post_meta( $event_id, '_mi_economic_mode', true ) : '';

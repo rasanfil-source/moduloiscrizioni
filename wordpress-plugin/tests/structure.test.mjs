@@ -1318,7 +1318,8 @@ test('il pannello verifica lo schema Workspace senza creare iscrizioni', async (
   const client = await read('includes/class-mi-workspace-client.php');
   assert.match(settings, /Verifica schema Workspace/);
   assert.match(settings, /schema_version/);
-  assert.match(settings, /'1\.9\.0'/);
+	assert.match(settings, /'1\.11\.0'/);
+	assert.match(settings, /participant_headers/);
   assert.match(settings, /group_headers/);
   assert.match(settings, /report_template_headers/);
   assert.match(client, /STATO_SCHEMA/);

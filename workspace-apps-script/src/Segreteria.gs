@@ -63,7 +63,7 @@ function cercaPrenotazioniSegreteria(form) {
     const personNumber = Number(participant.numero_partecipante) || 0;
     const fields = datiOperativiPartecipante_(participant, operational[orderCode + '|' + personNumber] || {});
     const room = String(fields.room || fields.camera || fields.alloggio || '');
-    const payment = statoPagamento_(registration, paidByOrder[orderCode] || 0);
+    const payment = statoPagamentoPartecipante_(participant, registration, paidByOrder[orderCode] || 0);
     const searchable = [orderCode, participant.nome, participant.cognome, registration.nome_referente, registration.cognome_referente].join(' ').toLowerCase();
     const roomDoesNotMatch = roomFilter === 'non assegnata' ? !!room : (roomFilter && room.toLowerCase().indexOf(roomFilter) < 0);
     if ((query && searchable.indexOf(query) < 0) || (paymentFilter && payment.code !== paymentFilter) || roomDoesNotMatch) return;
@@ -96,11 +96,11 @@ function caricaSchedaPrenotazioneConDati_(orderCode, lettura) {
   const participants = lettura.righe(MI_SHEETS.PARTICIPANTS).filter(function (row) { return String(row.codice_ordine) === orderCode; }).map(function (row) {
     const number = Number(row.numero_partecipante) || 0; const fields = datiOperativiPartecipante_(row, operational[orderCode + '|' + number] || {}); const room = String(fields.room || fields.camera || fields.alloggio || '');
     delete fields.room; delete fields.camera; delete fields.alloggio;
-    return { number: number, first_name: String(row.nome || ''), last_name: String(row.cognome || ''), ticket_type: String(row.codice_tipologia || ''), status: String(row.stato_partecipante || 'ACTIVE'), room: room, fields: fields, options: decodificaElenco_(row.opzioni_json) };
+    return { number: number, first_name: String(row.nome || ''), last_name: String(row.cognome || ''), ticket_type: String(row.codice_tipologia || ''), status: String(row.stato_partecipante || 'ACTIVE'), room: room, fields: fields, options: decodificaElenco_(row.opzioni_json), payment_status: statoPagamentoPartecipante_(row, registration, 0) };
   });
   const payments = lettura.righe(MI_SHEETS.PAYMENTS).filter(function (row) { return String(row.codice_ordine) === orderCode; });
-  const netPaid = calcolaVersatoPerOrdine_(payments)[orderCode] || 0;
-  return { order_code: orderCode, event_id: String(registration.id_evento || ''), event_title: String(event.titolo || registration.id_evento || ''), status: String(registration.stato || ''), payment_status: statoPagamento_(registration, netPaid), created_at: registration.data_creazione, buyer: { first_name: String(registration.nome_referente || ''), last_name: String(registration.cognome_referente || ''), email: String(registration.email_referente || ''), phone: String(registration.telefono_referente || '') }, special_requests: String(registration.richieste_particolari || ''), total_cents: Number(registration.totale_centesimi) || 0, deposit_cents: Number(registration.primo_versamento_centesimi) || 0, paid_cents: netPaid, balance_cents: Math.max(0, (Number(registration.totale_centesimi) || 0) - netPaid), participants: participants, accommodations: elencaSistemazioniConDati_(String(registration.id_evento || ''), lettura), active_operator: normalizzaTesto_(Session.getActiveUser().getEmail(), 120) };
+  const netPaid = calcolaVersatoPerOrdine_(payments)[orderCode] || 0; const economic = posizioneEconomicaRegistrazione_(registration, netPaid);
+  return { order_code: orderCode, event_id: String(registration.id_evento || ''), event_title: String(event.titolo || registration.id_evento || ''), status: String(registration.stato || ''), payment_status: statoPagamento_(registration, netPaid), created_at: registration.data_creazione, buyer: { first_name: String(registration.nome_referente || ''), last_name: String(registration.cognome_referente || ''), email: String(registration.email_referente || ''), phone: String(registration.telefono_referente || '') }, special_requests: String(registration.richieste_particolari || ''), total_cents: economic.total, deposit_cents: Number(registration.primo_versamento_centesimi) || 0, paid_cents: economic.paid, balance_cents: economic.balance, participants: participants, accommodations: elencaSistemazioniConDati_(String(registration.id_evento || ''), lettura), active_operator: normalizzaTesto_(Session.getActiveUser().getEmail(), 120) };
 }
 
 function configuraElencoOperativo(form) {
@@ -152,8 +152,8 @@ function destinatariComunicazioneOperativa_(eventId, templateType) {
   return convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(function (registration) {
     return String(registration.id_evento) === String(eventId) && ['CONFERMATA', 'IN_ATTESA_PAGAMENTO', 'CONFIRMED', 'PENDING_PAYMENT'].indexOf(String(registration.stato).toUpperCase()) >= 0;
   }).map(function (registration) {
-    const orderCode = normalizzaTesto_(registration.codice_ordine, 64); const total = Math.max(0, Number(registration.totale_centesimi) || 0); const paid = Math.max(0, Number(paidByOrder[orderCode]) || 0); const balance = Math.max(0, total - paid);
-    return { order_code: orderCode, paid_cents: paid, balance_cents: balance };
+    const orderCode = normalizzaTesto_(registration.codice_ordine, 64); const economic = posizioneEconomicaRegistrazione_(registration, paidByOrder[orderCode] || 0);
+    return { order_code: orderCode, paid_cents: economic.paid, balance_cents: economic.balance };
   }).filter(function (recipient) {
     return recipient.order_code && (templateType !== 'BALANCE_REMINDER' || recipient.balance_cents > 0);
   }).slice(0, 1000);
@@ -197,11 +197,28 @@ function calcolaVersatoPerOrdine_(payments) {
   return (payments || []).reduce(function (result, row) { const code = String(row.codice_ordine || ''); const amount = Number(row.importo_centesimi) || 0; result[code] = (result[code] || 0) + (['RIMBORSO', 'STORNO'].indexOf(String(row.tipo_movimento).toUpperCase()) >= 0 ? -amount : amount); return result; }, {});
 }
 
+function posizioneEconomicaRegistrazione_(registration, paidFallback) {
+  const total = Math.max(0, Number(registration.totale_centesimi) || 0); const rawBalance = registration.saldo_centesimi; const hasBalance = rawBalance !== '' && rawBalance !== null && rawBalance !== undefined && Number.isFinite(Number(rawBalance));
+  const balance = hasBalance ? Math.max(0, Number(rawBalance)) : Math.max(0, total - Math.max(0, Number(paidFallback) || 0));
+  return { total: total, paid: Math.max(0, total - balance), balance: balance };
+}
+
 function statoPagamento_(registration, paid) {
-  const total = Math.max(0, Number(registration.totale_centesimi) || 0); const deposit = Math.max(0, Number(registration.primo_versamento_centesimi) || 0); const balance = Math.max(0, total - paid);
+  const economic = posizioneEconomicaRegistrazione_(registration, paid); const total = economic.total; const deposit = Math.max(0, Number(registration.primo_versamento_centesimi) || 0); const balance = economic.balance; paid = economic.paid;
   if (!total) return { code: 'GRATUITO', label: 'Gratuito', paid_cents: paid, balance_cents: 0 };
-  if (paid >= total) return { code: 'SALDATO', label: 'Saldato', paid_cents: paid, balance_cents: 0 };
-  if (paid >= deposit && deposit > 0) return { code: 'CAPARRA_RICEVUTA', label: 'Caparra ricevuta', paid_cents: paid, balance_cents: balance };
+  if (!balance) return { code: 'SALDATO', label: 'Saldato', paid_cents: paid, balance_cents: 0 };
+  if (deposit > 0 && ['CONFERMATA', 'CONFIRMED'].indexOf(String(registration.stato).toUpperCase()) >= 0) return { code: 'CAPARRA_RICEVUTA', label: 'Caparra ricevuta', paid_cents: paid, balance_cents: balance };
+  if (paid > 0) return { code: 'PARZIALE', label: 'Versamento parziale', paid_cents: paid, balance_cents: balance };
+  return { code: deposit > 0 ? 'CAPARRA_DOVUTA' : 'DA_PAGARE', label: deposit > 0 ? 'Caparra dovuta' : 'Da pagare', paid_cents: 0, balance_cents: balance };
+}
+
+function statoPagamentoPartecipante_(participant, registration, paidFallback) {
+  const hasIndividual = participant.totale_centesimi !== '' && participant.totale_centesimi !== null && participant.totale_centesimi !== undefined && Number.isFinite(Number(participant.totale_centesimi));
+  if (!hasIndividual) return statoPagamento_(registration, paidFallback);
+  const total = Math.max(0, Number(participant.totale_centesimi) || 0); const paid = Math.max(0, Number(participant.versato_centesimi) || 0); const balance = Math.max(0, Number(participant.saldo_centesimi) || 0); const deposit = Math.max(0, Number(participant.caparra_centesimi) || 0); const missing = Math.max(0, Number(participant.caparra_residua_centesimi) || 0);
+  if (!total) return { code: 'GRATUITO', label: 'Gratuito', paid_cents: paid, balance_cents: 0 };
+  if (!balance) return { code: 'SALDATO', label: 'Saldato', paid_cents: paid, balance_cents: 0 };
+  if (deposit > 0 && !missing) return { code: 'CAPARRA_RICEVUTA', label: 'Caparra ricevuta', paid_cents: paid, balance_cents: balance };
   if (paid > 0) return { code: 'PARZIALE', label: 'Versamento parziale', paid_cents: paid, balance_cents: balance };
   return { code: deposit > 0 ? 'CAPARRA_DOVUTA' : 'DA_PAGARE', label: deposit > 0 ? 'Caparra dovuta' : 'Da pagare', paid_cents: 0, balance_cents: balance };
 }
@@ -415,13 +432,13 @@ function valoreCampoElenco_(field, event, registration, participant, data, payme
   if (field === 'options') return decodificaElenco_(participant.opzioni_json).map(function (option) { return option.name || option.label || option.code || ''; }).filter(Boolean).join(', ');
   const pagamentiOrdine = payments.filter(function (payment) { return String(payment.codice_ordine) === String(registration.codice_ordine); });
   const sommaPagamenti = function (fonte) { return pagamentiOrdine.reduce(function (total, payment) { if (fonte && String(payment.fonte_pagamento).toUpperCase() !== fonte) return total; const amount = Number(payment.importo_centesimi) || 0; return total + (['RIMBORSO', 'STORNO'].indexOf(String(payment.tipo_movimento).toUpperCase()) >= 0 ? -amount : amount); }, 0); };
-  const paid = sommaPagamenti('');
+  const economic = posizioneEconomicaRegistrazione_(registration, sommaPagamenti(''));
   if (field === 'total') return (Number(registration.totale_centesimi) || 0) / 100;
-  if (field === 'paid') return paid / 100;
+  if (field === 'paid') return economic.paid / 100;
   if (field === 'paid_cash') return sommaPagamenti('CONTANTE') / 100;
   if (field === 'paid_transfer') return sommaPagamenti('BONIFICO') / 100;
   if (field === 'paid_card') return sommaPagamenti('CARTA') / 100;
-  if (field === 'balance') return Math.max(0, (Number(registration.totale_centesimi) || 0) - paid) / 100;
+  if (field === 'balance') return economic.balance / 100;
   const candidates = aliases[field] || [field]; for (let index = 0; index < candidates.length; index += 1) if (data[candidates[index]] != null && data[candidates[index]] !== '') return data[candidates[index]];
   if (field === 'email') return registration.email_referente || ''; if (field === 'phone') return registration.telefono_referente || ''; return '';
 }

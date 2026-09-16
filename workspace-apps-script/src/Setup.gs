@@ -100,8 +100,8 @@ function inizializzaScheda_(sheet, headers) {
 	const usesPreviousHeaders = previous.length > 0 && current.slice(0, previous.length).join('|') === previous.join('|') && current.slice(previous.length).every(function (value) { return value === ''; });
 	const italianPrevious = MI_INTESTAZIONI_PRECEDENTI[sheet.getName()] || [];
 	const usesItalianPrevious = italianPrevious.length > 0 && current.slice(0, italianPrevious.length).join('|') === italianPrevious.join('|') && current.slice(italianPrevious.length).every(function (value) { return value === ''; });
-	const immediatelyPrevious = sheet.getName() === MI_SHEETS.PARTICIPANTS ? headers.slice(0, -2) : ([MI_SHEETS.REGISTRATIONS, MI_SHEETS.PAYMENTS, MI_SHEETS.EVENTS].indexOf(sheet.getName()) >= 0 ? headers.slice(0, -1) : []);
-	const usesImmediatelyPrevious = immediatelyPrevious.length > 0 && current.slice(0, immediatelyPrevious.length).join('|') === immediatelyPrevious.join('|') && current.slice(immediatelyPrevious.length).every(function (value) { return value === ''; });
+	const immediatelyPrevious = sheet.getName() === MI_SHEETS.PARTICIPANTS ? [headers.slice(0, -5), headers.slice(0, -7)] : ([MI_SHEETS.REGISTRATIONS, MI_SHEETS.PAYMENTS, MI_SHEETS.EVENTS].indexOf(sheet.getName()) >= 0 ? [headers.slice(0, -1)] : []);
+	const usesImmediatelyPrevious = immediatelyPrevious.some(function (candidate) { return candidate.length > 0 && current.slice(0, candidate.length).join('|') === candidate.join('|') && current.slice(candidate.length).every(function (value) { return value === ''; }); });
   if (hasData && current.join('|') !== headers.join('|') && !usesPreviousHeaders && !usesItalianPrevious && !usesImmediatelyPrevious) {
     throw new Error('Intestazioni inattese nel foglio ' + sheet.getName() + '. Intervento manuale richiesto.');
   }
