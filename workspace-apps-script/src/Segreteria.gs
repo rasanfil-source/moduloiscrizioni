@@ -279,6 +279,7 @@ function generaVistaOperativaEvento_(idEvento, campiForzati) {
     return { key: chiave, label: catalogo[chiave].label, gruppo: gruppoCampoVistaOperativa_(chiave), comprimibile: ['paid_cash', 'paid_transfer', 'paid_card'].indexOf(chiave) >= 0 };
   });
   aggiungiColonneServizi_(colonne, decodificaElenco_(evento.servizi_json));
+  aggiungiColonneDomande_(colonne, evento, iscrizioni, partecipanti);
   iscrizioni.forEach(r=>{const snapshot=decodificaOggetto_(r.snapshot_json);aggiungiColonneServizi_(colonne, (snapshot.event||{}).options||[]);});
   const righe = partecipanti.map(function (partecipante) {
     const iscrizione = iscrizioniPerCodice[String(partecipante.codice_ordine)];

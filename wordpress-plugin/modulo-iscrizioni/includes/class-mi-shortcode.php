@@ -39,10 +39,42 @@ final class MI_Shortcode {
 	}
 
 	public static function url_iscrizione( $event_id ) {
+		$slug = (string) get_post_meta( $event_id, '_mi_public_slug', true );
+		if ( $slug && (int) get_option( 'mi_public_slug_' . $slug ) === (int) $event_id ) return home_url( '/v/' . $slug );
 		return add_query_arg( 'mi_iscrizione', absint( $event_id ), home_url( '/' ) );
 	}
 
+	/** Hold the namespace lock through event creation and alias assignment. */
+	public static function validate_public_slug( $raw, $event_id = 0 ) {
+		$slug = strtolower( trim( (string) $raw ) );
+		if ( '' === $slug ) return '';
+		if ( strlen( $slug ) > 60 || ! preg_match( '/^[a-z0-9]+(?:-[a-z0-9]+)*$/D', $slug ) ) return new WP_Error( 'mi_slug_invalid', 'Usa da 1 a 60 lettere senza accenti, numeri o trattini, senza spazi. Inserisci solo il nome abbreviato, non l’indirizzo completo.' );
+		global $wpdb;
+		$lock = 'mi_slug_' . substr( hash( 'sha256', $wpdb->prefix . $slug ), 0, 48 );
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $lock ) ) ) return new WP_Error( 'mi_slug_busy', 'Verifica indirizzo occupata. Riprova tra qualche secondo.' );
+		register_shutdown_function( static function () use ( $wpdb, $lock ) { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); } );
+		$owner = get_option( 'mi_public_slug_' . $slug, false );
+		if ( false !== $owner && (int) $owner !== (int) $event_id ) return new WP_Error( 'mi_slug_taken', 'Questo indirizzo è già stato utilizzato. Scegli un altro nome abbreviato.' );
+		if ( get_page_by_path( 'v/' . $slug ) ) return new WP_Error( 'mi_slug_page', 'Questo indirizzo è già utilizzato da una pagina del sito.' );
+		return $slug;
+	}
+
+	public static function save_public_slug( $event_id, $slug ) {
+		if ( '' === $slug ) return true;
+		$key = 'mi_public_slug_' . $slug;
+		if ( ! add_option( $key, (int) $event_id, '', false ) && (int) get_option( $key ) !== (int) $event_id ) return new WP_Error( 'mi_slug_taken', 'Indirizzo non assegnato: il nome è già utilizzato.' );
+		update_post_meta( $event_id, '_mi_public_slug', $slug );
+		update_post_meta( $event_id, '_mi_registration_url', self::url_iscrizione( $event_id ) );
+		return true;
+	}
+
 	public static function mostra_pagina_iscrizione_pubblica() {
+		$path = wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
+		$base = rtrim( (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH ), '/' );
+		if ( preg_match( '#^' . preg_quote( $base, '#' ) . '/v/([a-z0-9-]{1,60})/?$#D', (string) $path, $match ) ) {
+			$owner = absint( get_option( 'mi_public_slug_' . $match[1] ) );
+			if ( $owner ) $_GET['mi_iscrizione'] = $owner;
+		}
 		$event_id = absint( $_GET['mi_iscrizione'] ?? 0 );
 		if ( ! $event_id ) return;
 		$content = self::render( array( 'event' => $event_id ) );

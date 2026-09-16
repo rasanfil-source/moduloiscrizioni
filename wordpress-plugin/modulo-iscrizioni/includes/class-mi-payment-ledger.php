@@ -86,7 +86,10 @@ final class MI_Payment_Ledger {
 		$payment['registration_id'] = (int) $id;
 		$participant_ids = isset( $input['participant_ids'] ) ? json_decode( (string) $input['participant_ids'], true ) : null;
 		if ( null !== $participant_ids && ( ! is_array( $participant_ids ) || count( $participant_ids ) > 100 || array_filter( $participant_ids, static function ( $id ) { return ! is_int( $id ) || $id < 1; } ) ) ) return array( 'ok' => true, 'saved' => false, 'message' => 'Selezione partecipanti non valida.' );
-		if ( is_array( $participant_ids ) ) { sort( $participant_ids, SORT_NUMERIC ); $payment['installment_kind'] = (string) ( $input['rata'] ?? '' ); }
+		if ( is_array( $participant_ids ) ) {
+			sort( $participant_ids, SORT_NUMERIC );
+			if ( 'PAYMENT' === $payment['transaction_kind'] ) $payment['installment_kind'] = (string) ( $input['rata'] ?? '' );
+		}
 		$payment['request_hash'] = hash( 'sha256', wp_json_encode( null === $participant_ids ? $payment : array( $payment, $participant_ids ) ) );
 		$payment['operator_label'] = mb_substr( $actor, 0, 120 );
 		$table = $wpdb->prefix . 'mi_registrations';
@@ -109,20 +112,27 @@ final class MI_Payment_Ledger {
 			if ( $incoming ) {
 				if ( ! is_array( $participant_ids ) ) throw new InvalidArgumentException( 'Riapri Pagamenti e seleziona le persone per cui registrare il versamento.' );
 				$payment['participant_allocations_json'] = wp_json_encode( MI_Payment_People::plan( $individual, $participant_ids, $payment['installment_kind'], $amount ) );
-			} elseif ( array_filter( $history, static function ( $row ) { return ! empty( $row['participant_allocations_json'] ); } ) ) {
-				throw new InvalidArgumentException( 'Questo versamento è attribuito a singole persone. Il rimborso richiede un’attribuzione individuale e non può essere registrato come movimento indistinto.' );
+			} elseif ( ! empty( $individual['requires_refund_allocation'] ) || is_array( $participant_ids ) ) {
+				if ( ! is_array( $participant_ids ) ) throw new InvalidArgumentException( 'Seleziona la persona a cui attribuire il rimborso o storno.' );
+				$payment['participant_allocations_json'] = wp_json_encode( MI_Payment_People::refund_plan( $individual, $participant_ids, $amount ) );
 			}
 			if ( $incoming && ! in_array( $r['status'], array( 'PENDING_PAYMENT', 'CONFIRMED' ), true ) ) throw new InvalidArgumentException( 'Questa prenotazione non può ricevere incassi.' );
 			if ( $incoming && (int) $r['total_cents'] < 1 ) throw new InvalidArgumentException( 'L’evento non prevede pagamenti.' );
-			// Un credito di un'altra persona non compensa il debito degli iscritti selezionati.
-			if ( $incoming && $amount > array_sum( array_column( $individual['people'], 'balance' ) ) ) throw new InvalidArgumentException( 'L’importo supera il residuo individuale.' );
+			// plan() ha già verificato l'importo sulle sole persone selezionate.
 			if ( ! $incoming && $amount > max( 0, $paid ) ) throw new InvalidArgumentException( 'Il rimborso o storno supera quanto versato.' );
 			$payment['created_at'] = current_time( 'mysql', true );
 			if ( false === $wpdb->insert( $wpdb->prefix . 'mi_payments', $payment ) ) throw new RuntimeException( 'Movimento non salvato.' );
 			$payment_id = (int) $wpdb->insert_id; $paid += $incoming ? $amount : -$amount;
 			$status = $r['status']; $changes = array( 'workspace_status' => 'PENDING', 'workspace_attempts' => 0, 'workspace_last_error' => 'payment_changed', 'workspace_revision' => (int) $r['workspace_revision'] + 1 );
 			if ( in_array( $status, array( 'PENDING_PAYMENT', 'CONFIRMED' ), true ) ) {
-				$status = $paid >= (int) $r['initial_due_cents'] ? 'CONFIRMED' : 'PENDING_PAYMENT';
+				$covered = $paid >= (int) $r['initial_due_cents'];
+				$updated_history = $history; $updated_history[] = $payment;
+				$updated_individual = MI_Payment_People::read( $r, $updated_history );
+				if ( ! empty( $updated_individual['quotes_known'] ) && ! empty( $updated_individual['payments_known'] ) ) {
+					$field = 'DEPOSIT_BALANCE' === $r['economic_mode'] ? 'deposit_missing' : 'balance'; $covered = true;
+					foreach ( $updated_individual['people'] as $person ) if ( $person['active'] && (int) $person[$field] > 0 ) { $covered = false; break; }
+				}
+				$status = $covered ? 'CONFIRMED' : 'PENDING_PAYMENT';
 				$changes['status'] = $status; $changes['expires_at'] = 'CONFIRMED' === $status ? null : $r['payment_deadline_at'];
 			}
 			if ( false === $wpdb->update( $table, $changes, array( 'id' => $id ) ) || ! MI_Registration_Service::append_registration_event( $id, 'PAYMENT_RECORDED', $r['status'], $status, $actor, array( 'payment_id' => $payment_id, 'net_paid_cents' => $paid ) ) ) throw new RuntimeException( 'Registrazione incompleta.' );

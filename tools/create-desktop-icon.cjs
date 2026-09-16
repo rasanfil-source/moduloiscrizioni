@@ -1,0 +1,23 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const root = path.resolve(__dirname, '..');
+const images = [32, 192].map(size => ({size, data: fs.readFileSync(path.join(root, `wordpress-plugin/modulo-iscrizioni/assets/portal-icon-${size}.png`))}));
+const header = Buffer.alloc(6 + 16 * images.length);
+header.writeUInt16LE(1, 2);
+header.writeUInt16LE(images.length, 4);
+let offset = header.length;
+images.forEach(({size, data}, i) => {
+  const entry = 6 + i * 16;
+  header[entry] = size;
+  header[entry + 1] = size;
+  header.writeUInt16LE(1, entry + 4);
+  header.writeUInt16LE(32, entry + 6);
+  header.writeUInt32LE(data.length, entry + 8);
+  header.writeUInt32LE(offset, entry + 12);
+  offset += data.length;
+});
+const destination = path.join(root, 'dist', 'segreteria-eventi.ico');
+fs.writeFileSync(destination, Buffer.concat([header, ...images.map(image => image.data)]), {flag:'wx'});
+const result = fs.readFileSync(destination);
+if (result.readUInt16LE(2) !== 1 || result.readUInt16LE(4) !== 2 || result.length !== offset) throw new Error('Icona non valida');
+console.log(`Icona Windows verificata: ${result.length} byte, 32 e 192 pixel.`);

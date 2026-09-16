@@ -16,6 +16,8 @@ function inviaEmailConfermaDaWordPress_(payload) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient) || !/^[a-f0-9]{64}$/.test(String(p.delivery_key || '')) || !['PROVA', 'OPERATIVO'].includes(p.mode)) return { ok: false, error: 'INVALID_EMAIL_PAYLOAD' };
   const props = PropertiesService.getScriptProperties();
   if (p.mode === 'PROVA' && recipient !== String(props.getProperty(MI_TEST_EMAIL_PROPERTY) || '').trim().toLowerCase()) return { ok: false, error: 'TEST_RECIPIENT_MISMATCH' };
+  const replyTo = String(p.reply_to || sender.sender).trim().toLowerCase();
+  if (p.mode === 'OPERATIVO' && (replyTo.length > 254 || !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(replyTo))) return { ok: false, error: 'INVALID_REPLY_TO' };
   if (!p.oggetto || !p.testo || !p.html || String(p.oggetto).length > 250 || String(p.testo).length > 100000 || String(p.html).length > 300000 || /[\r\n]/.test(String(p.oggetto))) return { ok: false, error: 'INVALID_EMAIL_PAYLOAD' };
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return { ok: false, error: 'EMAIL_BUSY' };
@@ -31,7 +33,7 @@ function inviaEmailConfermaDaWordPress_(payload) {
     const row = sheet.getLastRow();
     SpreadsheetApp.flush();
     const options = { to: recipient, subject: String(p.oggetto), body: String(p.testo), htmlBody: String(p.html), name: 'Parrocchia Sant’Eugenio', replyTo: recipient };
-    if (p.mode === 'OPERATIVO') options.replyTo = sender.sender;
+    if (p.mode === 'OPERATIVO') options.replyTo = replyTo;
     if (p.codice_svg) options.inlineImages = { 'mi-registration-code': Utilities.newBlob(String(p.codice_svg), 'image/svg+xml', 'codice-iscrizione.svg') };
     try { MailApp.sendEmail(options); }
     catch (error) { console.error('EMAIL_SEND_FAILED', String(error)); return { ok: false, error: 'EMAIL_DELIVERY_UNCERTAIN' }; }

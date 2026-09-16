@@ -23,8 +23,11 @@ function preparaProduzioniEventoConLock_(payload) {
     normalizzaTesto_(payload.chiusura_iscrizioni, 40),
     payload.evento_gratuito === true ? 'ZERO' : normalizzaTesto_(payload.modalita_prezzo, 40),
     new Date(),
-    JSON.stringify(Array.isArray(payload.servizi) ? payload.servizi : [])
+    JSON.stringify(Array.isArray(payload.servizi) ? payload.servizi : []),
+    JSON.stringify(Array.isArray(payload.domande_partecipanti) ? payload.domande_partecipanti : decodificaElenco_((esistente || {}).domande_json))
   ];
+  if (eventi.getMaxColumns() < 11) eventi.insertColumnsAfter(eventi.getMaxColumns(), 11 - eventi.getMaxColumns());
+  eventi.getRange(1, 11).setValue('domande_json');
   if (esistente) eventi.getRange(esistente._row, 1, 1, valori.length).setValues([valori]);
   else eventi.appendRow(valori);
 	const profiloOperativo = normalizzaValoreElenco_(payload.profilo_operativo, ['AUTOMATICO', 'MINIMO', 'QUOTA_UNICA', 'SERVIZI_MULTIPLI', 'VIAGGIO_COMPLESSO']) || 'AUTOMATICO';
@@ -114,6 +117,8 @@ function generaVistaOperativaIniziale_(idEvento, titolo, profiloRichiesto) {
 	const colonne = profili[profilo].filter(function (chiave) { return !!catalogo[chiave]; }).map(function (chiave) {
 		return { key: chiave, label: catalogo[chiave].label, gruppo: gruppoCampoVistaOperativa_(chiave), comprimibile: ['paid_cash', 'paid_transfer', 'paid_card'].indexOf(chiave) >= 0 };
 	});
+	const evento = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS)).find(r => String(r.id_evento) === String(idEvento)) || {};
+	aggiungiColonneDomande_(colonne, evento, [], []);
 	return { evento: { id: idEvento, titolo: titolo || idEvento }, profilo: profilo, nome_profilo: profilo, personalizzata: false, conservata: false, colonne: colonne, righe: [] };
 }
 
@@ -263,7 +268,7 @@ function aggiornaFoglioOperativoEventoConLock_(form) {
   const chiaveProiezione = 'MI_EVENT_VIEW_' + String(collegamento.id_foglio);
   const ordiniEvento = new Set(convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(r=>String(r.id_evento)===idEvento).map(r=>String(r.codice_ordine)));
   const movimentiEvento = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS)).filter(r=>ordiniEvento.has(String(r.codice_ordine))).map(r=>{const copia=Object.assign({},r);delete copia._row;return copia;});
-  const impronta = versioneGestione_({vista:vista,movimenti:movimentiEvento});
+  const impronta = versioneGestione_({versioneProiezione:2,vista:vista,movimenti:movimentiEvento});
   if (form.soloModificati === true && proprieta.getProperty(chiaveProiezione) === impronta) {
     return {ok:true, invariato:true, esito:{aggiunte:0,manuali:0,conflitti:0}};
   }

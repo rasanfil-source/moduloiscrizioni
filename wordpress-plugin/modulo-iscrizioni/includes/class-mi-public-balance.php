@@ -35,7 +35,7 @@ final class MI_Public_Balance {
 			'iban' => (string) ( $event ? get_post_meta( $event, '_mi_balance_iban', true ) : '' ) ?: (string) ( $defaults['iban'] ?? '' ),
 			'holder' => (string) ( $event ? get_post_meta( $event, '_mi_balance_holder', true ) : '' ) ?: (string) ( $defaults['holder'] ?? '' ),
 			'cardUrl' => esc_url_raw( ( $event ? get_post_meta( $event, '_mi_balance_card_url', true ) : '' ) ?: ( $defaults['cardUrl'] ?? '' ), array( 'https' ) ),
-			'contact' => sanitize_email( ( $event ? get_post_meta( $event, '_mi_balance_contact', true ) : '' ) ?: ( $defaults['contact'] ?? get_option( 'admin_email' ) ) ),
+			'contact' => $event ? MI_Spedizione_Email::destinatario_evento( $event ) : MI_Spedizione_Email::destinatario_segreteria(),
 			'methods' => $event ? (array) get_post_meta( $event, '_mi_payment_methods', true ) : array(),
 		);
 	}
@@ -257,8 +257,8 @@ final class MI_Public_Balance {
 		$config = array_merge( self::payment_config( $event ), array( 'eventTitle' => get_the_title( $event ), 'endpoint' => add_query_arg( 'mi_public_balance', $event, home_url( '/' ) ), 'nonce' => wp_create_nonce( 'mi_public_balance_' . $event ), 'prefill' => $prefill ) );
 		$asset = MI_PLUGIN_URL . 'assets/';
 		header( 'Content-Type: text/html; charset=UTF-8' );
-		echo '<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><title>Servizi e saldo — ' . esc_html( get_the_title( $event ) ) . '</title><link rel="stylesheet" href="' . esc_url( $asset . 'public-balance.css?ver=' . MI_VERSION ) . '"></head><body>';
+		echo '<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><title>Servizi e saldo — ' . esc_html( get_the_title( $event ) ) . '</title><link rel="stylesheet" href="' . esc_url( MI_Assets::filter_url( $asset . 'public-balance.css?ver=' . MI_VERSION ) ) . '"></head><body>';
 		include MI_PLUGIN_DIR . 'templates/public-balance.php';
-		echo '<script>window.MIBalance=' . wp_json_encode( $config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT ) . ';</script><script src="' . esc_url( $asset . 'public-balance.js?ver=' . MI_VERSION ) . '"></script></body></html>';
+		echo '<script>window.MIBalance=' . wp_json_encode( $config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT ) . ';</script><script src="' . esc_url( MI_Assets::filter_url( $asset . 'public-balance.js?ver=' . MI_VERSION ) ) . '"></script></body></html>';
 	}
 }

@@ -19,5 +19,14 @@ $changed=$input;$changed['participant_ids']='[1]';check(empty(MI_Payment_Ledger:
 $changed['request_id']='wp_7_12345678-1234-4234-8234-123456789abd';$changed['rata']='BALANCE';$changed['importo']='200';check(empty(MI_Payment_Ledger::save(1,$changed)['saved']),'balance before deposit rejected');
 $changed['participant_ids']='[2]';check(!empty(MI_Payment_Ledger::save(1,$changed)['saved']),'selected balance saved');
 $detail=MI_Payment_Ledger::detail(1)['saldo'];check($detail['individual']['people'][0]['balance']===30000&&$detail['individual']['people'][1]['balance']===0,'unselected debt unchanged');
+check($wpdb->get_var('SELECT status FROM wp_mi_registrations WHERE id=1')==='PENDING_PAYMENT','saldo di una persona non conferma la prenotazione senza caparra altrui');
 $changed['request_id']='wp_7_12345678-1234-4234-8234-123456789abe';check(empty(MI_Payment_Ledger::save(1,$changed)['saved']),'second payment of settled amount rejected');
-echo "PASS InnoDB: attribuzione atomica, caparra e saldo, isolamento persone, retry idempotente e rifiuto doppio incasso.\n";
+$deposit=$input;$deposit['request_id']='wp_7_12345678-1234-4234-8234-123456789ab1';$deposit['participant_ids']='[1]';check(!empty(MI_Payment_Ledger::save(1,$deposit)['saved']),'caparra altra persona salvata');
+check($wpdb->get_var('SELECT status FROM wp_mi_registrations WHERE id=1')==='CONFIRMED','prenotazione confermata quando ogni caparra personale è coperta');
+$refund=['request_id'=>'wp_7_12345678-1234-4234-8234-123456789abf','importo'=>'50','tipo'=>'RIMBORSO','metodo'=>'BONIFICO','data'=>'2026-09-14','participant_ids'=>'[2]'];
+check(!empty(MI_Payment_Ledger::save(1,$refund)['saved']),'rimborso individuale');
+$detail=MI_Payment_Ledger::detail(1)['saldo'];$people=array_column($detail['individual']['people'],null,'id');
+check($people[1]['paid']===10000&&$people[2]['paid']===25000&&$people[2]['balance']===5000,'rimborso attribuito solo alla persona scelta');
+$refund['request_id']='wp_7_12345678-1234-4234-8234-123456789ac0';$refund['importo']='260';check(empty(MI_Payment_Ledger::save(1,$refund)['saved']),'rimborso superiore al versato personale rifiutato');
+$refund['request_id']='wp_7_12345678-1234-4234-8234-123456789ac1';$refund['importo']='10';$refund['participant_ids']='[1,2]';check(empty(MI_Payment_Ledger::save(1,$refund)['saved']),'rimborso ambiguo su più persone rifiutato');
+echo "PASS InnoDB: attribuzione atomica, caparra e saldo, isolamento persone, rimborso individuale, retry e rifiuto duplicati.\n";

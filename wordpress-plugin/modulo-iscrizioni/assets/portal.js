@@ -920,9 +920,37 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Preserve the explicit deletion choice and prevent repeated submissions.
-document.addEventListener('submit',function(event){const form=event.target.closest('[data-mi-delete-form]');if(!form)return;if(form.dataset.busy){event.preventDefault();return;}form.dataset.busy='1';form.setAttribute('aria-busy','true');const button=form.querySelector('button[type="submit"]');if(button){button.disabled=true;button.textContent='Attendere prego…';}const status=document.createElement('p');status.setAttribute('role','status');status.setAttribute('aria-live','polite');status.textContent='Attendere prego… Eliminazione in corso.';form.after(status);});
-
-const miDeletionContinuation=document.querySelector('[data-mi-delete-continue]');if(miDeletionContinuation)setTimeout(()=>miDeletionContinuation.requestSubmit(),2000);
+// Keep one bounded deletion request in flight; errors require an explicit retry.
+function miSetupDeletion(form) {
+  if (!form || !form.dataset.miDeleteAjax) return;
+  const button=form.querySelector('button[type="submit"]');
+  if (!button) return;
+  const status=document.createElement('p');status.setAttribute('role','status');status.setAttribute('aria-live','polite');form.after(status);
+  let busy=false,timer=null;
+  const run=async()=>{
+    if(busy)return;
+    clearTimeout(timer);busy=true;
+    const body=new FormData(form);
+    form.setAttribute('aria-busy','true');button.disabled=true;button.textContent='Eliminazione in corso…';
+    status.textContent='Pulizia in corso. Attendo la risposta del server…';
+    try {
+      const response=await fetch(form.dataset.miDeleteAjax,{method:'POST',body,credentials:'same-origin'});
+      if(!response.ok)throw new Error('Risposta del server non disponibile.');
+      const result=await response.json();
+      if(!result.success)throw new Error(result.data?.message||'Eliminazione non completata.');
+      if(result.data.complete){status.textContent='Eliminazione completata.';location.assign(result.data.url);return;}
+      status.textContent=result.data.message;
+      timer=setTimeout(run,2000);
+    } catch(error) {
+      status.textContent=error.message+' Premi Riprendi per verificare e continuare: il lavoro già eseguito sarà conservato.';
+    } finally {
+      busy=false;form.removeAttribute('aria-busy');button.disabled=false;button.textContent='Riprendi eliminazione';
+    }
+  };
+  form.addEventListener('submit',event=>{event.preventDefault();run();});
+  if(form.hasAttribute('data-mi-delete-continue'))timer=setTimeout(run,2000);
+}
+miSetupDeletion(document.querySelector('[data-mi-delete-form]'));
 // Event selection is updated inline: keep navigation aligned with the current URL.
 document.addEventListener('click', event => {
   const link=event.target.closest('.mi-portal-switcher a');if(!link)return;
@@ -937,3 +965,30 @@ document.addEventListener('click', event => {
 if(window.miEmailAppearance){const form=document.querySelector('.mi-event-wizard'),before=form&&form.querySelector('.mi-confirmation-email');if(before){const data=window.miEmailAppearance,style=data.style||{},resolved=data.resolved||{},hasIdentity=['identity_name','identity_detail','contact_email','signature'].some(key=>style[key]),hasColors=['primary_color','secondary_color'].some(key=>style[key]);const esc=value=>String(value||'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));const panel=document.createElement('details');panel.className='mi-email-appearance';panel.innerHTML='<summary>Aspetto email</summary><input type="hidden" name="event_email_style_present" value="1"><p><strong>Usa lo stile ereditato</strong> · '+esc(data.groupName?'Gruppo: '+data.groupName:'Default parrocchia')+'</p><p class="mi-portal-muted">'+(data.eventImage?'Banner email: immagine dell’evento.':'Banner email: gruppo/default.')+' Attiva solo le proprietà da sovrascrivere.</p><label class="mi-check"><input type="checkbox" name="event_email_identity_enabled" value="1" '+(hasIdentity?'checked':'')+'> Personalizza identità e firma</label><div class="mi-wizard-grid"><label>Nome visualizzato<input name="event_email_identity_name" maxlength="120" value="'+esc(style.identity_name)+'"></label><label>Dettaglio<input name="event_email_identity_detail" maxlength="180" value="'+esc(style.identity_detail)+'"></label><label>Email di contatto<input type="email" name="event_email_contact" value="'+esc(style.contact_email)+'"></label><label>Firma<input name="event_email_signature" maxlength="240" value="'+esc(style.signature)+'"></label></div><label class="mi-check"><input type="checkbox" name="event_email_colors_enabled" value="1" '+(hasColors?'checked':'')+'> Personalizza colori</label><div class="mi-wizard-grid"><label>Colore principale<input type="color" name="event_email_primary_color" value="'+esc(style.primary_color||resolved.primary_color||'#151b38')+'"></label><label>Colore CTA<input type="color" name="event_email_secondary_color" value="'+esc(style.secondary_color||resolved.secondary_color||'#337ab7')+'"></label></div><label class="mi-check"><input type="checkbox" name="event_email_banner_enabled" value="1" '+(style.banner_url?'checked':'')+'> Sostituisci solo il banner</label><label>URL HTTPS del banner<input type="url" name="event_email_banner_url" value="'+esc(style.banner_url)+'" placeholder="https://…"></label>';before.before(panel);}}
 
 {const form=document.querySelector('.mi-event-wizard'),group=form&&form.querySelector('[name="activity_id"]'),panel=form&&form.querySelector('.mi-email-appearance');if(group&&panel){const source=panel.querySelector('p'),strong=source.querySelector('strong');const refresh=()=>{const option=group.options[group.selectedIndex],name=option&&option.value?option.textContent.trim():'';source.replaceChildren(strong,document.createTextNode(' · '+(name?'Gruppo: '+name:'Default parrocchia')));};group.addEventListener('change',refresh);refresh();}}
+(function () {
+  function setupCommunicationFormatting() {
+    document.querySelectorAll('.mi-portal-communications textarea[name="message"]').forEach(function (field) {
+      if (field.dataset.formattingReady) return;
+      field.dataset.formattingReady = '1';
+      var toolbar = document.createElement('div');
+      toolbar.setAttribute('role', 'group');
+      toolbar.setAttribute('aria-label', 'Formattazione messaggio');
+      [['Grassetto', '**'], ['Corsivo', '*'], ['Elenco', '- ']].forEach(function (format) {
+        var button = document.createElement('button');
+        button.type = 'button'; button.className = 'mi-secondary'; button.textContent = format[0];
+        button.addEventListener('click', function () {
+          var start = field.selectionStart, end = field.selectionEnd;
+          var selected = field.value.slice(start, end) || 'testo';
+          var replacement = format[1] === '- ' ? selected.split('\n').map(function (line) { return '- ' + line; }).join('\n') : format[1] + selected + format[1];
+          if (field.value.length - (end - start) + replacement.length > field.maxLength) return;
+          field.setRangeText(replacement, start, end, 'select'); field.focus();
+          field.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        toolbar.appendChild(button);
+      });
+      field.parentNode.insertBefore(toolbar, field);
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setupCommunicationFormatting);
+  else setupCommunicationFormatting();
+}());

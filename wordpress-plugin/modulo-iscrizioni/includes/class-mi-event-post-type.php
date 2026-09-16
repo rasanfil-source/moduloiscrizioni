@@ -8,6 +8,11 @@ final class MI_Event_Post_Type {
 	const ACTIVITY_TYPE = 'mi_activity';
 	const GROUP_TYPE = 'mi_activity';
 
+	private static function price_cents( $raw ) {
+		$raw = is_scalar( $raw ) ? trim( sanitize_text_field( (string) $raw ) ) : '';
+		return preg_match( '/^\d+(?:[.,]\d{1,2})?$/D', $raw ) ? max( 0, (int) round( (float) str_replace( ',', '.', $raw ) * 100 ) ) : 0;
+	}
+
 	public static function boot() {
 		add_action( 'init', array( __CLASS__, 'register_types' ) );
 		add_action( 'add_meta_boxes', array( __CLASS__, 'add_meta_boxes' ) );
@@ -332,8 +337,7 @@ final class MI_Event_Post_Type {
 		$pricing_mode = in_array( $pricing_mode, array( 'NONE', 'ZERO', 'FIXED', 'CALCULATED' ), true ) ? $pricing_mode : 'NONE';
 		update_post_meta( $post_id, '_mi_pricing_mode', $pricing_mode );
 		$fixed_price_raw = isset( $_POST['mi_fixed_price'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['mi_fixed_price'] ) ) ) : '';
-		$fixed_price = preg_match( '/^\d+(?:[\.,]\d{1,2})?$/', $fixed_price_raw ) ? (float) str_replace( ',', '.', $fixed_price_raw ) : 0;
-		update_post_meta( $post_id, '_mi_fixed_price_cents', 'FIXED' === $pricing_mode ? max( 0, (int) round( $fixed_price * 100 ) ) : 0 );
+		update_post_meta( $post_id, '_mi_fixed_price_cents', 'FIXED' === $pricing_mode ? self::price_cents( $fixed_price_raw ) : 0 );
 
 		$economic_mode = isset( $_POST['mi_economic_mode'] ) ? strtoupper( sanitize_key( wp_unslash( $_POST['mi_economic_mode'] ) ) ) : 'REGISTRATION_ONLY';
 		$economic_modes = array( 'REGISTRATION_ONLY', 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE' );
@@ -342,7 +346,7 @@ final class MI_Event_Post_Type {
 		$deposit_mode = isset( $_POST['mi_deposit_mode'] ) && 'FIXED' === strtoupper( sanitize_key( wp_unslash( $_POST['mi_deposit_mode'] ) ) ) ? 'FIXED' : 'PERCENTAGE';
 		$deposit_percentage = isset( $_POST['mi_deposit_percentage'] ) ? min( 99, max( 1, absint( $_POST['mi_deposit_percentage'] ) ) ) : 30;
 		$deposit_fixed_raw = isset( $_POST['mi_deposit_fixed'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['mi_deposit_fixed'] ) ) ) : '';
-		$deposit_fixed = preg_match( '/^\d+(?:[\.,]\d{1,2})?$/', $deposit_fixed_raw ) ? max( 0, (int) round( (float) str_replace( ',', '.', $deposit_fixed_raw ) * 100 ) ) : 0;
+		$deposit_fixed = self::price_cents( $deposit_fixed_raw );
 		update_post_meta( $post_id, '_mi_deposit_mode', $deposit_mode );
 		update_post_meta( $post_id, '_mi_deposit_percentage', $deposit_percentage );
 		update_post_meta( $post_id, '_mi_deposit_fixed_cents', 'DEPOSIT_BALANCE' === $economic_mode && 'FIXED' === $deposit_mode ? $deposit_fixed : 0 );
@@ -395,7 +399,7 @@ final class MI_Event_Post_Type {
 			$tickets[] = array(
 				'code'          => $code,
 				'name'          => $name,
-				'price_cents'   => max( 0, (int) round( (float) ( $prices[ $index ] ?? 0 ) * 100 ) ),
+				'price_cents'   => self::price_cents( $prices[ $index ] ?? 0 ),
 				'max_per_order' => min( 20, max( 1, absint( $maximums[ $index ] ?? 1 ) ) ),
 				'capacity'      => min( 10000, absint( $capacities[ $index ] ?? 0 ) ),
 			);
@@ -424,7 +428,7 @@ final class MI_Event_Post_Type {
 				'code'         => $code,
 				'name'         => $name,
 				'scope'        => in_array( $scope, array( 'ORDER', 'TICKET' ), true ) ? $scope : 'ORDER',
-				'price_cents'  => max( 0, (int) round( (float) ( $option_prices[ $index ] ?? 0 ) * 100 ) ),
+				'price_cents'  => self::price_cents( $option_prices[ $index ] ?? 0 ),
 				'max_quantity' => min( 20, max( 1, absint( $option_maximums[ $index ] ?? 1 ) ) ),
 			);
 		}

@@ -54,6 +54,8 @@ final class MI_Modello_Email {
 		// L’indirizzo per gli iscritti appartiene al gruppo e non può essere sostituito dal gestore del singolo evento.
 		unset( $event['contact_email'] );
 		$style = array_merge( self::stile_default(), $group, $event );
+		// Contatti e Reply-To seguono la stessa regola delle notifiche agli organizzatori.
+		$style['contact_email'] = MI_Spedizione_Email::destinatario_evento( $event_id );
 		$group_logo_id = $group_id ? get_post_thumbnail_id( $group_id ) : 0;
 		$group_cover_id = $group_id ? absint( get_post_meta( $group_id, '_mi_group_cover_image_id', true ) ) : 0;
 		$event_image = $event_id ? (string) get_the_post_thumbnail_url( $event_id, 'large' ) : '';
@@ -293,6 +295,22 @@ final class MI_Modello_Email {
 		return $snapshot;
 	}
 
+	/** Small escaped formatting subset; raw HTML is never accepted. */
+	public static function formatta_comunicazione( $text ) {
+		$lines = explode( "\n", str_replace( "\r", '', (string) $text ) );
+		$html = ''; $list = false;
+		foreach ( $lines as $line ) {
+			$is_item = 0 === strpos( $line, '- ' );
+			if ( $is_item && ! $list ) { $html .= '<ul>'; $list = true; }
+			if ( ! $is_item && $list ) { $html .= '</ul>'; $list = false; }
+			$safe = esc_html( $is_item ? substr( $line, 2 ) : $line );
+			$safe = preg_replace( '/\*\*([^*]+)\*\*/u', '<strong>$1</strong>', $safe );
+			$safe = preg_replace( '/(?<!\*)\*([^*]+)\*(?!\*)/u', '<em>$1</em>', $safe );
+			$html .= $is_item ? '<li>' . $safe . '</li>' : $safe . '<br>';
+		}
+		return $html . ( $list ? '</ul>' : '' );
+	}
+
 	public static function crea_istantanea_operativa( $event_id, $values, $template_type, $message, $status_url ) {
 		$snapshot = self::crea_istantanea( $event_id, $values );
 		$snapshot['identificativo']['modalita'] = 'NONE';
@@ -306,6 +324,10 @@ final class MI_Modello_Email {
 			$snapshot['preheader'] = 'Comunicazione importante relativa alla tua iscrizione.';
 			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ti informiamo che <strong>' . esc_html( $event_title ) . '</strong> è stato annullato.</p>' . ( $clean_message ? '<p><strong>Motivo comunicato:</strong><br>' . nl2br( esc_html( $clean_message ) ) . '</p>' : '' ) . '<p>La segreteria ti contatterà separatamente se sono necessari rimborsi o altri adempimenti.</p>';
 			$snapshot['testo'] = "Gentile {$buyer_name},\n\nl’evento {$event_title} è stato annullato." . ( $clean_message ? "\n\nMotivo comunicato:\n{$clean_message}" : '' ) . "\n\nLa segreteria ti contatterà separatamente se sono necessari rimborsi o altri adempimenti.";
+			$contact = MI_Spedizione_Email::destinatario_evento( $event_id );
+			$snapshot['html'] .= '<p>Per maggiori ragguagli, scrivi a <a href="mailto:' . esc_attr( $contact ) . '">' . esc_html( $contact ) . '</a>.</p>';
+			$snapshot['testo'] .= "\n\nPer maggiori ragguagli, scrivi a: {$contact}.";
+			$snapshot['identita_email']['indirizzo_risposte'] = $contact;
 			$snapshot['titolo'] = 'Evento annullato';
 			$snapshot['status_url'] = '';
 		} elseif ( in_array( $template_type, array( 'DEPOSIT_REMINDER', 'BALANCE_REMINDER' ), true ) ) {
@@ -328,7 +350,7 @@ final class MI_Modello_Email {
 			$snapshot['oggetto'] = ( 'MATERIAL_DELIVERY' === $template_type ? 'Materiale' : 'Informazioni utili' ) . ' — ' . $event_title;
 			$snapshot['titolo'] = 'MATERIAL_DELIVERY' === $template_type ? 'Materiale per l’evento' : 'Comunicazione';
 			$snapshot['preheader'] = 'Indicazioni operative prima dell’evento.';
-			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ecco le informazioni aggiornate per <strong>' . esc_html( $event_title ) . '</strong>.</p><p>' . nl2br( esc_html( $clean_message ) ) . '</p>';
+			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ecco le informazioni aggiornate per <strong>' . esc_html( $event_title ) . '</strong>.</p>' . self::formatta_comunicazione( $clean_message );
 			$snapshot['testo'] = "Gentile {$buyer_name},\n\necco le informazioni aggiornate per {$event_title}.\n\n{$clean_message}";
 		}
 		return $snapshot;
@@ -406,7 +428,7 @@ final class MI_Modello_Email {
 				$label = sanitize_text_field( (string) ( $action['label'] ?? '' ) );
 				return $url && $label ? array( 'url' => $url, 'label' => $label ) : null;
 			}, (array) $actions ) ) ),
-			'identita_email' => array( 'nome_mittente' => self::NOME_SEGRETERIA, 'indirizzo_mittente' => self::EMAIL_SEGRETERIA, 'indirizzo_risposte' => self::EMAIL_SEGRETERIA ),
+			'identita_email' => array( 'nome_mittente' => self::NOME_SEGRETERIA, 'indirizzo_mittente' => self::EMAIL_SEGRETERIA, 'indirizzo_risposte' => MI_Spedizione_Email::destinatario_evento( $event_id ) ),
 			'identificativo' => array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' ),
 		);
 	}
@@ -547,10 +569,14 @@ final class MI_Modello_Email {
 		$actions = '';
 		foreach ( (array) ( $snapshot['azioni'] ?? array() ) as $action ) {
 			$url = esc_url( $action['url'] ?? '' ); $label = sanitize_text_field( $action['label'] ?? '' );
-			if ( $url && $label ) $actions .= '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:14px;"><tr><td bgcolor="#111827" style="border-radius:7px;"><a href="' . $url . '" style="display:inline-block;padding:12px 17px;font-family:Arial,Helvetica,sans-serif;color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:700;">' . esc_html( $label ) . '</a></td></tr></table>';
+			if ( $url && $label ) {
+				if ( $actions ) $actions .= '<td width="12" aria-hidden="true" style="width:12px;font-size:0;">&nbsp;</td>';
+				$actions .= '<td bgcolor="#111827" align="center" valign="middle" style="border-radius:7px;"><a href="' . $url . '" style="display:inline-block;padding:12px 17px;font-family:Arial,Helvetica,sans-serif;color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:700;">' . esc_html( $label ) . '</a></td>';
+			}
 		}
+		if ( $actions ) $actions = '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:14px;"><tr>' . $actions . '</tr></table>';
 		$assets = $snapshot['publication_assets'] ?? array();
-		$logo = ! empty( $assets['logo'] ) ? '<img src="' . esc_url( $assets['logo'] ) . '" alt="' . esc_attr( $assets['alt'] ?? 'Logo' ) . '" width="64" style="display:block;width:64px;max-width:100%;height:auto;margin-bottom:16px;">' : '';
+		$logo = ! empty( $assets['logo'] ) ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td style="padding-top:12px;"><img src="' . esc_url( $assets['logo'] ) . '" alt="' . esc_attr( $assets['alt'] ?? 'Logo' ) . '" width="64" style="display:block;width:64px;max-width:100%;height:auto;margin-bottom:16px;"></td></tr></table>' : '';
 		$banner = ! empty( $assets['banner'] ) ? '<tr><td><img src="' . esc_url( $assets['banner'] ) . '" alt="' . esc_attr( $event ) . '" width="680" style="display:block;width:100%;max-width:680px;height:auto;border:0;"></td></tr>' : '';
 
 		$preheader = sanitize_text_field( (string) ( $snapshot['preheader'] ?? '' ) );

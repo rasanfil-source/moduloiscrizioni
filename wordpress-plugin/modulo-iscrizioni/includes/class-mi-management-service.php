@@ -26,6 +26,29 @@ final class MI_Management_Service {
 		global $wpdb;
 		if ( $wpdb->last_error ) throw new RuntimeException( 'Lettura del registro non disponibile.' );
 	}
+	/** Recalculate percentage deposits on the new individual totals, preserving exact cents. */
+	private static function percentage_deposits( array $registration, array $position, array $deltas, $new_total ) {
+		$snapshot = self::decode( $registration['snapshot_json'] ?? '' );
+		$event = $snapshot['event'] ?? array();
+		if ( 'DEPOSIT_BALANCE' !== ( $registration['economic_mode'] ?? '' ) || 'PERCENTAGE' !== strtoupper( (string) ( $event['deposit_mode'] ?? '' ) ) || empty( $position['quotes_known'] ) ) return null;
+		$totals = array(); $sum = 0;
+		foreach ( $position['people'] as $person ) {
+			$id = (int) $person['id']; $total = (int) $person['total'] + (int) ( $deltas[$id] ?? 0 );
+			if ( $total < 0 ) return null;
+			$totals[$id] = $total; $sum += $total;
+		}
+		if ( $sum !== (int) $new_total ) return null;
+		$percentage = min( 99, max( 1, absint( $event['deposit_percentage'] ?? 30 ) ) );
+		$target = (int) round( $sum * $percentage / 100 );
+		$deposits = array(); $remainders = array(); $assigned = 0;
+		foreach ( $totals as $id => $total ) {
+			$product = $total * $target; $deposits[$id] = $sum ? intdiv( $product, $sum ) : 0;
+			$remainders[$id] = $sum ? $product % $sum : 0; $assigned += $deposits[$id];
+		}
+		arsort( $remainders, SORT_NUMERIC );
+		foreach ( $remainders as $id => $remainder ) { if ( $assigned >= $target ) break; $deposits[$id]++; $assigned++; }
+		return $deposits;
+	}
 	private static function visible_special_requests( $value ) {
 		$value = trim( (string) $value );
 		return 'Iscrizione dimostrativa generata dal pannello amministrativo.' === $value ? '' : $value;
@@ -116,6 +139,7 @@ final class MI_Management_Service {
 			$booking['can_adjust_due'] = MI_Portal_Payments::allowed() && in_array( self::registration( $id )['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 			$saved_registration = self::registration( $id ); $saved_snapshot = self::decode( $saved_registration['snapshot_json'] );
 			$booking['is_free_event'] = 'ZERO' === strtoupper( (string) ( $saved_snapshot['event']['pricing_mode'] ?? get_post_meta( $booking['event_id'], '_mi_pricing_mode', true ) ) );
+			$booking['can_change_options'] = MI_Portal_Payments::allowed() && ! $booking['is_free_event'];
 			if ( $booking['is_free_event'] ) $booking['can_adjust_due'] = false;
             $booking['option_definitions'] = $saved_snapshot['event']['options'] ?? array();
 			$booking['option_scope'] = $saved_snapshot['event']['participant_extra_scope'] ?? 'ONE';
@@ -245,7 +269,7 @@ final class MI_Management_Service {
 			$definitions = array_column( $snapshot['event']['options'] ?? array(), null, 'code' );
 			$target = $definitions[$data['type']] ?? null;
 			if ( ! $target || ( $target['scope'] ?? '' ) !== 'TICKET' || ! isset( $target['price_cents'] ) || (int) $target['price_cents'] < 0 ) throw new InvalidArgumentException( 'La nuova sistemazione non ha una tariffa valida nell’iscrizione ' . $code . '.' );
-			$movements = $wpdb->get_results( $wpdb->prepare( "SELECT amount_cents,transaction_kind FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d" . ( $lock ? ' FOR UPDATE' : '' ), $row['id'] ), ARRAY_A ); self::check_database();
+			$movements = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d" . ( $lock ? ' FOR UPDATE' : '' ), $row['id'] ), ARRAY_A ); self::check_database();
 			$paid = 0; foreach ( $movements as $movement ) $paid += ( 'REFUND' === $movement['transaction_kind'] ? -1 : 1 ) * (int) $movement['amount_cents'];
 			$fingerprint[] = array( $row, $booking['version'], $paid ); $delta = 0;
 			foreach ( $numbers as $n ) {
@@ -270,10 +294,14 @@ final class MI_Management_Service {
 			$total = (int) $row['total_cents'] + $delta;
 			if ( $total < 0 || $total > 100000000 ) throw new InvalidArgumentException( 'Il nuovo dovuto di ' . $code . ' non è valido: verifica le rettifiche precedenti.' );
 			$managed = in_array( $row['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
-			$initial = 'FULL_PAYMENT' === $row['economic_mode'] ? $total : min( (int) $row['initial_due_cents'], $total );
+			$person_deltas = array();
+			foreach ( $plan['people'] as $changed_person ) if ( $changed_person['registration_id'] === (int) $row['id'] ) $person_deltas[(int) $changed_person['id']] = (int) $changed_person['delta'];
+			$position = MI_Payment_People::read( $row, $movements );
+			$deposits = self::percentage_deposits( $row, $position, $person_deltas, $total );
+			$initial = 'FULL_PAYMENT' === $row['economic_mode'] ? $total : ( null !== $deposits ? array_sum( $deposits ) : min( (int) $row['initial_due_cents'], $total ) );
 			$changes = array( 'total_cents' => $total );
 			if ( $managed ) { $changes += array( 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial, 'status' => $paid >= $initial ? 'CONFIRMED' : 'PENDING_PAYMENT', 'expires_at' => $paid >= $initial ? null : $row['payment_deadline_at'] ); }
-			$plan['orders'][] = array( 'id' => (int) $row['id'], 'code' => $code, 'before_total' => (int) $row['total_cents'], 'after_total' => $total, 'delta' => $delta, 'paid' => $paid, 'due' => $managed ? max( 0, $total - $paid ) : 0, 'refund' => $managed ? max( 0, $paid - $total ) : 0, 'changes' => $changes );
+			$plan['orders'][] = array( 'id' => (int) $row['id'], 'code' => $code, 'before_total' => (int) $row['total_cents'], 'after_total' => $total, 'delta' => $delta, 'paid' => $paid, 'due' => $managed ? max( 0, $total - $paid ) : 0, 'refund' => $managed ? max( 0, $paid - $total ) : 0, 'changes' => $changes, 'deposits' => null !== $deposits ? $deposits : array() );
 		}
 		foreach ( $occupancy as $code => $count ) if ( $count > ( $inventory[$code]['capacity'] ?? $plan['new_rooms'][$code]['capacity'] ?? 0 ) ) throw new InvalidArgumentException( 'Capienza superata per ' . $code . '. Scegli un’altra camera.' );
 		$plan['version'] = hash( 'sha256', wp_json_encode( array( $fingerprint, $plan ) ) );
@@ -304,6 +332,7 @@ final class MI_Management_Service {
 			foreach ( $plan['people'] as $person ) if ( false === $wpdb->update( $wpdb->prefix . 'mi_participants', array( 'options_json' => wp_json_encode( $person['after_options'] ), 'room_code' => $person['after_room'] ), array( 'id' => $person['id'] ) ) ) throw new RuntimeException();
 			foreach ( $plan['orders'] as $order ) {
 				if ( false === $wpdb->update( $wpdb->prefix . 'mi_registrations', $order['changes'], array( 'id' => $order['id'] ) ) ) throw new RuntimeException();
+				foreach ( $order['deposits'] as $person_id => $deposit ) if ( false === $wpdb->update( $wpdb->prefix . 'mi_participants', array( 'deposit_due_cents' => $deposit ), array( 'id' => $person_id, 'registration_id' => $order['id'] ) ) ) throw new RuntimeException();
 				MI_Registration_Service::mark_workspace_changed_locked( $order['id'] );
 				$audit = array( 'request_id' => $request_id, 'reason' => $plan['reason'], 'economics' => $order, 'people' => array_values( array_filter( $plan['people'], static function ( $p ) use ( $order ) { return $p['registration_id'] === $order['id']; } ) ) );
 				if ( ! MI_Registration_Service::append_registration_event( $order['id'], 'CHANGE_ACCOMMODATION', '', '', 'WP#' . get_current_user_id(), $audit ) ) throw new RuntimeException();
@@ -441,8 +470,8 @@ final class MI_Management_Service {
 		$history = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d ORDER BY id", $locked['id'] ), ARRAY_A ); self::check_database();
 		$position = MI_Payment_People::read( $locked, $history );
 		$individual = $person ? ( array_column( $position['people'], null, 'id' )[$person['id']] ?? null ) : null;
-		$deposits = array();
-		foreach ( $position['people'] as $row ) $deposits[$row['id']] = min( $row['deposit'], max( 0, $row['total'] + ( $person && $row['id'] === $person['id'] ? $delta : 0 ) ) );
+		$deposits = self::percentage_deposits( $locked, $position, $person ? array( $person['id'] => $delta ) : array(), $total );
+		if ( null === $deposits ) { $deposits = array(); foreach ( $position['people'] as $row ) $deposits[$row['id']] = min( $row['deposit'], max( 0, $row['total'] + ( $person && $row['id'] === $person['id'] ? $delta : 0 ) ) ); }
 		$initial = 'FULL_PAYMENT' === $locked['economic_mode'] ? $total : ( $position['quotes_known'] ? array_sum( $deposits ) : min( (int) $locked['initial_due_cents'], $total ) );
 		$paid = 0; foreach ( $history as $movement ) $paid += ( 'REFUND' === $movement['transaction_kind'] ? -1 : 1 ) * (int) $movement['amount_cents'];
 		$changes = array( 'total_cents' => $total, 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial );
@@ -450,6 +479,7 @@ final class MI_Management_Service {
 		return array( 'participant_id' => $person ? $person['id'] : 0, 'before_options' => $current_options, 'after_options' => $options, 'reason' => sanitize_textarea_field( $data['reason'] ), 'delta' => $delta, 'before_total' => $individual && $position['quotes_known'] ? $individual['total'] : null, 'after_total' => $individual && $position['quotes_known'] ? $individual['total'] + $delta : null, 'credit' => $individual && $position['payments_known'] && $position['quotes_known'] ? max( 0, $individual['paid'] - $individual['total'] - $delta ) : null, 'changes' => $changes, 'deposits' => $position['quotes_known'] ? $deposits : array() );
 	}
 	public static function options_preview( $id, $data, $version ) {
+		if ( ! MI_Portal_Payments::allowed() ) return new WP_Error( 'mi_options_permission', 'Occorre il permesso di gestione dei pagamenti per modificare servizi e importi.' );
 		try {
 			$registration = self::registration( $id ); $booking = self::booking( $registration );
 			if ( ! is_array( $data ) || ! hash_equals( $booking['version'], (string) $version ) ) throw new InvalidArgumentException( 'I dati sono cambiati: ricarica la scheda.' );
@@ -462,6 +492,7 @@ final class MI_Management_Service {
 		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( MI_Event_Deletion::registration_event( $id ) ); if ( is_wp_error( $lease ) ) return $lease; }
 		global $wpdb;
 		if ( ! MI_Portal_Management::allowed() || ! preg_match( '/^wp_' . get_current_user_id() . '_[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', $request_id ) || ! is_array( $data ) || ! in_array( $operation, array( 'participant','room_save','room_delete','request_review','attendance','adjust_due','identity_link','change_options' ), true ) ) return new WP_Error( 'mi_management_request', 'Richiesta non valida.' );
+		if ( 'change_options' === $operation && ! MI_Portal_Payments::allowed() ) return new WP_Error( 'mi_options_permission', 'Occorre il permesso di gestione dei pagamenti per modificare servizi e importi.' );
 		try { $registration = self::registration( $id ); } catch ( Throwable $error ) { return new WP_Error( 'mi_management_scope', $error->getMessage() ); }
 		$event_id = (int) $registration['event_id'];
 		$hash = hash( 'sha256', wp_json_encode( array( $id, $operation, $data, $version ) ) );

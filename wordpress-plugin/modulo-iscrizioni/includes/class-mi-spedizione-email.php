@@ -17,6 +17,8 @@ final class MI_Spedizione_Email {
 		add_action( 'admin_post_mi_salva_spedizione_email', array( __CLASS__, 'salva_impostazioni' ) );
 		add_action( 'admin_post_mi_invia_email_prova', array( __CLASS__, 'invia_prova' ) );
 		add_action( 'admin_post_mi_riaccoda_email', array( __CLASS__, 'riaccoda_email' ) );
+		add_action( 'admin_post_mi_recupera_pubblicazione', array( __CLASS__, 'recupera_pubblicazione' ) );
+		add_action( 'mi_riprova_notifica_pubblicazione', array( __CLASS__, 'riprova_pubblicazione' ), 10, 2 );
 		add_action( 'transition_post_status', array( __CLASS__, 'rileva_pubblicazione' ), 10, 3 );
 		add_action( 'save_post_' . MI_Event_Post_Type::EVENT_TYPE, array( __CLASS__, 'notifica_pubblicazione' ), 40, 2 );
 		add_action( 'mi_spedisci_email_in_coda', array( __CLASS__, 'spedisci_coda' ) );
@@ -26,22 +28,111 @@ final class MI_Spedizione_Email {
 		$group_id = absint( get_post_meta( $event_id, '_mi_activity_id', true ) );
 		$style = $group_id ? (array) get_post_meta( $group_id, '_mi_email_style', true ) : array();
 		$email = sanitize_email( $style['contact_email'] ?? '' );
-		return is_email( $email ) ? $email : ( sanitize_email( get_option( 'mi_email_segreteria_eventi', '' ) ) ?: MI_Modello_Email::EMAIL_SEGRETERIA );
+		return is_email( $email ) ? $email : self::destinatario_segreteria();
+	}
+	public static function destinatario_segreteria() {
+		$email = sanitize_email( get_option( 'mi_email_segreteria_eventi', '' ) );
+		return is_email( $email ) ? $email : MI_Modello_Email::EMAIL_SEGRETERIA;
+	}
+	public static function destinatari_avvisi_evento( $event_id ) {
+		$recipients = array();
+		foreach ( array( self::destinatario_segreteria(), self::destinatario_evento( $event_id ) ) as $email ) $recipients[strtolower( $email )] = $email;
+		return array_values( $recipients );
 	}
 	public static function rileva_pubblicazione( $new, $old, $post ) {
-		if ( 'publish' === $new && 'publish' !== $old && MI_Event_Post_Type::EVENT_TYPE === $post->post_type ) { self::$pubblicazioni[$post->ID] = true; update_post_meta( $post->ID, '_mi_publication_notification_pending', '1' ); }
+		if ( 'publish' === $new && 'publish' !== $old && MI_Event_Post_Type::EVENT_TYPE === $post->post_type ) {
+			self::$pubblicazioni[$post->ID] = true;
+			update_post_meta( $post->ID, '_mi_publication_notification_pending', '1' );
+			// Persist a fallback before later save hooks or remote calls can interrupt the request.
+			wp_schedule_single_event( time() + 120, 'mi_riprova_notifica_pubblicazione', array( (int) $post->ID, 1 ) );
+		}
 	}
 	public static function notifica_pubblicazione( $event_id, $post ) {
 		if ( empty( self::$pubblicazioni[$event_id] ) && ! get_post_meta( $event_id, '_mi_publication_notification_pending', true ) ) return;
 		if ( 'publish' !== $post->post_status || wp_is_post_revision( $event_id ) || wp_is_post_autosave( $event_id ) ) return;
 		if ( get_post_meta( $event_id, '_mi_publication_notified', true ) ) return;
-		$result = self::accoda_notifica_gestore_evento( $event_id, null, '', self::destinatario_evento( $event_id ) );
+		$result = self::accoda_notifiche_attivazione_evento( $event_id, null, '', '' );
+		self::registra_esito_pubblicazione( $event_id, $result );
+	}
+
+	private static function registra_esito_pubblicazione( $event_id, $result ) {
+		update_post_meta( $event_id, '_mi_publication_notification_error', is_wp_error( $result ) ? $result->get_error_message() : '' );
 		if ( ! is_wp_error( $result ) ) { update_post_meta( $event_id, '_mi_publication_notified', '1' ); update_post_meta( $event_id, '_mi_publication_notification_pending', '' ); }
+	}
+
+	public static function riprova_pubblicazione( $event_id, $attempt = 1 ) {
+		if ( ! get_post_meta( $event_id, '_mi_publication_notification_pending', true ) || 'publish' !== get_post_status( $event_id ) ) return;
+		$result = self::accoda_notifiche_attivazione_evento( $event_id, null, '', '' );
+		self::registra_esito_pubblicazione( $event_id, $result );
+		if ( is_wp_error( $result ) && $attempt < 3 ) wp_schedule_single_event( time() + 300, 'mi_riprova_notifica_pubblicazione', array( (int) $event_id, (int) $attempt + 1 ) );
+	}
+
+	public static function recupera_pubblicazione() {
+		self::verifica_amministratore( 'mi_recupera_pubblicazione' );
+		$event_id = absint( $_POST['event_id'] ?? 0 );
+		if ( MI_Event_Post_Type::EVENT_TYPE !== get_post_type( $event_id ) || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Evento non accessibile.', 403 );
+		$result = self::accoda_notifiche_attivazione_evento( $event_id, null, '', '' );
+		self::registra_esito_pubblicazione( $event_id, $result );
+		$message = is_wp_error( $result ) ? $result->get_error_message() : ( $result['count'] ? 'Notifica di pubblicazione preparata in modalità ' . $result['mode'] . '.' : 'La notifica è già presente in coda: nessun duplicato creato.' );
+		set_transient( 'mi_recupero_pubblicazione_' . get_current_user_id(), $message, 300 );
+		wp_safe_redirect( add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox' ), admin_url( 'edit.php' ) ) );
+		exit;
 	}
 
 	public static function modalita() {
 		$modalita = strtoupper( (string) get_option( self::OPZIONE_MODALITA, 'ANTEPRIMA' ) );
 		return in_array( $modalita, array( 'ANTEPRIMA', 'PROVA', 'OPERATIVO' ), true ) ? $modalita : 'ANTEPRIMA';
+	}
+	/** Chiamata nella transazione di eliminazione, prima di rimuovere i contatti. */
+	public static function accoda_avviso_eliminazione( $event_id ) {
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT buyer_email FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED','WAITLIST_OFFERED')", $event_id ), ARRAY_A );
+		if ( $wpdb->last_error ) throw new RuntimeException( 'Destinatari dell’avviso non disponibili.' );
+		$title = html_entity_decode( get_the_title( $event_id ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		$contact = self::destinatario_evento( $event_id );
+		$body = '<p>Ti informiamo che l’evento <strong>' . esc_html( $title ) . '</strong> è stato eliminato dal programma e la tua prenotazione non è più attiva.</p><p>Per maggiori ragguagli, scrivi a <a href="mailto:' . esc_attr( $contact ) . '">' . esc_html( $contact ) . '</a>.</p>';
+		$snapshot = MI_Modello_Email::crea_istantanea_istituzionale( $event_id, 'Evento eliminato — ' . $title, 'Comunicazione relativa alla tua prenotazione.', $body, "L’evento {$title} è stato eliminato dal programma e la tua prenotazione non è più attiva.\nPer maggiori ragguagli, scrivi a: {$contact}." );
+		$snapshot['identita_email']['indirizzo_risposte'] = $contact;
+		foreach ( array_unique( array_column( $rows, 'buyer_email' ) ) as $recipient ) {
+			if ( ! is_email( $recipient ) ) continue;
+			$key = hash( 'sha256', 'event-deleted|' . $event_id . '|' . strtolower( $recipient ) );
+			$payload = wp_json_encode( array( 'event_id' => $event_id, 'email_preview' => $snapshot ) );
+			if ( false === $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->prefix}mi_email_outbox (registration_id,recipient,template_type,origin_key,payload_json,status,created_at) VALUES (0,%s,'EVENT_DELETED_NOTICE',%s,%s,%s,%s)", $recipient, $key, $payload, self::stato_nuova_email( $snapshot ), current_time( 'mysql', true ) ) ) ) throw new RuntimeException( 'Avviso di eliminazione non salvato.' );
+		}
+		$segreteria = self::destinatario_segreteria();
+		if ( ! is_email( $segreteria ) ) throw new RuntimeException( 'Indirizzo della segreteria non valido.' );
+		$segreteria_body = '<p>L’evento <strong>' . esc_html( $title ) . '</strong> è stato eliminato dal portale.</p><p>Le prenotazioni, i partecipanti e i dati collegati sono stati rimossi; la pulizia del foglio Google è stata completata prima di questa notifica.</p><p>Questa è una comunicazione interna automatica.</p>';
+		$segreteria_snapshot = MI_Modello_Email::crea_istantanea_istituzionale( $event_id, 'Evento eliminato — ' . $title, 'Avviso interno per la segreteria.', $segreteria_body, "L’evento {$title} è stato eliminato dal portale.\nLe prenotazioni, i partecipanti e i dati collegati sono stati rimossi; la pulizia del foglio Google è stata completata.\n\nQuesta è una comunicazione interna automatica." );
+		$segreteria_snapshot['identita_email']['indirizzo_risposte'] = $contact;
+		foreach ( self::destinatari_avvisi_evento( $event_id ) as $segreteria ) {
+		$key = hash( 'sha256', 'event-deleted-secretariat|' . $event_id . '|' . strtolower( $segreteria ) );
+		$payload = wp_json_encode( array( 'event_id' => $event_id, 'email_preview' => $segreteria_snapshot ) );
+		if ( false === $payload || false === $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->prefix}mi_email_outbox (registration_id,recipient,template_type,origin_key,payload_json,status,created_at) VALUES (0,%s,'EVENT_DELETED_SECRETARIAT',%s,%s,%s,%s)", $segreteria, $key, $payload, self::stato_nuova_email( $segreteria_snapshot ), current_time( 'mysql', true ) ) ) ) throw new RuntimeException( 'Avviso alla segreteria non salvato.' );
+		}
+	}
+
+	/** Avviso interno indipendente dalla presenza di iscritti, con lo stile istituzionale. */
+	public static function accoda_avviso_annullamento_segreteria( $event_id, $reason ) {
+		global $wpdb;
+		$recipient = self::destinatario_segreteria();
+		if ( ! is_email( $recipient ) ) return new WP_Error( 'mi_annullamento_destinatario', 'Indirizzo della segreteria non valido.' );
+		$title = html_entity_decode( get_the_title( $event_id ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		$text = "L’evento {$title} è stato annullato. Le iscrizioni sono state annullate e i dati restano nello storico. Gli eventuali rimborsi devono essere gestiti separatamente.";
+		$body = '<p>L’evento <strong>' . esc_html( $title ) . '</strong> è stato annullato.</p><p>Le iscrizioni sono state annullate e i dati restano nello storico. Gli eventuali rimborsi devono essere gestiti separatamente.</p>';
+		if ( '' !== trim( $reason ) ) { $body .= '<p><strong>Motivo:</strong><br>' . nl2br( esc_html( $reason ) ) . '</p>'; $text .= "\nMotivo: " . $reason; }
+		$snapshot = MI_Modello_Email::crea_istantanea_istituzionale( $event_id, 'Evento annullato — ' . $title, 'Avviso interno per la segreteria.', $body, $text );
+		$payload = wp_json_encode( array( 'event_id' => $event_id, 'email_preview' => $snapshot ) );
+		$status = self::stato_nuova_email( $snapshot );
+		if ( false === $payload ) return new WP_Error( 'mi_annullamento_json', 'Avviso alla segreteria non serializzabile.' );
+		$count = 0;
+		foreach ( self::destinatari_avvisi_evento( $event_id ) as $recipient ) {
+		$key = hash( 'sha256', 'event-cancelled-secretariat|' . $event_id . '|' . strtolower( $recipient ) );
+		$inserted = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->prefix}mi_email_outbox (registration_id,recipient,template_type,origin_key,payload_json,status,created_at) VALUES (0,%s,'EVENT_CANCELLED_SECRETARIAT',%s,%s,%s,%s)", $recipient, $key, $payload, $status, current_time( 'mysql', true ) ) );
+		if ( false === $inserted ) return new WP_Error( 'mi_annullamento_archivio', 'Avviso alla segreteria non salvato.' );
+		$count += $inserted ? 1 : 0;
+		}
+		if ( self::email_da_spedire( $status ) ) self::pianifica_spedizione();
+		return array( 'ok' => true, 'count' => $count );
 	}
 
 	public static function stato_nuova_email( $istantanea ) {
@@ -79,16 +170,15 @@ final class MI_Spedizione_Email {
 		return array( 'ok' => true, 'count' => $inserted ? 1 : 0, 'mode' => 'TEST_PENDING' === $status ? 'PROVA' : ( 'PENDING' === $status ? 'OPERATIVO' : 'ANTEPRIMA' ) );
 	}
 
-	/** Prepara la conferma di attivazione per la parrocchia e, se assegnato, per il gestore dell’evento. */
+	/** Conferma di attivazione alla segreteria e al recapito del gruppo, senza duplicati. */
 	public static function accoda_notifiche_attivazione_evento( $event_id, ?WP_User $gestore, $sheet_url, $email_segreteria ) {
-		$email_segreteria = self::destinatario_evento( $event_id );
+		$email_segreteria = self::destinatario_segreteria();
 		if ( ! is_email( $email_segreteria ) ) return new WP_Error( 'mi_notifica_segreteria_non_valida', 'L’indirizzo email della parrocchia non è valido.' );
-		$destinatari = array( array( 'utente' => null, 'email' => $email_segreteria ) );
-		if ( $gestore instanceof WP_User && is_email( $gestore->user_email ) && strtolower( $gestore->user_email ) !== strtolower( $email_segreteria ) ) $destinatari[] = array( 'utente' => $gestore, 'email' => $gestore->user_email );
+		$destinatari = self::destinatari_avvisi_evento( $event_id );
 		$conteggio = 0;
 		$modalita = 'ANTEPRIMA';
 		foreach ( $destinatari as $destinatario ) {
-			$result = self::accoda_notifica_gestore_evento( $event_id, $destinatario['utente'], $sheet_url, $destinatario['email'] );
+			$result = self::accoda_notifica_gestore_evento( $event_id, null, $sheet_url, $destinatario );
 			if ( is_wp_error( $result ) ) return $result;
 			$conteggio += absint( $result['count'] ?? 0 );
 			$modalita = (string) ( $result['mode'] ?? $modalita );
@@ -283,24 +373,26 @@ final class MI_Spedizione_Email {
 	}
 
 	public static function spedisci_coda() {
-		if ( 'ANTEPRIMA' === self::modalita() ) return;
+		$modalita = self::modalita();
+		if ( 'ANTEPRIMA' === $modalita ) return;
 		$destinatario_prova = self::destinatario_prova();
-		$operativo = 'OPERATIVO' === self::modalita() && self::prova_verificata();
-		if ( ! $destinatario_prova && ! $operativo ) return;
+		$operativo = 'OPERATIVO' === $modalita && self::prova_verificata();
+		if ( ( 'PROVA' === $modalita && ! $destinatario_prova ) || ( 'OPERATIVO' === $modalita && ! $operativo ) ) return;
 		global $wpdb;
 		$table = $wpdb->prefix . 'mi_email_outbox';
 		$stale = gmdate( 'Y-m-d H:i:s', time() - 15 * MINUTE_IN_SECONDS );
 		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'PENDING', processing_started_at = NULL WHERE status = 'SENDING' AND processing_started_at < %s", $stale ) );
 		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'TEST_PENDING', processing_started_at = NULL WHERE status = 'TEST_SENDING' AND processing_started_at < %s", $stale ) );
-		$stati = array();
-		if ( $operativo ) $stati[] = "'PENDING'";
-		if ( $destinatario_prova ) $stati[] = "'TEST_PENDING'";
-		if ( ! $stati ) return;
+		// La modalità selezionata decide il canale: un invio di prova non può
+		// raggiungere la casella di test dopo il passaggio in Operativo.
+		$stati = 'OPERATIVO' === $modalita ? array( "'PENDING'" ) : array( "'TEST_PENDING'" );
 		$righe = $wpdb->get_results( "SELECT id, registration_id, recipient, template_type, payload_json, attempts, status FROM {$table} WHERE status IN (" . implode( ',', $stati ) . ") AND attempts < 5 ORDER BY id ASC LIMIT 10", ARRAY_A );
 		foreach ( $righe as $riga ) {
 			$event_payload = json_decode( (string) $riga['payload_json'], true );
 			$event_id = ! empty( $riga['registration_id'] ) ? MI_Event_Deletion::registration_event( $riga['registration_id'] ) : absint( $event_payload['event_id'] ?? 0 );
-			if ( ! $event_id || is_wp_error( MI_Event_Deletion::enter( $event_id ) ) ) continue;
+			if ( in_array( $riga['template_type'], array( 'EVENT_DELETED_NOTICE', 'EVENT_DELETED_SECRETARIAT' ), true ) ) {
+				if ( ! $event_id || 'done' !== ( MI_Event_Deletion::job( $event_id )['stage'] ?? '' ) ) continue;
+			} elseif ( ! $event_id || is_wp_error( MI_Event_Deletion::enter( $event_id ) ) ) continue;
 			$id = absint( $riga['id'] );
 			$invio_prova = 'TEST_PENDING' === $riga['status'];
 			$stato_invio = $invio_prova ? 'TEST_SENDING' : 'SENDING';
@@ -366,6 +458,7 @@ final class MI_Spedizione_Email {
 			'delivery_key' => $delivery_key,
 			'mode' => $invio_prova ? 'PROVA' : 'OPERATIVO',
 			'destinatario' => sanitize_email( $destinatario ),
+			'reply_to' => $reply_to,
 			'oggetto' => html_entity_decode( sanitize_text_field( $istantanea['oggetto'] ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ),
 			'html' => $corpo,
 			'testo' => self::$corpo_testo,

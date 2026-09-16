@@ -15,6 +15,7 @@ final class MI_Event_Deletion {
 		add_action( 'save_post_' . MI_Event_Post_Type::EVENT_TYPE, array( __CLASS__, 'guard_saved_post' ), 0 );
 		add_filter( 'post_row_actions', array( __CLASS__, 'row_actions' ), 20, 2 );
 		add_action( 'admin_post_mi_delete_event', array( __CLASS__, 'handle' ) );
+		add_action( 'wp_ajax_mi_delete_event', array( __CLASS__, 'ajax' ) );
 		add_action( 'admin_menu', array( __CLASS__, 'admin_menu' ) );
 	}
 	public static function allowed() {
@@ -158,8 +159,9 @@ final class MI_Event_Deletion {
 			if ( 'sql' === $job['stage'] ) {
 				self::query( 'START TRANSACTION' );
 				try {
+					MI_Spedizione_Email::accoda_avviso_eliminazione( $id );
 					foreach ( self::CHILDREN as $table ) self::query( $wpdb->prepare( "DELETE c FROM {$wpdb->prefix}{$table} c JOIN {$wpdb->prefix}mi_registrations r ON r.id=c.registration_id WHERE r.event_id=%d", $id ) );
-					foreach ( self::event_emails( $id ) as $row ) self::query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}mi_email_outbox WHERE id=%d AND registration_id=0", $row['id'] ) );
+					foreach ( self::event_emails( $id ) as $row ) self::query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}mi_email_outbox WHERE id=%d AND registration_id=0 AND template_type NOT IN ('EVENT_DELETED_NOTICE','EVENT_DELETED_SECRETARIAT')", $row['id'] ) );
 					foreach ( self::DIRECT as $table ) self::query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}{$table} WHERE event_id=%d", $id ) );
 					self::query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d", $id ) );
 					self::query( 'COMMIT' );
@@ -188,6 +190,7 @@ final class MI_Event_Deletion {
 				try { if ( get_post( $id ) && ! wp_delete_post( $id, true ) ) throw new RuntimeException( 'Evento non eliminato.' ); } finally { self::$finalizing = 0; }
 				clean_post_cache( $id );
 				$job['stage'] = 'done'; $job['error'] = ''; unset( $job['title'] ); self::save_job( $id, $job );
+				MI_Spedizione_Email::pianifica_spedizione();
 			}
 			return $job;
 		} catch ( Throwable $error ) {
@@ -195,13 +198,23 @@ final class MI_Event_Deletion {
 			return new WP_Error( 'mi_delete_retry', $job['error'] );
 		}
 	}
-	public static function handle() {
-		if ( ! self::allowed() ) wp_die( 'Accesso non consentito.', '', array( 'response' => 403 ) );
+	private static function submitted_step() {
+		if ( ! self::allowed() ) return new WP_Error( 'mi_delete_access', 'Accesso non consentito.' );
 		$id = absint( $_POST['event_id'] ?? 0 );
-		check_admin_referer( 'mi_delete_event_' . $id );
+		if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ?? '' ) ), 'mi_delete_event_' . $id ) ) return new WP_Error( 'mi_delete_nonce', 'Sessione scaduta. Ricarica la pagina prima di riprendere.' );
 		$job = self::job( $id );
 		$result = $job ?: self::begin( $id, sanitize_text_field( wp_unslash( $_POST['fingerprint'] ?? '' ) ), sanitize_text_field( wp_unslash( $_POST['request_id'] ?? '' ) ), sanitize_key( $_POST['sheet_mode'] ?? '' ), sanitize_text_field( wp_unslash( $_POST['confirm_title'] ?? '' ) ), ! empty( $_POST['confirm_delete'] ) );
 		if ( ! is_wp_error( $result ) ) $result = self::advance( $id );
+		return $result;
+	}
+	public static function ajax() {
+		$result = self::submitted_step();
+		if ( is_wp_error( $result ) ) wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+		wp_send_json_success( array( 'complete' => 'done' === ( $result['stage'] ?? '' ), 'message' => 'google' === ( $result['stage'] ?? '' ) ? 'Pulizia Google in corso. Proseguo con il prossimo blocco.' : 'Pulizia WordPress in corso.', 'url' => self::url( absint( $_POST['event_id'] ?? 0 ) ) ) );
+	}
+	public static function handle() {
+		$result = self::submitted_step();
+		$id = absint( $_POST['event_id'] ?? 0 );
 		$url = self::url( $id );
 		if ( is_wp_error( $result ) ) $url = add_query_arg( 'mi_delete_error', $result->get_error_message(), $url );
 		wp_safe_redirect( $url ); exit;
@@ -228,7 +241,7 @@ final class MI_Event_Deletion {
 			$error = sanitize_text_field( wp_unslash( $_GET['mi_delete_error'] ?? ( $job['error'] ?? '' ) ) );
 			if ( $error ) echo '<p role="alert">' . esc_html( $error ) . '</p>';
 			if ( $job ) echo '<p class="mi-action-progress" role="status">' . esc_html( $job['title'] ) . ' — In eliminazione. ' . ( 'google' === $job['stage'] ? 'Pulizia Google da completare.' : 'Pulizia WordPress da completare.' ) . ' Le nuove operazioni sono bloccate.</p>';
-			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" novalidate data-mi-delete-form' . ( $job && ! $error ? ' data-mi-delete-continue' : '' ) . '><input type="hidden" name="action" value="mi_delete_event"><input type="hidden" name="event_id" value="' . esc_attr( $id ) . '">';
+			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" novalidate data-mi-delete-ajax="' . esc_url( admin_url( 'admin-ajax.php' ) ) . '" data-mi-delete-form' . ( $job && ! $error ? ' data-mi-delete-continue' : '' ) . '><input type="hidden" name="action" value="mi_delete_event"><input type="hidden" name="event_id" value="' . esc_attr( $id ) . '">';
 			wp_nonce_field( 'mi_delete_event_' . $id );
 			if ( ! $job ) {
 				try {
@@ -238,7 +251,7 @@ final class MI_Event_Deletion {
 					if ( $wpdb->last_error ) throw new RuntimeException( 'Verifica delle iscrizioni attive non disponibile. Riprova.' );
 					if ( $active ) {
 						$communications = add_query_arg( array( 'mi_portal' => 1, 'mi_portal_view' => 'communications', 'mi_portal_event' => $id ), home_url( '/' ) );
-						echo '<aside class="mi-portal-notice"><p><strong>Prima di eliminare l’evento, avvisa gli iscritti e verifica eventuali rimborsi.</strong></p><p>L’eliminazione rimuove anche i contatti e le comunicazioni in coda: non invia avvisi e non esegue rimborsi.</p><p><a href="' . esc_url( $communications ) . '">Avvisa gli iscritti</a></p></aside>';
+						echo '<aside class="mi-portal-notice"><p><strong>Gli iscritti riceveranno automaticamente un avviso di eliminazione.</strong></p><p>L’avviso sarà inviato dopo il completamento, secondo la modalità email configurata; in prova sarà destinato solo all’indirizzo di test. Eventuali rimborsi restano da gestire separatamente. Se vuoi, prima di eliminare puoi inviare agli iscritti ulteriori spiegazioni.</p><p><a href="' . esc_url( $communications ) . '">Invia ulteriori spiegazioni (facoltativo)</a></p></aside>';
 					}
 					echo '<h3>' . esc_html( $data['title'] ) . '</h3><dl>';
 					foreach ( $data['counts'] as $label => $count ) echo '<dt>' . esc_html( $label ) . '</dt><dd>' . esc_html( $count ) . '</dd>';

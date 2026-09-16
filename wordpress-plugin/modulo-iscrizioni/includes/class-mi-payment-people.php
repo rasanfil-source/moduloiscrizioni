@@ -50,11 +50,13 @@ final class MI_Payment_People {
 		foreach ( $rows as $id => &$row ) if ( isset( $deposits[$id] ) ) $row['deposit'] = min( $row['total'], (int) $deposits[$id] );
 		unset( $row );
 		$payments_known = true;
+		$has_allocated_payments = false;
 		$unassigned = 0;
 		foreach ( $payments as $payment ) {
 			$sign = 'REFUND' === $payment['transaction_kind'] ? -1 : 1;
 			$allocations = json_decode( $payment['participant_allocations_json'] ?? 'null', true );
 			if ( ! is_array( $allocations ) || ! $allocations ) { $unassigned += $sign * (int) $payment['amount_cents']; continue; }
+			$has_allocated_payments = true;
 			$allocated = 0;
 			foreach ( $allocations as $allocation ) {
 				$id = (int) $allocation['participant_id']; $amount = (int) $allocation['amount_cents'];
@@ -74,7 +76,7 @@ final class MI_Payment_People {
 			$row['credit'] = max( 0, $row['paid'] - $row['total'] );
 			if ( $row['paid'] < 0 ) $issue = 'La posizione individuale richiede una verifica prima di un nuovo versamento.';
 		} unset( $row );
-		return array( 'ready' => '' === $issue, 'quotes_known' => $quotes_known, 'payments_known' => $payments_known && ( ! $unassigned || count( $rows ) === 1 ), 'message' => $issue, 'deposit_plan' => $deposit_plan, 'people' => array_values( $rows ) );
+		return array( 'ready' => '' === $issue, 'quotes_known' => $quotes_known, 'payments_known' => $payments_known && ( ! $unassigned || count( $rows ) === 1 ), 'requires_refund_allocation' => $has_allocated_payments, 'message' => $issue, 'deposit_plan' => $deposit_plan, 'people' => array_values( $rows ) );
 	}
 	public static function plan( array $position, array $ids, $installment, $amount ) {
 		if ( ! $position['ready'] ) throw new InvalidArgumentException( $position['message'] );
@@ -92,5 +94,14 @@ final class MI_Payment_People {
 		}
 		if ( $total !== $amount ) throw new InvalidArgumentException( 'L’importo deve corrispondere esattamente alle quote delle persone selezionate. Ricarica la prenotazione se è stata aggiornata.' );
 		return $plan;
+	}
+	public static function refund_plan( array $position, array $ids, $amount ) {
+		if ( empty( $position['payments_known'] ) ) throw new InvalidArgumentException( $position['message'] ?: 'I versamenti precedenti devono essere attribuiti prima di registrare il rimborso.' );
+		if ( 1 !== count( $ids ) || 1 !== count( array_unique( $ids ) ) ) throw new InvalidArgumentException( 'Seleziona una sola persona a cui attribuire il rimborso o storno.' );
+		$id = (int) reset( $ids );
+		$person = array_column( $position['people'], null, 'id' )[$id] ?? null;
+		if ( ! $person ) throw new InvalidArgumentException( 'Persona non disponibile per questo rimborso.' );
+		if ( $amount < 1 || $amount > max( 0, (int) $person['paid'] ) ) throw new InvalidArgumentException( 'Il rimborso o storno supera quanto versato dalla persona selezionata.' );
+		return array( array( 'participant_id' => $id, 'name' => $person['name'], 'amount_cents' => (int) $amount ) );
 	}
 }

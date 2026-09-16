@@ -27,15 +27,27 @@ function init(root) {
   const discard=document.createElement('button');discard.type='button';discard.textContent='Svuota la bozza del movimento';form.querySelector('.mi-payment-actions').append(discard);
   discard.onclick=()=>{if(busy||pending){say('Verifica l’esito della registrazione prima di svuotare il modulo.',true);return;}form.reset();unlock();if(selected)choose(selected);};
   const money = cents => (Number(cents) / 100).toLocaleString('it-IT', {style:'currency', currency:'EUR'});
-  let individual = null;
+  let individual = null, matchedPeople = [];
   const peopleBox=document.createElement('fieldset');peopleBox.className='mi-payment-people';peopleBox.dataset.paymentPeople='1';fields.prepend(peopleBox);
   peopleBox.before(field('rata').closest('label'));
   function updatePeopleAmount(reset=false) {
     if(!individual)return;
-    const incoming=field('tipo').value==='INCASSO';peopleBox.hidden=!incoming;
+    const incoming=field('tipo').value==='INCASSO',requiresRefundPerson=!incoming&&individual.requires_refund_allocation;peopleBox.hidden=!incoming&&!requiresRefundPerson;
     field('rata').closest('label').hidden=!incoming||!individual.deposit_plan;
     field('importo').readOnly=incoming;
-    if(!incoming)return;
+    if(!incoming){
+      if(reset)field('importo').value='';
+      const selected=[...peopleBox.querySelectorAll('input:checked')],person=individual.people.find(item=>item.id===Number(selected[0]?.value));
+      const amount=Math.round(Number(String(field('importo').value||'0').replace(',','.'))*100);
+      const validSelection=!requiresRefundPerson||selected.length===1;
+      const validAmount=!person||!Number.isFinite(amount)||amount<1||amount<=person.paid;
+      field('importo').setCustomValidity(!validSelection?'Seleziona una sola persona.':!validAmount?'Il rimborso supera quanto versato dalla persona selezionata.':'');
+      if(person)field('importo').max=(person.paid/100).toFixed(2);else field('importo').removeAttribute('max');
+      save.disabled=!validSelection||!validAmount;
+      peopleBox.querySelector('[data-selection-total]').textContent=person?'Rimborso attribuito a '+person.name+' · massimo '+money(person.paid):'Seleziona la persona a cui attribuire il rimborso o storno.';
+      return;
+    }
+    field('importo').removeAttribute('max');
     const ids=[...peopleBox.querySelectorAll('input:checked')].map(input=>Number(input.value));
     const people=individual.people.filter(person=>ids.includes(person.id));
     const needsDeposit=people.some(person=>person.deposit_missing>0);
@@ -51,17 +63,20 @@ function init(root) {
     peopleBox.querySelector('[data-selection-total]').textContent=people.length+' '+(people.length===1?'persona':'persone')+' · '+money(total);
   }
   function showPeople(position, matched=[]) {
-    individual=position;peopleBox.replaceChildren();if(!position){peopleBox.hidden=true;return;}
-    const legend=document.createElement('legend');legend.textContent='Persone incluse nel versamento';peopleBox.append(legend);
+    individual=position;matchedPeople=matched;peopleBox.replaceChildren();if(!position){peopleBox.hidden=true;return;}
+    const incoming=field('tipo').value==='INCASSO';
+    const legend=document.createElement('legend');legend.textContent=incoming?'Persone incluse nel versamento':'Persona a cui attribuire il rimborso o storno';peopleBox.append(legend);
     const people=[...position.people].sort((a,b)=>Number(matched.includes(b.id))-Number(matched.includes(a.id)));
     for(const person of people){const label=document.createElement('label'),check=document.createElement('input'),copy=document.createElement('span');
-      label.className='mi-payment-person';check.type='checkbox';check.value=person.id;check.checked=person.active&&person.balance>0&&position.ready;check.disabled=!check.checked;
+      label.className='mi-payment-person';check.type='checkbox';check.value=person.id;
+      if(incoming){check.checked=person.active&&person.balance>0&&position.ready;check.disabled=!check.checked;}
+      else{check.checked=false;check.disabled=!position.payments_known||person.paid<1;}
       const name=document.createElement('strong');name.textContent=person.name+' — '+money(person.total);copy.append(name);
       if(position.deposit_plan){const detail=document.createElement('small');detail.textContent='('+money(person.deposit)+' caparra + '+money(person.saldo)+' saldo)';copy.append(detail);}
       if(person.paid>0){const paid=document.createElement('small');paid.textContent=person.credit>0?'Credito da restituire '+money(person.credit):person.balance===0?'Saldato':'Versato '+money(person.paid);copy.append(paid);}
-      label.append(check,copy);peopleBox.append(label);check.addEventListener('change',()=>updatePeopleAmount());}
+      label.append(check,copy);peopleBox.append(label);check.addEventListener('change',()=>{if(!incoming&&check.checked)peopleBox.querySelectorAll('input:checked').forEach(other=>{if(other!==check)other.checked=false;});updatePeopleAmount();});}
     const total=document.createElement('p');total.dataset.selectionTotal='1';total.setAttribute('aria-live','polite');peopleBox.append(total);
-    if(!position.ready){const note=document.createElement('p');note.textContent=position.message;note.className='mi-portal-error';peopleBox.append(note);}
+    if((incoming&&!position.ready)||(!incoming&&!position.payments_known)){const note=document.createElement('p');note.textContent=position.message;note.className='mi-portal-error';peopleBox.append(note);}
     updatePeopleAmount(true);
   }
   field('rata').addEventListener('change',()=>updatePeopleAmount());
@@ -176,11 +191,13 @@ function init(root) {
     searchStatus.textContent = 'Digita almeno due caratteri.'; search.focus();
   });
   retryDetail.addEventListener('click', () => { if (selected) choose(selected); });
-  field('tipo').addEventListener('change', () => { field('importo').setCustomValidity('');save.disabled=false;updatePeopleAmount(true); });
+  field('tipo').addEventListener('change', () => { field('importo').setCustomValidity('');save.disabled=false;showPeople(individual,matchedPeople); });
+  field('importo').addEventListener('input',()=>{if(field('tipo').value!=='INCASSO')updatePeopleAmount();});
   form.addEventListener('submit', async e => {
     e.preventDefault();
     if (busy || !selected) return;
     if(!pending&&individual&&field('tipo').value==='INCASSO'&&(!individual.ready||!peopleBox.querySelector('input:checked'))){error.textContent=individual.message||'Seleziona almeno una persona.';return;}
+    if(!pending&&individual&&field('tipo').value!=='INCASSO'&&individual.requires_refund_allocation&&peopleBox.querySelectorAll('input:checked').length!==1){error.textContent='Seleziona una sola persona a cui attribuire il rimborso o storno.';return;}
     if (!pending) {
       for (const input of form.querySelectorAll('[aria-invalid]')) input.removeAttribute('aria-invalid');
       const invalid = [...form.elements].find(input => input.willValidate && !input.validity.valid);
@@ -191,7 +208,7 @@ function init(root) {
       }
       pending = {registration_id:selected.id, request_id:crypto.randomUUID()};
       for (const name of ['importo','data','tipo','rata','metodo','riferimento','nota']) pending[name] = field(name).value;
-      if(individual&&field('tipo').value==='INCASSO')pending.participant_ids=JSON.stringify([...peopleBox.querySelectorAll('input:checked')].map(input=>Number(input.value)));
+      if(individual&&(field('tipo').value==='INCASSO'||individual.requires_refund_allocation))pending.participant_ids=JSON.stringify([...peopleBox.querySelectorAll('input:checked')].map(input=>Number(input.value)));
     }
     busy = true; fields.disabled = true; searchFields.disabled = true; save.disabled = true;
     form.setAttribute('aria-busy','true'); error.textContent = ''; say('Registrazione in corso…');

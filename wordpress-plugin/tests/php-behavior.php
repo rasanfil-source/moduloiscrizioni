@@ -5,6 +5,7 @@ define( 'ABSPATH', __DIR__ . '/' );
 final class WP_Error {
 	public $code;
 	public $message;
+	public function get_error_message() { return $this->message; }
 	public function __construct( $code, $message, $data = null ) { $this->code = $code; $this->message = $message; }
 }
 

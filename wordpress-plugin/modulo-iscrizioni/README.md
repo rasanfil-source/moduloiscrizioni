@@ -1,3 +1,19 @@
+# Aggiornamento 3.26.114
+
+Email istituzionali: aggiunti 12 px tra l'intestazione «Segreteria parrocchiale · Portale eventi» e il logo. Apps Script invariato rispetto alla 3.26.113.
+
+# Aggiornamento 3.26.113
+
+Cancellazione evento con avanzamento AJAX e timeout Google dedicato di 110 secondi. Aggiornare anche EliminazioneEvento.gs nella distribuzione Apps Script per attivare la cancellazione per intervalli contigui. Permessi, conferme, lock e ripresa idempotente conservati.
+
+Export CSV a blocchi con snapshot coerente, residuo corrente e importi una volta per prenotazione; replica Workspace con versato e residuo dal ledger. Prezzi con virgola normalizzati e limite del totale verificato alla creazione. Query elenco eventi semplificata. Asset minificati con fallback ai sorgenti, favicon Segreteria scelta dall'operatore.
+
+Verifiche locali PHP, Node e InnoDB completate; collaudo WordPress/Google su evento fittizio ancora necessario prima della produzione.
+
+# Aggiornamento 3.26.112
+
+Avviso automatico agli indirizzi delle prenotazioni attive o in attesa per annullamento/eliminazione evento. Contatto del gruppo o segreteria nel testo e Reply-To. L’avviso di eliminazione sopravvive alla pulizia dati e parte solo dopo completamento; deduplicato per indirizzo. Modalità prova rispettata. Il gestore può inviare ulteriori spiegazioni facoltative prima di eliminare i contatti.
+
 # Segreteria eventi — aggiornamento 3.26.111
 
 La Segreteria eventi ha ora un’icona propria per la scheda del browser e i collegamenti salvati: riprende croce, fiore e baldacchino del logo della Parrocchia Sant’Eugenio e aggiunge un piccolo registro dorato, simbolo del lavoro di segreteria. L’icona è limitata al portale operativo e non sostituisce quella del sito nelle pagine pubbliche.

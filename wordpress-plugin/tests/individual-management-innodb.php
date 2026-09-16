@@ -42,4 +42,8 @@ check((int)$wpdb->get_var('SELECT total_cents FROM wp_mi_registrations WHERE id=
 $list=MI_Management_Service::all_people([42,43],'Gustavo Lora');check(count($list['items'])===1&&$list['items'][0]['number']==2,'ricerca persona non referente');
 check(!MI_Management_Service::all_people([43],'')['items'],'scope non rispettato');
 $foreign=$data;$foreign['participant_id']=999;check(is_wp_error(MI_Management_Service::options_preview(1,$foreign,version())),'persona estranea');
-echo "PASS: anteprima, rimozione/aggiunta servizi, quote personali, credito, altro iscritto invariato, caparre stabili, retry, versioni e ricerca autorizzata.\n";
+$GLOBALS['test_payment_permission']=false;
+check(is_wp_error(MI_Management_Service::options_preview(1,$data,version())),'anteprima servizi senza permesso pagamenti');
+check(is_wp_error(MI_Management_Service::save(1,'change_options',$data,version(),'wp_7_12345678-1234-4234-8234-123456789a05')),'salvataggio servizi senza permesso pagamenti');
+$GLOBALS['test_payment_permission']=true;
+echo "PASS: anteprima, rimozione/aggiunta servizi, quote personali, credito, caparre fisse, permesso pagamenti, retry, versioni e ricerca autorizzata.\n";

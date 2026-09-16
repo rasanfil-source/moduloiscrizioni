@@ -77,10 +77,16 @@ final class MI_Portal_Payments {
 	}
 	public static function render() {
 		if ( ! self::allowed() ) { echo '<p class="mi-portal-notice mi-portal-error">Non disponi del permesso per registrare pagamenti.</p>'; return; }
+		$scope = MI_Access::event_ids();
+		$access_label = 'Hai accesso a tutte le iniziative';
+		if ( 'ALL' !== $scope ) {
+			$events = $scope ? get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'post__in' => $scope, 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC', 'update_post_meta_cache' => false, 'update_post_term_cache' => false ) ) : array();
+			$access_label = $events ? 'Hai accesso alle iniziative: ' . implode( ', ', array_map( static function ( $event ) { return html_entity_decode( $event->post_title, ENT_QUOTES | ENT_HTML5, 'UTF-8' ); }, $events ) ) : 'Non hai iniziative assegnate';
+		}
 		?>
 		<section class="mi-payments" data-mi-payments data-event="<?php echo esc_attr( absint( $_GET['mi_portal_event'] ?? 0 ) ); ?>" data-initial-order="<?php echo esc_attr( sanitize_text_field( wp_unslash( $_GET['mi_order'] ?? '' ) ) ); ?>" data-endpoint="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'mi_portal_payment' ) ); ?>">
 		<h2>Inserisci un pagamento</h2><p>Cerca una prenotazione, controlla il saldo e registra il movimento.</p>
-		<p class="mi-portal-muted">Operatore: <strong><?php echo esc_html( wp_get_current_user()->display_name ); ?></strong> · <?php echo MI_Access::is_global_manager() ? 'Tutte le iniziative' : 'Solo le iniziative assegnate'; ?></p>
+		<p class="mi-portal-muted"><?php echo esc_html( $access_label ); ?></p>
 		<fieldset data-search-fields><label for="mi-payment-search">Nome della persona, email, telefono o codice prenotazione</label>
 		<div class="mi-payment-search"><input id="mi-payment-search" type="search" autocomplete="off" maxlength="80" aria-describedby="mi-payment-search-status"><button type="button" data-clear class="mi-secondary" hidden>Cancella ricerca</button></div>
 		<p id="mi-payment-search-status" role="status" aria-live="polite">Digita almeno due caratteri.</p><div data-results class="mi-booking-list"></div></fieldset>

@@ -123,7 +123,7 @@ test('la pubblicazione mostra attesa ed esito vicino al comando senza duplicare 
   assert.match(shortcode, /<strong>Seleziona la quantità<\/strong>/);
 });
 
-test('la pubblicazione notifica sempre la parrocchia e, se assegnato, anche il gestore', async () => {
+test('la pubblicazione notifica la parrocchia e il recapito del gruppo', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const email = await read('includes/class-mi-spedizione-email.php');
   assert.match(portal, /function risolvi_gestore_evento/);
@@ -136,7 +136,8 @@ test('la pubblicazione notifica sempre la parrocchia e, se assegnato, anche il g
   assert.match(email, /\?WP_User \$gestore/);
   assert.match(portal, /_mi_manager_user_id/);
   assert.match(email, /function accoda_notifiche_attivazione_evento/);
-  assert.match(portal, /alla parrocchia e al gestore/);
+  assert.match(portal, /al gruppo e alla segreteria parrocchiale/);
+  assert.match(email, /\$destinatari = self::destinatari_avvisi_evento\( \$event_id \)/);
   assert.match(email, /function accoda_notifica_gestore_evento/);
   assert.match(email, /EVENT_MANAGER_READY/);
   assert.match(email, /MI_Modello_Email::crea_istantanea_pubblicazione_evento/);
@@ -487,7 +488,7 @@ test('ogni partecipante dispone di annullamento individuale confermato e auditab
   assert.match(portal, /\$is_free = self::is_free_configuration[\s\S]*if \( ! \$is_free \).*Se hai già effettuato un pagamento/);
   assert.match(portal, /<p>Buongiorno,<br>ci dispiace non possa più partecipare\.<\/p>/);
   assert.match(portal, /mi_portal_message.*L’annullamento è stato registrato\./);
-  assert.match(service, /'PARTICIPANT_LINK' === \$actor_label/);
+  assert.match(service, /\$secretariat_recipient = MI_Spedizione_Email::destinatario_evento\( \$event_id \)/);
   assert.match(service, /crea_istantanea_annullamento_partecipazione_segreteria/);
   assert.match(service, /'template_type' => 'PARTICIPANT_CANCELLATION_SECRETARIAT_NOTIFICATION'/);
   assert.match(service, /MI_Spedizione_Email::stato_nuova_email\( \$secretariat_snapshot \)/);
@@ -639,17 +640,15 @@ test('la Segreteria eventi usa una favicon propria anche nei collegamenti salvat
   assert.match(portal, /! empty\( \$_GET\['mi_portal'\] \)/);
   assert.match(portal, /! empty\( \$_GET\['mi_status'\] \).*?! empty\( \$_GET\['mi_waitlist_offer'\] \)/);
   assert.match(portal, /has_shortcode\( \$post->post_content, self::SHORTCODE \)/);
-  assert.match(portal, /rel="icon" type="image\/png" sizes="32x32"/);
-  assert.match(portal, /rel="icon" type="image\/png" sizes="192x192"/);
-  assert.match(portal, /rel="icon" type="image\/png" sizes="512x512"/);
-  assert.match(portal, /rel="apple-touch-icon" sizes="180x180"/);
+  assert.match(portal, /rel="icon" type="image\/png"/);
+  assert.match(portal, /assets\/segreteria-eventi\.png/);
+  assert.match(portal, /rel="apple-touch-icon"/);
   assert.match(portal, /<title>[\s\S]*?self::portal_icon_links\(\);[\s\S]*?<link rel="stylesheet"/);
 
-  for (const size of [32, 180, 192, 512]) {
-    const png = await readFile(new URL(`assets/portal-icon-${size}.png`, root));
+  {
+    const png = await readFile(new URL('assets/segreteria-eventi.png', root));
     assert.equal(png.subarray(1, 4).toString('ascii'), 'PNG');
-    assert.equal(png.readUInt32BE(16), size);
-    assert.equal(png.readUInt32BE(20), size);
+    assert.equal(png.readUInt32BE(16), png.readUInt32BE(20));
   }
 });
 
@@ -659,7 +658,7 @@ test('prova e operativo generano sia la conferma iscritto sia la notifica alla s
 	const sender = await read('includes/class-mi-spedizione-email.php');
 	assert.match(service, /'template_type' => 'REGISTRATION_CONFIRMATION'/);
 	assert.match(service, /'template_type' => 'REGISTRATION_SECRETARIAT_NOTIFICATION'/);
-	assert.match(service, /get_option\( 'mi_email_segreteria_eventi', MI_Modello_Email::EMAIL_SEGRETERIA \)/);
+	assert.match(service, /\$secretariat_recipient = MI_Spedizione_Email::destinatario_evento\( \$event_id \)/);
 	assert.match(service, /crea_istantanea_nuova_iscrizione_segreteria/);
 	assert.match(service, /email_da_spedire\( \$email_status \) \|\| MI_Spedizione_Email::email_da_spedire\( \$secretariat_status \)/);
 	assert.match(model, /function crea_istantanea_nuova_iscrizione_segreteria/);
@@ -1114,7 +1113,9 @@ test('il registro pagamenti filtra in SQL, pagina la UI ed esporta a blocchi', a
   const admin = await read('includes/class-mi-admin.php');
   assert.match(admin, /payment_where/);
   assert.match(admin, /LIMIT %d OFFSET %d/);
-  assert.match(admin, /LIMIT 500 OFFSET %d/);
+  assert.match(admin, /ORDER BY p\.effective_at, p\.id LIMIT 500/);
+  assert.match(admin, /p\.effective_at > %s OR \(p\.effective_at = %s AND p\.id > %d\)/);
+  assert.match(admin, /START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY/);
   assert.match(admin, /payment_from/);
   assert.match(admin, /payment_to/);
   assert.match(admin, /SELECT COUNT\(\*\)/);
