@@ -25,7 +25,7 @@ function home_url(){return 'https://example.invalid/';}
 function wp_safe_redirect($u){throw new Redirected($u);}
 function is_wp_error($v){return false;}
 class MI_Access{static function can_access_event($id){return true;}}
-class MI_Payment_Ledger{static function positions($rows){return [1=>['paid'=>0,'balance'=>100,'managed'=>true]];}}
+class MI_Payment_Ledger{static function positions($rows){return [1=>['paid'=>0,'balance'=>100,'effective_paid'=>0,'effective_balance'=>100,'managed'=>true]];}}
 class MI_Spedizione_Email{
  static $calls=[]; static $mode='OPERATIVO';
  static function modalita(){return self::$mode;}

@@ -38,6 +38,23 @@ final class MI_Payment_People {
 		}
 		return true;
 	}
+	/** Totali operativi delle sole persone attive. I crediti individuali non compensano i debiti altrui. */
+	public static function summary( array $position ) {
+		$known = ! empty( $position['quotes_known'] ) && ! empty( $position['payments_known'] );
+		$summary = array( 'known' => $known, 'total' => 0, 'paid' => 0, 'balance' => 0, 'credit' => 0, 'deposit_due' => 0, 'deposit_missing' => 0 );
+		if ( ! $known ) return $summary;
+		foreach ( $position['people'] as $person ) {
+			if ( empty( $person['active'] ) ) continue;
+			$summary['total'] += max( 0, (int) $person['total'] );
+			$summary['paid'] += (int) $person['paid'];
+			$summary['balance'] += max( 0, (int) $person['balance'] );
+			$summary['credit'] += max( 0, (int) $person['credit'] );
+			$summary['deposit_due'] += max( 0, (int) $person['deposit'] );
+			$summary['deposit_missing'] += max( 0, (int) $person['deposit_missing'] );
+		}
+		$summary['paid'] = max( 0, $summary['paid'] );
+		return $summary;
+	}
 	public static function read( array $registration, array $payments ) {
 		global $wpdb;
 		$id = (int) $registration['id'];

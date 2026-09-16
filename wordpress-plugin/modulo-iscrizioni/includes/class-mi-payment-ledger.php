@@ -13,16 +13,44 @@ final class MI_Payment_Ledger {
 		$initial = $deposit ? min( $total, max( 0, (int) ( $registration['initial_due_cents'] ?? 0 ) ) ) : 0;
 		return array( 'total' => $total, 'paid' => $paid, 'balance' => max( 0, $total - $paid ), 'managed' => $managed, 'deposit_plan' => $deposit, 'deposit_due' => $initial, 'deposit_missing' => max( 0, $initial - $paid ), 'deposit_covered' => $deposit && $initial > 0 && $paid >= $initial );
 	}
-	/** Caller supplies already scoped registrations; one aggregate query for the whole list. */
+	/** Caller supplies already scoped registrations; bounded bulk reads also preserve individual debts. */
 	public static function positions( array $registrations, $id_key = 'id' ) {
 		global $wpdb;
 		if ( ! $registrations ) return array();
-		$ids = array_values( array_unique( array_map( 'intval', array_column( $registrations, $id_key ) ) ) );
-		$rows = $wpdb->get_results( "SELECT registration_id,SUM(CASE WHEN transaction_kind='REFUND' THEN -amount_cents ELSE amount_cents END) AS paid FROM {$wpdb->prefix}mi_payments WHERE registration_id IN (" . implode( ',', $ids ) . ') GROUP BY registration_id', ARRAY_A );
+		$ids = array_values( array_filter( array_unique( array_map( 'intval', array_column( $registrations, $id_key ) ) ) ) );
+		if ( ! $ids ) return array();
+		$id_list = implode( ',', $ids );
+		$stored = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}mi_registrations WHERE id IN ({$id_list})", ARRAY_A );
+		if ( $wpdb->last_error ) throw new RuntimeException( 'Prenotazioni non disponibili. Riprova.' );
+		$people = $wpdb->get_results( "SELECT id,registration_id,ticket_type_code,first_name,last_name,options_json,status,deposit_due_cents FROM {$wpdb->prefix}mi_participants WHERE registration_id IN ({$id_list}) ORDER BY registration_id,id", ARRAY_A );
+		if ( $wpdb->last_error ) throw new RuntimeException( 'Partecipanti non disponibili. Riprova.' );
+		$items = $wpdb->get_results( "SELECT registration_id,ticket_type_code,unit_price_cents FROM {$wpdb->prefix}mi_registration_items WHERE registration_id IN ({$id_list}) ORDER BY registration_id,id", ARRAY_A );
+		if ( $wpdb->last_error ) throw new RuntimeException( 'Quote non disponibili. Riprova.' );
+		$payments = $wpdb->get_results( "SELECT registration_id,transaction_kind,amount_cents,participant_allocations_json FROM {$wpdb->prefix}mi_payments WHERE registration_id IN ({$id_list}) ORDER BY registration_id,id", ARRAY_A );
 		if ( $wpdb->last_error ) throw new RuntimeException( 'Saldo non disponibile. Riprova.' );
-		$paid = array_column( $rows, 'paid', 'registration_id' );
+		$stored_by_id = array_column( $stored, null, 'id' );
+		$people_by_id = array(); $items_by_id = array(); $payments_by_id = array(); $paid_by_id = array();
+		foreach ( $people as $row ) $people_by_id[(int) $row['registration_id']][] = $row;
+		foreach ( $items as $row ) $items_by_id[(int) $row['registration_id']][] = $row;
+		foreach ( $payments as $row ) {
+			$id = (int) $row['registration_id']; $payments_by_id[$id][] = $row;
+			$paid_by_id[$id] = ( $paid_by_id[$id] ?? 0 ) + ( 'REFUND' === $row['transaction_kind'] ? -1 : 1 ) * (int) $row['amount_cents'];
+		}
 		$result = array();
-		foreach ( $registrations as $registration ) $result[$registration[$id_key]] = self::position( $registration, $paid[$registration[$id_key]] ?? 0 );
+		foreach ( $registrations as $registration ) {
+			$id = (int) $registration[$id_key];
+			$authoritative = $stored_by_id[$id] ?? array_replace( $registration, array( 'id' => $id ) );
+			$position = self::position( $authoritative, $paid_by_id[$id] ?? 0 );
+			$individual = MI_Payment_People::calculate( $authoritative, $people_by_id[$id] ?? array(), $items_by_id[$id] ?? array(), $payments_by_id[$id] ?? array() );
+			$summary = MI_Payment_People::summary( $individual );
+			$position['individual'] = $individual;
+			$position['individual_known'] = $summary['known'];
+			foreach ( array( 'total', 'paid', 'balance', 'credit', 'deposit_due', 'deposit_missing' ) as $field ) $position['individual_' . $field] = $summary[$field];
+			$position['effective_total'] = $summary['known'] ? $summary['total'] : $position['total'];
+			$position['effective_paid'] = $summary['known'] ? $summary['paid'] : $position['paid'];
+			$position['effective_balance'] = $summary['known'] ? $summary['balance'] : $position['balance'];
+			$result[$id] = $position;
+		}
 		return $result;
 	}
 	public static function normalize( array $input ) {

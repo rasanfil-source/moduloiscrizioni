@@ -24,12 +24,18 @@ verify_position($p['deposit_due']===1000 && $p['deposit_missing']===500,'Adjuste
 verify_position(!MI_Payment_Ledger::position(array_replace($order,array('economic_mode'=>'FULL_PAYMENT')),0)['deposit_plan'],'Single installment is not a deposit');
 class PositionDatabase {
 	public $prefix = 'wp_', $last_error = '', $queries = array();
-	function get_results( $sql, $format ) { $this->queries[] = $sql; return array( array( 'registration_id' => 1, 'paid' => 10000 ) ); }
+	function get_results( $sql, $format ) {
+		$this->queries[] = $sql;
+		if ( str_contains( $sql, 'mi_registrations' ) ) return array( array( 'id'=>1 ) + $GLOBALS['order'], array( 'id'=>2 ) + $GLOBALS['order'] );
+		if ( str_contains( $sql, 'mi_participants' ) ) return array();
+		if ( str_contains( $sql, 'mi_registration_items' ) ) return array();
+		return array( array( 'registration_id'=>1, 'transaction_kind'=>'PAYMENT', 'amount_cents'=>10000, 'participant_allocations_json'=>'' ) );
+	}
 }
 $wpdb = new PositionDatabase();
 $positions = MI_Payment_Ledger::positions( array( $order, array_replace( $order, array( 'id' => 2 ) ) ) );
 verify_position( $positions[1]['balance'] === 0 && $positions[2]['balance'] === 10000, 'Missing movements mean unpaid, not missing order' );
-verify_position( count( $wpdb->queries ) === 1 && str_contains( $wpdb->queries[0], 'IN (1,2)' ), 'One bounded aggregate for scoped orders' );
+verify_position( count( $wpdb->queries ) === 4 && ! array_filter( $wpdb->queries, static fn( $sql ) => ! str_contains( $sql, 'IN (1,2)' ) ), 'Bounded bulk reads for scoped orders' );
 $wpdb->last_error = 'synthetic failure';
 try { MI_Payment_Ledger::positions( array( $order ) ); throw new LogicException( 'Read error hidden' ); }
 catch ( RuntimeException $expected ) { verify_position( ! ( $expected instanceof LogicException ), 'Read error must not imply zero payments' ); }

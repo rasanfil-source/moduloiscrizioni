@@ -372,6 +372,8 @@ final class MI_Registration_Service {
 				return new WP_Error( 'mi_sold_out', 'Posti esauriti.', array( 'status' => 409 ) );
 			}
 			$economic_summary = self::riepilogo_economico( $event, $selection['total_cents'] + $options_total, $status, count( $participants ) );
+			// Una caparra nulla non deve creare un'attesa di pagamento impossibile da soddisfare.
+			if ( 'PENDING_PAYMENT' === $status && (int) $economic_summary['initial_due_cents'] < 1 ) $status = 'CONFIRMED';
 			$order_code = self::generate_order_code( $event_id, $event['title'] );
 			$expires_at = self::registration_expiry( $event, $status, $now );
 			$revision = (array) ( $event['revision'] ?? array() );
@@ -558,14 +560,16 @@ final class MI_Registration_Service {
 		// Ripetere il payload completo: una vecchia ricevuta non prova la replica dei movimenti nuovi.
 		$items = $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code, ticket_type_name, quantity, unit_price_cents, options_json FROM {$items_table} WHERE registration_id = %d ORDER BY id", $registration_id ), ARRAY_A );
 		if ( $wpdb->last_error ) return 'PENDING';
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code, ticket_index, first_name, last_name, extra_json, room_code, options_json, status, cancelled_at FROM {$participants_table} WHERE registration_id = %d ORDER BY id", $registration_id ), ARRAY_A );
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, ticket_type_code, ticket_index, first_name, last_name, extra_json, room_code, options_json, status, cancelled_at, deposit_due_cents FROM {$participants_table} WHERE registration_id = %d ORDER BY id", $registration_id ), ARRAY_A );
+		if ( $wpdb->last_error ) return 'PENDING';
+		$all_payments = $wpdb->get_results( $wpdb->prepare( "SELECT id AS payment_id, transaction_kind, movement_kind, installment_kind, effective_at, amount_cents, payment_source, external_reference, operator_label, administrative_note, participant_allocations_json, origin_channel FROM {$payments_table} WHERE registration_id = %d ORDER BY effective_at, id", $registration_id ), ARRAY_A );
 		if ( $wpdb->last_error ) return 'PENDING';
 		// I movimenti acquisiti da DB_MODULI sono già nel registro centrale: non rimandarli come nuovi versamenti.
-		$payments = $wpdb->get_results( $wpdb->prepare( "SELECT id AS payment_id, transaction_kind, movement_kind, installment_kind, effective_at, amount_cents, payment_source, external_reference, operator_label, administrative_note, participant_allocations_json FROM {$payments_table} WHERE registration_id = %d AND origin_channel <> 'WORKSPACE' ORDER BY effective_at, id", $registration_id ), ARRAY_A );
-		if ( $wpdb->last_error ) return 'PENDING';
-		// Include anche i movimenti originati da Workspace, esclusi dalla replica sopra.
+		$payments = array_values( array_map( static function ( $payment ) { unset( $payment['origin_channel'] ); return $payment; }, array_filter( $all_payments, static function ( $payment ) { return 'WORKSPACE' !== ( $payment['origin_channel'] ?? '' ); } ) ) );
 		try {
 			$position = MI_Payment_Ledger::position( $registration, MI_Payment_Ledger::net_paid( $registration_id ) );
+			$individual = MI_Payment_People::calculate( $registration, $rows, $items, $all_payments );
+			$individual_summary = MI_Payment_People::summary( $individual );
 		} catch ( Throwable $error ) {
 			return 'PENDING';
 		}
@@ -657,12 +661,12 @@ final class MI_Registration_Service {
 				'participants'   => $participants,
 				'tickets'        => $items,
 				'order_options'  => $order_options,
-				'total_cents'    => (int) $registration['total_cents'],
+				'total_cents'    => $individual_summary['known'] ? $individual_summary['total'] : (int) $registration['total_cents'],
 				'economic_mode'  => (string) $registration['economic_mode'],
-				'initial_due_cents' => (int) $registration['initial_due_cents'],
-				// Il DB conserva il piano rate; la replica espone il residuo corrente.
-				'balance_cents'  => $position['balance'],
-				'paid_cents'     => $position['paid'],
+				'initial_due_cents' => $individual_summary['known'] ? $individual_summary['deposit_due'] : (int) $registration['initial_due_cents'],
+				// La replica espone le somme delle posizioni attive senza compensare persone diverse.
+				'balance_cents'  => $individual_summary['known'] ? $individual_summary['balance'] : $position['balance'],
+				'paid_cents'     => $individual_summary['known'] ? $individual_summary['paid'] : $position['paid'],
 				'payment_methods'=> (array) json_decode( (string) $registration['payment_methods_json'], true ),
 				'event_revision_id' => $revision_id,
 				'event_revision_hash' => $revision_hash,
@@ -757,17 +761,21 @@ final class MI_Registration_Service {
 		$email = strtolower( sanitize_email( (string) $email ) );
 		$token = strtolower( sanitize_text_field( (string) $token ) );
 		if ( ! $order_code || ( ! $email && ! preg_match( '/^[a-f0-9]{64}$/', $token ) ) ) return new WP_Error( 'mi_status_not_found', 'Non è stato possibile verificare la prenotazione.' );
-		$registration = $wpdb->get_row( $wpdb->prepare( "SELECT id,event_id,order_code,status,buyer_email,economic_mode,payment_methods_json,total_cents,initial_due_cents,balance_cents,payment_deadline_at FROM {$wpdb->prefix}mi_registrations WHERE order_code=%s LIMIT 1", $order_code ), ARRAY_A );
+		$registration = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_registrations WHERE order_code=%s LIMIT 1", $order_code ), ARRAY_A );
 		if ( ! $registration ) return new WP_Error( 'mi_status_not_found', 'Non è stato possibile verificare la prenotazione.' );
 		if ( $event_id && absint( $registration['event_id'] ) !== absint( $event_id ) ) return new WP_Error( 'mi_status_not_found', 'Non è stato possibile verificare la prenotazione per questo evento.' );
 		$valid = $email
 			? hash_equals( strtolower( (string) $registration['buyer_email'] ), $email )
 			: hash_equals( self::public_status_token( $registration['id'], $registration['order_code'], $registration['buyer_email'] ), $token );
 		if ( ! $valid ) return new WP_Error( 'mi_status_not_found', 'Non è stato possibile verificare la prenotazione.' );
-		$paid = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(CASE WHEN transaction_kind='REFUND' THEN -amount_cents ELSE amount_cents END),0) FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d", $registration['id'] ) );
-		if ( $wpdb->last_error ) return new WP_Error( 'mi_status_unavailable', 'Saldo momentaneamente non disponibile. Riprova più tardi.' );
-		$total = max( 0, (int) $registration['total_cents'] );
-		$balance = max( 0, $total - $paid );
+		try { $coverage = self::payment_coverage( $registration ); }
+		catch ( Throwable $error ) { return new WP_Error( 'mi_status_unavailable', 'Saldo momentaneamente non disponibile. Riprova più tardi.' ); }
+		$individual = MI_Payment_People::summary( $coverage['position'] );
+		$paid = $individual['known'] ? $individual['paid'] : (int) $coverage['paid'];
+		$total = $individual['known'] ? $individual['total'] : max( 0, (int) $registration['total_cents'] );
+		$balance = $individual['known'] ? $individual['balance'] : max( 0, $total - $paid );
+		$deposit_due = $individual['known'] ? $individual['deposit_due'] : max( 0, (int) $registration['initial_due_cents'] );
+		$deposit_missing = $individual['known'] ? $individual['deposit_missing'] : max( 0, $deposit_due - $paid );
 		$managed = in_array( $registration['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 		$collectible = $managed && in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true );
 		$status_labels = array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'Da pagare', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto', 'CANCELLED' => 'Annullata', 'EXPIRED' => 'Scaduta' );
@@ -776,10 +784,10 @@ final class MI_Registration_Service {
 		elseif ( in_array( $registration['status'], array( 'CANCELLED', 'EXPIRED' ), true ) ) $payment_label = 'Prenotazione chiusa: contatta l’organizzazione per eventuali rimborsi';
 		elseif ( ! $managed ) $payment_label = 'Pagamento non gestito da questo portale';
 		elseif ( 0 === $total ) $payment_label = 'Nessun pagamento previsto';
-		elseif ( $paid >= $total ) $payment_label = 'Saldo completato';
-		elseif ( $paid >= (int) $registration['initial_due_cents'] && (int) $registration['initial_due_cents'] > 0 ) $payment_label = 'Caparra ricevuta, saldo ancora dovuto';
+		elseif ( 0 === $balance ) $payment_label = 'Saldo completato';
+		elseif ( 'DEPOSIT_BALANCE' === $registration['economic_mode'] && $deposit_due > 0 && 0 === $deposit_missing ) $payment_label = 'Caparra ricevuta, saldo ancora dovuto';
 		elseif ( $paid > 0 ) $payment_label = 'Versamento parziale ricevuto';
-		else $payment_label = 'DEPOSIT_BALANCE' === $registration['economic_mode'] && (int) $registration['initial_due_cents'] > 0 ? 'Caparra ancora da versare' : 'Pagamento ancora da completare';
+		else $payment_label = 'DEPOSIT_BALANCE' === $registration['economic_mode'] && $deposit_due > 0 ? 'Caparra ancora da versare' : 'Pagamento ancora da completare';
 		return array(
 			'order_code'       => (string) $registration['order_code'],
 			'event_title'      => get_the_title( (int) $registration['event_id'] ),
@@ -801,7 +809,7 @@ final class MI_Registration_Service {
 		$wpdb->query( 'START TRANSACTION' );
 		try {
 			$registration = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$registrations} WHERE id = %d FOR UPDATE", $registration_id ), ARRAY_A );
-			if ( ! $registration || ! in_array( $registration['status'], array( 'PENDING_PAYMENT', 'CONFIRMED' ), true ) || (int) $registration['initial_due_cents'] < 1 ) { $wpdb->query( 'COMMIT' ); return; }
+			if ( ! $registration || ! in_array( $registration['status'], array( 'PENDING_PAYMENT', 'CONFIRMED' ), true ) ) { $wpdb->query( 'COMMIT' ); return; }
 			$coverage = self::payment_coverage( $registration );
 			$paid = (int) $coverage['paid'];
 			$new_status = $coverage['covered'] ? 'CONFIRMED' : 'PENDING_PAYMENT';

@@ -539,7 +539,7 @@ final class MI_Portal {
 		$recipients = array();
 		try { $positions = MI_Payment_Ledger::positions( $rows ); }
 		catch ( Throwable $error ) { return self::redirect_portal_result( 'Saldo non disponibile. Nessuna comunicazione preparata.', true, 'communications' ); }
-		foreach ( $rows as $row ) { $position = $positions[$row['id']]; if ( 'BALANCE_REMINDER' === $template && ( ! $position['managed'] || $position['balance'] < 1 ) ) continue; $recipients[] = array( 'order_code' => $row['order_code'], 'paid_cents' => $position['paid'], 'balance_cents' => $position['managed'] ? $position['balance'] : 0 ); }
+		foreach ( $rows as $row ) { $position = $positions[$row['id']]; if ( 'BALANCE_REMINDER' === $template && ( ! $position['managed'] || $position['effective_balance'] < 1 ) ) continue; $recipients[] = array( 'order_code' => $row['order_code'], 'paid_cents' => $position['effective_paid'], 'balance_cents' => $position['managed'] ? $position['effective_balance'] : 0 ); }
 		$fingerprint = hash( 'sha256', wp_json_encode( array( get_post_status( $event_id ), $rows, $recipients ) ) );
 		if ( ! $token ) {
 			if ( ! $recipients ) return self::redirect_portal_result( 'Nessun destinatario corrisponde ai criteri.', true, 'communications' );
@@ -736,7 +736,7 @@ final class MI_Portal {
 		$recipients = array();
 		try { $positions = MI_Payment_Ledger::positions( $rows ); }
 		catch ( Throwable $error ) { return self::redirect_result( 'Saldo non disponibile. Annullamento non eseguito.', true, $event_id ); }
-		foreach ( $rows as $row ) { $position = $positions[$row['id']]; $recipients[] = array( 'order_code' => $row['order_code'], 'paid_cents' => $position['paid'], 'balance_cents' => $position['managed'] ? $position['balance'] : 0 ); }
+		foreach ( $rows as $row ) { $position = $positions[$row['id']]; $recipients[] = array( 'order_code' => $row['order_code'], 'paid_cents' => $position['effective_paid'], 'balance_cents' => $position['managed'] ? $position['effective_balance'] : 0 ); }
 		$email_result = $recipients ? MI_Spedizione_Email::accoda_comunicazione_operativa( array( 'communication_id' => 'event-cancel-' . $event_id . '-' . time(), 'event_id' => $event_id, 'template_type' => 'EVENT_CANCELLATION', 'message' => $reason, 'allow_operational' => true, 'recipients' => $recipients ) ) : array( 'count' => 0, 'mode' => MI_Spedizione_Email::modalita() );
 		if ( is_wp_error( $email_result ) ) return self::redirect_result( 'Impossibile preparare gli avvisi: evento non annullato.', true, $event_id );
 		foreach ( $rows as $row ) {
@@ -1545,7 +1545,7 @@ final class MI_Portal {
 		$people_by_order = array();
 		if ( $rows ) {
 			$order_ids = implode( ',', array_map( 'intval', array_column( $rows, 'registration_id' ) ) );
-			$people_rows = $wpdb->get_results( "SELECT registration_id,first_name,last_name,status FROM {$wpdb->prefix}mi_participants WHERE registration_id IN ({$order_ids}) ORDER BY id", ARRAY_A );
+			$people_rows = $wpdb->get_results( "SELECT id,registration_id,first_name,last_name,status FROM {$wpdb->prefix}mi_participants WHERE registration_id IN ({$order_ids}) ORDER BY id", ARRAY_A );
 			if ( $wpdb->last_error ) { echo '<p role="alert">Partecipanti non disponibili. Riprova.</p>'; return; }
 			foreach ( $people_rows as $person ) $people_by_order[$person['registration_id']][] = $person;
 		}
@@ -1575,20 +1575,22 @@ final class MI_Portal {
 			$status_label = $status_labels[ $row['status'] ] ?? $row['status'];
 			$status_class = $status_classes[ $row['status'] ] ?? 'is-blue';
 			$position = $positions[$row['registration_id']];
-			if ( $position['total'] < 1 ) { $payment_label = 'Nessun importo dovuto'; $payment_class = 'is-green'; }
-			elseif ( ! $position['managed'] ) { $payment_label = 'Quota ' . self::format_money( $position['total'] ); $payment_class = 'is-blue'; }
-			elseif ( in_array( $row['status'], array( 'CANCELLED', 'EXPIRED', 'WAITLISTED', 'WAITLIST_OFFERED' ), true ) ) { $payment_label = 'Versato netto ' . self::format_money( $position['paid'] ); $payment_class = 'is-blue'; }
-			elseif ( $position['balance'] < 1 ) { $payment_label = 'Saldato'; $payment_class = 'is-green'; }
-			else { $payment_label = 'Da versare ' . self::format_money( $position['balance'] ); $payment_class = 'is-yellow'; }
 			$is_free = self::is_free_configuration( array( 'pricing_mode' => get_post_meta( (int) $row['event_id'], '_mi_pricing_mode', true ) ) );
-			// La conferma è implicita; il residuo visibile comunica già l'attesa del pagamento.
-			$show_status = 'CONFIRMED' !== $row['status'] && ! ( 'PENDING_PAYMENT' === $row['status'] && ! $is_free && $position['managed'] && $position['total'] > 0 && $position['balance'] > 0 );
+			$individual_by_id = ! empty( $position['individual_known'] ) ? array_column( $position['individual']['people'], null, 'id' ) : array();
 			foreach ( $people as $person ) {
 				$person_name = trim( $person['first_name'] . ' ' . $person['last_name'] );
 				$person_initials = strtoupper( substr( (string) $person['first_name'], 0, 1 ) . substr( (string) $person['last_name'], 0, 1 ) );
 				$companions = array(); foreach ( $people as $other ) { $other_name = trim( $other['first_name'] . ' ' . $other['last_name'] ); if ( $other_name && $other_name !== $person_name ) $companions[] = $other_name; }
 				$detail = $companions ? 'Prenotazione con: ' . implode( ', ', $companions ) : 'Prenotazione individuale';
-		echo '<a class="mi-booking-card" data-mi-portal-booking-open href="' . esc_url( $url ) . '"><span class="mi-booking-card__avatar" aria-hidden="true">' . esc_html( $person_initials ?: '—' ) . '</span><span class="mi-booking-card__content"><strong>' . esc_html( $person_name ?: $name ?: 'Iscritto non indicato' ) . '</strong><small>' . esc_html( $row['event_title'] . ' · Iscrizione del ' . self::format_utc_date( $row['created_at'] ) ) . '</small><small>' . esc_html( $detail ) . '</small></span><span class="mi-booking-card__states">' . ( $show_status ? '<small class="mi-status-pill ' . esc_attr( $status_class ) . '">' . esc_html( $status_label ) . '</small>' : '' ) . ( $is_free ? '' : '<small class="mi-status-pill ' . esc_attr( $payment_class ) . '">' . esc_html( $payment_label ) . '</small>' ) . '</span></a>';
+				$person_position = $individual_by_id[(int) $person['id']] ?? array( 'total' => $position['effective_total'], 'paid' => $position['effective_paid'], 'balance' => $position['effective_balance'] );
+				if ( (int) $person_position['total'] < 1 ) { $payment_label = 'Nessun importo dovuto'; $payment_class = 'is-green'; }
+				elseif ( ! $position['managed'] ) { $payment_label = 'Quota ' . self::format_money( $person_position['total'] ); $payment_class = 'is-blue'; }
+				elseif ( in_array( $row['status'], array( 'CANCELLED', 'EXPIRED', 'WAITLISTED', 'WAITLIST_OFFERED' ), true ) ) { $payment_label = 'Versato netto ' . self::format_money( max( 0, (int) $person_position['paid'] ) ); $payment_class = 'is-blue'; }
+				elseif ( (int) $person_position['balance'] < 1 ) { $payment_label = 'Saldato'; $payment_class = 'is-green'; }
+				else { $payment_label = 'Da versare ' . self::format_money( $person_position['balance'] ); $payment_class = 'is-yellow'; }
+				// La conferma è implicita; il residuo personale comunica già l'attesa del pagamento.
+				$show_status = 'CONFIRMED' !== $row['status'] && ! ( 'PENDING_PAYMENT' === $row['status'] && ! $is_free && $position['managed'] && (int) $person_position['total'] > 0 && (int) $person_position['balance'] > 0 );
+			echo '<a class="mi-booking-card" data-mi-portal-booking-open href="' . esc_url( $url ) . '"><span class="mi-booking-card__avatar" aria-hidden="true">' . esc_html( $person_initials ?: '—' ) . '</span><span class="mi-booking-card__content"><strong>' . esc_html( $person_name ?: $name ?: 'Iscritto non indicato' ) . '</strong><small>' . esc_html( $row['event_title'] . ' · Iscrizione del ' . self::format_utc_date( $row['created_at'] ) ) . '</small><small>' . esc_html( $detail ) . '</small></span><span class="mi-booking-card__states">' . ( $show_status ? '<small class="mi-status-pill ' . esc_attr( $status_class ) . '">' . esc_html( $status_label ) . '</small>' : '' ) . ( $is_free ? '' : '<small class="mi-status-pill ' . esc_attr( $payment_class ) . '">' . esc_html( $payment_label ) . '</small>' ) . '</span></a>';
 			}
 		}
 		if ( ! $rows ) echo '<div class="mi-registration-empty"><strong>Nessuna iscrizione trovata</strong><p class="mi-portal-muted">Prova a modificare il testo cercato o i filtri selezionati.</p></div>';

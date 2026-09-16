@@ -220,7 +220,7 @@ test('le iscrizioni vengono replicate con idempotenza senza perdere il salvatagg
   assert.match(service, /sync_pending_workspace/);
   assert.match(service, /ORDER BY workspace_attempts,id LIMIT 10/);
   assert.match(service, /\$payments_table\s*=\s*\$wpdb->prefix\s*\.\s*'mi_payments'/);
-	assert.match(service, /administrative_note, participant_allocations_json FROM \{\$payments_table\}/);
+	assert.match(service, /administrative_note, participant_allocations_json, origin_channel FROM \{\$payments_table\}/);
   assert.match(activator, /workspace_status varchar\(24\)/);
   assert.match(activator, /workspace_attempts/);
   assert.match(activator, /wp_schedule_event/);
@@ -1161,7 +1161,7 @@ test('la lista d’attesa propone il posto con accettazione, rinuncia e scadenza
 
 test('la replica conserva i dati originali in MySQL', async () => {
   const service = await read('includes/class-mi-registration-service.php');
-  assert.match(service, /SELECT ticket_type_code, ticket_index, first_name, last_name, extra_json/);
+  assert.match(service, /SELECT id, ticket_type_code, ticket_index, first_name, last_name, extra_json/);
   assert.doesNotMatch(service, /scrub_relay_only_fields/);
 });
 
