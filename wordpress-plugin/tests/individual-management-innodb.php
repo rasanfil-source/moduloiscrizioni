@@ -9,6 +9,7 @@ require __DIR__.'/../modulo-iscrizioni/includes/class-mi-management-service.php'
 require __DIR__.'/../modulo-iscrizioni/includes/class-mi-payment-ledger.php';
 require __DIR__.'/../modulo-iscrizioni/includes/class-mi-booking-search.php';
 $source=file_get_contents(__DIR__.'/../modulo-iscrizioni/includes/class-mi-registration-service.php');
+$source=preg_replace("/^require_once __DIR__ \\. '\\/class-mi-payment-people\\.php';\\R/m",'', $source);
 eval(str_replace('class MI_Registration_Service','class MI_Registration_Validation_Test',preg_replace('/^<\?php\s*/','',$source)));
 function check($value,$message){if(!$value)throw new RuntimeException($message);}
 $wpdb=new DatabaseAdapter();$wpdb->db->select_db('mi_ledger_test');$GLOBALS['management_audit_test']=true;
