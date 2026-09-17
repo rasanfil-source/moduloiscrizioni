@@ -31,6 +31,7 @@ class WP_Error { public $code; function __construct($code,$message){$this->code=
 class MI_Access { static function can_access_event($id){return $id===42;} }
 class MI_Portal_Payments { static function allowed(){return true;} }
 class MI_Registration_Service {
+	static function reopened_payment_deadline($registration,$now=null){$now=$now??time();$deadline=trim((string)($registration['payment_deadline_at']??''));$timestamp=$deadline===''?false:strtotime($deadline.' UTC');return false!==$timestamp&&$timestamp>$now?$deadline:gmdate('Y-m-d H:i:s',$now+48*3600);}
  static function append_registration_event(...$args){return true;}
  static function accoda_iscrizione_workspace($id){throw new RuntimeException('Cron non disponibile');}
 }
