@@ -4,6 +4,23 @@ defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/class-mi-payment-people.php';
 
 final class MI_Registration_Service {
+	/**
+	 * Restituisce una scadenza UTC utilizzabile quando una posizione già confermata
+	 * torna in attesa di pagamento. Una scadenza storica non deve provocare
+	 * l'annullamento automatico al cron immediatamente successivo.
+	 */
+	public static function reopened_payment_deadline( array $registration, $now = null ) {
+		$now = null === $now ? time() : (int) $now;
+		$deadline = trim( (string) ( $registration['payment_deadline_at'] ?? '' ) );
+		$deadline_timestamp = '' === $deadline ? false : strtotime( $deadline . ' UTC' );
+		if ( false !== $deadline_timestamp && $deadline_timestamp > $now ) return $deadline;
+		$snapshot = json_decode( (string) ( $registration['snapshot_json'] ?? '' ), true );
+		$snapshot_hours = is_array( $snapshot ) ? absint( $snapshot['event']['waitlist_offer_hours'] ?? 0 ) : 0;
+		$stored_hours = function_exists( 'get_post_meta' ) ? absint( get_post_meta( (int) ( $registration['event_id'] ?? 0 ), '_mi_waitlist_offer_hours', true ) ) : 0;
+		$hours = min( 168, max( 1, $snapshot_hours ?: ( $stored_hours ?: 48 ) ) );
+		return gmdate( 'Y-m-d H:i:s', $now + $hours * 3600 );
+	}
+
 	private static function payment_coverage( array $registration ) {
 		global $wpdb;
 		$payments = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d ORDER BY id", $registration['id'] ), ARRAY_A );
@@ -821,8 +838,9 @@ final class MI_Registration_Service {
 			$paid = (int) $coverage['paid'];
 			$new_status = $coverage['covered'] ? 'CONFIRMED' : 'PENDING_PAYMENT';
 			if ( $new_status === $registration['status'] ) { $wpdb->query( 'COMMIT' ); return; }
-			$expires_at = 'CONFIRMED' === $new_status ? null : $registration['payment_deadline_at'];
-			if ( false === $wpdb->update( $registrations, array( 'status' => $new_status, 'expires_at' => $expires_at, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_status_changed' ), array( 'id' => $registration_id ), array( '%s', '%s', '%s', '%s' ), array( '%d' ) ) || ! self::append_registration_event( $registration_id, 'PAYMENT_STATUS_CHANGED', $registration['status'], $new_status, $actor_label, array( 'net_paid_cents' => $paid, 'initial_due_cents' => (int) $registration['initial_due_cents'] ) ) ) throw new RuntimeException( 'Stato pagamento non aggiornato.' );
+			$expires_at = 'CONFIRMED' === $new_status ? null : self::reopened_payment_deadline( $registration );
+			$deadline_at = 'CONFIRMED' === $new_status ? $registration['payment_deadline_at'] : $expires_at;
+			if ( false === $wpdb->update( $registrations, array( 'status' => $new_status, 'expires_at' => $expires_at, 'payment_deadline_at' => $deadline_at, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_status_changed' ), array( 'id' => $registration_id ), array( '%s', '%s', '%s', '%s', '%s' ), array( '%d' ) ) || ! self::append_registration_event( $registration_id, 'PAYMENT_STATUS_CHANGED', $registration['status'], $new_status, $actor_label, array( 'net_paid_cents' => $paid, 'initial_due_cents' => (int) $registration['initial_due_cents'], 'payment_deadline_at' => $expires_at ) ) ) throw new RuntimeException( 'Stato pagamento non aggiornato.' );
 			self::mark_workspace_changed_locked( $registration_id );
 			$wpdb->query( 'COMMIT' );
 		} catch ( Throwable $error ) {
@@ -911,8 +929,9 @@ final class MI_Registration_Service {
 			} elseif ( in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) && in_array( $registration['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) {
 				$coverage = self::payment_coverage( $registration );
 				$registration_update['status'] = $coverage['covered'] ? 'CONFIRMED' : 'PENDING_PAYMENT';
-				$registration_update['expires_at'] = $coverage['covered'] ? null : $registration['payment_deadline_at'];
-				$formats = array_merge( $formats, array( '%s', '%s' ) );
+				$registration_update['expires_at'] = $coverage['covered'] ? null : self::reopened_payment_deadline( $registration );
+				$registration_update['payment_deadline_at'] = $coverage['covered'] ? $registration['payment_deadline_at'] : $registration_update['expires_at'];
+				$formats = array_merge( $formats, array( '%s', '%s', '%s' ) );
 			}
 			if ( false === $wpdb->update( $registrations, $registration_update, array( 'id' => $registration['id'] ), $formats, array( '%d' ) ) ) throw new RuntimeException( 'Prenotazione non aggiornata.' );
 			self::mark_workspace_changed_locked( (int) $registration['id'] );

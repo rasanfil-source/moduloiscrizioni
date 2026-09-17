@@ -163,7 +163,7 @@
 	}
 
     function totalCents() {
-	  const prices = Object.fromEntries((config.event.ticket_types || []).map((ticket) => [ticket.code, config.event.pricing_mode === 'FIXED' ? Number(config.event.fixed_price_cents) || 0 : Number(ticket.price_cents) || 0]));
+	  const prices = Object.fromEntries((config.event.ticket_types || []).map((ticket) => [ticket.code, config.event.pricing_mode === 'FIXED' ? Number(config.event.fixed_price_cents) || 0 : (config.event.pricing_mode === 'CALCULATED' ? Number(ticket.price_cents) || 0 : 0)]));
       const optionPrices = config.event.pricing_mode === 'ZERO'
         ? {}
         : Object.fromEntries((config.event.options || []).map((option) => [option.code, Number(option.price_cents) || 0]));
@@ -272,7 +272,7 @@
       const options = config.event.options || [];
       const participantCosts = participantValues.map((participant) => {
         const ticket = (config.event.ticket_types || []).find((item) => item.code === participant.key.split(':')[0]);
-        const base = config.event.pricing_mode === 'FIXED' ? Number(config.event.fixed_price_cents) || 0 : Number(ticket?.price_cents) || 0;
+		const base = config.event.pricing_mode === 'FIXED' ? Number(config.event.fixed_price_cents) || 0 : (config.event.pricing_mode === 'CALCULATED' ? Number(ticket?.price_cents) || 0 : 0);
         const selected = options.filter((option) => option.scope === 'TICKET').map((option) => ({ option, quantity: Number(participant.options?.[option.code]) || 0 })).filter((item) => item.quantity > 0).map((item) => ({ ...item, cost: item.quantity * (Number(item.option.price_cents) || 0) }));
         return { participant, base, selected, subtotal: selected.reduce((total, item) => total + item.cost, base) };
       });

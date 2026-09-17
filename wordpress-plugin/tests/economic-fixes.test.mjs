@@ -10,6 +10,7 @@ const paymentsUi = read('../modulo-iscrizioni/assets/portal-payments.js');
 const managementUi = read('../modulo-iscrizioni/assets/portal-management.js');
 const admin = read('../modulo-iscrizioni/includes/class-mi-admin.php');
 const registration = read('../modulo-iscrizioni/includes/class-mi-registration-service.php');
+const publicBalance = read('../modulo-iscrizioni/includes/class-mi-public-balance.php');
 const publicUi = read('../modulo-iscrizioni/assets/public.js');
 
 test('rimborsi e storni mantengono la primazia della persona', () => {
@@ -54,4 +55,26 @@ test('le opzioni a pagamento valgono anche con prezzo NONE, mentre ZERO resta gr
   assert.match(registration, /'ZERO' === \( \$event\['pricing_mode'\] \?\? '' \) \? 0 : self::options_total/);
   assert.doesNotMatch(registration, /in_array\( \$event\['pricing_mode'\], array\( 'FIXED', 'CALCULATED' \)/);
   assert.match(publicUi, /config\.event\.pricing_mode === 'ZERO'\s*\? \{\}/);
+});
+
+test('una posizione riaperta non riusa una scadenza già trascorsa', () => {
+  assert.match(registration, /function reopened_payment_deadline/);
+  assert.match(registration, /\$deadline_timestamp > \$now/);
+  assert.match(ledger, /MI_Registration_Service::reopened_payment_deadline\( \$r \)/);
+  assert.match(management, /MI_Registration_Service::reopened_payment_deadline\( \$row \)/);
+  assert.match(management, /MI_Registration_Service::reopened_payment_deadline\( \$locked \)/);
+  assert.match(publicBalance, /MI_Registration_Service::reopened_payment_deadline\( \$r \)/);
+});
+
+test('i dati condivisi passano al primo partecipante ancora attivo', () => {
+  assert.match(management, /\$participants = array_values[\s\S]*?\$first_person_id = \(int\) \( \$participants\[0\]\['id'\]/);
+  assert.doesNotMatch(management, /\$first_person_id = \(int\) \( \$all_participants\[0\]/);
+  assert.match(publicBalance, /\(int\) \( \$active\[0\]\['id'\] \?\? 0 \) === \$id/);
+  assert.doesNotMatch(publicBalance, /\$b\['people'\]\[0\]\['id'\]/);
+});
+
+test('NONE azzera la quota base residua nel client ma conserva i servizi', () => {
+  assert.match(publicUi, /pricing_mode === 'CALCULATED' \? Number\(ticket\.price_cents\) \|\| 0 : 0/);
+  assert.match(publicUi, /pricing_mode === 'CALCULATED' \? Number\(ticket\?\.price_cents\) \|\| 0 : 0/);
+  assert.match(publicUi, /pricing_mode === 'ZERO'\s*\? \{\}\s*: Object\.fromEntries/);
 });

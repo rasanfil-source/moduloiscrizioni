@@ -172,8 +172,8 @@ final class MI_Management_Service {
 				$all_participants = $grouped[$order['id']] ?? array(); $missing = 0; $unassigned = 0;
 				$buyer_matches = array_values( array_filter( $all_participants, static function ( $person ) use ( $order ) { return mb_strtolower( trim( $person['first_name'] ) ) === mb_strtolower( trim( $order['buyer_first_name'] ) ) && mb_strtolower( trim( $person['last_name'] ) ) === mb_strtolower( trim( $order['buyer_last_name'] ) ); } ) );
 				$buyer_participant_id = count( $all_participants ) > 1 && 1 === count( $buyer_matches ) ? (int) $buyer_matches[0]['id'] : 0;
-				$first_person_id = (int) ( $all_participants[0]['id'] ?? 0 );
 				$participants = array_values( array_filter( $all_participants, static function ( $person ) { return 'ACTIVE' === $person['status']; } ) );
+				$first_person_id = (int) ( $participants[0]['id'] ?? 0 );
 				$definitions = self::definitions( $order ); $snapshot = self::decode( $order['snapshot_json'] );
 				foreach ( $definitions as $definition ) $field_labels[$definition['key']] = $definition['label'];
 				foreach ( $participants as $i => $person ) {
@@ -302,7 +302,7 @@ final class MI_Management_Service {
 			if ( null === $deposits && 'DEPOSIT_BALANCE' === $row['economic_mode'] && ! empty( $position['quotes_known'] ) ) { $deposits = array(); foreach ( $position['people'] as $person_position ) $deposits[(int) $person_position['id']] = min( (int) $person_position['deposit'], max( 0, (int) $person_position['total'] + (int) ( $person_deltas[(int) $person_position['id']] ?? 0 ) ) ); }
 			$initial = 'FULL_PAYMENT' === $row['economic_mode'] ? $total : ( null !== $deposits ? array_sum( $deposits ) : min( (int) $row['initial_due_cents'], $total ) );
 			$changes = array( 'total_cents' => $total );
-			if ( $managed ) { $covered = self::covered_after_change( $row, $position, $person_deltas, null !== $deposits ? $deposits : array(), $paid, $initial ); $changes += array( 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial, 'status' => $covered ? 'CONFIRMED' : 'PENDING_PAYMENT', 'expires_at' => $covered ? null : $row['payment_deadline_at'] ); }
+			if ( $managed ) { $covered = self::covered_after_change( $row, $position, $person_deltas, null !== $deposits ? $deposits : array(), $paid, $initial ); $deadline = $covered ? null : MI_Registration_Service::reopened_payment_deadline( $row ); $changes += array( 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial, 'status' => $covered ? 'CONFIRMED' : 'PENDING_PAYMENT', 'expires_at' => $deadline ); if ( null !== $deadline ) $changes['payment_deadline_at'] = $deadline; }
 			$plan['orders'][] = array( 'id' => (int) $row['id'], 'code' => $code, 'before_total' => (int) $row['total_cents'], 'after_total' => $total, 'delta' => $delta, 'paid' => $paid, 'due' => $managed ? max( 0, $total - $paid ) : 0, 'refund' => $managed ? max( 0, $paid - $total ) : 0, 'changes' => $changes, 'deposits' => null !== $deposits ? $deposits : array() );
 		}
 		foreach ( $occupancy as $code => $count ) if ( $count > ( $inventory[$code]['capacity'] ?? $plan['new_rooms'][$code]['capacity'] ?? 0 ) ) throw new InvalidArgumentException( 'Capienza superata per ' . $code . '. Scegli un’altra camera.' );
@@ -477,7 +477,7 @@ final class MI_Management_Service {
 		$initial = 'FULL_PAYMENT' === $locked['economic_mode'] ? $total : ( $position['quotes_known'] ? array_sum( $deposits ) : min( (int) $locked['initial_due_cents'], $total ) );
 		$paid = 0; foreach ( $history as $movement ) $paid += ( 'REFUND' === $movement['transaction_kind'] ? -1 : 1 ) * (int) $movement['amount_cents'];
 		$changes = array( 'total_cents' => $total, 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial );
-		if ( in_array( $locked['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) { $covered = self::covered_after_change( $locked, $position, $person ? array( $person['id'] => $delta ) : array(), $deposits, $paid, $initial ); $changes += array( 'status' => $covered ? 'CONFIRMED' : 'PENDING_PAYMENT', 'expires_at' => $covered ? null : $locked['payment_deadline_at'] ); }
+		if ( in_array( $locked['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) { $covered = self::covered_after_change( $locked, $position, $person ? array( $person['id'] => $delta ) : array(), $deposits, $paid, $initial ); $deadline = $covered ? null : MI_Registration_Service::reopened_payment_deadline( $locked ); $changes += array( 'status' => $covered ? 'CONFIRMED' : 'PENDING_PAYMENT', 'expires_at' => $deadline ); if ( null !== $deadline ) $changes['payment_deadline_at'] = $deadline; }
 		return array( 'participant_id' => $person ? $person['id'] : 0, 'before_options' => $current_options, 'after_options' => $options, 'reason' => sanitize_textarea_field( $data['reason'] ), 'delta' => $delta, 'before_total' => $individual && $position['quotes_known'] ? $individual['total'] : null, 'after_total' => $individual && $position['quotes_known'] ? $individual['total'] + $delta : null, 'credit' => $individual && $position['payments_known'] && $position['quotes_known'] ? max( 0, $individual['paid'] - $individual['total'] - $delta ) : null, 'changes' => $changes, 'deposits' => $position['quotes_known'] ? $deposits : array() );
 	}
 	public static function options_preview( $id, $data, $version ) {
@@ -551,7 +551,9 @@ final class MI_Management_Service {
 					if ( null === $covered ) $covered = MI_Payment_People::covered( $position, $locked['economic_mode'], $deltas );
 					if ( null === $covered ) $covered = $paid >= $initial;
 					$changes['status'] = $covered ? 'CONFIRMED' : 'PENDING_PAYMENT';
-					$changes['expires_at'] = 'CONFIRMED' === $changes['status'] ? null : $locked['payment_deadline_at'];
+					$deadline = $covered ? null : MI_Registration_Service::reopened_payment_deadline( $locked );
+					$changes['expires_at'] = $deadline;
+					if ( null !== $deadline ) $changes['payment_deadline_at'] = $deadline;
 				}
 				if ( false === $wpdb->update( $wpdb->prefix . 'mi_registrations', $changes, array( 'id' => $id ) ) ) throw new RuntimeException( 'Rettifica non salvata.' );
 			} elseif ( 'attendance' === $operation ) {

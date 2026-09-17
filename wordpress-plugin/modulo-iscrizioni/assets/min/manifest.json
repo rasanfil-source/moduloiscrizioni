@@ -61,8 +61,8 @@
   },
   "public.js": {
     "file": "min/public.js",
-    "source": "6ec5aab82f212bdfd5c908a750ba9cfc460ce052f7acb9b9d5b7287ce4b43641",
-    "hash": "68a869b77722acd36d7b06094a9625ecbb7df7be79be467657460c90ee6f5715"
+    "source": "2c50a56b4d5bf761a195187299efc86f4f7e51cacbc468b2af8bbb0f1ca129e4",
+    "hash": "8eb181804dd0a7ee06d51f0bf09b62a11409f392384361aa93c7bc6d1c8a2242"
   },
   "qrcode-generator-2.0.4.js": {
     "file": "min/qrcode-generator-2.0.4.js",

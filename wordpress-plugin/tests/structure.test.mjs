@@ -1136,7 +1136,7 @@ test('la lista d’attesa propone il posto con accettazione, rinuncia e scadenza
   assert.match(activator, /payment_deadline_at/);
   assert.match(activator, /waitlist_offer_token_hash char\(64\)/);
   assert.match(activator, /waitlist_offer_expiry/);
-  assert.match(await read('includes/class-mi-payment-ledger.php'), /\$r\['payment_deadline_at'\]/);
+  assert.match(await read('includes/class-mi-payment-ledger.php'), /MI_Registration_Service::reopened_payment_deadline\( \$r \)/);
   assert.match(service, /promote_waitlisted_locked/);
   assert.match(service, /WAITLIST_OFFERED/);
   assert.match(service, /WAITLIST_ACCEPTED/);

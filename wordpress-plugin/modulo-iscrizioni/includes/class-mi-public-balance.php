@@ -110,7 +110,7 @@ final class MI_Public_Balance {
 		$p = $active[$index]; $opts = self::decode( $p['options_json'] ); $definitions = self::definitions( $b );
 		$editable = array(); $locked = array(); $selected = array_column( $opts, null, 'code' );
 		$snapshot = self::decode( $r['snapshot_json'] );
-		$can_edit = 'ALL' === ( $snapshot['event']['participant_extra_scope'] ?? 'ONE' ) || (int) $b['people'][0]['id'] === $id;
+		$can_edit = 'ALL' === ( $snapshot['event']['participant_extra_scope'] ?? 'ONE' ) || (int) ( $active[0]['id'] ?? 0 ) === $id;
 		$managed = in_array( $r['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 		$individual = array_column( $b['individual']['people'], null, 'id' )[$id] ?? null;
 		if ( $managed && ( ! $individual || empty( $b['individual']['quotes_known'] ) || empty( $b['individual']['payments_known'] ) ) ) throw new InvalidArgumentException( $b['individual']['message'] ?: 'La posizione individuale deve essere verificata dalla segreteria prima di modificare i servizi.' );
@@ -218,7 +218,8 @@ final class MI_Public_Balance {
 				$person_deltas[$rid][$id] = $delta;
 				$changes[$id] = array( 'before' => $original, 'after' => $options );
 				$person_row = array_column( $b['people'], null, 'id' )[$id]; $fields = self::decode( $person_row['extra_json'] ); $snapshot = self::decode( $r['snapshot_json'] ); $missing = array();
-				if ( 'ALL' === ( $snapshot['event']['participant_extra_scope'] ?? 'ONE' ) || (int) $b['people'][0]['id'] === $id ) foreach ( $snapshot['event']['participant_fields'] ?? array() as $field ) {
+				$active_people = array_values( array_filter( $b['people'], static function ( $person ) { return 'ACTIVE' === ( $person['status'] ?? '' ); } ) );
+				if ( 'ALL' === ( $snapshot['event']['participant_extra_scope'] ?? 'ONE' ) || (int) ( $active_people[0]['id'] ?? 0 ) === $id ) foreach ( $snapshot['event']['participant_fields'] ?? array() as $field ) {
 					if ( ! empty( $field['required'] ) && '' === trim( (string) ( $fields[$field['key']] ?? '' ) ) ) $missing[] = $field['label'] ?? $field['key'];
 				}
 				$deadline = (string) ( $r['payment_deadline_at'] ?? '' );
@@ -252,7 +253,10 @@ final class MI_Public_Balance {
 				$covered = MI_Payment_People::covered( $b['individual'], $r['economic_mode'], $person_deltas[$rid] ?? array(), $deposits ?: array() );
 				if ( null === $covered ) $covered = $b['paid'] >= $initial;
 				$status = in_array( $r['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ? ( $covered ? 'CONFIRMED' : 'PENDING_PAYMENT' ) : $r['status'];
-				if ( false === $wpdb->update( $wpdb->prefix . 'mi_registrations', array( 'total_cents' => $total, 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial, 'status' => $status, 'expires_at' => 'CONFIRMED' === $status ? null : $r['payment_deadline_at'] ), array( 'id' => $rid ) ) ) throw new RuntimeException( 'Importi non salvati.' );
+				$deadline = 'CONFIRMED' === $status ? null : MI_Registration_Service::reopened_payment_deadline( $r );
+				$registration_changes = array( 'total_cents' => $total, 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial, 'status' => $status, 'expires_at' => $deadline );
+				if ( null !== $deadline ) $registration_changes['payment_deadline_at'] = $deadline;
+				if ( false === $wpdb->update( $wpdb->prefix . 'mi_registrations', $registration_changes, array( 'id' => $rid ) ) ) throw new RuntimeException( 'Importi non salvati.' );
 				foreach ( $deposits ?: array() as $participant_id => $deposit_due ) if ( false === $wpdb->update( $wpdb->prefix . 'mi_participants', array( 'deposit_due_cents' => (int) $deposit_due ), array( 'id' => (int) $participant_id, 'registration_id' => $rid ), array( '%d' ), array( '%d', '%d' ) ) ) throw new RuntimeException( 'Caparre individuali non salvate.' );
 				MI_Registration_Service::mark_workspace_changed_locked( $rid );
 			}
