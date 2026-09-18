@@ -39,8 +39,9 @@ $r=MI_Management_Service::save_event_room(43,'room_save',$inventory_data,$empty_
 $r=MI_Management_Service::save_event_room(42,'room_delete',['code'=>'PRE'],inventory_version(),'wp_7_12345678-1234-4234-8234-123456789ac4');check(!empty($r['saved']),'Camera vuota non eliminata');
 foreach([1,2]as $id){
  check(false!==$wpdb->query("INSERT INTO wp_mi_registrations (id,order_code,event_id,status,buyer_first_name,buyer_last_name,buyer_email,buyer_phone,total_qty,total_cents,initial_due_cents,idempotency_key,created_at,snapshot_json) VALUES ($id,'TEST$id',42,'CONFIRMED','Test','Locale','','',1,10000,2000,'test$id',NOW(),'{}')"),$wpdb->last_error);
- check(false!==$wpdb->query("INSERT INTO wp_mi_participants (id,registration_id,first_name,last_name,extra_json) VALUES ($id,$id,'Persona','Test','{}')"),$wpdb->last_error);
+	check(false!==$wpdb->query("INSERT INTO wp_mi_participants (id,registration_id,first_name,last_name,extra_json) VALUES ($id,$id,'Persona','Test','{}')"),$wpdb->last_error);
 }
+$wpdb->query("INSERT INTO wp_mi_registration_items (registration_id,ticket_type_code,quantity,unit_price_cents) VALUES (1,'',1,10000),(2,'',1,10000)");
 $v=booking_version(1);$room=['code'=>'A','name'=>'Camera A','capacity'=>1];
 $r=save_change(1,'room_save',$room,'123456789aaa',$v);check(!empty($r['saved']),'Camera non salvata');
 $r=save_change(1,'room_save',$room,'123456789aaa',$v);check(!empty($r['replayed']),'Retry camera non idempotente');
@@ -93,10 +94,12 @@ $r=save_change(1,'attendance',['participant_id'=>2,'attendance'=>'PRESENT'],'123
 $wpdb->query("UPDATE wp_mi_registrations SET status='WAITLISTED' WHERE id=1");
 $r=save_change(1,'attendance',['participant_id'=>1,'attendance'=>'PRESENT'],'123456789ae3');check(!empty($r['rejected']),'Presenza di persona in attesa accettata');
 echo "Presenze: audit, retry, appartenenza e ammissione verificati.\n";
-$wpdb->query("UPDATE wp_mi_registrations SET status='CONFIRMED',economic_mode='DEPOSIT_BALANCE',total_cents=10000,initial_due_cents=2000,balance_cents=8000 WHERE id=1");
+$wpdb->query("UPDATE wp_mi_registrations SET status='CONFIRMED',economic_mode='DEPOSIT_BALANCE',total_cents=10000,initial_due_cents=2000,balance_cents=8000,payment_deadline_at='2020-01-01 00:00:00',expires_at=NULL WHERE id=1");
 $version=booking_version(1);$r=save_change(1,'adjust_due',['total_cents'=>1500,'reason'=>'Riduzione concordata'],'123456789af1',$version);check(!empty($r['saved']),'Rettifica non salvata');
 $r=save_change(1,'adjust_due',['total_cents'=>1500,'reason'=>'Riduzione concordata'],'123456789af1',$version);check(!empty($r['replayed']),'Rettifica duplicata al retry');
 $row=$wpdb->get_row('SELECT * FROM wp_mi_registrations WHERE id=1',ARRAY_A);check((int)$row['total_cents']===1500&&(int)$row['initial_due_cents']===1500&&(int)$row['balance_cents']===0,'Piano rettificato incoerente');
+check($row['status']==='PENDING_PAYMENT'&&strtotime($row['expires_at'].' UTC')>time()&&$row['expires_at']===$row['payment_deadline_at'],'Rettifica ha riutilizzato una scadenza storica');
+check((int)$wpdb->get_var("SELECT COUNT(*) FROM wp_mi_registrations WHERE id=1 AND status='PENDING_PAYMENT' AND capacity_released_at IS NULL AND expires_at IS NOT NULL AND expires_at <= UTC_TIMESTAMP()")===0,'Il cron seleziona indebitamente la prenotazione appena rettificata');
 check((int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_payments')===0,'Rettifica ha creato un movimento');
 $audit=json_decode($wpdb->get_var("SELECT detail_json FROM wp_mi_registration_events WHERE event_type='MANAGEMENT_adjust_due' ORDER BY id DESC LIMIT 1"),true);check($audit['before_total']===10000&&$audit['after_total']===1500,'Importi precedenti non conservati');
 $r=save_change(1,'adjust_due',['total_cents'=>1000,'reason'=>''],'123456789af2');check(!empty($r['rejected']),'Rettifica priva di motivo accettata');
@@ -110,8 +113,9 @@ $source=preg_replace("/^require_once __DIR__ \\. '\/class-mi-payment-people\\.ph
 $source=preg_replace('/^<\?php\s*/','',$source);$source=str_replace('class MI_Registration_Service','class MI_Registration_Validation_Test',$source);eval($source);
 $definitions=[['code'=>'single','name'=>'Singola','scope'=>'TICKET','price_cents'=>5000,'max_quantity'=>1,'choice_group'=>'room'],['code'=>'double','name'=>'Doppia','scope'=>'TICKET','price_cents'=>3000,'max_quantity'=>1,'choice_group'=>'room']];
 $snapshot=json_encode(['event'=>['options'=>$definitions,'participant_extra_scope'=>'ALL']]);
-$wpdb->query($wpdb->prepare("UPDATE wp_mi_registrations SET status='CONFIRMED',snapshot_json=%s,total_cents=5000 WHERE id=1",$snapshot));
+$wpdb->query($wpdb->prepare("UPDATE wp_mi_registrations SET quote_adjustments_json=NULL,status='CONFIRMED',snapshot_json=%s,total_cents=5000 WHERE id=1",$snapshot));
 $wpdb->query($wpdb->prepare("UPDATE wp_mi_participants SET options_json=%s WHERE id=1",json_encode([['code'=>'single','name'=>'Singola','quantity'=>1,'unit_price_cents'=>5000]])));
+$wpdb->query('UPDATE wp_mi_registration_items SET unit_price_cents=0 WHERE registration_id=1');
 $version=booking_version(1);$change=['participant_id'=>1,'options'=>['single'=>0,'double'=>1],'reason'=>'Passaggio concordato a doppia'];
 $r=save_change(1,'change_options',$change,'123456789ab4',$version);check(!empty($r['saved']),'Cambio servizi non salvato');
 $r=save_change(1,'change_options',$change,'123456789ab4',$version);check(!empty($r['replayed']),'Retry cambio servizi non idempotente');

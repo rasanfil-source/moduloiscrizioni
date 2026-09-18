@@ -249,7 +249,8 @@ function registraIscrizioneCentrale_(payload) {
 	  normalizzaTesto_(payload.marketing_consent_id, 100),
 	  normalizzaTesto_(payload.marketing_accepted_at, 40),
 	  JSON.stringify(Array.isArray(payload.order_options) ? payload.order_options : []),
-      workspaceRevision
+      workspaceRevision,
+      payload.paid_cents == null ? '' : Math.max(0, Math.round(Number(payload.paid_cents) || 0))
     ];
     if (existing) registrations.getRange(existing._row, 1, 1, registrationValues.length).setValues([registrationValues]);
     else registrations.appendRow(registrationValues);

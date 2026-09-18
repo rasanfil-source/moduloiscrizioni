@@ -1254,7 +1254,7 @@ test('la caparra può essere percentuale o di importo fisso', async () => {
   assert.match(portalScript, /Importo fisso \(€\)/);
   assert.match(portalScript, /name="deposit_fixed"/);
   assert.match(service, /'FIXED'.*deposit_mode/);
-  assert.match(service, /min\( \$total_cents, max\( 0, \(int\).*deposit_fixed_cents/s);
+  assert.match(service, /\$participant_totals/);
   assert.match(eventType, /name="mi_deposit_mode"/);
   assert.match(eventType, /_mi_deposit_fixed_cents/);
   assert.match(adminScript, /modalitaCaparra/);
@@ -2056,7 +2056,7 @@ test('il cambio servizi non richiede né mostra un motivo', async () => {
 test('la scheda iscritto non espone il riepilogo economico della prenotazione', async () => {
   const script = await read('assets/portal-management.js');
   assert.doesNotMatch(script, /data-booking-economics>/);
-  assert.doesNotMatch(script, /Rettifica il dovuto della prenotazione/);
+  assert.match(script, /data-adjust-due[\s\S]*participant_id/);
 });
 
 test('le presenze si registrano in blocco soltanto per i gruppi con rapporto annuale', async () => {

@@ -30,7 +30,7 @@ class FakeSheet {
 
 function environment() {
   const headers = {
-    Iscrizioni: ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'richieste_particolari', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'hash_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'versione_informativa_privacy', 'data_accettazione_privacy', 'biglietti_json', 'id_consenso_marketing', 'data_accettazione_marketing', 'opzioni_ordine_json', 'workspace_revision'],
+    Iscrizioni: ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'richieste_particolari', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'hash_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'versione_informativa_privacy', 'data_accettazione_privacy', 'biglietti_json', 'id_consenso_marketing', 'data_accettazione_marketing', 'opzioni_ordine_json', 'workspace_revision', 'versato_centesimi'],
     Partecipanti: ['codice_ordine', 'numero_partecipante', 'codice_tipologia', 'indice_tipologia', 'nome', 'cognome', 'dati_aggiuntivi_json', 'opzioni_json', 'stato_partecipante', 'data_annullamento', 'totale_centesimi', 'versato_centesimi', 'saldo_centesimi', 'caparra_centesimi', 'caparra_residua_centesimi'],
     Pagamenti: ['id_pagamento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo_centesimi', 'valuta', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'canale_registrazione', 'id_inserimento_origine', 'data_creazione', 'nota_amministrativa', 'attribuzioni_partecipanti_json'],
     'Coda email': ['id_messaggio', 'codice_ordine', 'destinatario', 'tipo_modello', 'contenuto_json', 'stato', 'data_creazione'],
@@ -185,3 +185,5 @@ test('la consegna è incompleta se il foglio evento fallisce, il retry conserva 
   assert.equal(sheets.Iscrizioni.rows.length, 2);
   assert.equal(sheets.Partecipanti.rows.length, 3);
 });
+
+test('la replica conserva il versato anche con residuo zero e credito',()=>{const {context,sheets}=environment();const result=context.aggiungiIscrizione_(payload({paid_cents:12000,total_cents:10000,balance_cents:0}));assert.equal(result.complete,true);assert.equal(sheets.Iscrizioni.rows[1][27],12000);});

@@ -200,7 +200,9 @@ function calcolaVersatoPerOrdine_(payments) {
 function posizioneEconomicaRegistrazione_(registration, paidFallback) {
   const total = Math.max(0, Number(registration.totale_centesimi) || 0); const rawBalance = registration.saldo_centesimi; const hasBalance = rawBalance !== '' && rawBalance !== null && rawBalance !== undefined && Number.isFinite(Number(rawBalance));
   const balance = hasBalance ? Math.max(0, Number(rawBalance)) : Math.max(0, total - Math.max(0, Number(paidFallback) || 0));
-  return { total: total, paid: Math.max(0, total - balance), balance: balance };
+  const rawPaid = registration.versato_centesimi;
+  const paid = rawPaid !== '' && rawPaid != null && Number.isFinite(Number(rawPaid)) ? Math.max(0, Number(rawPaid)) : Math.max(0, Number(paidFallback) || 0);
+  return { total: total, paid: paid, balance: balance };
 }
 
 function statoPagamento_(registration, paid) {

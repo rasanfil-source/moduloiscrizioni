@@ -3,6 +3,34 @@ defined( 'ABSPATH' ) || exit;
 
 /** Quote individuali e attribuzioni: nessuna ripartizione implicita dei versamenti storici. */
 final class MI_Payment_People {
+	/** Shared service fees are split equally in participant ID order; cents are never lost. */
+	public static function common_shares( array $registration, array $people ) {
+		$cost = 0;
+		foreach ( json_decode( $registration['order_options_json'] ?? '[]', true ) ?: array() as $option ) $cost += (int) ( $option['quantity'] ?? 0 ) * (int) ( $option['unit_price_cents'] ?? 0 );
+		$ids = array_map( 'intval', array_column( $people, 'id' ) ); sort( $ids, SORT_NUMERIC );
+		$stored = json_decode( $registration['common_allocations_json'] ?? 'null', true );
+		if ( is_array( $stored ) ) {
+			$keys = array_map( 'intval', array_keys( $stored ) ); sort( $keys, SORT_NUMERIC );
+			if ( $keys !== $ids || array_sum( $stored ) !== $cost ) throw new InvalidArgumentException( 'Ripartizione dei servizi comuni incoerente.' );
+			foreach ( $stored as $amount ) if ( ! is_int( $amount ) || $amount < 0 ) throw new InvalidArgumentException( 'Importo individuale non valido.' );
+			return $stored;
+		}
+		$shares = array(); $count = count( $ids );
+		foreach ( $ids as $n => $id ) $shares[$id] = $count ? intdiv( $cost, $count ) + ( $n < $cost % $count ? 1 : 0 ) : 0;
+		return $shares;
+	}
+	public static function quote_totals( array $registration, array $people, array $items ) {
+		$prices = array_column( $items, 'unit_price_cents', 'ticket_type_code' );
+		$common = self::common_shares( $registration, $people );
+		$adjustments = json_decode( $registration['quote_adjustments_json'] ?? '{}', true ) ?: array();
+		$totals = array();
+		foreach ( $people as $person ) {
+			$id = (int) $person['id']; $total = (int) ( $prices[$person['ticket_type_code']] ?? 0 ) + (int) ( $common[$id] ?? 0 ) + (int) ( $adjustments[$id] ?? 0 );
+			foreach ( json_decode( $person['options_json'] ?? '[]', true ) ?: array() as $option ) $total += (int) ( $option['quantity'] ?? 0 ) * (int) ( $option['unit_price_cents'] ?? 0 );
+			$totals[$id] = $total;
+		}
+		return $totals;
+	}
 	/** Project percentage deposits after person-scoped price changes. Null means the plan is not percentage-based or quotes are not attributable. */
 	public static function projected_deposits( array $registration, array $position, array $deltas, $new_total ) {
 		$snapshot = json_decode( $registration['snapshot_json'] ?? '{}', true ) ?: array();
@@ -70,10 +98,11 @@ final class MI_Payment_People {
 		$snapshot = json_decode( $registration['snapshot_json'] ?? '{}', true ) ?: array();
 		$deposit_plan = 'DEPOSIT_BALANCE' === ( $registration['economic_mode'] ?? '' );
 		$rows = array(); $sum = 0; $issue = '';
+		$totals = self::quote_totals( $registration, $people, $items );
 		foreach ( $people as $person ) {
-			$total = (int) ( $prices[$person['ticket_type_code']] ?? 0 );
+			$total = $totals[(int) $person['id']];
 			if ( ! array_key_exists( $person['ticket_type_code'], $prices ) ) $issue = 'La quota individuale non è disponibile. Verifica le quote della prenotazione.';
-			foreach ( json_decode( $person['options_json'] ?? '[]', true ) ?: array() as $option ) $total += (int) ( $option['quantity'] ?? 0 ) * (int) ( $option['unit_price_cents'] ?? 0 );
+			if ( $total < 0 ) $issue = 'La quota individuale non può essere negativa.';
 			$sum += $total;
 			$rows[(int) $person['id']] = array( 'id' => (int) $person['id'], 'name' => trim( $person['first_name'] . ' ' . $person['last_name'] ), 'total' => $total, 'deposit' => 0, 'paid' => 0, 'active' => 'ACTIVE' === $person['status'] );
 		}

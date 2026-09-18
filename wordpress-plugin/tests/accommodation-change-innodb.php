@@ -40,3 +40,11 @@ check($r instanceof WP_Error,'Errore database ignorato');check($before===$wpdb->
 $free=json_encode(['event'=>['options'=>$definitions,'pricing_mode'=>'ZERO']]);$wpdb->query($wpdb->prepare("UPDATE wp_mi_registrations SET snapshot_json=%s,economic_mode='NO_PAYMENT',total_cents=0,initial_due_cents=0,balance_cents=0 WHERE id=31",$free));
 $data['people']=[['code'=>'AUTO31','number'=>1]];$p=MI_Management_Service::change_accommodation(42,$data);check($p['orders'][0]['after_total']===0&&$p['orders'][0]['delta']===0,'Evento gratuito ha acquisito un dovuto');
 echo "Cambio unico: anteprima senza scritture, quote storiche e rettifiche, atomicità multi-iscrizione, retry, conflitto pagamenti e rimborso manuale verificati.\n";
+$none=json_encode(['event'=>['options'=>$definitions,'pricing_mode'=>'NONE','participant_extra_scope'=>'ALL']]);
+$wpdb->query($wpdb->prepare("UPDATE wp_mi_registrations SET snapshot_json=%s,economic_mode='FULL_PAYMENT',total_cents=7000,initial_due_cents=7000,balance_cents=0 WHERE id=31",$none));
+$data=['people'=>[['code'=>'AUTO31','number'=>1]],'type'=>'alloggio-tripla','number'=>'','reason'=>'Tariffa per servizi'];
+$preview=MI_Management_Service::change_accommodation(42,$data);
+check(isset($preview['version'])&&$preview['orders'][0]['after_total']===6000,'Tariffa NONE non gestita');
+sleep(2);
+$saved=MI_Management_Service::change_accommodation(42,$data,$preview['version'],'wp_7_12345678-1234-4234-8234-123456781006');
+check(!empty($saved['saved']),'Il trascorrere dei secondi invalida una anteprima invariata');

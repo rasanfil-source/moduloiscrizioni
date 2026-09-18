@@ -42,10 +42,8 @@ Il payload originale delle iscrizioni resta disponibile nelle strutture esistent
 
 Deploy del 9 settembre 2026: plugin WordPress 3.25.1 e Web App Apps Script versione 64, sul collegamento esistente. Verificati salvataggio operativo, pagamento unico e modifica Sheet → MySQL. Due attivatori Google avviano il cron e le proiezioni ogni cinque minuti. Il recupero WordPress è stato corretto e collaudato: 38 repliche sincronizzate, nessuna pendente. Stato e verifiche aggiornate in [Passaggio MySQL](docs/PASSAGGIO_MYSQL.md).
 
-Si conservano le tre versioni più recenti disponibili per famiglia di artefatti e tre note di rilascio. La documentazione di sviluppo superata è stata rimossa; la cronologia Git resta invariata.
+Le guide sostituite, le vecchie note di rilascio e i verbali superati sono stati rimossi. Restano il manuale operativo aggiornato; la cronologia Git resta invariata.
 
-- [Architettura operativa](docs/ARCHITETTURA_SEGRETERIA_SHEETS.md)
-- [Guida operatore](docs/GUIDA_OPERATORE.md)
-- [Installazione e verifiche](docs/rilascio-3.25.1.md)
+- [Manuale del segretario](docs/manuale-segretario/Manuale_del_segretario.docx)
 - [Schema logico](docs/SCHEMA_DATI.md)
 - [Contratto dell'interfaccia](UX-CONTRACT.md)

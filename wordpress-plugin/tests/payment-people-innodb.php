@@ -28,9 +28,11 @@ check(!empty(MI_Payment_Ledger::save(1,$refund)['saved']),'rimborso individuale'
 $detail=MI_Payment_Ledger::detail(1)['saldo'];$people=array_column($detail['individual']['people'],null,'id');
 check($people[1]['paid']===10000&&$people[2]['paid']===25000&&$people[2]['balance']===5000,'rimborso attribuito solo alla persona scelta');
 $refund_first=$refund;$refund_first['request_id']='wp_7_12345678-1234-4234-8234-123456789ab2';$refund_first['importo']='10';$refund_first['participant_ids']='[1]';
+$wpdb->update('wp_mi_registrations',['payment_deadline_at'=>'2020-01-01 00:00:00','expires_at'=>null],['id'=>1]);
 check(!empty(MI_Payment_Ledger::save(1,$refund_first)['saved']),'rimborso che riapre la caparra individuale');
 $reopened=$wpdb->get_row('SELECT status,expires_at,payment_deadline_at FROM wp_mi_registrations WHERE id=1',ARRAY_A);
 check($reopened['status']==='PENDING_PAYMENT'&&strtotime($reopened['expires_at'].' UTC')>time()&&$reopened['expires_at']===$reopened['payment_deadline_at'],'rimborso riaperto con scadenza futura coerente');
+check((int)$wpdb->get_var("SELECT COUNT(*) FROM wp_mi_registrations WHERE id=1 AND status='PENDING_PAYMENT' AND capacity_released_at IS NULL AND expires_at IS NOT NULL AND expires_at <= UTC_TIMESTAMP()")===0,'il cron non deve selezionare la prenotazione appena riaperta dopo rimborso');
 $refund['request_id']='wp_7_12345678-1234-4234-8234-123456789ac0';$refund['importo']='260';check(empty(MI_Payment_Ledger::save(1,$refund)['saved']),'rimborso superiore al versato personale rifiutato');
 $refund['request_id']='wp_7_12345678-1234-4234-8234-123456789ac1';$refund['importo']='10';$refund['participant_ids']='[1,2]';check(empty(MI_Payment_Ledger::save(1,$refund)['saved']),'rimborso ambiguo su più persone rifiutato');
 $full=MI_Payment_People::calculate(

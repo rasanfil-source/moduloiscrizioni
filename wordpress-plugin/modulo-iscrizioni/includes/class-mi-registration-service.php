@@ -388,7 +388,11 @@ final class MI_Registration_Service {
 				$wpdb->query( 'ROLLBACK' );
 				return new WP_Error( 'mi_sold_out', 'Posti esauriti.', array( 'status' => 409 ) );
 			}
-			$economic_summary = self::riepilogo_economico( $event, $selection['total_cents'] + $options_total, $status, count( $participants ) );
+			$quote_people = array(); $quote_items = array();
+			foreach ( $participants as $n => $person ) $quote_people[] = array( 'id' => $n + 1, 'ticket_type_code' => $person['ticket_type_code'], 'options_json' => wp_json_encode( $person['options'] ) );
+			foreach ( $selection['items'] as $item ) $quote_items[] = array( 'ticket_type_code' => $item['code'], 'unit_price_cents' => $item['unit_price_cents'] );
+			$quote_totals = MI_Payment_People::quote_totals( array( 'order_options_json' => wp_json_encode( $order_options ) ), $quote_people, $quote_items );
+			$economic_summary = self::riepilogo_economico( $event, $selection['total_cents'] + $options_total, $status, count( $participants ), $quote_totals );
 			// Una caparra nulla non deve creare un'attesa di pagamento impossibile da soddisfare.
 			if ( 'PENDING_PAYMENT' === $status && (int) $economic_summary['initial_due_cents'] < 1 ) $status = 'CONFIRMED';
 			$order_code = self::generate_order_code( $event_id, $event['title'] );
@@ -535,7 +539,7 @@ final class MI_Registration_Service {
 		return true;
 	}
 
-	public static function riepilogo_economico( $event, $total_cents, $status, $participant_count = 1 ) {
+	public static function riepilogo_economico( $event, $total_cents, $status, $participant_count = 1, $participant_totals = null ) {
 		$total_cents = max( 0, (int) $total_cents );
 		$mode = in_array( $event['economic_mode'] ?? '', array( 'REGISTRATION_ONLY', 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ? $event['economic_mode'] : 'REGISTRATION_ONLY';
 		$initial_due = 0;
@@ -544,7 +548,8 @@ final class MI_Registration_Service {
 			$initial_due = $total_cents;
 		} elseif ( in_array( $status, array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) && 'DEPOSIT_BALANCE' === $mode ) {
 			if ( 'FIXED' === strtoupper( (string) ( $event['deposit_mode'] ?? '' ) ) ) {
-				$initial_due = min( $total_cents, max( 0, (int) ( $event['deposit_fixed_cents'] ?? 0 ) ) * max( 0, (int) $participant_count ) );
+				$fixed = max( 0, (int) ( $event['deposit_fixed_cents'] ?? 0 ) );
+				$initial_due = is_array( $participant_totals ) ? array_sum( array_map( static function ( $total ) use ( $fixed ) { return min( max( 0, (int) $total ), $fixed ); }, $participant_totals ) ) : min( $total_cents, $fixed * max( 0, (int) $participant_count ) );
 			} else {
 				$percentage = min( 99, max( 1, absint( $event['deposit_percentage'] ?? 30 ) ) );
 				$initial_due = (int) round( $total_cents * $percentage / 100 );
@@ -1066,7 +1071,9 @@ final class MI_Registration_Service {
 				$event = self::public_event( $event_id, 'publish' !== get_post_status( $event_id ) );
 				if ( is_wp_error( $event ) ) throw new RuntimeException( 'Evento non disponibile.' );
 				$target = in_array( $event['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) && (int) $row['total_cents'] > 0 ? 'PENDING_PAYMENT' : 'CONFIRMED';
-				$economic = self::riepilogo_economico( $event, (int) $row['total_cents'], $target, $active_qty );
+				$position = MI_Payment_People::read( $row, array() );
+				if ( empty( $position['quotes_known'] ) ) throw new RuntimeException( 'Quote individuali non disponibili.' );
+				$economic = self::riepilogo_economico( $event, (int) $row['total_cents'], $target, $active_qty, array_column( $position['people'], 'total' ) );
 				$payment_deadline = self::registration_expiry( $event, $target, $now );
 				if ( 'PENDING_PAYMENT' === $target && ( ! $payment_deadline || strtotime( $payment_deadline . ' UTC' ) <= time() ) ) {
 					$hours = min( 168, max( 1, absint( $event['waitlist_offer_hours'] ?? 48 ) ) );

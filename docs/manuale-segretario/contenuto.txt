@@ -1,0 +1,225 @@
+Manuale del segretario per il portale Segreteria eventi
+Guida ai criteri di gestione e alle operazioni quotidiane
+Edizione del 18 settembre 2026 • Versione di riferimento 3.26.129
+
+Questo manuale accompagna chi prende in carico la segreteria: spiega come preparare un evento, gestire le iscrizioni, registrare i movimenti economici, comunicare con gli iscritti e chiudere il lavoro. Il criterio fondamentale è mantenere coerenti persone, posti e contabilità, verificando sempre l’esito delle operazioni.
+
+## Come utilizzare la guida
+Per il primo accesso leggi i criteri e i ruoli nelle pagine 2 e 3. Per le attività quotidiane consulta le procedure delle pagine 5–9. La pagina 10 contiene i controlli di fine turno e le indicazioni per il passaggio di consegne.
+I nomi dei comandi riprendono quelli del portale. Le funzioni disponibili dipendono dal ruolo e dalla configurazione dell’evento. I controlli di fine turno sono buone pratiche di segreteria.
+
+## Indice operativo
+2   I criteri adottati nel portale
+3   Accesso e responsabilità
+4   Creazione e pubblicazione di un evento
+5   Iscrizioni e lista di attesa
+6   Dati personali servizi camere e presenze
+7   Quote incassi rimborsi e storni
+8   Comunicazioni e consultazione degli iscritti
+9   Fogli Google stampe ed esportazioni
+10   Chiusura eventi problemi e consegne
+
+## Le quattro verifiche prima di confermare
+- Ho selezionato l’evento e la prenotazione corretti?
+- Sto modificando una persona, tutta la prenotazione o l’intero evento?
+- L’azione cambia posti, importi o destinatari di una comunicazione?
+- Dopo il salvataggio, il portale conferma il risultato atteso?
+===PAGE===
+# I criteri adottati nel portale
+## Un evento appartiene a un gruppo
+Il gruppo identifica l’organizzatore e raccoglie contatti e impostazioni comuni. Gli eventi possono ereditare logo, copertina e colori. Controllare il gruppo prima della pubblicazione evita di attribuire l’iniziativa o le comunicazioni all’organizzatore sbagliato.
+
+## La persona è distinta dalla prenotazione
+Una prenotazione può contenere più partecipanti. Nella vista Partecipanti ogni persona ha una riga; aprendo la scheda si ritrova anche la prenotazione comune. Il codice prenotazione è il riferimento operativo da usare nelle ricerche e nelle comunicazioni.
+Gli importi appartengono alla prenotazione: non devono essere sommati una volta per ogni partecipante. Per esempio, una famiglia di tre persone con un totale di 300 euro ha una sola prenotazione da 300 euro, non tre debiti da 300 euro.
+
+## Il dovuto è distinto dal denaro ricevuto
+La quota stabilisce quanto si deve pagare. Un incasso registra quanto è stato effettivamente ricevuto. Una rettifica cambia il dovuto; un rimborso registra una restituzione. Annullare una partecipazione non esegue automaticamente nessuna di queste due operazioni economiche.
+La pagina Stato e saldo mostra i movimenti registrati e le istruzioni previste: non esegue un addebito. Una comunicazione di pagamento dell’iscritto deve essere verificata prima di registrare l’incasso.
+
+## Il portale conserva il registro principale
+Il registro autorevole è nel sistema WordPress. Google Sheets riceve una replica dei dati. Le modifiche consentite sul foglio devono essere confrontate e confermate con Sincronizza nel portale: non basta cambiare una cella per aggiornare il registro principale.
+
+## Le correzioni devono restare comprensibili
+Le operazioni economiche e le variazioni rilevanti conservano uno storico. Scrivi motivi concreti, per esempio «rinuncia al pranzo concordata con il referente». Se una richiesta ha esito incerto, controlla la scheda e usa Riprova sulla stessa richiesta, quando disponibile, evitando di inserire subito una seconda operazione.
+
+## Si raccolgono soltanto i dati necessari
+Nome e cognome identificano ogni partecipante. Gli altri campi si attivano secondo le necessità dell’evento; il portale non richiede foto o scansioni di documenti. I collegamenti di gestione, le esportazioni e i fogli operativi vanno condivisi solo con chi deve svolgere il lavoro.
+===PAGE===
+# Accesso e responsabilità
+## Entrare nel portale
+1. Apri il collegamento Segreteria eventi fornito dall’organizzazione e accedi con il tuo account personale.
+2. Verifica gli eventi visibili. Se manca un evento, chiedi al responsabile di controllare le assegnazioni del tuo account.
+3. Scegli la sezione adatta: Gestione iscrizioni per il lavoro sulle prenotazioni; Gestisci eventi per la configurazione; Pagamenti per i movimenti; Comunicazioni per i messaggi.
+4. Alla fine del lavoro usa Esci, soprattutto su un computer condiviso.
+
+## Che cosa può fare ogni ruolo
+- Amministratore: amministra il portale e il sito WordPress, comprese le impostazioni tecniche.
+- Gestore iscrizioni: gestisce tutto il servizio iscrizioni, compresi gruppi e operatori, senza amministrare il resto del sito.
+- Gestore gruppo: crea e gestisce gli eventi dei gruppi assegnati.
+- Gestore evento: gestisce gli eventi assegnati; non crea nuovi eventi.
+Le operazioni distruttive e alcune configurazioni restano riservate ai ruoli globali autorizzati. La visibilità di una funzione non si amplia modificando un foglio Google o utilizzando l’account di un collega.
+
+## Gestire gruppi e operatori
+Chi è autorizzato entra in Gruppi per creare o aggiornare nome, immagini, colori e recapito del gruppo. Controlla con particolare attenzione l’indirizzo email: viene usato per i contatti e per gli avvisi all’organizzatore.
+In Operatori crea o aggiorna l’account, scegli il ruolo e assegna i gruppi o gli eventi pertinenti. Per interrompere l’accesso di un operatore usa la sospensione prevista. Le password non vengono mostrate dopo la creazione; non inserirle nelle note degli eventi o nel verbale delle consegne.
+
+## Avviare il turno
+Controlla eventi e scadenze, richieste da verificare, proposte di posto e pagamenti da registrare. Un elenco vuoto può dipendere da filtri o permessi: azzera i filtri e verifica l’evento prima di concludere che manchino dati.
+Se appare Accesso sospeso o account non abilitato, rivolgiti all’amministratore o al Gestore iscrizioni. Non creare una nuova iscrizione per tentare di recuperare una scheda non visibile.
+===PAGE===
+# Creazione e pubblicazione di un evento
+## Preparare la configurazione
+Apri Crea evento. Se parti da un evento modello, ricontrolla ogni campo: date, servizi, quote e recapiti possono essere diversi. La procedura è organizzata in otto passaggi.
+1. Come si chiama: inserisci titolo e gruppo organizzatore.
+2. Cosa devono sapere le persone: indica luogo, programma e informazioni utili; la presentazione ammette al massimo sei righe.
+3. Immagine: scegli la copertina facoltativa in JPG, PNG o WebP, entro 2 MB.
+4. Date e posti: imposta apertura e chiusura delle iscrizioni, data dell’evento, capienza e, se prevista, lista di attesa. Verifica anche la durata delle proposte di posto.
+5. Quali dati chiediamo: scegli i campi e gli obblighi. Decidi se i dati aggiuntivi devono essere raccolti per uno solo degli iscritti oppure per tutti.
+6. Domande particolari: configura le domande specifiche realmente necessarie; sono disponibili fino a quattro domande.
+7. Servizi e quote: imposta alloggio, servizi, tratte e quote. Scegli evento totalmente gratuito, quota uguale per tutti oppure calcolo in base ai servizi. Per i pagamenti scegli unica soluzione o caparra e saldo, percentuale della caparra e metodi accettati.
+8. Controlla e crea la bozza: rileggi il riepilogo, l’eventuale nome abbreviato del collegamento, la pagina di ritorno e il testo della conferma email.
+
+## Attivare e distribuire i collegamenti
+Salva con Crea la bozza e vai ad Attiva l’evento. La preparazione della bozza non pubblica l’evento e non invia email. Una bozza interrotta può essere riaperta da Gestisci eventi.
+Nella schermata conclusiva controlla i dati e usa il comando di pubblicazione. Verifica l’esito prima di distribuire il collegamento. Apri il modulo pubblico e controlla titolo, scadenze, campi, servizi e quote senza inserire dati reali di prova.
+Condividi il Link per le iscrizioni con i partecipanti e, quando previsto, il collegamento Stato e saldo. Il collegamento al foglio Google è destinato agli operatori autorizzati. La pubblicazione può accodare avvisi all’organizzazione secondo la modalità email attiva.
+
+## Modificare un evento esistente
+Apri l’evento in Gestisci eventi e usa la modifica prevista. Ricontrolla il riepilogo prima di Salva modifiche. Non presumere che una nuova quota corregga le prenotazioni già acquisite: le variazioni economiche concordate si gestiscono sulle singole prenotazioni con una rettifica motivata.
+===PAGE===
+# Iscrizioni e lista di attesa
+## Trovare una prenotazione
+1. In Gestione iscrizioni apri Riepilogo e gestione e seleziona l’evento.
+2. Alterna Partecipanti e Prenotazioni secondo il controllo da svolgere. Cerca anche il nome di una persona diversa dal referente.
+3. Combina i filtri per stato, richieste, camera, servizio e scadenza della proposta. La ricerca comprende anche le persone non ancora caricate sullo schermo.
+4. Apri la scheda e verifica codice, referente e componenti. Prima di modificare, accertati di non essere davanti a un omonimo.
+Per inserire una prenotazione usa Inserisci una nuova iscrizione e completa i dati richiesti. Controlla prima che non esista già, poi verifica il codice e lo stato restituiti.
+
+## Interpretare gli stati
+- Confermata: l’iscrizione risulta confermata; controlla comunque il riepilogo economico per l’eventuale saldo.
+- Da pagare: è richiesto un pagamento; verifica importo e scadenza nella scheda.
+- Lista d’attesa: il posto non è assegnato; non è richiesto il pagamento durante l’attesa.
+- Posto proposto: è stata formulata una proposta con scadenza; il pagamento non è richiesto prima dell’accettazione.
+- Annullata o Scaduta: non considerare la prenotazione una partecipazione attiva. Verifica separatamente eventuali importi già incassati.
+
+## Seguire la lista di attesa
+Quando si liberano posti il sistema può proporli alle prenotazioni in attesa. Valuta l’ordine di iscrizione e la disponibilità necessaria per la prenotazione e le tipologie richieste: non promettere un posto sulla sola base del numero totale libero.
+Il destinatario usa il collegamento della proposta per accettare o rifiutare entro il termine indicato. L’accettazione porta alla conferma o alla richiesta di pagamento secondo la configurazione; rifiuto o scadenza liberano la proposta per il successivo scorrimento.
+Controlla il filtro delle proposte in scadenza e l’effettivo invio della comunicazione. Non iscrivere nuovamente la stessa persona per aggirare la lista.
+
+## Annullare una partecipazione
+Apri la persona corretta e scegli Annulla partecipazione, poi conferma. Il posto viene liberato; se si annullano tutti i partecipanti, la prenotazione diventa annullata. Verifica gli altri componenti ancora attivi. Il partecipante può anche usare il collegamento personale di annullamento ricevuto nell’email.
+Eventuali modifiche del dovuto e restituzioni richiedono operazioni separate, descritte nella pagina 7.
+===PAGE===
+# Dati personali servizi camere e presenze
+## Correggere dati e richieste
+Apri la scheda, modifica i dati del partecipante e salva. Controlla il risultato prima di passare alla persona successiva. Se il portale segnala che i dati sono cambiati, ricarica e confronta la situazione aggiornata.
+Per una richiesta particolare, leggi il testo e svolgi il controllo necessario prima di segnarla come verificata. Se il testo viene modificato, la verifica precedente non vale più. Il filtro Richieste da verificare permette di ritrovare quelle ancora aperte.
+
+## Cambiare i servizi richiesti
+1. Nella scheda scegli Varia i servizi richiesti.
+2. Seleziona le opzioni disponibili per l’evento, inserisci il motivo e controlla le nuove scelte.
+3. Per i servizi comuni controlla la ripartizione proposta in parti uguali e modifica gli importi personali se necessario. Controlla l’anteprima economica e conferma: il cambio servizi aggiorna anche il dovuto e, quando previsto, le caparre individuali.
+4. Verifica servizi, totale e saldo risultanti. Usa Rettifica il dovuto della prenotazione soltanto per un ulteriore accordo economico, evitando di applicare due volte la stessa variazione.
+Questa procedura vale per i servizi configurati, non soltanto per l’alloggio. Distingui sempre la richiesta di una tipologia, per esempio una doppia, dall’assegnazione di una camera fisica, per esempio la camera 12.
+
+## Preparare e assegnare le camere
+Dal riepilogo usa Gestisci inventario camere anche prima dell’arrivo delle iscrizioni. Inserisci le camere e le capienze effettive; elimina soltanto camere vuote. Nella scheda del partecipante scegli una camera disponibile oppure lascia Non assegnata.
+Camere e occupanti mostra le persone assegnate e consente lo scambio tra due persone. Il sistema controlla la capienza e applica lo scambio insieme. Dopo una variazione verifica entrambe le camere e tutti gli occupanti interessati.
+L’assegnazione fisica non sostituisce una variazione del servizio richiesto. Il cambio sistemazione con anteprima aggiorna camera e dovuto insieme. Il Residuo totale comprende anche il saldo successivo, non soltanto la caparra da versare ora.
+
+## Rilevare le presenze effettive
+In Presenze effettive indica Presente o Assente soltanto dopo il controllo. Lascia Non rilevata finché non hai verificato: un’iscrizione confermata non dimostra la partecipazione effettiva.
+Il rapporto annuale per gruppo conta eventi distinti con presenza registrata. Prima di collegare iscrizioni attribuite alla stessa persona, controlla il riferimento mostrato e l’identità: il nome uguale o un contatto familiare condiviso non bastano.
+===PAGE===
+# Quote incassi rimborsi e storni
+## Registrare un incasso
+1. Apri la prenotazione e scegli Registra un movimento; in alternativa entra in Pagamenti e cerca la prenotazione.
+2. Controlla codice, persone, dovuto, saldo e storico per evitare duplicazioni.
+3. Seleziona le persone cui attribuire il movimento quando richiesto, quindi Incasso, importo, metodo, data, rata, riferimento e nota utile. Controlla l’attribuzione individuale proposta.
+4. Spunta la conferma di verifica e salva. Registra soltanto denaro di cui hai verificato la ricezione.
+5. Riapri lo storico e controlla il movimento e il nuovo saldo. Un salvataggio non prova da solo che la replica Google sia già completata.
+
+## Scegliere l’operazione corretta
+Incasso registra denaro ricevuto. Rimborso registra denaro effettivamente restituito. Storno serve a correggere un movimento registrato per errore, secondo i vincoli del modulo. Rettifica il dovuto della prenotazione modifica invece la quota concordata: scegli la persona interessata, indica il nuovo totale della prenotazione e scrivi il motivo. La differenza viene attribuita soltanto alla persona scelta.
+Prima di uno storno identifica il movimento errato e verifica l’effetto previsto; non usarlo per rappresentare una restituzione realmente avvenuta. Non correggere importi intervenendo direttamente sulle celle del foglio Google.
+
+## Leggere il saldo
+Per comprendere il riepilogo considera il dovuto aggiornato e quanto risulta effettivamente pagato al netto dei rimborsi e delle correzioni. La caparra è una parte del dovuto: averla versata non significa aver pagato tutto. Usa gli importi e le scadenze mostrati dal portale, senza ricostruire una nuova percentuale a mano.
+Esempio: dovuto di 300 euro, incassi di 100 euro, nessun rimborso. Restano 200 euro da versare. Se una variazione concordata porta il dovuto a 250 euro, la rettifica riduce il residuo a 150 euro; non produce un movimento di cassa.
+
+## Gestire una rinuncia con rimborso
+Esempio: una persona ha versato 300 euro e rinuncia; l’organizzazione concorda di trattenere 50 euro. Annulla la partecipazione, rettifica il dovuto a 50 euro con il motivo e registra un Rimborso di 250 euro soltanto quando è stato realmente restituito. Controlla infine storico e saldo.
+L’esempio illustra le operazioni, non stabilisce una politica di rimborso. Importi e condizioni devono essere concordati con il responsabile dell’evento.
+
+## Se non arriva la conferma
+Non creare subito un secondo incasso. Controlla lo storico; se disponibile, usa Riprova sulla stessa richiesta. Se persiste l’incertezza, comunica al responsabile codice prenotazione, importo, orario e messaggio d’errore.
+===PAGE===
+# Comunicazioni e consultazione degli iscritti
+## Controllare la modalità email
+- ANTEPRIMA prepara i messaggi senza inviarli.
+- PROVA indirizza le comunicazioni alla casella di test configurata.
+- OPERATIVO accoda gli invii ai destinatari reali per gli eventi pubblicati.
+Gli eventi non pubblicati restano in anteprima. Un messaggio preparato in precedenza non viene trasformato automaticamente in un invio reale. La configurazione tecnica della posta va affidata all’amministratore.
+
+## Inviare una comunicazione
+1. Apri Comunicazioni e seleziona l’evento.
+2. Scegli Informazioni prima dell’evento, Promemoria del saldo oppure un tipo personalizzato disponibile.
+3. Scrivi il messaggio. Puoi utilizzare grassetto, corsivo ed elenchi; il promemoria saldo usa il testo automatico personalizzato.
+4. Premi Controlla anteprima e destinatari. Rileggi testo, numero di email e indirizzi delle prenotazioni.
+5. Conferma l’accodamento soltanto dopo il controllo della modalità e dei destinatari. Verifica il messaggio d’esito.
+L’anteprima dura 30 minuti. Se cambiano modalità, destinatari, pubblicazione o saldo, preparane una nuova. Oltre 1000 prenotazioni la schermata si ferma: segnala il limite al responsabile, senza presumere un invio parziale.
+Accodato non significa consegnato; lo stato di invio non dimostra che il destinatario abbia letto il messaggio. In caso di mancata ricezione, fai controllare la Coda email dall’amministratore prima di ripetere l’invio.
+
+## A chi arrivano gli avvisi
+Per nuove iscrizioni e cancellazioni individuali, gli avvisi all’organizzatore vanno al recapito valido del gruppo; se manca, alla segreteria parrocchiale. Le conferme destinate agli iscritti restano separate.
+Pubblicazione, annullamento ed eliminazione dell’evento notificano gruppo e segreteria, senza duplicare lo stesso indirizzo. Il recapito personale del gestore non viene aggiunto automaticamente. Contatti, assistenza saldi e indirizzo di risposta seguono il recapito del gruppo.
+
+## Aiutare chi consulta stato e saldo
+Fornisci il collegamento pubblico dell’evento. La ricerca avviene per cognome e, in caso di omonimia, scelta del nome. Gli importi riguardano l’intera prenotazione; note amministrative e dati interni non sono esposti. Dove previsto, le opzioni transfer modificabili passano da anteprima e conferma; i servizi confermati bloccati richiedono l’intervento della segreteria.
+Se il versamento è già avvenuto ma manca dal riepilogo, verifica la ricezione e la registrazione prima di invitare a pagare di nuovo.
+===PAGE===
+# Fogli Google stampe ed esportazioni
+## Consultare il foglio operativo
+Apri il foglio Google dal collegamento dell’evento. Il documento raccoglie i dati replicati dal portale e le informazioni operative previste. Una modifica appena salvata nel portale può essere ancora in attesa di replica: non ricreare l’iscrizione perché non compare subito sul foglio.
+Se il foglio risulta non disponibile, utilizza il comando di ricreazione proposto al ruolo autorizzato o informa il responsabile. Evita di creare manualmente un foglio con lo stesso nome aspettandoti che venga collegato automaticamente.
+
+## Confermare modifiche fatte sul foglio
+1. Modifica soltanto le celle operative consentite, indicate in azzurro.
+2. Torna nel portale e avvia Sincronizza per l’evento.
+3. Leggi il confronto prima e dopo. Verifica persona, campo e valore proposto.
+4. Conferma le modifiche corrette e risolvi gli eventuali conflitti confrontando i dati aggiornati.
+5. Controlla il risultato nel portale e poi l’allineamento del foglio.
+Gli identificativi delle righe e gli importi non sono campi da correggere nelle celle operative. Se la stessa informazione è stata modificata anche da un collega nel portale, non sovrascrivere senza il confronto.
+
+## Stampare ed esportare elenchi
+Seleziona l’evento e imposta i filtri desiderati. Controlla che non siano rimasti filtri da una ricerca precedente. Stampa ed esportazione comprendono tutti i risultati filtrati, anche oltre le righe già visibili.
+Nel CSV individuale scegli le colonne utili, comprese le domande specifiche dell’evento. Il rapporto annuale dispone di una propria esportazione. I modelli Workspace permettono filtri per stato, camera, trasporto e nome o codice.
+Se i dati cambiano durante l’esportazione e il sistema chiede di ripetere, aggiorna il riepilogo e ricomincia. Non considerare completo un file precedente rispetto a modifiche appena eseguite.
+
+## Consegnare un elenco utilizzabile
+Prima della consegna controlla evento, data di estrazione, filtri, numero di persone e colonne. Per l’accoglienza può bastare l’elenco con i nomi; per le camere servono le assegnazioni. Evita di includere note personali o informazioni non necessarie al destinatario.
+Per i controlli economici usa la vista per prenotazione o il riepilogo pertinente: le righe delle persone non devono moltiplicare gli importi comuni. Conserva i file negli spazi autorizzati dall’organizzazione e aggiorna gli elenchi quando cambiano iscrizioni o assegnazioni.
+===PAGE===
+# Chiusura eventi problemi e consegne
+## Annullare o eliminare un evento
+Annulla evento conserva i dati e gestisce l’annullamento dell’iniziativa. L’eliminazione definitiva rimuove l’evento e i dati collegati: non è un modo ordinario per chiudere un’attività conclusa. Prima di intervenire concorda con il responsabile conservazione dei dati, comunicazioni e partite economiche aperte.
+Per l’eliminazione, il ruolo autorizzato apre Elimina definitivamente dal menu dell’evento, controlla il riepilogo e sceglie se cestinare il foglio Google oppure conservarlo come copia scollegata. Completa la conferma richiesta, compresa la riscrittura del titolo quando prevista.
+Attendi Evento eliminato. In caso di errore usa Riprendi eliminazione. Il foglio conservato non si sincronizza più; il cestino Drive non equivale alla distruzione definitiva. Nella versione di riferimento l’eliminazione accoda anche avvisi agli iscritti attivi e all’organizzazione secondo la modalità email: controllala prima dell’azione.
+
+## Affrontare i problemi più comuni
+- Evento o prenotazione non visibili: controlla selezione, filtri e permessi.
+- Dati cambiati da un altro operatore: ricarica la scheda e ripeti il confronto.
+- Importo inatteso: verifica prenotazione intera, servizi, rettifiche, incassi e rimborsi.
+- Email non ricevuta: controlla indirizzo e modalità; fai verificare la coda prima di reinviare.
+- Foglio non aggiornato: verifica replica e sincronizzazione; non duplicare il dato.
+- Operazione senza esito: controlla lo storico e riusa Riprova quando disponibile.
+Per l’assistenza comunica evento, codice prenotazione, comando usato, orario e messaggio d’errore. Non trasmettere password o copie complete di dati personali non necessarie.
+
+## Controlli di fine turno e passaggio di consegne
+Verifica salvataggi, movimenti, richieste aperte, proposte in scadenza e comunicazioni accodate. Confronta gli incassi registrati con i riscontri disponibili e annota le differenze da risolvere. Chiudi la sessione.
+Al successore consegna l’elenco degli eventi e dei responsabili, scadenze, accordi sulle quote, rimborsi da completare, richieste particolari aperte e anomalie note. Fai predisporre il suo account e i permessi; indica dove trovare collegamenti e documenti autorizzati senza copiare credenziali nel verbale.
+
+## Riferimenti per aggiornare il manuale
+Versione di riferimento 3.26.129. Le procedure riprendono il codice del portale. Riesaminare il manuale quando cambiano funzioni, ruoli o regole organizzative.

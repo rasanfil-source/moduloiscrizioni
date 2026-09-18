@@ -9,4 +9,4 @@ La versione corrente usa MySQL WordPress come registro autorevole. I fogli event
 - Pagamenti, correzioni e camere si salvano in MySQL. La replica firmata conserva identificativi e revisioni; il portale verifica permesso e ambito evento.
 - Nessun identificativo operativo o segreto deve essere inserito nei sorgenti.
 
-I sorgenti GS completi vengono generati con node tools/prepara-codice-workspace.mjs. Per installazione e collaudo vedere [3.25.1](../docs/rilascio-3.25.1.md).
+I sorgenti GS completi vengono generati con node tools/prepara-codice-workspace.mjs. Per installazione e collaudo vedere 3.25.1 (documento storico rimosso).

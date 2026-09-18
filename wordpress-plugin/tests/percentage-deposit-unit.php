@@ -19,4 +19,10 @@ $reopened = MI_Registration_Service::reopened_payment_deadline( array( 'event_id
 check_percentage( '2026-09-18 10:00:00' === $reopened, 'Una scadenza trascorsa non è stata sostituita con una nuova finestra.' );
 $future = MI_Registration_Service::reopened_payment_deadline( array( 'event_id' => 42, 'payment_deadline_at' => '2026-09-20 09:00:00', 'snapshot_json' => '{}' ), $now );
 check_percentage( '2026-09-20 09:00:00' === $future, 'Una scadenza ancora valida è stata modificata.' );
+foreach ( array( null, '', 'data non valida', '2026-09-17 10:00:00' ) as $deadline ) {
+	$actual = MI_Registration_Service::reopened_payment_deadline( array( 'payment_deadline_at' => $deadline, 'snapshot_json' => '{}' ), $now );
+	check_percentage( '2026-09-19 10:00:00' === $actual, 'Una scadenza assente, invalida o appena trascorsa deve ricevere 48 ore.' );
+}
+$capped = MI_Registration_Service::reopened_payment_deadline( array( 'snapshot_json' => json_encode( array( 'event' => array( 'waitlist_offer_hours' => 999 ) ) ) ), $now );
+check_percentage( '2026-09-24 10:00:00' === $capped, 'La finestra non deve superare 168 ore.' );
 echo "PASS: ricalcolo percentuale esatto e caparra fissa invariata.\n";

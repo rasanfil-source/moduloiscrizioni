@@ -12,7 +12,7 @@ La parrocchia è l'ente base. Ogni gruppo può avere logo, immagine, colori e co
 
 ## Stato
 
-Il repository contiene **3.26.85**. La versione ripristina le correzioni al modulo pubblico, alle email e alla gestione degli eventi gratuiti; durante la creazione di un evento, il modello può essere scelto fra tutti gli eventi in corso e fino a 10 eventi passati recenti. L’installazione WordPress resta separata dalla pubblicazione GitHub: [stato e istruzioni](docs/rilascio-3.26.85.md).
+Il codice locale contiene la versione **3.26.129**. La versione installata sul sito richiede una verifica separata. Il [manuale del segretario](docs/manuale-segretario/Manuale_del_segretario.docx) descrive criteri e procedure operative.
 
 Una bozza è una creazione interrotta: selezionandola da **Gestisci eventi** si riapre dal primo passaggio incompleto, già popolato con i dati salvati. Se la configurazione è completa, si apre direttamente **Attiva l’evento**, con gli indirizzi pronti per i pulsanti **Iscriviti** e, quando previsto, **Saldo**, oltre allo shortcode per WordPress e Divi. Workspace crea in modo idempotente un foglio operativo dedicato nella stessa cartella Drive di `DB_MODULI`, con nome `Evento ID - Titolo`, e ne restituisce il collegamento. La preparazione non pubblica l’evento e non invia email.
 
@@ -23,10 +23,8 @@ Il sistema non richiede fotografie o scansioni dei documenti. Se indispensabili 
 Il codice non memorizza IBAN, numeri completi di carta, link operativi, ID del foglio, URL di distribuzione, segreti o destinatari reali. L’aggiornamento del repository non equivale a un deploy: prima dell’uso occorre aggiornare il plugin, eseguire `configuraCartellaDiLavoro()` sul progetto Apps Script aggiornato e collaudare in ambiente autorizzato con sole identità fittizie.
 
 - [Progetto funzionale e tecnico](PROGETTO.md)
-- [Rilascio corrente](docs/rilascio-3.26.85.md)
+- [Manuale del segretario](docs/manuale-segretario/Manuale_del_segretario.docx)
 - [Schema dati](docs/SCHEMA_DATI.md)
-- [Allineamento tra documentazione e codice](docs/ALLINEAMENTO_CODICE_DOCUMENTAZIONE.md)
-- [Guida rapida per l'operatore](docs/GUIDA_OPERATORE.md)
 - [Contratto della gestione web](UX-CONTRACT.md)
 - [Configurazione evento dimostrativa](schema/evento.example.json)
 - [Prototipo statico](prototipo/README.md)

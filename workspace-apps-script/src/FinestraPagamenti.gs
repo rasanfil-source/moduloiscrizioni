@@ -5,5 +5,6 @@ function caricaSaldoFinestraPagamenti(codice) {
 }
 function serializzaMovimento_(r) {
   const amount = Number(r.importo_centesimi) || 0;
-  return { id:String(r.id_pagamento), data:r.data_effettiva instanceof Date ? r.data_effettiva.toISOString() : String(r.data_effettiva || ''), tipo:String(r.tipo_movimento), importo:['RIMBORSO','STORNO'].includes(String(r.tipo_movimento)) ? -amount : amount, metodo:String(r.fonte_pagamento || ''), riferimento:String(r.riferimento_esterno || ''), operatore:String(r.etichetta_operatore || ''), nota:String(r.nota_amministrativa || '') };
+  const tipo = String(r.tipo_movimento).toUpperCase();
+  return { id:String(r.id_pagamento), data:r.data_effettiva instanceof Date ? r.data_effettiva.toISOString() : String(r.data_effettiva || ''), tipo:tipo, importo:['RIMBORSO','STORNO'].includes(tipo) ? -amount : amount, metodo:String(r.fonte_pagamento || ''), riferimento:String(r.riferimento_esterno || ''), operatore:String(r.etichetta_operatore || ''), nota:String(r.nota_amministrativa || '') };
 }

@@ -91,7 +91,7 @@ final class MI_Management_Service {
 		}
 		$rooms = self::rooms( (int) $registration['event_id'] );
 		$review = self::request_review( $registration );
-		return array( 'ok' => true, 'registration_id' => (int) $registration['id'], 'event_id' => (int) $registration['event_id'], 'order_code' => $registration['order_code'], 'status' => $registration['status'], 'buyer' => array( 'first_name' => $registration['buyer_first_name'], 'last_name' => $registration['buyer_last_name'], 'email' => $registration['buyer_email'] ?? '', 'phone' => $registration['buyer_phone'] ?? '' ), 'special_requests' => self::visible_special_requests( $registration['special_requests'] ?? '' ), 'order_options' => self::decode( $registration['order_options_json'] ?? '' ), 'workspace_status' => $registration['workspace_status'] ?? '', 'workspace_synced_at' => $registration['workspace_synced_at'] ?? '', 'offer_expires_at' => $registration['waitlist_offer_expires_at'] ?? '', 'participants' => $participants, 'accommodations' => $rooms, 'features' => array( 'rooms' => '1' === get_post_meta( (int) $registration['event_id'], '_mi_overnight', true ) ), 'request_review' => $review, 'fields' => array_values( self::definitions( $registration ) ), 'version' => hash( 'sha256', wp_json_encode( array( $registration['status'], $participants, $rooms, $review, $registration['special_requests'] ?? '', $registration['total_cents'] ?? 0, $registration['initial_due_cents'] ?? 0, $registration['order_options_json'] ?? '' ) ) ) );
+		return array( 'ok' => true, 'registration_id' => (int) $registration['id'], 'event_id' => (int) $registration['event_id'], 'order_code' => $registration['order_code'], 'status' => $registration['status'], 'buyer' => array( 'first_name' => $registration['buyer_first_name'], 'last_name' => $registration['buyer_last_name'], 'email' => $registration['buyer_email'] ?? '', 'phone' => $registration['buyer_phone'] ?? '' ), 'special_requests' => self::visible_special_requests( $registration['special_requests'] ?? '' ), 'order_options' => self::decode( $registration['order_options_json'] ?? '', $registration['common_allocations_json'] ?? '', $registration['quote_adjustments_json'] ?? '' ), 'workspace_status' => $registration['workspace_status'] ?? '', 'workspace_synced_at' => $registration['workspace_synced_at'] ?? '', 'offer_expires_at' => $registration['waitlist_offer_expires_at'] ?? '', 'participants' => $participants, 'accommodations' => $rooms, 'features' => array( 'rooms' => '1' === get_post_meta( (int) $registration['event_id'], '_mi_overnight', true ) ), 'request_review' => $review, 'fields' => array_values( self::definitions( $registration ) ), 'version' => hash( 'sha256', wp_json_encode( array( $registration['status'], $participants, $rooms, $review, $registration['special_requests'] ?? '', $registration['total_cents'] ?? 0, $registration['initial_due_cents'] ?? 0, $registration['order_options_json'] ?? '' ) ) ) );
 	}
 	private static function attendance_map( $rows ) {
 		$map = array();
@@ -282,7 +282,7 @@ final class MI_Management_Service {
 				$options = array_values( array_filter( $person['options'], static function ( $option ) { return 0 !== strpos( $option['code'] ?? '', 'alloggio-' ); } ) );
 				$options[] = array( 'code' => $data['type'], 'name' => sanitize_text_field( $target['name'] ?? $type['name'] ), 'quantity' => 1, 'unit_price_cents' => (int) $target['price_cents'] );
 				$pricing = $snapshot['event']['pricing_mode'] ?? '';
-				if ( ! in_array( $pricing, array( 'FIXED', 'CALCULATED', 'ZERO' ), true ) ) throw new InvalidArgumentException( 'Modalità tariffaria non disponibile per ' . $code . '. Verifica l’iscrizione prima del cambio.' );
+				if ( ! in_array( $pricing, array( 'FIXED', 'CALCULATED', 'ZERO', 'NONE' ), true ) ) throw new InvalidArgumentException( 'Modalità tariffaria non disponibile per ' . $code . '. Verifica l’iscrizione prima del cambio.' );
 				$change = 'ZERO' === $pricing ? 0 : (int) $target['price_cents'] - (int) $old[0]['unit_price_cents']; $delta += $change;
 				$new_room = 1 === $type['capacity'] && '' === $number ? $type['prefix'] . $next++ : $shared;
 				if ( ! preg_match( '/^' . $type['prefix'] . '[1-9][0-9]{0,5}$/', $new_room ) ) throw new InvalidArgumentException( 'Numerazione esaurita.' );
@@ -306,7 +306,9 @@ final class MI_Management_Service {
 			$plan['orders'][] = array( 'id' => (int) $row['id'], 'code' => $code, 'before_total' => (int) $row['total_cents'], 'after_total' => $total, 'delta' => $delta, 'paid' => $paid, 'due' => $managed ? max( 0, $total - $paid ) : 0, 'refund' => $managed ? max( 0, $paid - $total ) : 0, 'changes' => $changes, 'deposits' => null !== $deposits ? $deposits : array() );
 		}
 		foreach ( $occupancy as $code => $count ) if ( $count > ( $inventory[$code]['capacity'] ?? $plan['new_rooms'][$code]['capacity'] ?? 0 ) ) throw new InvalidArgumentException( 'Capienza superata per ' . $code . '. Scegli un’altra camera.' );
-		$plan['version'] = hash( 'sha256', wp_json_encode( array( $fingerprint, $plan ) ) );
+		$stable_plan = $plan;
+		foreach ( $stable_plan['orders'] as &$order_plan ) { unset( $order_plan['changes']['expires_at'], $order_plan['changes']['payment_deadline_at'] ); } unset( $order_plan );
+		$plan['version'] = hash( 'sha256', wp_json_encode( array( $fingerprint, $stable_plan ) ) );
 		return $plan;
 	}
 	public static function change_accommodation( $event_id, $data, $version = null, $request_id = '' ) {
@@ -472,13 +474,21 @@ final class MI_Management_Service {
 		$history = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d ORDER BY id", $locked['id'] ), ARRAY_A ); self::check_database();
 		$position = MI_Payment_People::read( $locked, $history );
 		$individual = $person ? ( array_column( $position['people'], null, 'id' )[$person['id']] ?? null ) : null;
-		$deposits = self::percentage_deposits( $locked, $position, $person ? array( $person['id'] => $delta ) : array(), $total );
-		if ( null === $deposits ) { $deposits = array(); foreach ( $position['people'] as $row ) $deposits[$row['id']] = min( $row['deposit'], max( 0, $row['total'] + ( $person && $row['id'] === $person['id'] ? $delta : 0 ) ) ); }
+		$deltas = $person ? array( $person['id'] => $delta ) : array();
+		if ( ! $person ) {
+			$before = MI_Payment_People::common_shares( $locked, $position['people'] );
+			$after = MI_Payment_People::common_shares( array( 'order_options_json' => wp_json_encode( $options ), 'common_allocations_json' => isset( $data['allocations'] ) ? wp_json_encode( $data['allocations'] ) : ( 0 === $delta ? ( $locked['common_allocations_json'] ?? null ) : null ) ), $position['people'] );
+			foreach ( $after as $person_id => $share ) $deltas[$person_id] = $share - ( $before[$person_id] ?? 0 );
+		}
+		$deposits = self::percentage_deposits( $locked, $position, $deltas, $total );
+		foreach ( $position['people'] as $row ) if ( $row['total'] + ( $deltas[$row['id']] ?? 0 ) < 0 ) throw new InvalidArgumentException( 'La variazione rende negativa una quota personale. Controlla la ripartizione e le rettifiche.' );
+		if ( null === $deposits ) { $deposits = array(); foreach ( $position['people'] as $row ) $deposits[$row['id']] = min( $row['deposit'], max( 0, $row['total'] + ( $deltas[$row['id']] ?? 0 ) ) ); }
 		$initial = 'FULL_PAYMENT' === $locked['economic_mode'] ? $total : ( $position['quotes_known'] ? array_sum( $deposits ) : min( (int) $locked['initial_due_cents'], $total ) );
 		$paid = 0; foreach ( $history as $movement ) $paid += ( 'REFUND' === $movement['transaction_kind'] ? -1 : 1 ) * (int) $movement['amount_cents'];
 		$changes = array( 'total_cents' => $total, 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial );
-		if ( in_array( $locked['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) { $covered = self::covered_after_change( $locked, $position, $person ? array( $person['id'] => $delta ) : array(), $deposits, $paid, $initial ); $deadline = $covered ? null : MI_Registration_Service::reopened_payment_deadline( $locked ); $changes += array( 'status' => $covered ? 'CONFIRMED' : 'PENDING_PAYMENT', 'expires_at' => $deadline ); if ( null !== $deadline ) $changes['payment_deadline_at'] = $deadline; }
-		return array( 'participant_id' => $person ? $person['id'] : 0, 'before_options' => $current_options, 'after_options' => $options, 'reason' => sanitize_textarea_field( $data['reason'] ), 'delta' => $delta, 'before_total' => $individual && $position['quotes_known'] ? $individual['total'] : null, 'after_total' => $individual && $position['quotes_known'] ? $individual['total'] + $delta : null, 'credit' => $individual && $position['payments_known'] && $position['quotes_known'] ? max( 0, $individual['paid'] - $individual['total'] - $delta ) : null, 'changes' => $changes, 'deposits' => $position['quotes_known'] ? $deposits : array() );
+		if ( ! $person ) $changes['common_allocations_json'] = wp_json_encode( $after );
+		if ( in_array( $locked['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) { $covered = self::covered_after_change( $locked, $position, $deltas, $deposits, $paid, $initial ); $deadline = $covered ? null : MI_Registration_Service::reopened_payment_deadline( $locked ); $changes += array( 'status' => $covered ? 'CONFIRMED' : 'PENDING_PAYMENT', 'expires_at' => $deadline ); if ( null !== $deadline ) $changes['payment_deadline_at'] = $deadline; }
+		return array( 'participant_id' => $person ? $person['id'] : 0, 'allocations' => ! $person ? $after : null, 'person_deltas' => $deltas, 'before_options' => $current_options, 'after_options' => $options, 'reason' => sanitize_textarea_field( $data['reason'] ), 'delta' => $delta, 'before_total' => $individual && $position['quotes_known'] ? $individual['total'] : null, 'after_total' => $individual && $position['quotes_known'] ? $individual['total'] + $delta : null, 'credit' => $individual && $position['payments_known'] && $position['quotes_known'] ? max( 0, $individual['paid'] - $individual['total'] - $delta ) : null, 'changes' => $changes, 'deposits' => $position['quotes_known'] ? $deposits : array() );
 	}
 	public static function options_preview( $id, $data, $version ) {
 		if ( ! MI_Portal_Payments::allowed() ) return new WP_Error( 'mi_options_permission', 'Occorre il permesso di gestione dei pagamenti per modificare servizi e importi.' );
@@ -486,7 +496,7 @@ final class MI_Management_Service {
 			$registration = self::registration( $id ); $booking = self::booking( $registration );
 			if ( ! is_array( $data ) || ! hash_equals( $booking['version'], (string) $version ) ) throw new InvalidArgumentException( 'I dati sono cambiati: ricarica la scheda.' );
 			$plan = self::options_plan( $registration, $booking, $data );
-			return array_intersect_key( $plan, array_flip( array( 'delta', 'before_total', 'after_total', 'credit' ) ) );
+			return array_intersect_key( $plan, array_flip( array( 'delta', 'before_total', 'after_total', 'credit', 'allocations' ) ) );
 		} catch ( Throwable $error ) { return new WP_Error( 'mi_options_preview', $error->getMessage() ); }
 	}
 
@@ -537,24 +547,31 @@ final class MI_Management_Service {
 				if ( ! MI_Portal_Payments::allowed() || ! in_array( $locked['status'], array( 'CONFIRMED', 'PENDING_PAYMENT', 'CANCELLED', 'EXPIRED' ), true ) || ! in_array( $locked['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) || ! is_int( $data['total_cents'] ?? null ) || $data['total_cents'] < 0 || $data['total_cents'] > 100000000 || ! is_string( $data['reason'] ?? null ) || ! trim( $data['reason'] ) || mb_strlen( $data['reason'] ) > 500 ) throw new InvalidArgumentException( 'Indica un importo valido e il motivo della rettifica. È richiesto il permesso pagamenti.' );
 				$adjustment = array( 'before_total' => (int) $locked['total_cents'], 'before_initial' => (int) $locked['initial_due_cents'], 'before_balance' => (int) $locked['balance_cents'], 'after_total' => $data['total_cents'], 'reason' => sanitize_textarea_field( $data['reason'] ) );
 				if ( ! trim( $adjustment['reason'] ) ) throw new InvalidArgumentException( 'Indica il motivo della rettifica.' );
-				$initial = 'FULL_PAYMENT' === $locked['economic_mode'] ? $data['total_cents'] : min( (int) $locked['initial_due_cents'], $data['total_cents'] );
-				$changes = array( 'total_cents' => $data['total_cents'], 'initial_due_cents' => $initial, 'balance_cents' => $data['total_cents'] - $initial );
+				$history = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d ORDER BY id", $id ), ARRAY_A ); self::check_database();
+				$position = MI_Payment_People::read( $locked, $history );
+				if ( empty( $position['quotes_known'] ) ) throw new InvalidArgumentException( 'Verifica le quote individuali prima della rettifica.' );
+				$people = array_column( $position['people'], null, 'id' );
+				$person_id = (int) ( $data['participant_id'] ?? ( count( $people ) === 1 ? array_key_first( $people ) : 0 ) );
+				if ( ! isset( $people[$person_id] ) ) throw new InvalidArgumentException( 'Scegli la persona a cui attribuire la rettifica.' );
+				$delta = $data['total_cents'] - (int) $locked['total_cents'];
+				if ( $people[$person_id]['total'] + $delta < 0 ) throw new InvalidArgumentException( 'La rettifica supera la quota della persona scelta.' );
+				$allocations = self::decode( $locked['quote_adjustments_json'] ?? '{}' );
+				$allocations[$person_id] = (int) ( $allocations[$person_id] ?? 0 ) + $delta;
+				$deltas = array( $person_id => $delta );
+				$deposits = self::percentage_deposits( $locked, $position, $deltas, $data['total_cents'] );
+				if ( null === $deposits ) { $deposits = array(); foreach ( $people as $person ) $deposits[$person['id']] = min( $person['deposit'], max( 0, $person['total'] + ( $deltas[$person['id']] ?? 0 ) ) ); }
+				$initial = 'FULL_PAYMENT' === $locked['economic_mode'] ? $data['total_cents'] : array_sum( $deposits );
+				$changes = array( 'quote_adjustments_json' => wp_json_encode( $allocations ), 'total_cents' => $data['total_cents'], 'initial_due_cents' => $initial, 'balance_cents' => $data['total_cents'] - $initial );
 				if ( in_array( $locked['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ) {
-					$history = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d ORDER BY id", $id ), ARRAY_A ); self::check_database();
 					$paid = 0; foreach ( $history as $movement ) $paid += ( 'REFUND' === $movement['transaction_kind'] ? -1 : 1 ) * (int) $movement['amount_cents'];
-					$position = MI_Payment_People::read( $locked, $history ); $deltas = array(); $covered = null;
-					$active = array_values( array_filter( $position['people'], static function ( $person ) { return ! empty( $person['active'] ); } ) );
-					if ( 'FULL_PAYMENT' === $locked['economic_mode'] && $data['total_cents'] > (int) $locked['total_cents'] ) {
-						if ( 1 === count( $active ) ) $deltas[(int) $active[0]['id']] = $data['total_cents'] - (int) $locked['total_cents'];
-						else $covered = false;
-					}
-					if ( null === $covered ) $covered = MI_Payment_People::covered( $position, $locked['economic_mode'], $deltas );
-					if ( null === $covered ) $covered = $paid >= $initial;
+					$covered = self::covered_after_change( $locked, $position, $deltas, $deposits, $paid, $initial );
 					$changes['status'] = $covered ? 'CONFIRMED' : 'PENDING_PAYMENT';
 					$deadline = $covered ? null : MI_Registration_Service::reopened_payment_deadline( $locked );
 					$changes['expires_at'] = $deadline;
 					if ( null !== $deadline ) $changes['payment_deadline_at'] = $deadline;
 				}
+				foreach ( $deposits as $pid => $deposit ) if ( false === $wpdb->update( $wpdb->prefix . 'mi_participants', array( 'deposit_due_cents' => $deposit ), array( 'id' => $pid ) ) ) throw new RuntimeException( 'Caparra non aggiornata.' );
+				$adjustment['participant_id'] = $person_id; $adjustment['person_delta'] = $delta;
 				if ( false === $wpdb->update( $wpdb->prefix . 'mi_registrations', $changes, array( 'id' => $id ) ) ) throw new RuntimeException( 'Rettifica non salvata.' );
 			} elseif ( 'attendance' === $operation ) {
 				$person = array_column( $booking['participants'], null, 'id' )[$data['participant_id'] ?? 0] ?? null;
