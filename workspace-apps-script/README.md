@@ -9,4 +9,8 @@ La versione corrente usa MySQL WordPress come registro autorevole. I fogli event
 - Pagamenti, correzioni e camere si salvano in MySQL. La replica firmata conserva identificativi e revisioni; il portale verifica permesso e ambito evento.
 - Nessun identificativo operativo o segreto deve essere inserito nei sorgenti.
 
+Gli elenchi operativi, i report personalizzati e la ricerca nella sidebar leggono la copia locale sincronizzata: importi e stati possono non includere gli ultimi incassi, rimborsi o annullamenti. L'avviso compare anche nell'intestazione stampabile degli elenchi. Prima di richiedere pagamenti o rimborsi, verificare la posizione nel portale WordPress. Generare un report non forza una sincronizzazione e non certifica la freschezza dei dati.
+
+L'azione firmata `SCHEDA_GESTIONE_PORTALE` è ritirata e risponde `USE_MYSQL_MANAGEMENT`, come la corrispondente azione di modifica. Il portale corrente usa la gestione MySQL; il menu Sheets «Configura elenco operativo» è un percorso distinto e resta disponibile con l'avviso sopra.
+
 I sorgenti GS completi vengono generati con node tools/prepara-codice-workspace.mjs. Per installazione e collaudo vedere 3.25.1 (documento storico rimosso).

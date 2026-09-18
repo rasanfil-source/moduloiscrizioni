@@ -76,7 +76,7 @@ final class MI_Portal_Management {
 				$belongs = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}mi_participants WHERE id=%d AND registration_id=%d", $participant_id, $row['id'] ) );
 				if ( ! $belongs ) wp_send_json_error( array( 'message' => 'Partecipante non accessibile.' ), 403 );
 				$result = MI_Registration_Service::cancel_participant( $participant_id, 'WP#' . get_current_user_id() . ' · ' . wp_get_current_user()->display_name );
-				if ( ! is_wp_error( $result ) ) $result = array( 'ok' => true, 'saved' => true, 'message' => 'Partecipazione annullata. L’allineamento dei fogli può richiedere qualche istante.' );
+				if ( ! is_wp_error( $result ) ) $result = array( 'ok' => true, 'saved' => true, 'message' => 'Partecipazione annullata. Per gli eventi a pagamento, verifica il dovuto e usa «Rettifica il dovuto» se necessario: l’annullamento non riduce automaticamente gli importi. Eventuali rimborsi si registrano separatamente. L’allineamento dei fogli può richiedere qualche istante.' );
 			} elseif ( in_array( $operation, array( 'participant', 'room_save', 'room_delete', 'request_review', 'attendance', 'adjust_due', 'identity_link', 'change_options' ), true ) ) {
 				$request_id = sanitize_text_field( wp_unslash( $_POST['request_id'] ?? '' ) );
 				if ( ! preg_match( '/^[a-f0-9-]{36}$/i', $request_id ) ) wp_send_json_error( array( 'message' => 'Richiesta non valida.' ), 400 );
