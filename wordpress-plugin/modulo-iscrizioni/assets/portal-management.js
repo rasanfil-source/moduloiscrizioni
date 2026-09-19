@@ -63,7 +63,7 @@
       try{const response=await fetch(root.dataset.endpoint,{method:'POST',credentials:'same-origin',cache:'no-store',signal:abort.signal,body:new URLSearchParams({action:'mi_portal_management',nonce:root.dataset.nonce,event_id:event,order_code:order,operation,...data})});
       const json=await response.json();if(!response.ok||!json.success)throw new Error(json.data?.message||'Operazione non riuscita.');
       const sheetLink=root.querySelector('[data-open-sheet]');
-      if(sheetLink&&Object.hasOwn(json.data||{},'sheet_url')){const url=json.data?.sheet_url||'';sheetLink.hidden=!/^https:\/\/docs\.google\.com\/spreadsheets\//.test(url);if(!sheetLink.hidden)sheetLink.href=url;else sheetLink.removeAttribute('href');}
+      if(sheetLink&&Object.hasOwn(json.data||{},'sheet_url')){const url=json.data?.sheet_url||'';let valid=false;try{const link=new URL(url,location.href);valid=!!url&&link.origin===location.origin&&link.searchParams.has('mi_open_sheet');}catch(error){}sheetLink.hidden=!valid;if(!sheetLink.hidden)sheetLink.href=url;else sheetLink.removeAttribute('href');}
       if(['participant','room_save','room_delete','change_options','identity_link','adjust_due','attendance','attendance_bulk','request_review','cancel','sheet_save','room_swap','room_assign','event_room_save','event_room_delete'].includes(operation)&&json.data?.saved!==false)document.dispatchEvent(new Event('mi:operational-saved'));
       return json.data;}finally{clearTimeout(timeout);}
     }
@@ -269,7 +269,7 @@
             try{
               const plan=await request('accommodation_preview',{data:JSON.stringify(payload)});if(plan.saved===false)throw new Error(plan.message);
               changePreview={payload,version:plan.version};
-              previewHost.innerHTML='<h4>Anteprima del cambio</h4><ul>'+plan.people.map(p=>'<li>'+esc(p.name)+' · '+esc(p.code)+': '+esc(p.before_type)+' → '+esc(p.after_type)+'; '+esc(p.before_room||'senza codice')+' → <strong>'+esc(p.after_room)+'</strong></li>').join('')+'</ul><div class="mi-room-assignment-table" tabindex="0" role="region" aria-label="Variazione importi"><table><thead><tr><th>Iscrizione</th><th>Dovuto prima</th><th>Dovuto dopo</th><th>Differenza</th><th>Versato</th><th>Residuo totale</th><th>Da restituire</th></tr></thead><tbody>'+plan.orders.map(o=>'<tr><th scope="row">'+esc(o.code)+'</th><td>'+money(o.before_total)+'</td><td>'+money(o.after_total)+'</td><td>'+money(o.delta)+'</td><td>'+money(o.paid)+'</td><td>'+money(o.due)+'</td><td>'+money(o.refund)+'</td></tr>').join('')+'</tbody></table></div><p>Il residuo totale comprende anche il saldo successivo: non indica la sola caparra da versare ora. La conferma aggiorna sistemazione, camera e dovuto insieme. Non registra pagamenti né rimborsi. Se la caparra è percentuale viene ricalcolata sulle quote individuali; se è fissa resta invariata, entro la nuova quota.</p>';
+              previewHost.innerHTML='<h4>Anteprima del cambio</h4><ul>'+plan.people.map(p=>'<li>'+esc(p.name)+' · '+esc(p.code)+': '+esc(p.before_type)+' → '+esc(p.after_type)+'; '+esc(p.before_room||'senza codice')+' → <strong>'+esc(p.after_room)+'</strong></li>').join('')+'</ul><div class="mi-room-assignment-table" tabindex="0" role="region" aria-label="Variazione importi"><table><thead><tr><th>Iscrizione</th><th>Dovuto prima</th><th>Dovuto dopo</th><th>Differenza</th><th>Versato</th><th>Residuo totale</th><th>Da restituire</th></tr></thead><tbody>'+plan.orders.map(o=>'<tr><th scope="row">'+esc(o.code)+'</th><td>'+money(o.before_total)+'</td><td>'+money(o.after_total)+'</td><td>'+money(o.delta)+'</td><td>'+money(o.paid)+'</td><td>'+(o.due===null?'Da verificare':money(o.due))+'</td><td>'+(o.refund===null?'Da verificare':money(o.refund))+'</td></tr>').join('')+'</tbody></table></div><p>Il residuo totale comprende anche il saldo successivo: non indica la sola caparra da versare ora. La conferma aggiorna sistemazione, camera e dovuto insieme. Non registra pagamenti né rimborsi. Se la caparra è percentuale viene ricalcolata sulle quote individuali; se è fissa resta invariata, entro la nuova quota.</p>';
               previewButton.hidden=true;confirmButton.hidden=false;actionStatus.textContent='Anteprima pronta';
               say('Anteprima pronta. Verifica camere e importi prima di confermare.');
             }catch(error){say('Anteprima non disponibile. '+error.message);}finally{busy=false;controls.forEach(el=>el.disabled=false);}
@@ -483,6 +483,7 @@
           pending=pending||{operation:'sheet_save',data:JSON.stringify(changes),request_id:crypto.randomUUID()};say('Sincronizzazione…');
           try{
             const saved=await request('sheet_save',pending);
+            if(saved.ack_pending)throw new Error(saved.message);
             if(saved.saved===false){if(saved.rejected){pending=null;say(saved.message);button.textContent='Rileggi le modifiche';button.onclick=syncSheet;return;}throw new Error(saved.message);}
             pending=null;busy=false;await summary();say(saved.message+' Il foglio si aggiornerà dopo la replica.');
           }catch(error){say(error.message);button.textContent='Riprova la stessa sincronizzazione';}

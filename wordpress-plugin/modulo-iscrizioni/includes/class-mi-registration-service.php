@@ -1,6 +1,7 @@
 <?php
 
 defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/class-mi-option-rules.php';
 require_once __DIR__ . '/class-mi-payment-people.php';
 
 final class MI_Registration_Service {
@@ -156,7 +157,7 @@ final class MI_Registration_Service {
 			'pricing_mode'     => (string) get_post_meta( $event_id, '_mi_pricing_mode', true ),
 			'fixed_price_cents'=> max( 0, (int) get_post_meta( $event_id, '_mi_fixed_price_cents', true ) ),
 			'economic_mode'    => (string) ( get_post_meta( $event_id, '_mi_economic_mode', true ) ?: 'REGISTRATION_ONLY' ),
-			'operational_profile' => MI_Field_Schema::sanitize_operational_profile( get_post_meta( $event_id, '_mi_operational_profile', true ) ),
+			'operational_profile' => MI_Field_Schema::resolved_operational_profile( $event_id ),
 			'deposit_percentage' => min( 99, max( 1, absint( get_post_meta( $event_id, '_mi_deposit_percentage', true ) ?: 30 ) ) ),
 			'deposit_mode'       => 'FIXED' === strtoupper( (string) get_post_meta( $event_id, '_mi_deposit_mode', true ) ) ? 'FIXED' : 'PERCENTAGE',
 			'deposit_fixed_cents'=> max( 0, (int) get_post_meta( $event_id, '_mi_deposit_fixed_cents', true ) ),
@@ -564,7 +565,7 @@ final class MI_Registration_Service {
 		return array( 'mode' => (string) $registration['economic_mode'], 'total_cents' => (int) $registration['total_cents'], 'initial_due_cents' => (int) $registration['initial_due_cents'], 'balance_cents' => (int) $registration['balance_cents'], 'payment_methods' => is_array( $payment_methods ) ? $payment_methods : array() );
 	}
 
-	public static function sync_workspace( $registration_id ) {
+	public static function sync_workspace( $registration_id, $force = false ) {
 		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( MI_Event_Deletion::registration_event( $registration_id ) ); if ( is_wp_error( $lease ) ) return 'PENDING'; }
 		global $wpdb;
 		$registration_id = absint( $registration_id );
@@ -576,7 +577,7 @@ final class MI_Registration_Service {
 		if ( ! $registration ) {
 			return 'UNAVAILABLE';
 		}
-		if ( 'SYNCED' === $registration['workspace_status'] ) {
+		if ( ! $force && 'SYNCED' === $registration['workspace_status'] ) {
 			return 'SYNCED';
 		}
 		// Ripetere il payload completo: una vecchia ricevuta non prova la replica dei movimenti nuovi.
@@ -1373,7 +1374,7 @@ final class MI_Registration_Service {
 				return new WP_Error( 'mi_option_limit', 'Quantità opzione superiore al limite.', array( 'status' => 400 ) );
 			}
 			if ( $quantity ) {
-				$group = (string) ( $allowed[$code]['choice_group'] ?? ( 0 === strpos( $code, 'alloggio-' ) ? 'alloggio' : '' ) );
+				$group = MI_Option_Rules::choice_group( $allowed[$code] );
 				if ( $group && isset( $choice_groups[$group] ) ) return new WP_Error( 'mi_option_alternative', 'Scegli una sola voce per il gruppo ' . $group . '.', array( 'status' => 400 ) );
 				if ( $group ) $choice_groups[$group] = true;
 				$result[] = array( 'code' => $code, 'name' => sanitize_text_field( $allowed[ $code ]['name'] ), 'quantity' => $quantity, 'unit_price_cents' => max( 0, (int) $allowed[ $code ]['price_cents'] ) );

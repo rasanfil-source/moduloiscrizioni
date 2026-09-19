@@ -48,6 +48,7 @@ verify_position( ! MI_Portal::is_free_configuration( array() ), 'Incomplete draf
 verify_position( ! MI_Portal::is_free_configuration( array( 'pricing_mode' => 'CALCULATED', 'ticket_types' => array( array( 'price_cents' => 0 ), array( 'price_cents' => 100 ) ) ) ), 'Mixed ticket prices are not free' );
 echo "Situazione economica corrente, lettura in blocco e gratuità verificati.\n";
 
+function get_post_meta($id,$key,$single=true){return $key==='_mi_options'?[]:'';}
 class MI_Access { static function can_access_event( $id ) { return 42 === $id; } }
 class MI_Portal_Management { static function allowed() { return true; } }
 class MI_Shortcode { static function url_iscrizione( $id ) { return 'https://example.invalid/registration'; } }
@@ -57,14 +58,14 @@ class SummaryDatabase {
 	public $prefix = 'wp_', $last_error = '', $scope = 'ONE', $status = 'CONFIRMED';
 	function prepare( $sql, ...$args ) { return $sql; }
 	function get_results( $sql, $format ) {
-		if ( str_contains( $sql, 'SELECT * FROM wp_mi_registrations' ) ) return array( array( 'id'=>1, 'order_code'=>'TEST', 'buyer_first_name'=>'Persona', 'buyer_last_name'=>'Prova', 'status'=>$this->status, 'total_cents'=>10000, 'economic_mode'=>'FULL_PAYMENT', 'snapshot_json'=>json_encode( array( 'event'=>array( 'participant_extra_scope'=>$this->scope, 'participant_fields'=>array( array( 'key'=>'phone', 'required'=>true ) ) ) ) ) ) );
-		if ( str_contains( $sql, 'SELECT p.id,p.registration_id' ) ) return array( array( 'id'=>1, 'registration_id'=>1, 'status'=>'CANCELLED', 'extra_json'=>'{}', 'room_code'=>'' ), array( 'id'=>2, 'registration_id'=>1, 'status'=>'ACTIVE', 'extra_json'=>'{}', 'room_code'=>'' ) );
+		if ( str_contains( $sql, 'SELECT * FROM wp_mi_registrations' ) ) return array( array( 'id'=>1, 'event_id'=>42, 'order_code'=>'TEST', 'buyer_first_name'=>'Persona', 'buyer_last_name'=>'Prova', 'status'=>$this->status, 'total_cents'=>10000, 'economic_mode'=>'FULL_PAYMENT', 'snapshot_json'=>json_encode( array( 'event'=>array( 'participant_extra_scope'=>$this->scope, 'participant_fields'=>array( array( 'key'=>'phone', 'required'=>true ) ) ) ) ) ) );
+		if ( str_contains( $sql, 'SELECT p.id,p.registration_id' ) ) return array( array( 'id'=>1, 'registration_id'=>1, 'first_name'=>'Persona', 'last_name'=>'Uno', 'ticket_type_code'=>'base', 'options_json'=>'[]', 'status'=>'CANCELLED', 'extra_json'=>'{}', 'room_code'=>'' ), array( 'id'=>2, 'registration_id'=>1, 'first_name'=>'Persona', 'last_name'=>'Due', 'ticket_type_code'=>'base', 'options_json'=>'[]', 'status'=>'ACTIVE', 'extra_json'=>'{}', 'room_code'=>'' ) );
 		return array();
 	}
 }
 $wpdb = new SummaryDatabase();
 $summary = MI_Management_Service::summary( 42 );
-verify_position( $summary['items'][0]['participants'] === 1 && $summary['items'][0]['missing'] === 0, 'Cancelled first participant does not transfer required fields to second person' );
+verify_position( $summary['items'][0]['participants'] === 1 && $summary['items'][0]['missing'] === 1, 'Shared required fields transfer to the first active participant' );
 verify_position( $summary['items'][0]['collectible'], 'Confirmed unpaid booking is collectible' );
 $wpdb->scope = 'ALL'; $wpdb->status = 'WAITLISTED';
 $summary = MI_Management_Service::summary( 42 );

@@ -81,7 +81,7 @@ function allineaBaseConVista_(sheet, vista) {
   const confirmed = Object.create(null);
   pending.changes.forEach(change=>{
     const id=JSON.stringify([change.order_code,change.number]), values=incoming[id];
-    if (values && Object.prototype.hasOwnProperty.call(values,change.key) && String(values[change.key]??'')===change.after) {
+    if (values && Object.prototype.hasOwnProperty.call(values,change.key) && normalizzaTesto_(values[change.key],5000)===change.after) {
       if (!confirmed[id]) confirmed[id]={};
       confirmed[id][change.key]=change.after;
     }
@@ -107,4 +107,76 @@ function leggiModificheEventoMysql_(payload) {
     if (!result.initialized) throw new Error('Aggiorna il foglio evento prima di sincronizzarlo.');
     return {ok:true,changes:result.changes,errors:result.errors};
   } finally {lock.releaseLock();}
+}
+
+/** Signed MySQL receipts normalize only the submitted cell, never a newer edit.
+ * Keep the base unchanged: only the returning canonical view acknowledges it.
+ */
+function confermaModificheFoglio_(payload) {
+  const eventId=String(payload.event_id||''), receipts=payload.confirmations;
+  if (!/^[1-9][0-9]*$/.test(eventId) || !Array.isArray(receipts) || receipts.length>500) throw new Error('INVALID_SHEET_RECEIPT');
+  const lock=LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    const record=convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES)).find(r=>String(r.id_evento)===eventId);
+    if (!record || !record.id_foglio) throw new Error('EVENT_SHEET_MISSING');
+    const sheet=SpreadsheetApp.openById(String(record.id_foglio)).getSheetByName('Dati operativi');
+    if (!sheet) throw new Error('EVENT_SHEET_MISSING');
+    let updated=0;
+    const protection=sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET).find(p=>p.getDescription()==='MI_PROIEZIONE');
+    const editable=protection?protection.getUnprotectedRanges():[];
+    proteggiProiezione_(sheet); SpreadsheetApp.flush();
+    try {
+    const base=leggiBaseFoglio_(sheet.getParent()), columns=mappaColonneEvento_(sheet);
+    if (!base || !columns._ordine || !columns._numero) throw new Error('SHEET_BASE_MISSING');
+    const rows=sheet.getLastRow()>1?sheet.getRange(2,1,sheet.getLastRow()-1,sheet.getLastColumn()).getDisplayValues():[];
+    receipts.forEach(receipt=>{
+      if (!campoModificabileFoglio_(receipt.key) || !columns[receipt.key] || typeof receipt.accepted!=='string') return;
+      const identity=JSON.stringify([String(receipt.order_code),Number(receipt.number)]);
+      if (!base[identity] || String(base[identity][receipt.key]??'')!==receipt.before) return;
+      const matches=rows.map((row,index)=>({row,index})).filter(item=>String(item.row[columns._ordine-1])===String(receipt.order_code) && Number(item.row[columns._numero-1])===Number(receipt.number));
+      if (matches.length!==1) return;
+      const cell=sheet.getRange(matches[0].index+2,columns[receipt.key]);
+      if (cell.getDisplayValue()!==receipt.after) return;
+      cell.setNumberFormat('@').setValue(neutralizzaFormula_(receipt.accepted,5000)); updated++;
+    }); SpreadsheetApp.flush();
+    } finally {proteggiProiezione_(sheet,editable);}
+    return {ok:true,updated:updated};
+  } finally {lock.releaseLock();}
+}
+
+/** Verify the exact MySQL revisions, then refresh the event under the same lock. */
+function preparaAperturaFoglio_(payload) {
+  const eventId=String(payload.event_id||''), expected=payload.registrations;
+  if (!/^[1-9][0-9]*$/.test(eventId) || !Array.isArray(expected)) throw new Error('INVALID_OPEN_REQUEST');
+  const lock=LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    if (typeof eventoInEliminazione_==='function' && eventoInEliminazione_(eventId)) throw new Error('EVENT_DELETED');
+    const rows=convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(row=>String(row.id_evento)===eventId);
+    const codes=new Set(expected.map(row=>String(row.order_code)));
+    if (codes.size!==expected.length || rows.some(row=>!codes.has(String(row.codice_ordine)))) throw new Error('REPLICA_MISMATCH');
+    const needs=expected.filter(row=>{
+      const found=rows.filter(value=>String(value.codice_ordine)===String(row.order_code));
+      return found.length!==1 || String(found[0].workspace_revision)!==String(row.revision) || String(found[0].replica_completa_revision)!==String(row.revision);
+    }).map(row=>String(row.order_code));
+    if (needs.length) return {ok:true,ready:false,needs_sync:needs};
+    sincronizzaCamereMysql_(eventId,payload.rooms,payload.workspace_event_revision);
+    const revision=convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REPLICA_REVISIONS)).find(row=>String(row.id_evento)===eventId);
+    if (!revision || String(revision.revisione_camere)!==String(payload.workspace_event_revision)) throw new Error('REPLICA_MISMATCH');
+    if (payload.operational_profile !== undefined) aggiornaProfiloEventoMysql_(eventId, payload.operational_profile);
+    const result=aggiornaFoglioOperativoEventoConLock_({id_evento:eventId});
+    const complete=!!result.ok && !!result.esito && !result.esito.manuali && !result.esito.conflitti;
+    SpreadsheetApp.flush();
+    return {ok:true,ready:complete,event_sheet_complete:complete,operational_profile:payload.operational_profile,url_foglio:complete?result.url_foglio:undefined};
+  } finally {lock.releaseLock();}
+}
+
+/** Called only under the script lock, from an authenticated WordPress request. */
+function aggiornaProfiloEventoMysql_(eventId, profile) {
+  if (!['MINIMO','QUOTA_UNICA','SERVIZI_MULTIPLI','VIAGGIO_COMPLESSO'].includes(profile)) throw new Error('INVALID_OPERATIONAL_PROFILE');
+  const sheet=ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS);
+  const row=convertiRigheInOggetti_(sheet).find(value=>String(value.id_evento)===eventId);
+  if (!row) throw new Error('EVENT_NOT_FOUND');
+  if (sheet.getMaxColumns()<12) sheet.insertColumnsAfter(sheet.getMaxColumns(),12-sheet.getMaxColumns());
+  sheet.getRange(1,12).setValue('profilo_operativo');
+  sheet.getRange(row._row,12).setValue(profile);
 }

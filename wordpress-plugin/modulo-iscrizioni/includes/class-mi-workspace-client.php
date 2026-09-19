@@ -62,6 +62,7 @@ final class MI_Workspace_Client {
 		// a 30 secondi produce un falso "non raggiungibile" mentre Google continua.
 		// La replica gira nella coda: la formattazione Google può superare un minuto.
 		$timeout = 'PREPARA_PRODUZIONI_EVENTO' === $action ? 240 : ( 'APPEND_REGISTRATION' === $action ? 120 : ( 'ELIMINA_DATI_EVENTO' === $action ? 110 : ( 'LEGGI_MODIFICHE_FOGLIO' === $action ? 45 : ( 'INVIA_EMAIL_PROVA' === $action ? 30 : 15 ) ) ) );
+		if ( in_array( $action, array( 'PREPARA_APERTURA_FOGLIO', 'CONFERMA_MODIFICHE_FOGLIO' ), true ) ) $timeout = 180;
 		$response = wp_remote_post(
 			self::webapp_url(),
 			array(

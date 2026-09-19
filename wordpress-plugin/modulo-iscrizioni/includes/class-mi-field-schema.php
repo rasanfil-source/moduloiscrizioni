@@ -113,6 +113,20 @@ final class MI_Field_Schema {
 		);
 	}
 
+	public static function resolved_operational_profile( $event_id ) {
+		$stored = self::sanitize_operational_profile( get_post_meta( $event_id, '_mi_operational_profile', true ) );
+		if ( 'AUTOMATICO' !== $stored ) return $stored;
+		$fields = array_map( 'sanitize_key', (array) get_post_meta( $event_id, '_mi_participant_fields', true ) );
+		$document_fields = array( 'birth_date', 'document_type', 'document_number', 'document_issue_date', 'document_expiry_date', 'document_expiry', 'document_country', 'nationality' );
+		if ( array_intersect( $fields, $document_fields ) || '1' === get_post_meta( $event_id, '_mi_overnight_enabled', true ) ) return 'VIAGGIO_COMPLESSO';
+		$pricing = strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) );
+		$options = get_post_meta( $event_id, '_mi_options', true );
+		$options = is_array( $options ) ? $options : array();
+		if ( 'NONE' === $pricing || $options ) return 'SERVIZI_MULTIPLI';
+		if ( 'FIXED' === $pricing ) return 'QUOTA_UNICA';
+		return 'MINIMO';
+	}
+
 	public static function operational_profiles() {
 		return array(
 			'AUTOMATICO'       => 'Automatico in base ai dati e alle quote',

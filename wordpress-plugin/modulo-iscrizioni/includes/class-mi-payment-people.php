@@ -31,6 +31,15 @@ final class MI_Payment_People {
 		}
 		return $totals;
 	}
+	/** Keep the existing individual deposit, capped at the new personal quote. */
+	public static function retained_deposits( array $people, array $deltas ) {
+		$deposits = array();
+		foreach ( $people as $person ) {
+			$id = (int) $person['id'];
+			$deposits[$id] = min( (int) $person['deposit'], max( 0, (int) $person['total'] + (int) ( $deltas[$id] ?? 0 ) ) );
+		}
+		return $deposits;
+	}
 	/** Project percentage deposits after person-scoped price changes. Null means the plan is not percentage-based or quotes are not attributable. */
 	public static function projected_deposits( array $registration, array $position, array $deltas, $new_total ) {
 		$snapshot = json_decode( $registration['snapshot_json'] ?? '{}', true ) ?: array();

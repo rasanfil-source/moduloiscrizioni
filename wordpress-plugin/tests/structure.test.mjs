@@ -2202,7 +2202,7 @@ test('il wizard distingue salvataggio, anteprima e pubblicazione', async () => {
 	assert.doesNotMatch(portal, /Salva e continua la produzione|Produci pulsante e foglio Google/);
 	assert.match(portal, /Link per le iscrizioni/);
 	assert.match(portal, /Collegamento per il pulsante Saldo/);
-	assert.match(portal, /Apri il foglio Google/);
+	assert.match(portal, />Apri <span/);
 	assert.doesNotMatch(portal, /Codice e indicazioni per WordPress e Divi/);
   assert.match(portal, /_mi_registration_url/);
   assert.match(portal, /_mi_balance_url/);

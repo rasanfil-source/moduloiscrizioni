@@ -1,5 +1,6 @@
 <?php
 defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/class-mi-option-rules.php';
 require_once __DIR__ . '/class-mi-payment-people.php';
 
 /** Operational records in MySQL. Google receives a projection of these records. */
@@ -298,12 +299,21 @@ final class MI_Management_Service {
 			$person_deltas = array();
 			foreach ( $plan['people'] as $changed_person ) if ( $changed_person['registration_id'] === (int) $row['id'] ) $person_deltas[(int) $changed_person['id']] = (int) $changed_person['delta'];
 			$position = MI_Payment_People::read( $row, $movements );
+			$due = 0; $refund = 0;
+			foreach ( $position['people'] as $person_position ) {
+				$projected_total = (int) $person_position['total'] + (int) ( $person_deltas[(int) $person_position['id']] ?? 0 );
+				if ( $projected_total < 0 ) throw new InvalidArgumentException( 'Il cambio rende negativa una quota personale. Verifica prima le rettifiche del dovuto.' );
+				if ( empty( $person_position['active'] ) ) continue;
+				$due += max( 0, $projected_total - (int) $person_position['paid'] );
+				$refund += max( 0, (int) $person_position['paid'] - $projected_total );
+			}
+			$individual_known = ! empty( $position['quotes_known'] ) && ! empty( $position['payments_known'] );
 			$deposits = self::percentage_deposits( $row, $position, $person_deltas, $total );
-			if ( null === $deposits && 'DEPOSIT_BALANCE' === $row['economic_mode'] && ! empty( $position['quotes_known'] ) ) { $deposits = array(); foreach ( $position['people'] as $person_position ) $deposits[(int) $person_position['id']] = min( (int) $person_position['deposit'], max( 0, (int) $person_position['total'] + (int) ( $person_deltas[(int) $person_position['id']] ?? 0 ) ) ); }
+			if ( null === $deposits && 'DEPOSIT_BALANCE' === $row['economic_mode'] && ! empty( $position['quotes_known'] ) ) $deposits = MI_Payment_People::retained_deposits( $position['people'], $person_deltas );
 			$initial = 'FULL_PAYMENT' === $row['economic_mode'] ? $total : ( null !== $deposits ? array_sum( $deposits ) : min( (int) $row['initial_due_cents'], $total ) );
 			$changes = array( 'total_cents' => $total );
 			if ( $managed ) { $covered = self::covered_after_change( $row, $position, $person_deltas, null !== $deposits ? $deposits : array(), $paid, $initial ); $deadline = $covered ? null : MI_Registration_Service::reopened_payment_deadline( $row ); $changes += array( 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial, 'status' => $covered ? 'CONFIRMED' : 'PENDING_PAYMENT', 'expires_at' => $deadline ); if ( null !== $deadline ) $changes['payment_deadline_at'] = $deadline; }
-			$plan['orders'][] = array( 'id' => (int) $row['id'], 'code' => $code, 'before_total' => (int) $row['total_cents'], 'after_total' => $total, 'delta' => $delta, 'paid' => $paid, 'due' => $managed ? max( 0, $total - $paid ) : 0, 'refund' => $managed ? max( 0, $paid - $total ) : 0, 'changes' => $changes, 'deposits' => null !== $deposits ? $deposits : array() );
+			$plan['orders'][] = array( 'id' => (int) $row['id'], 'code' => $code, 'before_total' => (int) $row['total_cents'], 'after_total' => $total, 'delta' => $delta, 'paid' => $paid, 'due' => $managed ? ( $individual_known ? $due : null ) : 0, 'refund' => $managed ? ( $individual_known ? $refund : null ) : 0, 'individual_known' => $individual_known, 'changes' => $changes, 'deposits' => null !== $deposits ? $deposits : array() );
 		}
 		foreach ( $occupancy as $code => $count ) if ( $count > ( $inventory[$code]['capacity'] ?? $plan['new_rooms'][$code]['capacity'] ?? 0 ) ) throw new InvalidArgumentException( 'Capienza superata per ' . $code . '. Scegli un’altra camera.' );
 		$stable_plan = $plan;
@@ -458,7 +468,7 @@ final class MI_Management_Service {
 			$person = array_column( $booking['participants'], null, 'id' )[$data['participant_id']] ?? null;
 			if ( ! $person || 'ACTIVE' !== $person['status'] ) throw new InvalidArgumentException( 'Servizi individuali non modificabili per questa persona.' );
 		}
-		$is_accommodation = static function ( $definition ) { return 0 === strpos( sanitize_key( $definition['code'] ?? '' ), 'alloggio-' ) || 'alloggio' === sanitize_key( $definition['choice_group'] ?? '' ) || 'alloggio' === sanitize_key( $definition['category'] ?? '' ); };
+		$is_accommodation = static function ( $definition ) { return MI_Option_Rules::is_accommodation( (array) $definition ); };
 		$definitions = array_values( array_filter( (array) ( $snapshot['event']['options'] ?? array() ), static function ( $definition ) use ( $is_accommodation ) { return ! $is_accommodation( (array) $definition ); } ) );
 		$accommodation_codes = array_map( static function ( $definition ) { return sanitize_key( $definition['code'] ?? '' ); }, array_filter( (array) ( $snapshot['event']['options'] ?? array() ), $is_accommodation ) );
 		if ( $person ) foreach ( array_keys( $data['options'] ) as $option_code ) if ( in_array( sanitize_key( $option_code ), $accommodation_codes, true ) ) throw new InvalidArgumentException( 'Per cambiare alloggio o camera usa Cambia sistemazione.' );
@@ -482,7 +492,7 @@ final class MI_Management_Service {
 		}
 		$deposits = self::percentage_deposits( $locked, $position, $deltas, $total );
 		foreach ( $position['people'] as $row ) if ( $row['total'] + ( $deltas[$row['id']] ?? 0 ) < 0 ) throw new InvalidArgumentException( 'La variazione rende negativa una quota personale. Controlla la ripartizione e le rettifiche.' );
-		if ( null === $deposits ) { $deposits = array(); foreach ( $position['people'] as $row ) $deposits[$row['id']] = min( $row['deposit'], max( 0, $row['total'] + ( $deltas[$row['id']] ?? 0 ) ) ); }
+		if ( null === $deposits ) $deposits = MI_Payment_People::retained_deposits( $position['people'], $deltas );
 		$initial = 'FULL_PAYMENT' === $locked['economic_mode'] ? $total : ( $position['quotes_known'] ? array_sum( $deposits ) : min( (int) $locked['initial_due_cents'], $total ) );
 		$paid = 0; foreach ( $history as $movement ) $paid += ( 'REFUND' === $movement['transaction_kind'] ? -1 : 1 ) * (int) $movement['amount_cents'];
 		$changes = array( 'total_cents' => $total, 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial );
@@ -559,7 +569,7 @@ final class MI_Management_Service {
 				$allocations[$person_id] = (int) ( $allocations[$person_id] ?? 0 ) + $delta;
 				$deltas = array( $person_id => $delta );
 				$deposits = self::percentage_deposits( $locked, $position, $deltas, $data['total_cents'] );
-				if ( null === $deposits ) { $deposits = array(); foreach ( $people as $person ) $deposits[$person['id']] = min( $person['deposit'], max( 0, $person['total'] + ( $deltas[$person['id']] ?? 0 ) ) ); }
+				if ( null === $deposits ) $deposits = MI_Payment_People::retained_deposits( $people, $deltas );
 				$initial = 'FULL_PAYMENT' === $locked['economic_mode'] ? $data['total_cents'] : array_sum( $deposits );
 				$changes = array( 'quote_adjustments_json' => wp_json_encode( $allocations ), 'total_cents' => $data['total_cents'], 'initial_due_cents' => $initial, 'balance_cents' => $data['total_cents'] - $initial );
 				if ( in_array( $locked['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ) {
@@ -623,7 +633,7 @@ final class MI_Management_Service {
 			if ( $previous ) {
 				if ( ! hash_equals( $previous['request_hash'], $hash ) ) throw new InvalidArgumentException( 'Identificativo già utilizzato con dati diversi.' );
 				if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma non disponibile.' );
-				return array( 'ok' => true, 'saved' => true, 'replayed' => true, 'message' => 'Modifiche già sincronizzate.' );
+				return array( 'ok' => true, 'saved' => true, 'replayed' => true, 'confirmations' => 'SHEET_SYNC' === $source ? self::sheet_confirmations( $event_id, $changes ) : array(), 'message' => 'Modifiche già sincronizzate.' );
 			}
 			foreach ( $grouped as $code => $patches ) {
 				$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND order_code=%s FOR UPDATE", $event_id, $code ), ARRAY_A );
@@ -653,7 +663,8 @@ final class MI_Management_Service {
 					if ( isset( $seen[$identity] ) ) throw new InvalidArgumentException( 'La stessa cella compare più volte.' );
 					$seen[$identity] = true;
 					$current = in_array( $key, array( 'first_name','last_name','room' ), true ) ? $p[$key] : ( $p['fields'][$key] ?? '' );
-					if ( (string) $current !== $patch['before'] && (string) $current !== $patch['after'] ) throw new InvalidArgumentException( 'Conflitto in ' . $code . ', partecipante ' . $p['number'] . ', campo ' . $patch['key'] . '. Nessuna modifica applicata.' );
+					$accepted = 'room' === $key ? $patch['after'] : ( in_array( $key, array( 'first_name', 'last_name' ), true ) ? sanitize_text_field( $patch['after'] ) : sanitize_textarea_field( $patch['after'] ) );
+					if ( (string) $current !== $patch['before'] && (string) $current !== (string) $accepted ) throw new InvalidArgumentException( 'Conflitto in ' . $code . ', partecipante ' . $p['number'] . ', campo ' . $patch['key'] . '. Nessuna modifica applicata.' );
 					if ( ! isset( $updates[$p['number']] ) ) $updates[$p['number']] = array( 'number' => $p['number'], 'first_name' => $p['first_name'], 'last_name' => $p['last_name'], 'room' => $p['room'], 'fields' => array() );
 					if ( in_array( $key, array( 'first_name','last_name','room' ), true ) ) $updates[$p['number']][$key] = $patch['after'];
 					else $updates[$p['number']]['fields'][$key] = $patch['after'];
@@ -673,7 +684,29 @@ final class MI_Management_Service {
 			return new WP_Error( 'mi_sheet_save', 'Sincronizzazione non confermata. Riprova la stessa richiesta.' );
 		}
 		foreach ( $ids as $id ) try { MI_Registration_Service::accoda_iscrizione_workspace( $id ); } catch ( Throwable $error ) { /* Persistent queue retains the committed change. */ }
-		return array( 'ok' => true, 'saved' => true, 'message' => 'ROOM_ASSIGN' === $source ? 'Assegnazioni camere salvate. Aggiornamento del foglio accodato.' : count( $changes ) . ' celle sincronizzate.' );
+		return array( 'ok' => true, 'saved' => true, 'confirmations' => 'SHEET_SYNC' === $source ? self::sheet_confirmations( $event_id, $changes ) : array(), 'message' => 'ROOM_ASSIGN' === $source ? 'Assegnazioni camere salvate. Aggiornamento del foglio accodato.' : count( $changes ) . ' celle sincronizzate.' );
+	}
+	/** A receipt is emitted only while MySQL still contains this request's accepted value. */
+	private static function sheet_confirmations( $event_id, array $changes ) {
+		global $wpdb;
+		$bookings = array(); $receipts = array();
+		try {
+			foreach ( $changes as $change ) {
+				$code = $change['order_code'];
+				if ( ! isset( $bookings[$code] ) ) {
+					$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND order_code=%s", $event_id, $code ), ARRAY_A );
+					self::check_database(); if ( ! $row ) continue;
+					$bookings[$code] = self::booking( $row );
+				}
+				$booking = $bookings[$code]; $person = array_column( $booking['participants'], null, 'number' )[$change['number']] ?? null;
+				if ( ! $person ) continue;
+				$key = self::sheet_field_key( $change['key'], $booking, $person );
+				$expected = 'room' === $key ? $change['after'] : ( in_array( $key, array( 'first_name', 'last_name' ), true ) ? sanitize_text_field( $change['after'] ) : sanitize_textarea_field( $change['after'] ) );
+				$current = in_array( $key, array( 'first_name', 'last_name', 'room' ), true ) ? $person[$key] : ( $person['fields'][$key] ?? '' );
+				if ( (string) $current === (string) $expected ) $receipts[] = array_replace( $change, array( 'accepted' => (string) $current ) );
+			}
+		} catch ( Throwable $error ) { return array(); }
+		return $receipts;
 	}
 	private static function sheet_field_key( $key, $booking, $person ) {
 		if ( in_array( $key, array( 'first_name','last_name','room' ), true ) ) return $key;

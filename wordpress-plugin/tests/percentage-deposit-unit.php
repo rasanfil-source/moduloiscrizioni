@@ -26,3 +26,6 @@ foreach ( array( null, '', 'data non valida', '2026-09-17 10:00:00' ) as $deadli
 $capped = MI_Registration_Service::reopened_payment_deadline( array( 'snapshot_json' => json_encode( array( 'event' => array( 'waitlist_offer_hours' => 999 ) ) ) ), $now );
 check_percentage( '2026-09-24 10:00:00' === $capped, 'La finestra non deve superare 168 ore.' );
 echo "PASS: ricalcolo percentuale esatto e caparra fissa invariata.\n";
+$people=[['id'=>1,'total'=>10000,'deposit'=>3000],['id'=>2,'total'=>10000,'deposit'=>3000]];
+check_percentage(MI_Payment_People::retained_deposits($people,[1=>-8000,2=>5000])===[1=>2000,2=>3000],'Fixed deposits must cap independently and never grow with the quote.');
+check_percentage(MI_Payment_People::retained_deposits($people,[1=>-10000])===[1=>0,2=>3000],'One zero quote must not erase another person’s deposit.');

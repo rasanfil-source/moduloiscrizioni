@@ -24,6 +24,8 @@ function doPost(event) {
     if (envelope.action === 'SALDO_PAGAMENTO_PORTALE') return creaRispostaJson_(saldoPagamentoPortale_(envelope.payload));
     if (envelope.action === 'REGISTRA_PAGAMENTO_PORTALE') return creaRispostaJson_({ok:false,error:'USE_MYSQL_PAYMENT_LEDGER'});
     if (envelope.action === 'LEGGI_MODIFICHE_FOGLIO') return creaRispostaJson_(leggiModificheEventoMysql_(envelope.payload));
+    if (envelope.action === 'CONFERMA_MODIFICHE_FOGLIO') return creaRispostaJson_(confermaModificheFoglio_(envelope.payload));
+    if (envelope.action === 'PREPARA_APERTURA_FOGLIO') return creaRispostaJson_(preparaAperturaFoglio_(envelope.payload));
     if (envelope.action === 'SCHEDA_GESTIONE_PORTALE') return creaRispostaJson_({ok:false,error:'USE_MYSQL_MANAGEMENT'});
     if (envelope.action === 'AGGIORNA_GESTIONE_PORTALE') return creaRispostaJson_({ok:false,error:'USE_MYSQL_MANAGEMENT'});
     if (envelope.action === 'RIEPILOGO_GESTIONE_EVENTO') return creaRispostaJson_(riepilogoGestioneEvento_(envelope.payload));
@@ -250,7 +252,8 @@ function registraIscrizioneCentrale_(payload) {
 	  normalizzaTesto_(payload.marketing_accepted_at, 40),
 	  JSON.stringify(Array.isArray(payload.order_options) ? payload.order_options : []),
       workspaceRevision,
-      payload.paid_cents == null ? '' : Math.max(0, Math.round(Number(payload.paid_cents) || 0))
+      payload.paid_cents == null ? '' : Math.max(0, Math.round(Number(payload.paid_cents) || 0)),
+      '' // Cleared before writes; revision alone must not certify a partial replica.
     ];
     if (existing) registrations.getRange(existing._row, 1, 1, registrationValues.length).setValues([registrationValues]);
     else registrations.appendRow(registrationValues);
@@ -260,7 +263,7 @@ function registraIscrizioneCentrale_(payload) {
       sincronizzaCamereMysql_(eventId, payload.rooms, payload.workspace_event_revision);
       // Legacy overrides must not hide values now maintained by the canonical service.
       const stato = ottieniSchedaObbligatoria_(MI_SHEETS.OPERATIONAL_STATE);
-      convertiRigheInOggetti_(stato).filter(r => String(r.codice_ordine) === orderCode).sort((a,b) => b._row-a._row).forEach(r => stato.deleteRow(r._row));
+      eliminaRigheContigue_(stato, convertiRigheInOggetti_(stato).filter(r => String(r.codice_ordine) === orderCode));
     }
     const participantRows = participants.map(function (participant, index) {
       return [
@@ -282,7 +285,7 @@ function registraIscrizioneCentrale_(payload) {
       ];
     });
     const participantSheet = ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS);
-    convertiRigheInOggetti_(participantSheet).filter(function (row) { return String(row.codice_ordine) === orderCode; }).sort(function (a, b) { return b._row - a._row; }).forEach(function (row) { participantSheet.deleteRow(row._row); });
+    eliminaRigheContigue_(participantSheet, convertiRigheInOggetti_(participantSheet).filter(row => String(row.codice_ordine) === orderCode));
     participantSheet.getRange(participantSheet.getLastRow() + 1, 1, participantRows.length, participantRows[0].length).setValues(participantRows);
     const outbox = ottieniSchedaObbligatoria_(MI_SHEETS.EMAIL_OUTBOX);
     const message = convertiRigheInOggetti_(outbox).find(function (row) { return String(row.codice_ordine) === orderCode && String(row.tipo_modello) === 'REGISTRATION_CONFIRMATION'; });
@@ -293,13 +296,17 @@ function registraIscrizioneCentrale_(payload) {
     // originaria WAITLISTED. Le cancellazioni continuano invece a usare lo
     // stato dell'istantanea per non generare una nuova conferma.
     const originalStatus = ['CONFIRMED', 'PENDING_PAYMENT'].indexOf(currentStatus) >= 0 ? currentStatus : normalizzaValoreElenco_(snapshotData && snapshotData.status, ['PENDING_PAYMENT', 'CONFIRMED', 'WAITLISTED']) || currentStatus || 'CONFIRMED';
-    const messageValues = [message ? message.id_messaggio : creaIdentificativoOpaco_('msg'), neutralizzaFormula_(orderCode, 64), neutralizzaFormula_(originalRecipient, 254), 'REGISTRATION_CONFIRMATION', JSON.stringify({ order_code: orderCode, status: originalStatus }), 'PREVIEW', message && message.data_creazione ? message.data_creazione : new Date()];
+    const messageValues = [message ? message.id_messaggio : creaIdentificativoOpaco_('msg'), neutralizzaFormula_(orderCode, 64), neutralizzaFormula_(originalRecipient, 254), 'REGISTRATION_CONFIRMATION', JSON.stringify({ order_code: orderCode, status: originalStatus }), message ? message.stato : 'PREVIEW', message && message.data_creazione ? message.data_creazione : new Date()];
     if (message) outbox.getRange(message._row, 1, 1, messageValues.length).setValues([messageValues]); else outbox.appendRow(messageValues);
     sincronizzaPagamenti_(orderCode, payload.payments);
     const registrationComplete = convertiRigheInOggetti_(registrations).some(function (row) { return String(row.codice_ordine) === orderCode && String(row.chiave_idempotenza) === idempotencyKey && String(row.hash_revisione_evento) === revisionHash && String(row.snapshot_json) === snapshotJson; });
     const participantCount = convertiRigheInOggetti_(participantSheet).filter(function (row) { return String(row.codice_ordine) === orderCode; }).length;
     const outboxComplete = convertiRigheInOggetti_(outbox).some(function (row) { return String(row.codice_ordine) === orderCode && String(row.tipo_modello) === 'REGISTRATION_CONFIRMATION' && String(row.destinatario) === originalRecipient; });
     const complete = registrationComplete && participantCount === participants.length && outboxComplete;
+    if (complete) {
+      const saved = convertiRigheInOggetti_(registrations).find(row=>String(row.codice_ordine)===orderCode);
+      registrations.getRange(saved._row,registrationValues.length,1,1).setValues([[workspaceRevision]]);
+    }
     aggiungiControllo_('APPEND_REGISTRATION', 'REGISTRATION', orderCode, 'SUCCESS', 'WORDPRESS', 'REGISTRATION_RECORDED', 'WORDPRESS_PROXY');
     return { ok: complete, complete: complete, workspace_revision: String(payload.workspace_revision === undefined ? '' : payload.workspace_revision), replayed: Boolean(existing), order_code: orderCode, error: complete ? undefined : 'INCOMPLETE_REPLICA' };
   } finally {
@@ -326,8 +333,18 @@ function sincronizzaCamereMysql_(eventId, rooms, revision) {
   if (previous) versions.getRange(previous._row, 1, 1, 2).setValues([[eventId, revision]]);
   else versions.appendRow([eventId, revision]);
   const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.ACCOMMODATIONS);
-  convertiRigheInOggetti_(sheet).filter(r => String(r.id_evento) === eventId).sort((a,b) => b._row-a._row).forEach(r => sheet.deleteRow(r._row));
+  eliminaRigheContigue_(sheet, convertiRigheInOggetti_(sheet).filter(r => String(r.id_evento) === eventId));
   if (values.length) sheet.getRange(sheet.getLastRow()+1, 1, values.length, values[0].length).setValues(values);
+}
+
+/** Delete bottom-up, preserving rows belonging to other events and retry repair. */
+function eliminaRigheContigue_(sheet, rows) {
+  const indices = [...new Set(rows.map(row => row._row))].sort((a,b) => b-a);
+  for (let i=0; i<indices.length;) {
+    const end=indices[i]; let start=end; i++;
+    while (i<indices.length && indices[i]===start-1) { start=indices[i]; i++; }
+    sheet.deleteRows(start,end-start+1);
+  }
 }
 
 function sincronizzaPagamenti_(orderCode, payments) {

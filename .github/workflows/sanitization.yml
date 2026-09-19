@@ -21,6 +21,9 @@ jobs:
         run: |
           php wordpress-plugin/tests/public-balance.php
           php wordpress-plugin/tests/public-balance-model.php
+          php wordpress-plugin/tests/operational-profile.php
+          php wordpress-plugin/tests/option-rules.php
+          php wordpress-plugin/tests/sheet-open.php
 
   economic-innodb:
     runs-on: ubuntu-latest
@@ -44,7 +47,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          extensions: mysqli
+          extensions: mysqli, mbstring
           coverage: none
       - name: Verify economic logic with MariaDB
         run: |
@@ -52,6 +55,7 @@ jobs:
           php wordpress-plugin/tests/individual-management-innodb.php
           php wordpress-plugin/tests/accommodation-change-innodb.php
           php wordpress-plugin/tests/percentage-deposit-unit.php
+          php wordpress-plugin/tests/sheet-receipts-innodb.php
 
   sanitization:
     runs-on: ubuntu-latest

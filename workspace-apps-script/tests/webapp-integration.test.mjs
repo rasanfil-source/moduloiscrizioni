@@ -4,7 +4,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 const sourceDir = new URL('../src/', import.meta.url);
-const source = (await Promise.all(['Config.gs', 'Core.gs', 'WebApp.gs'].map((name) => readFile(new URL(name, sourceDir), 'utf8')))).join('\n');
+const source = (await Promise.all(['Config.gs', 'Core.gs', 'WebApp.gs', 'SincronizzazioneManuale.gs'].map((name) => readFile(new URL(name, sourceDir), 'utf8')))).join('\n');
 
 class FakeRange {
   constructor(sheet, row, column, rowCount, columnCount) { Object.assign(this, { sheet, row, column, rowCount, columnCount }); }
@@ -26,11 +26,12 @@ class FakeSheet {
   getRange(row, column, rowCount = 1, columnCount = 1) { return new FakeRange(this, row, column, rowCount, columnCount); }
   appendRow(row) { this.rows.push([...row]); }
   deleteRow(row) { this.rows.splice(row - 1, 1); }
+  deleteRows(row, count) { this.rows.splice(row - 1, count); }
 }
 
 function environment() {
   const headers = {
-    Iscrizioni: ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'richieste_particolari', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'hash_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'versione_informativa_privacy', 'data_accettazione_privacy', 'biglietti_json', 'id_consenso_marketing', 'data_accettazione_marketing', 'opzioni_ordine_json', 'workspace_revision', 'versato_centesimi'],
+    Iscrizioni: ['codice_ordine', 'id_evento', 'stato', 'nome_referente', 'cognome_referente', 'email_referente', 'telefono_referente', 'richieste_particolari', 'numero_partecipanti', 'totale_centesimi', 'chiave_idempotenza', 'data_creazione', 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'hash_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'versione_informativa_privacy', 'data_accettazione_privacy', 'biglietti_json', 'id_consenso_marketing', 'data_accettazione_marketing', 'opzioni_ordine_json', 'workspace_revision', 'versato_centesimi', 'replica_completa_revision'],
     Partecipanti: ['codice_ordine', 'numero_partecipante', 'codice_tipologia', 'indice_tipologia', 'nome', 'cognome', 'dati_aggiuntivi_json', 'opzioni_json', 'stato_partecipante', 'data_annullamento', 'totale_centesimi', 'versato_centesimi', 'saldo_centesimi', 'caparra_centesimi', 'caparra_residua_centesimi'],
     Pagamenti: ['id_pagamento', 'codice_ordine', 'tipo_movimento', 'tipo_rata', 'data_effettiva', 'importo_centesimi', 'valuta', 'fonte_pagamento', 'riferimento_esterno', 'etichetta_operatore', 'canale_registrazione', 'id_inserimento_origine', 'data_creazione', 'nota_amministrativa', 'attribuzioni_partecipanti_json'],
     'Coda email': ['id_messaggio', 'codice_ordine', 'destinatario', 'tipo_modello', 'contenuto_json', 'stato', 'data_creazione'],
@@ -187,3 +188,40 @@ test('la consegna è incompleta se il foglio evento fallisce, il retry conserva 
 });
 
 test('la replica conserva il versato anche con residuo zero e credito',()=>{const {context,sheets}=environment();const result=context.aggiungiIscrizione_(payload({paid_cents:12000,total_cents:10000,balance_cents:0}));assert.equal(result.complete,true);assert.equal(sheets.Iscrizioni.rows[1][27],12000);});
+
+test('Apri richiede le revisioni correnti e una proiezione completata',()=>{
+ const {context,sheets}=environment();context.SpreadsheetApp.flush=()=>{};
+ const p=payload({canonical_source:'MYSQL',workspace_revision:'3',workspace_event_revision:'2',rooms:[]});
+ assert.equal(context.aggiungiIscrizione_(p).complete,true);
+ let writes=0,pending=false;
+ context.aggiornaFoglioOperativoEventoConLock_=()=>{writes++;return {ok:true,url_foglio:'https://docs.google.com/spreadsheets/d/synthetic/edit',esito:{manuali:pending?1:0,conflitti:0}};};
+ const request={event_id:'42',registrations:[{order_code:p.order_code,revision:'4'}],rooms:[],workspace_event_revision:'2'};
+ assert.deepEqual(Array.from(context.preparaAperturaFoglio_(request).needs_sync),[p.order_code]);assert.equal(writes,0);
+ request.registrations[0].revision='3';pending=true;let result=context.preparaAperturaFoglio_(request);assert.equal(result.ready,false);assert.equal(result.url_foglio,undefined);
+ pending=false;result=context.preparaAperturaFoglio_(request);assert.equal(result.ready,true);assert.equal(result.event_sheet_complete,true);
+ request.workspace_event_revision='1';assert.throws(()=>context.preparaAperturaFoglio_(request),/REPLICA_MISMATCH/);
+ request.registrations=[];assert.throws(()=>context.preparaAperturaFoglio_(request),/REPLICA_MISMATCH/);
+});
+
+test('replica conserva TEST_INVIATA e cancella solo blocchi contigui selezionati',()=>{
+ const {context,sheets}=environment();const p=payload();context.aggiungiIscrizione_(p);
+ sheets['Coda email'].rows[1][5]='TEST_INVIATA';context.aggiungiIscrizione_(p);assert.equal(sheets['Coda email'].rows[1][5],'TEST_INVIATA');
+ const rows=['header','a','b','foreign','c','d','e','foreign2'];const calls=[];
+ context.eliminaRigheContigue_({deleteRows:(start,count)=>{calls.push([start,count]);rows.splice(start-1,count);}},[2,3,5,6,7].map(_row=>({_row})));
+ assert.deepEqual(calls,[[5,3],[2,2]]);assert.deepEqual(rows,['header','foreign','foreign2']);
+});
+
+test('una replica interrotta non autorizza Apri anche se la revisione è già scritta',()=>{
+ const {context,sheets}=environment();context.SpreadsheetApp.flush=()=>{};
+ const p=payload({canonical_source:'MYSQL',workspace_revision:'3',workspace_event_revision:'2',rooms:[]});
+ context.aggiungiIscrizione_(p);
+ const original=sheets.Partecipanti.getRange.bind(sheets.Partecipanti);
+ sheets.Partecipanti.getRange=(...args)=>{if(args[0]>1)throw Error('synthetic write failure');return original(...args);};
+ assert.throws(()=>context.aggiungiIscrizione_({...p,workspace_revision:'4'}),/synthetic write failure/);
+ assert.equal(sheets.Iscrizioni.rows[1][26],'4');assert.equal(sheets.Iscrizioni.rows[1][28],'');
+ const request={event_id:'42',registrations:[{order_code:p.order_code,revision:'4'}],rooms:[],workspace_event_revision:'2'};
+ context.aggiornaFoglioOperativoEventoConLock_=()=>{throw Error('must not render partial replica');};
+ assert.deepEqual(Array.from(context.preparaAperturaFoglio_(request).needs_sync),[p.order_code]);
+ sheets.Partecipanti.getRange=original;assert.equal(context.aggiungiIscrizione_({...p,workspace_revision:'4'}).complete,true);
+ assert.equal(sheets.Iscrizioni.rows[1][28],'4');
+});

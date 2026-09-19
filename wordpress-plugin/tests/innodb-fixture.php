@@ -2,8 +2,8 @@
 // Test distruttivo esclusivamente nel database locale mi_ledger_test sulla porta 33317.
 define('ABSPATH',__DIR__);define('ARRAY_A','ARRAY_A');
 function wp_timezone(){return new DateTimeZone('Europe/Rome');}
-function sanitize_text_field($v){return strip_tags((string)$v);}
-function sanitize_textarea_field($v){return strip_tags((string)$v);}
+function sanitize_text_field($v){return trim(preg_replace('/[\r\n\t ]+/',' ',strip_tags((string)$v)));}
+function sanitize_textarea_field($v){return trim(strip_tags((string)$v));}
 function get_current_user_id(){return 7;}
 function wp_get_current_user(){return(object)['display_name'=>'Test'];}
 function wp_json_encode($v){return json_encode($v);}

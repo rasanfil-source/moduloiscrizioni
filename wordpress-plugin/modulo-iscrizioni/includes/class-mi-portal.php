@@ -405,7 +405,7 @@ final class MI_Portal {
 		$url_iscrizione = MI_Shortcode::url_iscrizione( $event_id );
 		$ha_saldo = 'DEPOSIT_BALANCE' === get_post_meta( $event_id, '_mi_economic_mode', true );
 		$url_saldo = $ha_saldo ? add_query_arg( array( 'mi_status' => 'balance', 'evento' => $event_id ), home_url( '/' ) ) : '';
-		$profilo_operativo = self::initial_operational_profile( $event_id );
+		$profilo_operativo = MI_Field_Schema::resolved_operational_profile( $event_id );
 		$result = null;
 		// Un tentativo precedente può essere scaduto su WordPress mentre Apps Script
 		// terminava correttamente. Prima di ricreare, recupera il foglio idempotente.
@@ -455,18 +455,6 @@ final class MI_Portal {
 		return $result;
 	}
 
-	private static function initial_operational_profile( $event_id ) {
-		$stored = MI_Field_Schema::sanitize_operational_profile( get_post_meta( $event_id, '_mi_operational_profile', true ) );
-		if ( 'AUTOMATICO' !== $stored ) return $stored;
-		$fields = array_map( 'sanitize_key', (array) get_post_meta( $event_id, '_mi_participant_fields', true ) );
-		$document_fields = array( 'birth_date', 'document_type', 'document_number', 'document_issue_date', 'document_expiry_date', 'nationality' );
-		if ( array_intersect( $fields, $document_fields ) || '1' === get_post_meta( $event_id, '_mi_overnight_enabled', true ) ) return 'VIAGGIO_COMPLESSO';
-		$pricing = strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) );
-		$options = (array) get_post_meta( $event_id, '_mi_options', true );
-		if ( 'NONE' === $pricing || $options ) return 'SERVIZI_MULTIPLI';
-		if ( 'FIXED' === $pricing ) return 'QUOTA_UNICA';
-		return 'MINIMO';
-	}
 
 	/** Individua un solo gestore responsabile, senza ampliare implicitamente l'accesso ai dati. */
 	private static function risolvi_gestore_evento( $event_id, $obbligatorio ) {
@@ -1795,7 +1783,7 @@ final class MI_Portal {
 			$fixed_price = max( 0, absint( get_post_meta( $event_id, '_mi_fixed_price_cents', true ) ) );
 			update_post_meta( $event_id, '_mi_ticket_types', array( array( 'code' => 'standard', 'name' => 'ZERO' === $pricing_mode ? 'Iscrizione' : 'Quota di partecipazione', 'price_cents' => 'FIXED' === $pricing_mode ? $fixed_price : 0, 'max_per_order' => 20, 'capacity' => 0 ) ) );
 		}
-		$sheet_url = esc_url( (string) get_post_meta( $event_id, '_mi_operational_sheet_url', true ) );
+		$sheet_url = get_post_meta( $event_id, '_mi_operational_sheet_url', true ) ? esc_url( MI_Sheet_Open::url( $event_id ) ) : '';
 		$sheet_missing = '1' === get_post_meta( $event_id, '_mi_sheet_missing', true );
 		$registration_url = esc_url( (string) get_post_meta( $event_id, '_mi_registration_url', true ) );
 		if ( ! $registration_url ) $registration_url = esc_url( MI_Shortcode::url_iscrizione( $event_id ) );
@@ -1817,7 +1805,7 @@ final class MI_Portal {
 		} elseif ( $is_published ) {
 			echo '<div class="mi-event-outputs__success"><span aria-hidden="true">✓</span><div><strong>L’evento è pubblicato</strong><p>Il modulo di iscrizione è pronto. Puoi condividerlo con le persone interessate.</p></div></div>';
 			echo '<div class="mi-event-outputs__grid"><article class="mi-output-card mi-output-card--public"><span class="mi-output-card__audience">Per i partecipanti</span><h3>Condividi il modulo di iscrizione</h3><label>Link per le iscrizioni<div class="mi-output-copy"><input type="url" readonly value="' . esc_attr( $registration_url ) . '"><button type="button" class="mi-primary" data-mi-copy="' . esc_attr( $registration_url ) . '">Copia link</button></div></label><a class="mi-secondary mi-output-link" href="' . $registration_url . '" target="_blank" rel="noopener noreferrer">Apri il modulo <span aria-hidden="true">↗</span></a></article>';
-			echo '<article class="mi-output-card mi-output-card--internal"><span class="mi-output-card__audience">Per gli operatori</span><h3>Gestisci le iscrizioni</h3><p>Consulta e aggiorna i dati nel foglio Google dell’evento.</p><div class="mi-output-document"><span aria-hidden="true">▦</span><div><strong>Foglio iscrizioni</strong><small>' . esc_html( $event_title ) . '</small></div></div>' . ( $sheet_missing ? '<p class="mi-portal-notice mi-portal-error"><strong>Foglio non disponibile.</strong> Usa il comando qui sotto per ricrearlo dai dati conservati.</p>' : ( $sheet_url ? '<a class="mi-secondary mi-output-link" href="' . $sheet_url . '" target="_blank" rel="noopener noreferrer">Apri il foglio Google <span aria-hidden="true">↗</span></a><div class="mi-output-copy-action"><button type="button" class="mi-secondary mi-output-link" data-mi-copy="' . esc_attr( $sheet_url ) . '" data-mi-copy-success-label="Copiato">Copia il collegamento al foglio</button></div>' : '<p class="mi-portal-muted">Collegamento al foglio non ancora disponibile.</p>' ) );
+			echo '<article class="mi-output-card mi-output-card--internal"><span class="mi-output-card__audience">Per gli operatori</span><h3>Gestisci le iscrizioni</h3><p>Consulta e aggiorna i dati nel foglio Google dell’evento.</p><div class="mi-output-document"><span aria-hidden="true">▦</span><div><strong>Foglio iscrizioni</strong><small>' . esc_html( $event_title ) . '</small></div></div>' . ( $sheet_missing ? '<p class="mi-portal-notice mi-portal-error"><strong>Foglio non disponibile.</strong> Usa il comando qui sotto per ricrearlo dai dati conservati.</p>' : ( $sheet_url ? '<a class="mi-secondary mi-output-link" href="' . $sheet_url . '" target="_blank" rel="noopener noreferrer">Apri <span aria-hidden="true">↗</span></a><div class="mi-output-copy-action"><button type="button" class="mi-secondary mi-output-link" data-mi-copy="' . esc_attr( $sheet_url ) . '" data-mi-copy-success-label="Copiato">Copia il collegamento al foglio</button></div>' : '<p class="mi-portal-muted">Collegamento al foglio non ancora disponibile.</p>' ) );
 			echo '<form method="post" class="mi-output-sheet-check"><input type="hidden" name="mi_portal_action" value="repair_event_sheet"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
 			wp_nonce_field( 'mi_portal_repair_event_sheet_' . $event_id, 'mi_portal_nonce' );
 			echo '<button type="submit" class="mi-secondary mi-output-link">Verifica o ricrea il foglio Google</button></form></article></div>';

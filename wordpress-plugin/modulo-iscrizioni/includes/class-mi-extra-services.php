@@ -1,5 +1,6 @@
 <?php
 defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/class-mi-option-rules.php';
 
 final class MI_Extra_Services {
 	public static function parse( $input ) {
@@ -18,9 +19,9 @@ final class MI_Extra_Services {
 			$seen[$code] = true;
 			$category = sanitize_key( $input['extra_service_category'][$i] ?? 'altro' );
 			if ( ! in_array( $category, array( 'alloggio', 'supplemento', 'pullman', 'trasferimento', 'pranzo', 'altro' ), true ) ) $category = 'altro';
-			$group = sanitize_key( $input['extra_service_group'][$i] ?? '' );
+			$group = MI_Option_Rules::choice_group( array( 'code' => $code, 'category' => $category, 'choice_group' => sanitize_key( $input['extra_service_group'][$i] ?? '' ) ) );
 			if ( strlen( $group ) > 40 ) return new WP_Error( 'mi_extra_group', 'Il gruppo di alternative deve avere al massimo 40 caratteri.' );
-			$result[] = array( 'code' => $code, 'name' => $label, 'scope' => 'TICKET', 'price_cents' => $cents, 'max_quantity' => 1, 'category' => $category, 'choice_group' => $group );
+			$result[] = array( 'code' => $code, 'name' => $label, 'scope' => 'TICKET', 'price_cents' => $cents, 'max_quantity' => 1, 'category' => $category, 'choice_group' => '' === $group ? null : $group );
 		}
 		return $result;
 	}

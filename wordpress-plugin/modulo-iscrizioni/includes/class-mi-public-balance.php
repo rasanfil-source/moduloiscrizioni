@@ -1,5 +1,6 @@
 <?php
 defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/class-mi-option-rules.php';
 require_once __DIR__ . '/class-mi-payment-people.php';
 
 /** Public participant workflow adapted from the supplied Cammino balance model. */
@@ -114,12 +115,12 @@ final class MI_Public_Balance {
 		$managed = in_array( $r['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 		$individual = array_column( $b['individual']['people'], null, 'id' )[$id] ?? null;
 		if ( $managed && ( ! $individual || empty( $b['individual']['quotes_known'] ) || empty( $b['individual']['payments_known'] ) ) ) throw new InvalidArgumentException( $b['individual']['message'] ?: 'La posizione individuale deve essere verificata dalla segreteria prima di modificare i servizi.' );
-		foreach ( $definitions as $code => $o ) if ( $can_edit && $managed && 'TICKET' === ( $o['scope'] ?? '' ) && ( 'pullman' === ( $o['category'] ?? '' ) || 0 === strpos( $code, 'pullman-' ) ) ) {
+		foreach ( $definitions as $code => $o ) if ( $can_edit && $managed && 'TICKET' === ( $o['scope'] ?? '' ) && MI_Option_Rules::is_bus( $o ) ) {
 			$direction = preg_match( '/ritorno|fiumicino.{0,5}roma|santiago.{0,5}a coru/i', $o['name'] ) ? 'Al ritorno' : ( preg_match( '/andata|roma.{0,5}fiumicino|porto.{0,5}tui/i', $o['name'] ) ? 'All’andata' : 'Trasferimenti' );
-			$editable[] = array( 'code' => $code, 'name' => $o['name'], 'price' => isset( $selected[$code] ) ? (int) $selected[$code]['unit_price_cents'] : (int) $o['price_cents'], 'selected' => ! empty( $selected[$code]['quantity'] ), 'group' => $o['choice_group'] ?? '', 'direction' => $direction );
+			$editable[] = array( 'code' => $code, 'name' => $o['name'], 'price' => isset( $selected[$code] ) ? (int) $selected[$code]['unit_price_cents'] : (int) $o['price_cents'], 'selected' => ! empty( $selected[$code]['quantity'] ), 'group' => MI_Option_Rules::choice_group( $o ), 'direction' => $direction );
 		}
 		$editable_codes = array_column( $editable, 'code' );
-		foreach ( $opts as $o ) if ( ! in_array( $o['code'], $editable_codes, true ) && ! empty( $o['quantity'] ) ) $locked[] = array( 'name' => $o['name'], 'accommodation' => 0 === strpos( $o['code'], 'alloggio-' ) || 'alloggio' === ( $definitions[$o['code']]['category'] ?? '' ), 'price' => (int) $o['unit_price_cents'] * (int) $o['quantity'] );
+		foreach ( $opts as $o ) if ( ! in_array( $o['code'], $editable_codes, true ) && ! empty( $o['quantity'] ) ) $locked[] = array( 'name' => $o['name'], 'accommodation' => MI_Option_Rules::is_accommodation( $definitions[$o['code']] ?? $o ), 'price' => (int) $o['unit_price_cents'] * (int) $o['quantity'] );
 		$editable_selected = 0; foreach ( $opts as $option ) if ( in_array( $option['code'] ?? '', $editable_codes, true ) ) $editable_selected += (int) ( $option['unit_price_cents'] ?? 0 ) * (int) ( $option['quantity'] ?? 0 );
 		$fixed = $managed ? (int) $individual['total'] - $editable_selected : 0;
 		$extra = self::decode( $p['extra_json'] ); $email = sanitize_email( $extra['email'] ?? $r['buyer_email'] );
@@ -231,7 +232,7 @@ final class MI_Public_Balance {
 			foreach ( $bundles as $rid => $bundle ) {
 				$new_total = (int) $bundle['registration']['total_cents'] + (int) ( $deltas[$rid] ?? 0 );
 				$projected = MI_Payment_People::projected_deposits( $bundle['registration'], $bundle['individual'], $person_deltas[$rid] ?? array(), $new_total );
-				if ( null === $projected && 'DEPOSIT_BALANCE' === $bundle['registration']['economic_mode'] ) { $projected = array(); foreach ( $bundle['individual']['people'] as $person_position ) $projected[(int) $person_position['id']] = min( (int) $person_position['deposit'], max( 0, (int) $person_position['total'] + (int) ( $person_deltas[$rid][(int) $person_position['id']] ?? 0 ) ) ); }
+				if ( null === $projected && 'DEPOSIT_BALANCE' === $bundle['registration']['economic_mode'] ) $projected = MI_Payment_People::retained_deposits( $bundle['individual']['people'], $person_deltas[$rid] ?? array() );
 				$projected_by_registration[$rid] = $projected ?: array();
 			}
 			foreach ( array( 'deposit', 'depositPaid', 'depositDue', 'saldoDue', 'balance' ) as $field ) $receipt[$field] = 0;
@@ -248,7 +249,7 @@ final class MI_Public_Balance {
 			foreach ( $bundles as $rid => $b ) {
 				$r = $b['registration']; $total = (int) $r['total_cents'] + $deltas[$rid]; if ( $total < 0 ) throw new InvalidArgumentException( 'La rettifica presente richiede una verifica della segreteria.' );
 				$deposits = MI_Payment_People::projected_deposits( $r, $b['individual'], $person_deltas[$rid] ?? array(), $total );
-				if ( null === $deposits && 'DEPOSIT_BALANCE' === $r['economic_mode'] ) { $deposits = array(); foreach ( $b['individual']['people'] as $person_position ) $deposits[(int) $person_position['id']] = min( (int) $person_position['deposit'], max( 0, (int) $person_position['total'] + (int) ( $person_deltas[$rid][(int) $person_position['id']] ?? 0 ) ) ); }
+				if ( null === $deposits && 'DEPOSIT_BALANCE' === $r['economic_mode'] ) $deposits = MI_Payment_People::retained_deposits( $b['individual']['people'], $person_deltas[$rid] ?? array() );
 				$initial = 'FULL_PAYMENT' === $r['economic_mode'] ? $total : array_sum( $deposits ?: array() );
 				$covered = MI_Payment_People::covered( $b['individual'], $r['economic_mode'], $person_deltas[$rid] ?? array(), $deposits ?: array() );
 				if ( null === $covered ) $covered = $b['paid'] >= $initial;

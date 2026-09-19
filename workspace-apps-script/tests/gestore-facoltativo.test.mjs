@@ -16,7 +16,7 @@ for (const email of [undefined, '', 'gestore@example.invalid']) {
       normalizzaValoreElenco_: valore => valore,
       normalizzaUrlPubblico_: valore => valore || '',
       decodificaElenco_: s => JSON.parse(s || '[]'),
-      ottieniSchedaObbligatoria_: () => ({ appendRow() {}, getMaxColumns:()=>11, getRange:()=>({setValue(){}}) }),
+      ottieniSchedaObbligatoria_: () => ({ appendRow() {}, getMaxColumns:()=>11, insertColumnsAfter(last,count){assert.equal(last,11);assert.equal(count,1);}, getRange:()=>({setValue(){}}) }),
       convertiRigheInOggetti_: () => [],
       aggiungiControllo_() {},
     });

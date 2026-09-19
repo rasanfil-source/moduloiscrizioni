@@ -4,6 +4,14 @@ import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 
 const source = await readFile(new URL('../src/WebApp.gs', import.meta.url), 'utf8');
+test('il vecchio writer non è più distribuito e l’impronta della proiezione resta disponibile', async () => {
+  const management = await readFile(new URL('../src/GestionePortale.gs', import.meta.url), 'utf8');
+  assert.doesNotMatch(management, /function (schedaGestionePortale_|aggiornaGestionePortale_|rispostaAggiornamentoGestione_)/);
+  assert.match(management, /function versioneGestione_/);
+  const c=vm.createContext({});vm.runInContext(source,c);
+  c.verificaBusta_=()=>({ok:true});c.creaRispostaJson_=v=>v;
+  for(const action of ['SCHEDA_GESTIONE_PORTALE','AGGIORNA_GESTIONE_PORTALE']) assert.equal(c.doPost({postData:{contents:JSON.stringify({action,payload:{}})}}).error,'USE_MYSQL_MANAGEMENT');
+});
 test('la vecchia scheda firmata rimanda a MySQL senza leggere la replica', () => {
   let reads = 0;
   const context = vm.createContext({

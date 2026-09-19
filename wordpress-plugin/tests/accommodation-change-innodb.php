@@ -26,7 +26,7 @@ $wpdb->query($wpdb->prepare('UPDATE wp_mi_registrations SET snapshot_json=%s WHE
 $data['people']=[['code'=>'AUTO30','number'=>1]];$p=MI_Management_Service::change_accommodation(42,$data);
 check(false!==$wpdb->insert('wp_mi_payments',['registration_id'=>30,'transaction_kind'=>'PAYMENT','amount_cents'=>10000,'payment_source'=>'CASH','origin_id'=>'test-room-payment','effective_at'=>gmdate('Y-m-d H:i:s'),'created_at'=>gmdate('Y-m-d H:i:s')]),$wpdb->last_error);
 $r=MI_Management_Service::change_accommodation(42,$data,$p['version'],'wp_7_12345678-1234-4234-8234-123456781003');check(!empty($r['rejected']),'Pagamento intervenuto dopo anteprima ignorato');
-$p=MI_Management_Service::change_accommodation(42,$data);check($p['orders'][0]['refund']===1500&&$p['orders'][0]['due']===0,'Rimborso proposto errato');
+$p=MI_Management_Service::change_accommodation(42,$data);check($p['orders'][0]['refund']===null&&$p['orders'][0]['due']===null,'Quote non attribuibili presentate come rimborso certo');
 $r=MI_Management_Service::change_accommodation(42,$data,$p['version'],'wp_7_12345678-1234-4234-8234-123456781004');check(!empty($r['saved']),'Cambio con restituzione non salvato');check((int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_payments')===1,'Rimborso creato automaticamente');
 check(MI_Management_Service::change_accommodation(43,$data) instanceof WP_Error,'Evento non autorizzato accessibile');
 $GLOBALS['test_payment_permission']=false;check(MI_Management_Service::change_accommodation(42,$data) instanceof WP_Error,'Permesso pagamenti ignorato');$GLOBALS['test_payment_permission']=true;

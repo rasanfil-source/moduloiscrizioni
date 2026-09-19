@@ -24,9 +24,11 @@ function preparaProduzioniEventoConLock_(payload) {
     payload.evento_gratuito === true ? 'ZERO' : normalizzaTesto_(payload.modalita_prezzo, 40),
     new Date(),
     JSON.stringify(Array.isArray(payload.servizi) ? payload.servizi : []),
-    JSON.stringify(Array.isArray(payload.domande_partecipanti) ? payload.domande_partecipanti : decodificaElenco_((esistente || {}).domande_json))
+    JSON.stringify(Array.isArray(payload.domande_partecipanti) ? payload.domande_partecipanti : decodificaElenco_((esistente || {}).domande_json)),
+    normalizzaValoreElenco_(payload.profilo_operativo, ['MINIMO', 'QUOTA_UNICA', 'SERVIZI_MULTIPLI', 'VIAGGIO_COMPLESSO']) || (esistente || {}).profilo_operativo || ''
   ];
-  if (eventi.getMaxColumns() < 11) eventi.insertColumnsAfter(eventi.getMaxColumns(), 11 - eventi.getMaxColumns());
+  if (eventi.getMaxColumns() < 12) eventi.insertColumnsAfter(eventi.getMaxColumns(), 12 - eventi.getMaxColumns());
+  eventi.getRange(1, 12).setValue('profilo_operativo');
   eventi.getRange(1, 11).setValue('domande_json');
   if (esistente) eventi.getRange(esistente._row, 1, 1, valori.length).setValues([valori]);
   else eventi.appendRow(valori);
@@ -269,7 +271,8 @@ function aggiornaFoglioOperativoEventoConLock_(form) {
   const ordiniEvento = new Set(convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(r=>String(r.id_evento)===idEvento).map(r=>String(r.codice_ordine)));
   const movimentiEvento = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS)).filter(r=>ordiniEvento.has(String(r.codice_ordine))).map(r=>{const copia=Object.assign({},r);delete copia._row;return copia;});
   const impronta = versioneGestione_({versioneProiezione:2,vista:vista,movimenti:movimentiEvento});
-  if (form.soloModificati === true && proprieta.getProperty(chiaveProiezione) === impronta) {
+  const pending = modificheCorrentiFoglio_(scheda);
+  if (form.soloModificati === true && proprieta.getProperty(chiaveProiezione) === impronta && !pending.changes.length && !pending.errors.length) {
     return {ok:true, invariato:true, esito:{aggiunte:0,manuali:0,conflitti:0}};
   }
   const esito = scriviProiezioneEvento_(scheda, vista);
@@ -277,7 +280,8 @@ function aggiornaFoglioOperativoEventoConLock_(form) {
   aggiornaProiezionePagamentiEventoConLock_(foglio, idEvento);
   // Store only after all writes succeed. Pending edits remain in the sheet;
   // a new canonical value changes the fingerprint and retries acknowledgment.
-  proprieta.setProperty(chiaveProiezione, impronta);
+  if (!esito.manuali && !esito.conflitti) proprieta.setProperty(chiaveProiezione, impronta);
+  else proprieta.deleteProperty(chiaveProiezione);
   aggiungiControllo_('FOGLIO_OPERATIVO', 'REFRESH', idEvento, 'SUCCESS', normalizzaTesto_(Session.getActiveUser().getEmail() || 'SEGRETERIA', 120), 'DATABASE_TO_EVENT_SHEET', 'SEGRETERIA');
   return { ok: true, url_foglio: foglio.getUrl(), righe: vista.righe.length, esito: esito, message: 'Controllo completato. Le modifiche nelle celle blu si inviano con Sincronizza.' };
 }

@@ -58,6 +58,10 @@ final class MI_Portal_Management {
 			$changes = json_decode( wp_unslash( $_POST['data'] ?? 'null' ), true );
 			$request_id = 'wp_' . get_current_user_id() . '_' . sanitize_text_field( wp_unslash( $_POST['request_id'] ?? '' ) );
 			$result = MI_Management_Service::save_sheet( $event_id, $changes, $request_id, 'room_assign' === $operation ? 'ROOM_ASSIGN' : ( 'room_swap' === $operation ? 'ROOM_SWAP' : 'SHEET_SYNC' ) );
+			if ( ! is_wp_error( $result ) && ! empty( $result['saved'] ) && ! empty( $result['confirmations'] ) ) {
+				$ack = MI_Workspace_Client::request( 'CONFERMA_MODIFICHE_FOGLIO', array( 'event_id' => (string) $event_id, 'confirmations' => $result['confirmations'] ) );
+				if ( is_wp_error( $ack ) ) { $result['ack_pending'] = true; $result['message'] .= ' Dati salvati; conferma nel foglio non completata. Riprova la stessa sincronizzazione.'; }
+			}
 		} else {
 			global $wpdb;
 			$code = sanitize_text_field( wp_unslash( $_POST['order_code'] ?? '' ) );
@@ -87,7 +91,7 @@ final class MI_Portal_Management {
 			} else { wp_send_json_error( array( 'message' => 'Operazione non valida.' ), 400 ); }
 		}
 		if ( is_wp_error( $result ) ) wp_send_json_error( array( 'message' => $result->get_error_message() ), 502 );
-		$result['sheet_url'] = esc_url_raw( (string) get_post_meta( $event_id, '_mi_operational_sheet_url', true ), array( 'https' ) );
+		$result['sheet_url'] = get_post_meta( $event_id, '_mi_operational_sheet_url', true ) ? MI_Sheet_Open::url( $event_id ) : '';
 		$result['report_url'] = current_user_can( 'mi_view_registrations' ) || current_user_can( 'manage_options' ) ? add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-payments', 'payment_event_id' => $event_id ), admin_url( 'edit.php' ) ) : '';
 		wp_send_json_success( $result );
 	}
@@ -121,7 +125,7 @@ final class MI_Portal_Management {
 		<label>Anno<input data-annual-year type="number" min="2000" max="2200" value="<?php echo esc_attr( wp_date( 'Y' ) ); ?>"></label><label>Numero minimo di eventi frequentati<input data-annual-minimum type="number" min="1" max="1000" value="2"></label><button type="button" data-load-annual>Genera rapporto annuale</button><p data-annual-status role="status"></p><div data-annual-results></div></details>
 		<div class="mi-management-event-selectors"<?php echo $compact ? ' hidden' : ''; ?>><label><select data-period-select aria-label="Eventi attivi o passati"><option value="current" <?php selected( $period, 'current' ); ?>>Eventi attivi</option><option value="past" <?php selected( $period, 'past' ); ?>>Eventi passati</option></select></label>
 		<label>Evento<select data-event-select aria-label="Evento"><option value="">Tutti gli eventi</option><?php foreach ( $events as $event ) : ?><option data-period="<?php echo esc_attr( $periods[$event->ID] ); ?>" value="<?php echo esc_attr( $event->ID ); ?>" <?php selected( $event_id, $event->ID ); ?>><?php echo esc_html( $event->post_title ); ?></option><?php endforeach; ?></select></label></div>
-		<div data-event-actions data-sheet-auto="<?php echo empty( $_GET['mi_sheet_sync'] ) ? '0' : '1'; ?>" hidden><div class="mi-booking-detail__actions mi-event-toolbar"><button type="button" data-refresh aria-label="Aggiorna riepilogo"><span class="mi-refresh-icon" aria-hidden="true">↻</span><span class="mi-refresh-label">Aggiorna riepilogo</span></button><button type="button" data-print>Stampa riepilogo iscritti</button><a class="mi-sheet-button" data-open-sheet hidden target="_blank" rel="noopener"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true" focusable="false"><path d="M6 2h8l5 5v15H6zM14 2v6h5"/><path d="M9 11h7v8H9zM9 15h7M12.5 11v8"/></svg><span>Apri foglio Google</span><span aria-hidden="true">↗</span></a></div>
+		<div data-event-actions data-sheet-auto="<?php echo empty( $_GET['mi_sheet_sync'] ) ? '0' : '1'; ?>" hidden><div class="mi-booking-detail__actions mi-event-toolbar"><button type="button" data-refresh aria-label="Aggiorna riepilogo"><span class="mi-refresh-icon" aria-hidden="true">↻</span><span class="mi-refresh-label">Aggiorna riepilogo</span></button><button type="button" data-print>Stampa riepilogo iscritti</button><a class="mi-sheet-button" data-open-sheet hidden target="_blank" rel="noopener"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true" focusable="false"><path d="M6 2h8l5 5v15H6zM14 2v6h5"/><path d="M9 11h7v8H9zM9 15h7M12.5 11v8"/></svg><span>Apri</span><span aria-hidden="true">↗</span></a></div>
 		<p data-management-status role="status" aria-live="polite"></p></div><div data-management-content></div>
 		</section>
 		<?php
