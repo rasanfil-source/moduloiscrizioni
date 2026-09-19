@@ -205,6 +205,19 @@
     aggiornaConfigurazioneEconomica();
   }
 
+  function labelConfigTable(table) {
+    const headers = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
+    [...table.tBodies[0].rows].forEach((row, index) => {
+      const title = row.cells[1]?.querySelector('input')?.value.trim() || row.cells[0]?.querySelector('input')?.value.trim() || 'riga ' + (index + 1);
+      [...row.cells].forEach((cell, column) => cell.querySelectorAll('input:not([type="hidden"]),select').forEach(input => input.setAttribute('aria-label', headers[column] + ' — ' + title)));
+      row.querySelector('button')?.setAttribute('aria-label', 'Rimuovi ' + title);
+    });
+  }
+  document.querySelectorAll('#mi-ticket-types,#mi-options,#mi-custom-fields').forEach(table => {
+    labelConfigTable(table);
+    table.addEventListener('input', () => labelConfigTable(table));
+    new MutationObserver(() => labelConfigTable(table)).observe(table.tBodies[0], {childList:true});
+  });
   const table = document.getElementById('mi-ticket-types');
   const addButton = document.getElementById('mi-add-ticket');
   if (!table || !addButton) return;

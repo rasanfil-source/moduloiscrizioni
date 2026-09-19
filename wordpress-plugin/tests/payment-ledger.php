@@ -31,6 +31,7 @@ class WP_Error { public $code; function __construct($code,$message){$this->code=
 class MI_Access { static function can_access_event($id){return $id===42;} }
 class MI_Portal_Payments { static function allowed(){return true;} }
 class MI_Registration_Service {
+	static function reopened_payment_deadline($registration,$now=null){$now=$now??time();$deadline=trim((string)($registration['payment_deadline_at']??''));$timestamp=$deadline===''?false:strtotime($deadline.' UTC');return false!==$timestamp&&$timestamp>$now?$deadline:gmdate('Y-m-d H:i:s',$now+48*3600);}
  static function append_registration_event(...$args){return true;}
  static function accoda_iscrizione_workspace($id){throw new RuntimeException('Cron non disponibile');}
 }
@@ -40,7 +41,7 @@ function wp_json_encode($v){return json_encode($v);}
 function current_time(...$args){return '2026-09-09 10:00:00';}
 class LedgerDatabase {
  public $prefix='wp_', $last_error='', $insert_id=0, $payments=[], $failUpdate=false;
- public $registration=['id'=>1,'event_id'=>42,'workspace_revision'=>0,'status'=>'PENDING_PAYMENT','total_cents'=>10000,'initial_due_cents'=>2000,'payment_deadline_at'=>'2026-10-01 10:00:00'];
+ public $registration=['id'=>1,'event_id'=>42,'workspace_revision'=>0,'status'=>'PENDING_PAYMENT','economic_mode'=>'DEPOSIT_BALANCE','total_cents'=>10000,'initial_due_cents'=>3000,'payment_deadline_at'=>'2026-10-01 10:00:00'];
  private $snapshot;
  function prepare($sql,...$args){return [$sql,$args];}
  function query($sql){
@@ -55,11 +56,17 @@ class LedgerDatabase {
   return null;
  }
  function get_var($query){return array_sum(array_map(fn($p)=>($p['transaction_kind']==='REFUND'?-1:1)*$p['amount_cents'],$this->payments));}
+ function get_results($query,$mode){
+  [$sql]=$query;
+  if(str_contains($sql,'mi_participants'))return [['id'=>1,'ticket_type_code'=>'base','first_name'=>'Persona','last_name'=>'Test','options_json'=>'[]','status'=>'ACTIVE','deposit_due_cents'=>3000]];
+  if(str_contains($sql,'mi_registration_items'))return [['ticket_type_code'=>'base','unit_price_cents'=>10000]];
+  return $this->payments;
+ }
  function insert($table,$data){$data['id']=++$this->insert_id;$this->payments[]=$data;return 1;}
  function update($table,$changes,$where){if($this->failUpdate)return false;$this->registration=array_replace($this->registration,$changes);return 1;}
 }
 $wpdb=new LedgerDatabase();
-$input=array_replace($base,['importo'=>'30']);
+$input=array_replace($base,['importo'=>'30','participant_ids'=>'[1]','rata'=>'DEPOSIT']);
 $saved=MI_Payment_Ledger::save(1,$input);
 check($saved['saved']===true && count($wpdb->payments)===1,'Salvataggio anche con cron non disponibile');
 check($wpdb->registration['workspace_revision']===1,'Nuovo movimento incrementa revisione');
@@ -72,7 +79,7 @@ $second=array_replace($input,['request_id'=>str_replace('abc','abd',$input['requ
 check(MI_Payment_Ledger::save(1,array_replace($second,['importo'=>'71']))['saved']===false,'No sovrapagamento');
 check(MI_Payment_Ledger::save(1,array_replace($second,['tipo'=>'RIMBORSO','importo'=>'31']))['saved']===false,'No rimborso eccessivo');
 $wpdb->failUpdate=true;
-check(MI_Payment_Ledger::save(1,$second) instanceof WP_Error,'Errore database segnalato');
+check(MI_Payment_Ledger::save(1,array_replace($second,['rata'=>'BALANCE','importo'=>'70'])) instanceof WP_Error,'Errore database segnalato');
 check(count($wpdb->payments)===1,'Rollback del movimento quando fallisce aggiornamento');
 $wpdb->failUpdate=false;
 $refund=MI_Payment_Ledger::save(1,array_replace($second,['tipo'=>'STORNO','importo'=>'20']));

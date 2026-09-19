@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Modulo Iscrizioni
  * Description: Gestione essenziale di gruppi, eventi, capienza e iscrizioni.
- * Version: 3.26.15
+ * Version: 3.26.132
  * Requires at least: 6.4
  * Requires PHP: 7.4
  * Author: HappyDuck
@@ -11,10 +11,14 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'MI_VERSION', '3.26.15' );
+define( 'MI_VERSION', '3.26.132' );
 define( 'MI_PLUGIN_FILE', __FILE__ );
 define( 'MI_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MI_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
+
+require_once MI_PLUGIN_DIR . 'includes/class-mi-assets.php';
+add_filter( 'script_loader_src', array( 'MI_Assets', 'filter_url' ) );
+add_filter( 'style_loader_src', array( 'MI_Assets', 'filter_url' ) );
 
 require_once MI_PLUGIN_DIR . 'includes/class-mi-activator.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-field-schema.php';
@@ -38,6 +42,7 @@ require_once MI_PLUGIN_DIR . 'includes/class-mi-public-balance.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-event-duplicator.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-event-deletion.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-portal-management.php';
+require_once MI_PLUGIN_DIR . 'includes/class-mi-sheet-open.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-management-service.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-management-list.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-attendance-report.php';

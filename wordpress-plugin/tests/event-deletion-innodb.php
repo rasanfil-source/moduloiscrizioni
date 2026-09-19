@@ -11,6 +11,12 @@ class DeletionDatabase extends DatabaseAdapter {
 class WP_Error {function __construct(public $code,public $message){}function get_error_message(){return $this->message;}}
 class MI_Access {static function is_suspended(){return false;}static function is_global_manager(){return true;}static function can_access_event($id){return true;}}
 class MI_Event_Post_Type {const EVENT_TYPE='mi_event';}
+class MI_Modello_Email {const EMAIL_SEGRETERIA='office@example.invalid';static function crea_istantanea_istituzionale($id,$subject,$preheader,$html,$text){return ['attivo'=>true,'oggetto'=>$subject,'html'=>$html,'testo'=>$text];}}
+function sanitize_email($v){return $v;}function is_email($v){return filter_var($v,FILTER_VALIDATE_EMAIL);}
+function esc_html($v){return htmlspecialchars($v);}function esc_attr($v){return htmlspecialchars($v);}
+function get_the_title($id){return get_post($id)->post_title;}function current_time(...$args){return gmdate('Y-m-d H:i:s');}
+function wp_next_scheduled($hook){return false;}function wp_schedule_single_event(...$args){}
+require __DIR__.'/../modulo-iscrizioni/includes/class-mi-spedizione-email.php';
 class MI_Workspace_Client {static $fail=true;static $calls=0;static function request($action,$payload){self::$calls++;return self::$fail?new WP_Error('google','Offline'):['ok'=>true,'complete'=>true,'sheet_url'=>''];}}
 function absint($v){return abs((int)$v);}function is_wp_error($v){return $v instanceof WP_Error;}
 function is_user_logged_in(){return true;}function current_user_can($cap){global $allowed;return $allowed;}
@@ -28,7 +34,7 @@ require __DIR__.'/../modulo-iscrizioni/includes/class-mi-event-deletion.php';
 $wpdb=new DeletionDatabase();
 if (($argv[1]??'')==='worker') { $result=MI_Event_Deletion::enter(42,true); check(is_wp_error($result)&&$result->code==='mi_event_busy','Concurrent request entered leased event'); echo 'Concurrent lease blocked'; exit; }
 $wpdb->query('CREATE DATABASE IF NOT EXISTS mi_deletion_test');$wpdb->db->select_db('mi_deletion_test');
-$allowed=true;$options=[];$meta=[];$scopes=[7=>[42,43]];$posts=[];
+$allowed=true;$options=['mi_modalita_spedizione_email'=>'PROVA','mi_destinatario_prova_email'=>'test@example.invalid'];$meta=[];$scopes=[7=>[42,43]];$posts=[];
 foreach([42,43]as$id)$posts[$id]=(object)['ID'=>$id,'post_type'=>'mi_event','post_status'=>'draft','post_title'=>'Evento '.$id,'post_modified_gmt'=>'2026-09-09 00:00:00'];
 $schema=file_get_contents(__DIR__.'/../modulo-iscrizioni/includes/class-mi-activator.php');
 foreach(['registrations'=>'registrations','items'=>'registration_items','participants'=>'participants','counters'=>'event_counters','ticket_counters'=>'ticket_counters','event_revisions'=>'event_revisions','registration_events'=>'registration_events','outbox'=>'email_outbox','payments'=>'payments','rooms'=>'rooms','management_state'=>'management_state','management_requests'=>'management_requests']as$var=>$name){
@@ -44,6 +50,7 @@ foreach([42,43]as$id){
  $wpdb->query("INSERT INTO wp_mi_email_outbox (registration_id,recipient,template_type,payload_json,status,created_at) VALUES (0,'test@example.invalid','EVENT_MANAGER_READY','{\"event_id\":$id}','PREVIEW',NOW())");
 }
 $request='12345678-1234-4234-8234-123456789abc';$preview=MI_Event_Deletion::preview(42);
+$wpdb->query("UPDATE wp_mi_registrations SET buyer_email='person@example.invalid' WHERE event_id=42");$preview=MI_Event_Deletion::preview(42);
 $allowed=false;check(is_wp_error(MI_Event_Deletion::begin(42,$preview['fingerprint'],$request,'trash','Evento 42',true)),'Permissions bypassed');$allowed=true;
 $wpdb->query('UPDATE wp_mi_payments SET amount_cents=200 WHERE id=42');
 check(is_wp_error(MI_Event_Deletion::begin(42,$preview['fingerprint'],$request,'trash','Evento 42',true)),'Stale preview accepted');
@@ -60,7 +67,14 @@ check((int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_participants')===2,'SQL ro
 $calls=MI_Workspace_Client::$calls;
 $result=MI_Event_Deletion::advance(42);check(!is_wp_error($result)&&$result['stage']==='done','Retry did not finish');
 check(MI_Workspace_Client::$calls===$calls,'Repeated successful Google phase');
-foreach(['registrations','participants','payments','rooms','email_outbox']as$table)check((int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_'.$table)===1,'Wrong cleanup '.$table);
+foreach(['registrations','participants','payments','rooms']as$table)check((int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_'.$table)===1,'Wrong cleanup '.$table);
+$notice=$wpdb->get_row("SELECT * FROM wp_mi_email_outbox WHERE template_type='EVENT_DELETED_NOTICE'",ARRAY_A);
+check($notice&&$notice['status']==='TEST_PENDING'&&(int)$notice['registration_id']===0,'Avviso eliminato o modalità errata');
+check(str_contains($notice['payload_json'],'office@example.invalid'),'Contatto assente');
+$segreteria=$wpdb->get_row("SELECT * FROM wp_mi_email_outbox WHERE template_type='EVENT_DELETED_SECRETARIAT'",ARRAY_A);
+check($segreteria&&$segreteria['status']==='TEST_PENDING'&&(int)$segreteria['registration_id']===0,'Avviso segreteria assente o modalità errata');
+check(str_contains($segreteria['payload_json'],'comunicazione interna automatica'),'Testo avviso segreteria assente');
+check((int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_email_outbox')===3,'Duplicati o comunicazioni estranee cancellate');
 check(!isset($posts[42])&&isset($posts[43]),'Wrong post removed');check($scopes[7]===[43],'Operator scope incorrect');
 check(MI_Event_Deletion::advance(42)['stage']==='done','Retry not idempotent');
 check(is_wp_error(MI_Event_Deletion::enter(42)),'Deleted event accepts delayed write');

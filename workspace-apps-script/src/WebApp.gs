@@ -10,7 +10,7 @@ function doPost(event) {
     if (!verified.ok) return creaRispostaJson_({ ok: false, error: verified.error });
     if (envelope.action === 'ELIMINA_DATI_EVENTO') return creaRispostaJson_(eliminaDatiEventoDaWordPress_(envelope.payload));
     if (envelope.action === 'PING') return creaRispostaJson_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, mode: 'PREVIEW' });
-	if (envelope.action === 'STATO_SCHEMA') return creaRispostaJson_({ ok: true, schema_version: MI_SCHEMA_VERSION, registration_headers: MI_HEADERS[MI_SHEETS.REGISTRATIONS], accommodation_headers: MI_HEADERS[MI_SHEETS.ACCOMMODATIONS], group_headers: MI_HEADERS[MI_SHEETS.GROUPS], report_template_headers: MI_HEADERS[MI_SHEETS.REPORT_TEMPLATES], event_headers: MI_HEADERS[MI_SHEETS.EVENTS], mode: 'PREVIEW' });
+	if (envelope.action === 'STATO_SCHEMA') return creaRispostaJson_({ ok: true, schema_version: MI_SCHEMA_VERSION, registration_headers: MI_HEADERS[MI_SHEETS.REGISTRATIONS], participant_headers: MI_HEADERS[MI_SHEETS.PARTICIPANTS], accommodation_headers: MI_HEADERS[MI_SHEETS.ACCOMMODATIONS], group_headers: MI_HEADERS[MI_SHEETS.GROUPS], report_template_headers: MI_HEADERS[MI_SHEETS.REPORT_TEMPLATES], event_headers: MI_HEADERS[MI_SHEETS.EVENTS], mode: 'PREVIEW' });
 	if (envelope.action === 'STATO_REPLICA_ISCRIZIONE') return creaRispostaJson_(statoReplicaIscrizione_(envelope.payload));
 	if (envelope.action === 'PREPARA_PRODUZIONI_EVENTO') return creaRispostaJson_(preparaProduzioniEventoDaWordPress_(envelope.payload));
 	if (envelope.action === 'VERIFICA_FOGLIO_EVENTO') return creaRispostaJson_(verificaFoglioEventoDaWordPress_(envelope.payload));
@@ -19,10 +19,14 @@ function doPost(event) {
 	if (envelope.action === 'ORGANIZZA_FOGLI_EVENTO') return creaRispostaJson_(organizzaFogliEventoDaWordPress_(envelope.payload));
 	if (envelope.action === 'ELIMINA_FOGLIO_EVENTO') return creaRispostaJson_(eliminaFoglioEventoDaWordPress_(envelope.payload));
 	if (envelope.action === 'INVIA_EMAIL_PROVA') return creaRispostaJson_(inviaEmailProvaDaWordPress_(envelope.payload));
+	if (envelope.action === 'INVIA_EMAIL_CONFERMA') return creaRispostaJson_(inviaEmailConfermaDaWordPress_(envelope.payload));
+	if (envelope.action === 'STATO_CANALE_EMAIL') return creaRispostaJson_(statoCanaleEmail_());
     if (envelope.action === 'SALDO_PAGAMENTO_PORTALE') return creaRispostaJson_(saldoPagamentoPortale_(envelope.payload));
     if (envelope.action === 'REGISTRA_PAGAMENTO_PORTALE') return creaRispostaJson_({ok:false,error:'USE_MYSQL_PAYMENT_LEDGER'});
     if (envelope.action === 'LEGGI_MODIFICHE_FOGLIO') return creaRispostaJson_(leggiModificheEventoMysql_(envelope.payload));
-    if (envelope.action === 'SCHEDA_GESTIONE_PORTALE') return creaRispostaJson_(schedaGestionePortale_(envelope.payload));
+    if (envelope.action === 'CONFERMA_MODIFICHE_FOGLIO') return creaRispostaJson_(confermaModificheFoglio_(envelope.payload));
+    if (envelope.action === 'PREPARA_APERTURA_FOGLIO') return creaRispostaJson_(preparaAperturaFoglio_(envelope.payload));
+    if (envelope.action === 'SCHEDA_GESTIONE_PORTALE') return creaRispostaJson_({ok:false,error:'USE_MYSQL_MANAGEMENT'});
     if (envelope.action === 'AGGIORNA_GESTIONE_PORTALE') return creaRispostaJson_({ok:false,error:'USE_MYSQL_MANAGEMENT'});
     if (envelope.action === 'RIEPILOGO_GESTIONE_EVENTO') return creaRispostaJson_(riepilogoGestioneEvento_(envelope.payload));
     if (envelope.action === 'ELENCA_PAGAMENTI') return creaRispostaJson_(elencaPagamenti_(envelope.payload));
@@ -41,7 +45,7 @@ function elencaPagamenti_(payload) {
   const allowed = {};
   orderCodes.forEach(function (code) { allowed[code] = true; });
   const payments = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS)).filter(function (row) { return allowed[String(row.codice_ordine)] && String(row.canale_registrazione).toUpperCase() !== 'WORDPRESS'; }).slice(0, 500).map(function (row) {
-    return { id_pagamento: normalizzaTesto_(row.id_pagamento, 64), codice_ordine: normalizzaTesto_(row.codice_ordine, 64), tipo_movimento: normalizzaTesto_(row.tipo_movimento, 24), tipo_rata: normalizzaTesto_(row.tipo_rata, 24), data_effettiva: row.data_effettiva instanceof Date ? row.data_effettiva.toISOString() : normalizzaTesto_(row.data_effettiva, 40), importo_centesimi: Math.max(0, Math.round(Number(row.importo_centesimi) || 0)), fonte_pagamento: normalizzaTesto_(row.fonte_pagamento, 24), riferimento_esterno: normalizzaTesto_(row.riferimento_esterno, 120), etichetta_operatore: normalizzaTesto_(row.etichetta_operatore, 100), nota_amministrativa: normalizzaTesto_(row.nota_amministrativa, 500) };
+    return { id_pagamento: normalizzaTesto_(row.id_pagamento, 64), codice_ordine: normalizzaTesto_(row.codice_ordine, 64), tipo_movimento: normalizzaTesto_(row.tipo_movimento, 24), tipo_rata: normalizzaTesto_(row.tipo_rata, 24), data_effettiva: row.data_effettiva instanceof Date ? row.data_effettiva.toISOString() : normalizzaTesto_(row.data_effettiva, 40), importo_centesimi: Math.max(0, Math.round(Number(row.importo_centesimi) || 0)), fonte_pagamento: normalizzaTesto_(row.fonte_pagamento, 24), riferimento_esterno: normalizzaTesto_(row.riferimento_esterno, 120), etichetta_operatore: normalizzaTesto_(row.etichetta_operatore, 100), nota_amministrativa: normalizzaTesto_(row.nota_amministrativa, 500), attribuzioni_partecipanti_json: normalizzaTesto_(row.attribuzioni_partecipanti_json, 10000) };
   });
   return { ok: true, payments: payments };
 }
@@ -56,10 +60,12 @@ function statoReplicaIscrizione_(payload) {
   });
   if (!registration) return { ok: true, complete: false, central_complete: false, event_sheet_complete: false, order_code: orderCode };
   const expected = Math.max(0, Number(registration.numero_partecipanti) || 0);
-  const participantCount = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).filter(function (item) {
+  const participantRows = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).filter(function (item) {
     return String(item.codice_ordine) === orderCode;
-  }).length;
-  const centralComplete = expected > 0 && participantCount === expected;
+  });
+	const registrationClosed = ['CANCELLED', 'EXPIRED', 'ANNULLATO', 'SCADUTO'].indexOf(String(registration.stato || '').toUpperCase()) >= 0;
+	const activeParticipantCount = registrationClosed ? 0 : participantRows.filter(function (item) { return String(item.stato_partecipante || 'ACTIVE').toUpperCase() !== 'CANCELLED'; }).length;
+	const centralComplete = participantRows.length > 0 && activeParticipantCount === expected;
   let eventSheetComplete = false;
   if (centralComplete) {
     try {
@@ -173,6 +179,7 @@ function registraIscrizioneCentrale_(payload) {
 	const revisionId = normalizzaTesto_(payload.event_revision_id, 40);
 	const revisionHash = normalizzaTesto_(payload.event_revision_hash, 64);
 	const registrationStatus = normalizzaValoreElenco_(payload.status, ['PENDING_PAYMENT', 'CONFIRMED', 'WAITLISTED', 'CANCELLED', 'EXPIRED']);
+	const activeParticipantCount = ['CANCELLED', 'EXPIRED'].indexOf(registrationStatus) >= 0 ? 0 : participants.filter(function (participant) { return normalizzaValoreElenco_(participant.status, ['ACTIVE', 'CANCELLED']) !== 'CANCELLED'; }).length;
 	const economicMode = normalizzaValoreElenco_(payload.economic_mode, ['REGISTRATION_ONLY', 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE']);
   if (!/^[A-Za-z0-9_-]{3,64}$/.test(orderCode) || !/^\d+$/.test(eventId) || !/^[A-Za-z0-9_-]{16,64}$/.test(idempotencyKey) || !registrationStatus || !economicMode || participants.length < 1 || participants.length > 20) return { ok: false, error: 'INVALID_REGISTRATION' };
 	if (!/^\d+$/.test(revisionId) || !/^[a-f0-9]{64}$/i.test(revisionHash) || !normalizzaTesto_(payload.privacy_consent_id, 100) || !normalizzaTesto_(payload.privacy_policy_version, 64) || !normalizzaTesto_(payload.privacy_accepted_at, 40)) return { ok: false, error: 'INVALID_REVISION_OR_CONSENT' };
@@ -226,7 +233,7 @@ function registraIscrizioneCentrale_(payload) {
       neutralizzaFormula_(buyer.email, 254),
 		neutralizzaFormula_(buyer.phone, 32),
 		neutralizzaFormula_(payload.special_requests, 2000),
-		participants.length,
+		activeParticipantCount,
       Math.max(0, Math.round(Number(payload.total_cents) || 0)),
       neutralizzaFormula_(idempotencyKey, 64),
 	  existing && existing.data_creazione ? existing.data_creazione : new Date(),
@@ -244,7 +251,9 @@ function registraIscrizioneCentrale_(payload) {
 	  normalizzaTesto_(payload.marketing_consent_id, 100),
 	  normalizzaTesto_(payload.marketing_accepted_at, 40),
 	  JSON.stringify(Array.isArray(payload.order_options) ? payload.order_options : []),
-      workspaceRevision
+      workspaceRevision,
+      payload.paid_cents == null ? '' : Math.max(0, Math.round(Number(payload.paid_cents) || 0)),
+      '' // Cleared before writes; revision alone must not certify a partial replica.
     ];
     if (existing) registrations.getRange(existing._row, 1, 1, registrationValues.length).setValues([registrationValues]);
     else registrations.appendRow(registrationValues);
@@ -254,7 +263,7 @@ function registraIscrizioneCentrale_(payload) {
       sincronizzaCamereMysql_(eventId, payload.rooms, payload.workspace_event_revision);
       // Legacy overrides must not hide values now maintained by the canonical service.
       const stato = ottieniSchedaObbligatoria_(MI_SHEETS.OPERATIONAL_STATE);
-      convertiRigheInOggetti_(stato).filter(r => String(r.codice_ordine) === orderCode).sort((a,b) => b._row-a._row).forEach(r => stato.deleteRow(r._row));
+      eliminaRigheContigue_(stato, convertiRigheInOggetti_(stato).filter(r => String(r.codice_ordine) === orderCode));
     }
     const participantRows = participants.map(function (participant, index) {
       return [
@@ -267,11 +276,16 @@ function registraIscrizioneCentrale_(payload) {
         JSON.stringify(participant.fields || {}),
         JSON.stringify(participant.options || []),
         normalizzaValoreElenco_(participant.status, ['ACTIVE', 'CANCELLED']) || 'ACTIVE',
-        normalizzaTesto_(participant.cancelled_at, 40)
+        normalizzaTesto_(participant.cancelled_at, 40),
+		participant.total_cents == null ? '' : Math.max(0, Math.round(Number(participant.total_cents) || 0)),
+		participant.paid_cents == null ? '' : Math.max(0, Math.round(Number(participant.paid_cents) || 0)),
+		participant.balance_cents == null ? '' : Math.max(0, Math.round(Number(participant.balance_cents) || 0)),
+		participant.deposit_due_cents == null ? '' : Math.max(0, Math.round(Number(participant.deposit_due_cents) || 0)),
+		participant.deposit_missing_cents == null ? '' : Math.max(0, Math.round(Number(participant.deposit_missing_cents) || 0))
       ];
     });
     const participantSheet = ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS);
-    convertiRigheInOggetti_(participantSheet).filter(function (row) { return String(row.codice_ordine) === orderCode; }).sort(function (a, b) { return b._row - a._row; }).forEach(function (row) { participantSheet.deleteRow(row._row); });
+    eliminaRigheContigue_(participantSheet, convertiRigheInOggetti_(participantSheet).filter(row => String(row.codice_ordine) === orderCode));
     participantSheet.getRange(participantSheet.getLastRow() + 1, 1, participantRows.length, participantRows[0].length).setValues(participantRows);
     const outbox = ottieniSchedaObbligatoria_(MI_SHEETS.EMAIL_OUTBOX);
     const message = convertiRigheInOggetti_(outbox).find(function (row) { return String(row.codice_ordine) === orderCode && String(row.tipo_modello) === 'REGISTRATION_CONFIRMATION'; });
@@ -282,13 +296,17 @@ function registraIscrizioneCentrale_(payload) {
     // originaria WAITLISTED. Le cancellazioni continuano invece a usare lo
     // stato dell'istantanea per non generare una nuova conferma.
     const originalStatus = ['CONFIRMED', 'PENDING_PAYMENT'].indexOf(currentStatus) >= 0 ? currentStatus : normalizzaValoreElenco_(snapshotData && snapshotData.status, ['PENDING_PAYMENT', 'CONFIRMED', 'WAITLISTED']) || currentStatus || 'CONFIRMED';
-    const messageValues = [message ? message.id_messaggio : creaIdentificativoOpaco_('msg'), neutralizzaFormula_(orderCode, 64), neutralizzaFormula_(originalRecipient, 254), 'REGISTRATION_CONFIRMATION', JSON.stringify({ order_code: orderCode, status: originalStatus }), 'PREVIEW', message && message.data_creazione ? message.data_creazione : new Date()];
+    const messageValues = [message ? message.id_messaggio : creaIdentificativoOpaco_('msg'), neutralizzaFormula_(orderCode, 64), neutralizzaFormula_(originalRecipient, 254), 'REGISTRATION_CONFIRMATION', JSON.stringify({ order_code: orderCode, status: originalStatus }), message ? message.stato : 'PREVIEW', message && message.data_creazione ? message.data_creazione : new Date()];
     if (message) outbox.getRange(message._row, 1, 1, messageValues.length).setValues([messageValues]); else outbox.appendRow(messageValues);
     sincronizzaPagamenti_(orderCode, payload.payments);
     const registrationComplete = convertiRigheInOggetti_(registrations).some(function (row) { return String(row.codice_ordine) === orderCode && String(row.chiave_idempotenza) === idempotencyKey && String(row.hash_revisione_evento) === revisionHash && String(row.snapshot_json) === snapshotJson; });
     const participantCount = convertiRigheInOggetti_(participantSheet).filter(function (row) { return String(row.codice_ordine) === orderCode; }).length;
     const outboxComplete = convertiRigheInOggetti_(outbox).some(function (row) { return String(row.codice_ordine) === orderCode && String(row.tipo_modello) === 'REGISTRATION_CONFIRMATION' && String(row.destinatario) === originalRecipient; });
     const complete = registrationComplete && participantCount === participants.length && outboxComplete;
+    if (complete) {
+      const saved = convertiRigheInOggetti_(registrations).find(row=>String(row.codice_ordine)===orderCode);
+      registrations.getRange(saved._row,registrationValues.length,1,1).setValues([[workspaceRevision]]);
+    }
     aggiungiControllo_('APPEND_REGISTRATION', 'REGISTRATION', orderCode, 'SUCCESS', 'WORDPRESS', 'REGISTRATION_RECORDED', 'WORDPRESS_PROXY');
     return { ok: complete, complete: complete, workspace_revision: String(payload.workspace_revision === undefined ? '' : payload.workspace_revision), replayed: Boolean(existing), order_code: orderCode, error: complete ? undefined : 'INCOMPLETE_REPLICA' };
   } finally {
@@ -315,8 +333,18 @@ function sincronizzaCamereMysql_(eventId, rooms, revision) {
   if (previous) versions.getRange(previous._row, 1, 1, 2).setValues([[eventId, revision]]);
   else versions.appendRow([eventId, revision]);
   const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.ACCOMMODATIONS);
-  convertiRigheInOggetti_(sheet).filter(r => String(r.id_evento) === eventId).sort((a,b) => b._row-a._row).forEach(r => sheet.deleteRow(r._row));
+  eliminaRigheContigue_(sheet, convertiRigheInOggetti_(sheet).filter(r => String(r.id_evento) === eventId));
   if (values.length) sheet.getRange(sheet.getLastRow()+1, 1, values.length, values[0].length).setValues(values);
+}
+
+/** Delete bottom-up, preserving rows belonging to other events and retry repair. */
+function eliminaRigheContigue_(sheet, rows) {
+  const indices = [...new Set(rows.map(row => row._row))].sort((a,b) => b-a);
+  for (let i=0; i<indices.length;) {
+    const end=indices[i]; let start=end; i++;
+    while (i<indices.length && indices[i]===start-1) { start=indices[i]; i++; }
+    sheet.deleteRows(start,end-start+1);
+  }
 }
 
 function sincronizzaPagamenti_(orderCode, payments) {
@@ -332,8 +360,22 @@ function sincronizzaPagamenti_(orderCode, payments) {
     const kind = kindMap[String(payment.movement_kind || payment.transaction_kind || '').toUpperCase()];
     const source = sourceMap[String(payment.payment_source || '').toUpperCase()];
     const installment = installmentMap[String(payment.installment_kind || '').toUpperCase()] || 'NON_ASSEGNATO';
-    const amount = Math.max(0, Math.round(Number(payment.amount_cents) || 0));
-    if (!kind || !source || amount < 1) throw new Error('INVALID_PAYMENT');
+	const amount = Math.max(0, Math.round(Number(payment.amount_cents) || 0));
+	if (!kind || !source || amount < 1) throw new Error('INVALID_PAYMENT');
+	let allocations = payment.participant_allocations_json || [];
+	try { if (typeof allocations === 'string') allocations = allocations ? JSON.parse(allocations) : []; } catch (error) { throw new Error('INVALID_PAYMENT_ALLOCATIONS'); }
+	if (!Array.isArray(allocations)) throw new Error('INVALID_PAYMENT_ALLOCATIONS');
+	const participantIds = new Set();
+	let allocated = 0;
+	allocations = allocations.map(function (allocation) {
+	  const participantId = Math.round(Number(allocation && allocation.participant_id));
+	  const allocatedAmount = Math.round(Number(allocation && allocation.amount_cents));
+	  if (participantId < 1 || allocatedAmount < 1 || participantIds.has(participantId)) throw new Error('INVALID_PAYMENT_ALLOCATIONS');
+	  participantIds.add(participantId); allocated += allocatedAmount;
+	  return { participant_id: participantId, name: normalizzaTesto_(allocation.name, 200), amount_cents: allocatedAmount };
+	});
+	if (allocations.length && allocated !== amount) throw new Error('INVALID_PAYMENT_ALLOCATIONS');
+	const allocationsJson = allocations.length ? JSON.stringify(allocations) : '';
     const effective = normalizzaTesto_(payment.effective_at, 40);
     const effectiveDate = effective ? new Date(stableId && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(effective) ? effective.replace(' ', 'T') + 'Z' : effective) : new Date();
     if (isNaN(effectiveDate.getTime())) {
@@ -344,10 +386,10 @@ function sincronizzaPagamenti_(orderCode, payments) {
     const origin = stableId ? 'MYSQL|' + orderCode + '|' + stableId : 'WP|' + orderCode + '|' + kind + '|' + installment + '|' + effective + '|' + amount + '|' + source + '|' + reference;
     const duplicate = existing.find(function (row) { return String(row.id_inserimento_origine) === origin; });
     if (duplicate) {
-      if (stableId && (String(duplicate.tipo_movimento) !== kind || Number(duplicate.importo_centesimi) !== amount || String(duplicate.fonte_pagamento) !== source || new Date(duplicate.data_effettiva).getTime() !== effectiveDate.getTime())) throw new Error('PAYMENT_ID_CONFLICT');
-      return;
-    }
-    sheet.appendRow([creaIdentificativoOpaco_('pay'), neutralizzaFormula_(orderCode, 64), kind, installment, effectiveDate, amount, 'EUR', source, neutralizzaFormula_(reference, 120), neutralizzaFormula_(payment.operator_label, 100), 'WORDPRESS', origin, new Date(), neutralizzaFormula_(payment.administrative_note, 500)]);
-    existing.push({ id_inserimento_origine: origin, tipo_movimento: kind, importo_centesimi: amount, fonte_pagamento: source, data_effettiva: effectiveDate });
+	  if (stableId && (String(duplicate.tipo_movimento) !== kind || Number(duplicate.importo_centesimi) !== amount || String(duplicate.fonte_pagamento) !== source || new Date(duplicate.data_effettiva).getTime() !== effectiveDate.getTime() || String(duplicate.attribuzioni_partecipanti_json || '') !== allocationsJson)) throw new Error('PAYMENT_ID_CONFLICT');
+	  return;
+	}
+	sheet.appendRow([creaIdentificativoOpaco_('pay'), neutralizzaFormula_(orderCode, 64), kind, installment, effectiveDate, amount, 'EUR', source, neutralizzaFormula_(reference, 120), neutralizzaFormula_(payment.operator_label, 100), 'WORDPRESS', origin, new Date(), neutralizzaFormula_(payment.administrative_note, 500), allocationsJson]);
+	existing.push({ id_inserimento_origine: origin, tipo_movimento: kind, importo_centesimi: amount, fonte_pagamento: source, data_effettiva: effectiveDate, attribuzioni_partecipanti_json: allocationsJson });
   });
 }

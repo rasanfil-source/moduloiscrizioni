@@ -1,5 +1,12 @@
 /** Storico consultabile: nessuna riga locale viene acquisita. */
 function preparaPagamentiEvento_(foglio, idEvento) {
+  if (!eventoPrevedeMovimenti_(idEvento)) {
+    const existing = foglio.getSheetByName('Pagamenti');
+    if (existing && foglio.getSheets().some(s => s.getName() !== 'Pagamenti' && !s.isSheetHidden())) existing.hideSheet();
+    return null;
+  }
+  const existing = foglio.getSheetByName('Pagamenti');
+  if (existing) { existing.showSheet(); return existing; }
   return foglio.getSheetByName('Pagamenti') || foglio.insertSheet('Pagamenti');
 }
 function aggiornaProiezionePagamentiEvento_(foglio, idEvento) {
@@ -9,6 +16,7 @@ function aggiornaProiezionePagamentiEvento_(foglio, idEvento) {
 }
 function aggiornaProiezionePagamentiEventoConLock_(foglio, idEvento) {
     const s=preparaPagamentiEvento_(foglio,idEvento);
+    if (!s) return;
     const ordini=new Set(convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(r=>String(r.id_evento)===String(idEvento)).map(r=>String(r.codice_ordine)));
     const rows=convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS)).filter(r=>ordini.has(String(r.codice_ordine))).sort((a,b)=>new Date(a.data_effettiva)-new Date(b.data_effettiva)).map(r=>{const m=serializzaMovimento_(r);return [m.id,r.codice_ordine,m.data,m.tipo,m.importo/100,m.metodo,m.riferimento,m.operatore,m.nota].map(v=>typeof v==='string'?neutralizzaFormula_(v,5000):v);});
     s.clear();

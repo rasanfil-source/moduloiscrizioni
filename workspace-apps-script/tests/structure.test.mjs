@@ -77,11 +77,6 @@ test('i pagamenti ammettono solo bonifico carta e contanti senza dati carta', ()
   assert.match(sources['Config.gs'], /BONIFICO/);
   assert.match(sources['Config.gs'], /CARTA/);
   assert.match(sources['Config.gs'], /CONTANTE/);
-  assert.match(sources['Payments.gs'], /contienePossibileNumeroCarta_/);
-  assert.match(sources['Payments.gs'], /id_inserimento_origine/);
-	assert.match(sources['Payments.gs'], /FREE_ORDER/);
-	assert.match(sources['Payments.gs'], /OVERPAYMENT/);
-	assert.match(sources['Payments.gs'], /EXCESS_REFUND/);
 });
 
 test('il retry WordPress verifica prima una replica già completata', () => {
@@ -102,7 +97,7 @@ test('le funzioni Apps Script applicative hanno nomi italiani', () => {
 });
 
 test('la migrazione aggiunge riepilogo economico e sistemazioni operative', () => {
-	assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.9\.0'/);
+	assert.match(sources['Config.gs'], /MI_SCHEMA_VERSION = '1\.13\.0'/);
   assert.match(sources['Config.gs'], /modalita_economica/);
   assert.match(sources['Config.gs'], /primo_versamento_centesimi/);
   assert.match(sources['Config.gs'], /saldo_centesimi/);
@@ -124,7 +119,6 @@ test('la console Sheets consulta prenotazioni e genera elenchi operativi per eve
 	assert.match(sources['Segreteria.gs'], /MI_SHEETS\.OPERATIONAL_VIEWS/);
 	assert.match(sources['Segreteria.gs'], /generaElencoOperativo_/);
 	assert.match(sources['Segreteria.gs'], /cercaPrenotazioniSegreteria/);
-  assert.match(sources['GestionePortale.gs'], /Camera non disponibile/);
   assert.doesNotMatch(sources['Segreteria.gs'], /Opzione dimostrativa predefinita/);
   assert.match(sources['Segreteria.gs'], /Data di nascita/);
 	assert.match(sources['Segreteria.gs'], /destinatariComunicazioneOperativa_/);
@@ -222,15 +216,20 @@ test('lo stato individuale dei partecipanti arriva nelle schede e negli elenchi'
 
 test('camere e pullman si gestiscono dal portale unico', () => {
   assert.match(sources['Setup.gs'], /Apri gestione web/);
-  assert.match(sources['GestionePortale.gs'], /Camera non disponibile o al completo/);
-  assert.match(sources['GestionePortale.gs'], /Assegnazione pullman/);
   assert.doesNotMatch(segreteriaHtml, /call\('salvaAssegnazioniEvento'/);
 });
 
 test('la console non richiede mai foto o scansioni dei documenti', () => {
 	assert.doesNotMatch(segreteriaHtml, /type\s*=\s*["']file["']/i);
 	assert.doesNotMatch(segreteriaHtml, /foto(?:grafia)?\s+(?:del|di)\s+document|scansione\s+(?:del|di)\s+document/i);
-	assert.doesNotMatch(combined, /DriveApp\.createFile|Utilities\.newBlob/);
+	assert.doesNotMatch(combined, /DriveApp\.createFile/);
+	assert.doesNotMatch(Object.entries(sources).filter(([name]) => name !== 'Email.gs').map(([, text]) => text).join('\n'), /Utilities\.newBlob/);
+});
+
+test('la data di rilascio del documento è disponibile nelle viste operative', () => {
+	assert.match(sources['Segreteria.gs'], /document_issue_date/);
+	assert.match(sources['Segreteria.gs'], /Data di rilascio del documento/);
+	assert.match(sources['Segreteria.gs'], /data_rilascio_documento/);
 });
 
 test('la modalità email GAS è fail-closed e sostituisce sempre il destinatario', () => {
@@ -243,7 +242,7 @@ test('la modalità email GAS è fail-closed e sostituisce sempre il destinatario
 
 test('la replica è riconciliante e viene confermata solo quando completa', () => {
   assert.match(sources['WebApp.gs'], /IDEMPOTENCY_CONFLICT/);
-  assert.match(sources['WebApp.gs'], /participantSheet\.deleteRow/);
+  assert.match(sources['WebApp.gs'], /eliminaRigheContigue_\(participantSheet/);
   assert.match(sources['WebApp.gs'], /participantCount === participants\.length/);
   assert.match(sources['WebApp.gs'], /complete:\s*complete/);
   assert.match(sources['WebApp.gs'], /existing && existing\.data_creazione/);

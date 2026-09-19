@@ -105,11 +105,12 @@ final class MI_Workspace_Settings {
 		$result = MI_Workspace_Client::stato_schema();
 		$required = array( 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'opzioni_ordine_json', 'id_consenso_marketing' );
 		$headers = is_wp_error( $result ) ? array() : (array) ( $result['registration_headers'] ?? array() );
+		$participant_headers = is_wp_error( $result ) ? array() : (array) ( $result['participant_headers'] ?? array() );
 		$accommodation_headers = is_wp_error( $result ) ? array() : (array) ( $result['accommodation_headers'] ?? array() );
 		$group_headers = is_wp_error( $result ) ? array() : (array) ( $result['group_headers'] ?? array() );
 		$report_headers = is_wp_error( $result ) ? array() : (array) ( $result['report_template_headers'] ?? array() );
 		$event_headers = is_wp_error( $result ) ? array() : (array) ( $result['event_headers'] ?? array() );
-		$valid = ! is_wp_error( $result ) && '1.9.0' === ( $result['schema_version'] ?? '' ) && ! array_diff( $required, $headers ) && ! array_diff( array( 'id_evento', 'codice', 'nome', 'capienza', 'attiva' ), $accommodation_headers ) && ! array_diff( array( 'id_gruppo', 'nome', 'slug', 'stato', 'logo_url', 'immagine_url' ), $group_headers ) && ! array_diff( array( 'id_modello', 'nome', 'tipo', 'colonne_json', 'filtri_json' ), $report_headers ) && ! array_diff( array( 'id_evento', 'id_gruppo', 'titolo' ), $event_headers );
+		$valid = ! is_wp_error( $result ) && '1.11.0' === ( $result['schema_version'] ?? '' ) && ! array_diff( $required, $headers ) && ! array_diff( array( 'totale_centesimi', 'versato_centesimi', 'saldo_centesimi', 'caparra_centesimi', 'caparra_residua_centesimi' ), $participant_headers ) && ! array_diff( array( 'id_evento', 'codice', 'nome', 'capienza', 'attiva' ), $accommodation_headers ) && ! array_diff( array( 'id_gruppo', 'nome', 'slug', 'stato', 'logo_url', 'immagine_url' ), $group_headers ) && ! array_diff( array( 'id_modello', 'nome', 'tipo', 'colonne_json', 'filtri_json' ), $report_headers ) && ! array_diff( array( 'id_evento', 'id_gruppo', 'titolo' ), $event_headers );
 		wp_safe_redirect( self::page_url( $valid ? 'schema_ok' : 'schema_errore' ) );
 		exit;
 	}

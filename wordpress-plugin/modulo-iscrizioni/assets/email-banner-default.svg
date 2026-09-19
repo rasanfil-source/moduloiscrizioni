@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" role="img" aria-labelledby="title description">
+  <title id="title">Parrocchia Sant'Eugenio</title>
+  <desc id="description">Banner istituzionale astratto blu</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1a365d"/>
+      <stop offset="1" stop-color="#337ab7"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="320" fill="url(#background)"/>
+  <circle cx="1040" cy="45" r="235" fill="#ffffff" opacity=".08"/>
+  <circle cx="115" cy="330" r="210" fill="#ffffff" opacity=".06"/>
+  <path d="M600 70v180M510 150h180" stroke="#ffffff" stroke-width="12" stroke-linecap="round" opacity=".9"/>
+</svg>

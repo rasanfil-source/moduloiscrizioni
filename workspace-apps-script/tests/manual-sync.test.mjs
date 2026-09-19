@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
 import test from 'node:test';
-const c=vm.createContext({});vm.runInContext(await readFile(new URL('../src/SincronizzazioneManuale.gs',import.meta.url),'utf8'),c);
+const c=vm.createContext({});vm.runInContext(await readFile(new URL('../src/Core.gs',import.meta.url),'utf8')+'\n'+await readFile(new URL('../src/SincronizzazioneManuale.gs',import.meta.url),'utf8'),c);
 const base={'["MI-1",1]':{first_name:'Anna',room:'A',balance:'100'},'["MI-1",2]':{first_name:'Maria',room:'B',balance:'100'}};
 const rows=()=>[{order:'MI-1',number:2,values:{first_name:'Maria',room:'B',balance:'100'}},{order:'MI-1',number:1,values:{first_name:'Anna',room:'A',balance:'100'}}];
 test('ordinamento righe non genera cambiamenti, due camere scambiate restano due modifiche',()=>{

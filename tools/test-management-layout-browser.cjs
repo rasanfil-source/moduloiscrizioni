@@ -11,14 +11,24 @@ const server=http.createServer(async(req,res)=>{if(req.url==='/')return res.end(
 (async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({channel:'msedge',headless:true});try{const page=await browser.newPage({viewport:{width:1280,height:900},acceptDownloads:true});const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:'+server.address().port);await page.locator('[data-more]').waitFor();assert.equal(await page.locator('[data-list] tbody tr').count(),30);
 assert.equal(await page.locator('.mi-management-summary tr:has-text("senza camera")').isVisible(),false);
 assert.equal(await page.locator('[data-annual-report]').isVisible(),false);
-await page.route('**/ajax',async route=>{const response=await route.fetch();const json=await response.json();if(new URLSearchParams(route.request().postData()).get('operation')==='detail'){Object.assign(json.data,{status:'CONFIRMED',option_scope:'ALL',fields:[{key:'participant_phone',required:true,type:'tel'}],option_definitions:[{code:'bus',scope:'TICKET',name:'Pullman',max_quantity:5}]});json.data.participants=json.data.participants.slice(0,1).map(p=>({...p,status:'ACTIVE',fields:{participant_phone:'3123456789'}}));}await route.fulfill({response,json});});
-await page.locator('[data-open]').first().click();await page.locator('[data-person]').waitFor();
+await page.route('**/ajax',async route=>{const response=await route.fetch();const json=await response.json();if(new URLSearchParams(route.request().postData()).get('operation')==='detail'){Object.assign(json.data,{status:'CONFIRMED',option_scope:'ALL',fields:[{key:'participant_phone',label:'Cellulare',required:true,type:'tel'}],option_definitions:[{code:'bus',scope:'TICKET',name:'Pullman',max_quantity:5}]});json.data.participants=json.data.participants.slice(0,1).map(p=>({...p,status:'ACTIVE',fields:{participant_phone:'3123456789'}}));}await route.fulfill({response,json});});
+await page.screenshot({path:'.tmp/gestione-rifinitura-desktop.png'});await page.locator('[data-open]').first().click();await page.locator('[data-person]').waitFor();
 assert.doesNotMatch(await page.locator('[data-management-content] h3').innerText(),/ORD-1/);
 assert.match(await page.locator('[data-management-content] h3 + p').innerText(),/Contatti dell’iscritto: 3123456789/);
 assert.doesNotMatch(await page.locator('[data-management-content]').innerText(),/Foglio Google:|Collega persone|Nessun collegamento/);
+assert.match(await page.locator('.mi-person-economic').innerText(),/Intera prenotazione ORD-1/);
+assert.deepEqual(await page.locator('.mi-person-economic dd').allTextContents(),['660,00 €','10,00 €','650,00 €']);
+await page.locator('[data-management-content]').screenshot({path:'.tmp/persona-rifinitura-desktop.png'});
+await page.setViewportSize({width:390,height:844});
+assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+assert.equal(await page.locator('.mi-person-economic dl').evaluate(e=>getComputedStyle(e).gridTemplateColumns.split(' ').length),1);
+await page.locator('[data-person] input').first().focus();
+assert.equal(await page.locator('[data-person] input').first().evaluate(e=>getComputedStyle(e).outlineWidth),'3px');
+await page.locator('[data-management-content]').screenshot({path:'.tmp/persona-rifinitura-mobile.png'});
+await page.setViewportSize({width:1280,height:900});
 assert.equal(await page.locator('[data-change-options] input[type=checkbox]').count(),1);
 assert.equal(await page.locator('[data-change-options] input[type=number]').count(),0);
-await page.unroute('**/ajax');await page.locator('[data-back]').click();await page.locator('[data-more]').waitFor();
+await page.unroute('**/ajax');await page.locator('[data-back]').first().click();await page.locator('[data-more]').waitFor();
 await page.route('**/ajax',async route=>{const response=await route.fetch();const json=await response.json();if(new URLSearchParams(route.request().postData()).get('operation')==='summary')json.data.annual_report_group={id:5,name:'Gruppo prova'};await route.fulfill({response,json});});
 await page.reload();await page.locator('[data-more]').waitFor();
 assert.equal(await page.locator('[data-annual-report]').isVisible(),true);
@@ -40,13 +50,14 @@ assert.equal(await page.locator('[data-participant-heading]').innerText(),'Elenc
 await page.locator('[data-critical-filter]').selectOption('missing');
 assert.equal(await page.locator('[data-participant-heading]').innerText(),'Elenco partecipanti con dati mancanti');
 await page.locator('[data-service-filter]').selectOption('bus');
+assert.equal(await page.locator('[data-filter-count]').innerText(),'(2 attivi)');
 assert.equal(await page.locator('[data-participant-heading]').innerText(),'Elenco partecipanti con dati mancanti, che hanno scelto Pullman');
 await page.locator('[data-service-filter]').selectOption('');
 await page.locator('[data-critical-filter]').selectOption('all');
 assert.equal(await page.locator('[data-room-inventory]').isVisible(),false);
 assert.equal(await page.locator('[data-deposit-filter]').isVisible(),false);
 assert.equal(await page.locator('.mi-management-summary tr:has-text("Da incassare")').isVisible(),false);
-assert.equal(await page.locator(".mi-management-summary tr:not(.mi-summary-section)").first().locator("td").innerText(),"65");assert.equal(await page.locator(".mi-management-summary button").count(),0);assert.equal(await page.locator('[data-list-view]').count(),0);assert.doesNotMatch(await page.locator('.mi-management-summary').innerText(),/prenotazion/i);
+assert.equal(await page.locator(".mi-summary-card").first().locator("strong").innerText(),"65");assert.equal(await page.locator(".mi-management-summary button").count(),0);assert.equal(await page.locator('[data-list-view]').count(),0);assert.doesNotMatch(await page.locator('.mi-management-summary').innerText(),/prenotazion/i);
 assert.equal(await page.evaluate(()=>!!(document.querySelector('[data-event-actions]').compareDocumentPosition(document.querySelector('[data-new-registration]'))&Node.DOCUMENT_POSITION_FOLLOWING)),true);
 assert.equal(await page.evaluate(()=>document.querySelector('[data-mi-management]').lastElementChild.hasAttribute('data-annual-report')),true);
 await page.locator('[data-refresh]').click();await page.locator('[data-more]').waitFor();assert.equal(await page.locator('[data-refresh]').count(),1);assert.equal(await page.locator('[data-annual-report]').count(),1);
@@ -54,9 +65,9 @@ for(const deposit of [false,true]){
 features={rooms:false,payments:true,deposit};await page.reload();await page.locator('[data-more]').waitFor();
 const state=page.locator('select[data-deposit-filter]');assert.match(await state.locator('..').innerText(),/^Stato/);assert.equal(await state.count(),1);assert.equal(await state.inputValue(),'');
 assert.deepEqual(await state.locator('option').allTextContents(),deposit?['Tutti gli iscritti','Nessun versamento','Caparra da completare','Caparra versata','Saldato']:['Tutti gli iscritti','Da saldare','Saldato']);
-assert.deepEqual(await page.locator('.mi-summary-section').allTextContents(),['Persone','Importi']);
-assert.match(await page.locator('[data-net-paid]').innerText(),/10,00/);
+assert.deepEqual(await page.locator('.mi-summary-card > span').allTextContents(),['Persone iscritte','Da incassare','Dati mancanti']);
+assert.match(await page.locator('.mi-summary-card').filter({hasText:'Da incassare'}).innerText(),/10,00/);
 if(deposit){await page.locator('.mi-management-summary').screenshot({path:'.tmp/riepilogo-grafica-desktop.png'});await page.setViewportSize({width:390,height:844});await page.locator('.mi-management-summary').screenshot({path:'.tmp/riepilogo-grafica-mobile.png'});await page.setViewportSize({width:1280,height:900});}
 }
 features={rooms:false,payments:false,deposit:false};await page.reload();await page.locator('[data-more]').waitFor();assert.equal(await page.locator('select[data-deposit-filter]').isVisible(),false);
-await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(errors,[]);console.log('Evento senza pernottamento/incassi: elementi pertinenti, singolari, ordine comandi, rapporto annuale e refresh verificati.');}finally{await browser.close();server.close();}})().catch(e=>{console.error(e);server.close();process.exitCode=1;});
+await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.reload();await page.locator('[data-more]').waitFor();assert.equal(await page.locator('.mi-advanced-filters').evaluate(e=>e.open),false);assert.equal(await page.locator('[data-query]').isVisible(),true);await page.screenshot({path:'.tmp/gestione-rifinitura-mobile.png'});assert.deepEqual(errors,[]);console.log('Evento senza pernottamento/incassi: elementi pertinenti, singolari, ordine comandi, rapporto annuale e refresh verificati.');}finally{await browser.close();server.close();}})().catch(e=>{console.error(e);server.close();process.exitCode=1;});

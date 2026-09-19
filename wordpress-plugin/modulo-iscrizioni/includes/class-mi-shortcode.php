@@ -39,10 +39,42 @@ final class MI_Shortcode {
 	}
 
 	public static function url_iscrizione( $event_id ) {
+		$slug = (string) get_post_meta( $event_id, '_mi_public_slug', true );
+		if ( $slug && (int) get_option( 'mi_public_slug_' . $slug ) === (int) $event_id ) return home_url( '/v/' . $slug );
 		return add_query_arg( 'mi_iscrizione', absint( $event_id ), home_url( '/' ) );
 	}
 
+	/** Hold the namespace lock through event creation and alias assignment. */
+	public static function validate_public_slug( $raw, $event_id = 0 ) {
+		$slug = strtolower( trim( (string) $raw ) );
+		if ( '' === $slug ) return '';
+		if ( strlen( $slug ) > 60 || ! preg_match( '/^[a-z0-9]+(?:-[a-z0-9]+)*$/D', $slug ) ) return new WP_Error( 'mi_slug_invalid', 'Usa da 1 a 60 lettere senza accenti, numeri o trattini, senza spazi. Inserisci solo il nome abbreviato, non l’indirizzo completo.' );
+		global $wpdb;
+		$lock = 'mi_slug_' . substr( hash( 'sha256', $wpdb->prefix . $slug ), 0, 48 );
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $lock ) ) ) return new WP_Error( 'mi_slug_busy', 'Verifica indirizzo occupata. Riprova tra qualche secondo.' );
+		register_shutdown_function( static function () use ( $wpdb, $lock ) { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); } );
+		$owner = get_option( 'mi_public_slug_' . $slug, false );
+		if ( false !== $owner && (int) $owner !== (int) $event_id ) return new WP_Error( 'mi_slug_taken', 'Questo indirizzo è già stato utilizzato. Scegli un altro nome abbreviato.' );
+		if ( get_page_by_path( 'v/' . $slug ) ) return new WP_Error( 'mi_slug_page', 'Questo indirizzo è già utilizzato da una pagina del sito.' );
+		return $slug;
+	}
+
+	public static function save_public_slug( $event_id, $slug ) {
+		if ( '' === $slug ) return true;
+		$key = 'mi_public_slug_' . $slug;
+		if ( ! add_option( $key, (int) $event_id, '', false ) && (int) get_option( $key ) !== (int) $event_id ) return new WP_Error( 'mi_slug_taken', 'Indirizzo non assegnato: il nome è già utilizzato.' );
+		update_post_meta( $event_id, '_mi_public_slug', $slug );
+		update_post_meta( $event_id, '_mi_registration_url', self::url_iscrizione( $event_id ) );
+		return true;
+	}
+
 	public static function mostra_pagina_iscrizione_pubblica() {
+		$path = wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
+		$base = rtrim( (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH ), '/' );
+		if ( preg_match( '#^' . preg_quote( $base, '#' ) . '/v/([a-z0-9-]{1,60})/?$#D', (string) $path, $match ) ) {
+			$owner = absint( get_option( 'mi_public_slug_' . $match[1] ) );
+			if ( $owner ) $_GET['mi_iscrizione'] = $owner;
+		}
 		$event_id = absint( $_GET['mi_iscrizione'] ?? 0 );
 		if ( ! $event_id ) return;
 		$content = self::render( array( 'event' => $event_id ) );
@@ -107,6 +139,7 @@ final class MI_Shortcode {
 		self::enqueue_assets();
 		$config = array( 'event' => $event, 'state' => $is_preview ? 'OPEN' : MI_Registration_Service::registration_state( $event ), 'preview' => $is_preview, 'endpoint' => esc_url_raw( rest_url( MI_REST_Controller::NAMESPACE . '/events/' . $event_id . '/registrations' ) ), 'instanceId' => $instance_id, 'homeUrl' => esc_url_raw( home_url( '/' ) ), 'privacyUrl' => $event['privacy_url'], 'qrScriptUrl' => esc_url_raw( MI_PLUGIN_URL . 'assets/qrcode-generator-2.0.4.js?ver=2.0.4' ) );
 		$formatted_date = self::formatted_event_date( $event['event_starts_at'] );
+		$formatted_opens = self::formatted_event_date( $event['opens_at'] );
 		$formatted_closes = self::formatted_event_date( $event['closes_at'] );
 		ob_start(); ?>
 		<section id="<?php echo esc_attr( $instance_id ); ?>" class="mi-registration" style="--mi-primary:<?php echo esc_attr( $event['accent_color'] ); ?>;--mi-primary-dark:<?php echo esc_attr( self::darken_color( $event['accent_color'] ) ); ?>" data-mi-config="<?php echo esc_attr( wp_json_encode( $config ) ); ?>">
@@ -120,7 +153,7 @@ final class MI_Shortcode {
 					<?php if ( $event['description'] ) : ?><p class="mi-registration__lead"><?php echo nl2br( esc_html( $event['description'] ) ); ?></p><?php endif; ?>
 				</div>
 			</header>
-			<?php if ( 'OPEN' !== $config['state'] ) : ?><p class="mi-registration__notice" role="status"><?php echo esc_html( self::state_message( $config['state'] ) ); ?></p><?php else : ?>
+			<?php if ( 'OPEN' !== $config['state'] ) : ?><p class="mi-registration__notice" role="status"><?php echo esc_html( self::state_message( $config['state'], $formatted_opens ) ); ?></p><?php else : ?>
 			<?php if ( $event['availability']['full'] && $event['waitlist_enabled'] ) : ?><p class="mi-registration__availability mi-registration__availability--waitlist" role="status"><span><strong>Posti ordinari esauriti.</strong> Puoi inviare la richiesta: sarà inserita in lista d’attesa.</span><?php if ( $formatted_closes ) : ?><small>Richieste aperte fino a <?php echo esc_html( $formatted_closes ); ?>.</small><?php endif; ?></p><?php else : ?><p class="mi-registration__availability" role="status"><span><strong><?php echo esc_html( (string) $event['availability']['remaining'] ); ?> posti disponibili</strong> su <?php echo esc_html( (string) $event['availability']['capacity'] ); ?>.</span><?php if ( $formatted_closes ) : ?><small>Iscrizioni aperte fino a <?php echo esc_html( $formatted_closes ); ?>.</small><?php endif; ?></p><?php endif; ?>
 			<nav class="mi-registration__progress" aria-label="Avanzamento iscrizione"><ol><li aria-current="step" data-mi-progress="1"><span>1</span> Iscrizioni</li><li data-mi-progress="2"><span>2</span> Informazioni</li><li data-mi-progress="3"><span>3</span> Conferma</li></ol></nav>
 			<form class="mi-registration__form" novalidate>
@@ -166,7 +199,8 @@ final class MI_Shortcode {
 		return sprintf( '#%02x%02x%02x', $red, $green, $blue );
 	}
 
-	private static function state_message( $state ) {
+	private static function state_message( $state, $formatted_opens = '' ) {
+		if ( 'NOT_OPEN' === $state && $formatted_opens ) return 'Le iscrizioni apriranno ' . str_replace( ', ', ' alle ', $formatted_opens ) . '.';
 		$messages = array( 'NOT_OPEN' => 'Le iscrizioni non sono ancora aperte.', 'CLOSED' => 'Le iscrizioni sono chiuse.', 'SOLD_OUT' => 'I posti sono esauriti e la lista d’attesa non è attiva.', 'MISCONFIGURED' => 'Le iscrizioni non sono al momento disponibili.' );
 		return $messages[ $state ] ?? 'Le iscrizioni non sono disponibili.';
 	}

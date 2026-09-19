@@ -11,7 +11,7 @@ function riepilogoPagamenti_(orderCode, lettura) {
     const amount = Math.max(0, Number(item.importo_centesimi) || 0);
     return total + (['RIMBORSO', 'STORNO'].indexOf(String(item.tipo_movimento).toUpperCase()) >= 0 ? -amount : amount);
   }, 0));
-  const total = Math.max(0, Number(registration.totale_centesimi) || 0);
+  const economic = posizioneEconomicaRegistrazione_(registration, paid); const total = economic.total;
   const event = lettura.righe(MI_SHEETS.EVENTS).find(function (item) {
     return String(item.id_evento) === String(registration.id_evento);
   });
@@ -21,7 +21,7 @@ function riepilogoPagamenti_(orderCode, lettura) {
     eventTitle: event ? String(event.titolo || '') : 'Evento ' + String(registration.id_evento),
     referent: [registration.nome_referente, registration.cognome_referente].filter(String).join(' '),
     total: total,
-    paid: paid,
-    balance: Math.max(0, total - paid)
+    paid: economic.paid,
+    balance: economic.balance
   };
 }

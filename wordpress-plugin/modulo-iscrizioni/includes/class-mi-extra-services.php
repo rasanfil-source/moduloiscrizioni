@@ -1,5 +1,6 @@
 <?php
 defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/class-mi-option-rules.php';
 
 final class MI_Extra_Services {
 	public static function parse( $input ) {
@@ -17,10 +18,10 @@ final class MI_Extra_Services {
 			if ( isset( $seen[$code] ) ) return new WP_Error( 'mi_extra_duplicate', 'Voce aggiuntiva duplicata.' );
 			$seen[$code] = true;
 			$category = sanitize_key( $input['extra_service_category'][$i] ?? 'altro' );
-			if ( ! in_array( $category, array( 'alloggio','pullman','pranzo','altro' ), true ) ) $category = 'altro';
-			$group = sanitize_key( $input['extra_service_group'][$i] ?? '' );
+			if ( ! in_array( $category, array( 'alloggio', 'supplemento', 'pullman', 'trasferimento', 'pranzo', 'altro' ), true ) ) $category = 'altro';
+			$group = MI_Option_Rules::choice_group( array( 'code' => $code, 'category' => $category, 'choice_group' => sanitize_key( $input['extra_service_group'][$i] ?? '' ) ) );
 			if ( strlen( $group ) > 40 ) return new WP_Error( 'mi_extra_group', 'Il gruppo di alternative deve avere al massimo 40 caratteri.' );
-			$result[] = array( 'code' => $code, 'name' => $label, 'scope' => 'TICKET', 'price_cents' => $cents, 'max_quantity' => 1, 'category' => $category, 'choice_group' => $group );
+			$result[] = array( 'code' => $code, 'name' => $label, 'scope' => 'TICKET', 'price_cents' => $cents, 'max_quantity' => 1, 'category' => $category, 'choice_group' => '' === $group ? null : $group );
 		}
 		return $result;
 	}
@@ -33,7 +34,7 @@ final class MI_Extra_Services {
 	}
 	private static function row( $option ) {
 		echo '<div class="mi-extra-service"><input type="hidden" name="extra_service_code[]" value="' . esc_attr( $option['code'] ?? '' ) . '"><label>Etichetta<input name="extra_service_label[]" maxlength="120" required value="' . esc_attr( $option['name'] ?? '' ) . '"></label><label>Categoria<select name="extra_service_category[]">';
-		foreach ( array( 'alloggio' => 'Alloggio','pullman' => 'Pullman','pranzo' => 'Pasti','altro' => 'Altro' ) as $code => $label ) echo '<option value="' . esc_attr( $code ) . '" ' . selected( $option['category'] ?? 'altro', $code, false ) . '>' . esc_html( $label ) . '</option>';
+		foreach ( array( 'alloggio' => 'Alloggio', 'supplemento' => 'Supplementi', 'pullman' => 'Trasferimenti (pullman)', 'trasferimento' => 'Trasferimenti', 'pranzo' => 'Pasti', 'altro' => 'Altro' ) as $code => $label ) echo '<option value="' . esc_attr( $code ) . '" ' . selected( $option['category'] ?? 'altro', $code, false ) . '>' . esc_html( $label ) . '</option>';
 		echo '</select></label><label>Quota (€)<input name="extra_service_price[]" inputmode="decimal" required value="' . esc_attr( isset( $option['price_cents'] ) ? number_format( $option['price_cents'] / 100, 2, ',', '' ) : '' ) . '"></label><label>Gruppo di alternative (facoltativo)<input name="extra_service_group[]" maxlength="40" pattern="[a-z0-9_-]*" value="' . esc_attr( $option['choice_group'] ?? '' ) . '" placeholder="Vuoto: voce cumulabile"></label><button type="button" data-mi-remove-extra>Rimuovi voce</button></div>';
 	}
 }

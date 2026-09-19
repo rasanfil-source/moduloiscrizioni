@@ -31,6 +31,7 @@ final class MI_Plugin {
 		MI_Portal::boot();
 		MI_Portal_Payments::boot();
 		MI_Portal_Management::boot();
+		MI_Sheet_Open::boot();
 		MI_Site_Performance::boot();
 		MI_Integrazione_Divi::avvia();
 		add_action( 'mi_sync_workspace_pending', array( 'MI_Registration_Service', 'sync_pending_workspace' ) );

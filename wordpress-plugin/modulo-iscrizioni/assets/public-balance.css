@@ -409,8 +409,26 @@
     display: none;
     margin-top: 12px;
     font-size: 0.9rem;
-    border-top: 1px solid #e2e8f0;
-    padding-top: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #f8fafc;
+  }
+
+  #breakdownBox summary {
+    cursor: pointer;
+    padding: 10px 12px;
+    color: #475569;
+    font-size: .82rem;
+    font-weight: 700;
+    list-style-position: inside;
+  }
+
+  #breakdownBox summary:hover { color: #1e293b; }
+  #breakdownBox summary:focus-visible { outline: 3px solid rgba(51,122,183,.22); outline-offset: 2px; }
+  #breakdownBox[open] summary { border-bottom: 1px solid #e2e8f0; }
+
+  .breakdown-content {
+    padding: 8px 12px 10px;
   }
 
   .breakdown-row {
@@ -818,3 +836,31 @@
 
 .candidate-buttons{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.candidate-buttons button.secondary{width:auto;font-size:.85rem;padding:4px 10px}.breakdown-row{gap:12px}.breakdown-row span:last-child{white-space:nowrap}.field-hint{height:auto}.promemoria-bozza .field-hint{display:block} [hidden]{display:none!important}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;scroll-behavior:auto!important;transition:none!important}}
+
+/* Interfaccia pubblica allineata alla Segreteria eventi. */
+:root{--mi-ink:#151b38;--mi-blue:#337ab7;--mi-paper:#fff;--mi-bg:#f6f8fc;--mi-line:#d9e1ec;--mi-muted:#64748b;--mi-success:#166534;--mi-danger:#b42318}
+body{background:var(--mi-bg);color:#111827;font-family:Arial,Helvetica,sans-serif}
+.page{max-width:1180px;padding:32px 20px 72px}
+.balance-header{text-align:left;margin:0 0 22px;padding:0 2px}
+.balance-header .balance-eyebrow{display:block;color:var(--mi-blue);font-size:.76rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
+.balance-header h1{margin:7px 0 5px;text-align:left;color:var(--mi-ink);font-size:clamp(1.8rem,4vw,2.6rem);line-height:1.08}
+.balance-header p{margin:0;color:var(--mi-muted);font-size:1rem}
+.layout{grid-template-columns:minmax(0,1.7fr) minmax(300px,.8fr);gap:22px;align-items:start}
+.stepper{margin:0 0 22px;border-color:var(--mi-line);border-radius:14px;box-shadow:none;padding:13px 16px}
+.step-dot{border-color:#b8c5d6}.step.is-active .step-dot{border-color:var(--mi-blue);background:#edf5fc;color:var(--mi-ink)}
+.person-card,aside{border:1px solid var(--mi-line);border-radius:16px;box-shadow:0 8px 24px rgba(21,27,56,.06)}
+.person-card{padding:22px;margin-bottom:16px}.card-title,aside h2{color:var(--mi-ink)}
+aside{top:18px;padding:22px}
+input[type="text"],input[type="email"]{min-height:44px;border-color:#b8c5d6;border-radius:9px;color:#111827}
+input[type="text"]:focus,input[type="email"]:focus{border-color:var(--mi-blue);box-shadow:0 0 0 3px rgba(51,122,183,.16)}
+button{min-height:42px;border-radius:9px;font-weight:700}
+button.primary,.popup-btn-confirm{background:var(--mi-ink);border-color:var(--mi-ink)}
+button.primary:hover,.popup-btn-confirm:hover{background:#252d58;border-color:#252d58}
+button.secondary{color:var(--mi-ink);border-color:#aab8ca}
+#btnAddPerson{color:var(--mi-blue);border:1px solid var(--mi-blue);background:#fff}
+#totalBox{border-top-color:var(--mi-ink);color:var(--mi-ink)}
+.promemoria-bozza,#breakdownBox{background:#f8fafc;border-color:var(--mi-line)}
+.status.ok{color:var(--mi-success);background:#ecfdf3}.status.error{color:var(--mi-danger);background:#fef3f2}
+.popup-overlay{background:rgba(15,23,42,.58)}.popup-box{border:1px solid var(--mi-line);border-radius:16px;box-shadow:0 24px 70px rgba(15,23,42,.24)}
+:focus-visible{outline:3px solid rgba(51,122,183,.38);outline-offset:3px}
+@media(max-width:900px){.layout{grid-template-columns:1fr}.page{padding:22px 14px 150px}aside{position:static}.balance-header{padding:0}.person-card{padding:18px}}

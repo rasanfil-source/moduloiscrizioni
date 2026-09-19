@@ -1,5 +1,6 @@
 <?php
 defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/class-mi-payment-people.php';
 
 /** Registro autorevole MySQL. Nessuna richiesta Google nel percorso di lettura o salvataggio. */
 final class MI_Payment_Ledger {
@@ -12,16 +13,44 @@ final class MI_Payment_Ledger {
 		$initial = $deposit ? min( $total, max( 0, (int) ( $registration['initial_due_cents'] ?? 0 ) ) ) : 0;
 		return array( 'total' => $total, 'paid' => $paid, 'balance' => max( 0, $total - $paid ), 'managed' => $managed, 'deposit_plan' => $deposit, 'deposit_due' => $initial, 'deposit_missing' => max( 0, $initial - $paid ), 'deposit_covered' => $deposit && $initial > 0 && $paid >= $initial );
 	}
-	/** Caller supplies already scoped registrations; one aggregate query for the whole list. */
+	/** Caller supplies already scoped registrations; bounded bulk reads also preserve individual debts. */
 	public static function positions( array $registrations, $id_key = 'id' ) {
 		global $wpdb;
 		if ( ! $registrations ) return array();
-		$ids = array_values( array_unique( array_map( 'intval', array_column( $registrations, $id_key ) ) ) );
-		$rows = $wpdb->get_results( "SELECT registration_id,SUM(CASE WHEN transaction_kind='REFUND' THEN -amount_cents ELSE amount_cents END) AS paid FROM {$wpdb->prefix}mi_payments WHERE registration_id IN (" . implode( ',', $ids ) . ') GROUP BY registration_id', ARRAY_A );
+		$ids = array_values( array_filter( array_unique( array_map( 'intval', array_column( $registrations, $id_key ) ) ) ) );
+		if ( ! $ids ) return array();
+		$id_list = implode( ',', $ids );
+		$stored = $wpdb->get_results( "SELECT * FROM {$wpdb->prefix}mi_registrations WHERE id IN ({$id_list})", ARRAY_A );
+		if ( $wpdb->last_error ) throw new RuntimeException( 'Prenotazioni non disponibili. Riprova.' );
+		$people = $wpdb->get_results( "SELECT id,registration_id,ticket_type_code,first_name,last_name,options_json,status,deposit_due_cents FROM {$wpdb->prefix}mi_participants WHERE registration_id IN ({$id_list}) ORDER BY registration_id,id", ARRAY_A );
+		if ( $wpdb->last_error ) throw new RuntimeException( 'Partecipanti non disponibili. Riprova.' );
+		$items = $wpdb->get_results( "SELECT registration_id,ticket_type_code,unit_price_cents FROM {$wpdb->prefix}mi_registration_items WHERE registration_id IN ({$id_list}) ORDER BY registration_id,id", ARRAY_A );
+		if ( $wpdb->last_error ) throw new RuntimeException( 'Quote non disponibili. Riprova.' );
+		$payments = $wpdb->get_results( "SELECT registration_id,transaction_kind,amount_cents,participant_allocations_json FROM {$wpdb->prefix}mi_payments WHERE registration_id IN ({$id_list}) ORDER BY registration_id,id", ARRAY_A );
 		if ( $wpdb->last_error ) throw new RuntimeException( 'Saldo non disponibile. Riprova.' );
-		$paid = array_column( $rows, 'paid', 'registration_id' );
+		$stored_by_id = array_column( $stored, null, 'id' );
+		$people_by_id = array(); $items_by_id = array(); $payments_by_id = array(); $paid_by_id = array();
+		foreach ( $people as $row ) $people_by_id[(int) $row['registration_id']][] = $row;
+		foreach ( $items as $row ) $items_by_id[(int) $row['registration_id']][] = $row;
+		foreach ( $payments as $row ) {
+			$id = (int) $row['registration_id']; $payments_by_id[$id][] = $row;
+			$paid_by_id[$id] = ( $paid_by_id[$id] ?? 0 ) + ( 'REFUND' === $row['transaction_kind'] ? -1 : 1 ) * (int) $row['amount_cents'];
+		}
 		$result = array();
-		foreach ( $registrations as $registration ) $result[$registration[$id_key]] = self::position( $registration, $paid[$registration[$id_key]] ?? 0 );
+		foreach ( $registrations as $registration ) {
+			$id = (int) $registration[$id_key];
+			$authoritative = $stored_by_id[$id] ?? array_replace( $registration, array( 'id' => $id ) );
+			$position = self::position( $authoritative, $paid_by_id[$id] ?? 0 );
+			$individual = MI_Payment_People::calculate( $authoritative, $people_by_id[$id] ?? array(), $items_by_id[$id] ?? array(), $payments_by_id[$id] ?? array() );
+			$summary = MI_Payment_People::summary( $individual );
+			$position['individual'] = $individual;
+			$position['individual_known'] = $summary['known'];
+			foreach ( array( 'people_count', 'active_count', 'total', 'paid', 'balance', 'credit', 'deposit_due', 'deposit_missing' ) as $field ) $position['individual_' . $field] = $summary[$field];
+			$position['effective_total'] = $summary['known'] ? $summary['total'] : $position['total'];
+			$position['effective_paid'] = $summary['known'] ? $summary['paid'] : $position['paid'];
+			$position['effective_balance'] = $summary['known'] ? $summary['balance'] : $position['balance'];
+			$result[$id] = $position;
+		}
 		return $result;
 	}
 	public static function normalize( array $input ) {
@@ -69,7 +98,13 @@ final class MI_Payment_Ledger {
 			$movements[] = array( 'id' => 'mysql_' . $p['id'], 'data' => gmdate( 'c', strtotime( $p['effective_at'] . ' UTC' ) ), 'tipo' => $p['movement_kind'] ?: ( $amount < 0 ? 'RIMBORSO' : 'INCASSO' ), 'importo' => $amount, 'metodo' => array( 'BANK_TRANSFER' => 'BONIFICO', 'CARD' => 'CARTA', 'CASH' => 'CONTANTE' )[ $p['payment_source'] ] ?? $p['payment_source'], 'riferimento' => $p['external_reference'], 'operatore' => $p['operator_label'], 'nota' => $p['administrative_note'] );
 		}
 		$position = self::position( $r, $paid );
-		return array( 'ok' => true, 'data' => wp_date( 'Y-m-d' ), 'saldo' => array( 'codice' => $r['order_code'], 'referente' => trim( $r['buyer_first_name'] . ' ' . $r['buyer_last_name'] ), 'evento' => get_the_title( (int) $r['event_id'] ), 'totale' => $position['total'], 'versato' => $position['paid'], 'residuo' => $position['balance'], 'deposit_plan' => $position['deposit_plan'], 'deposit_due' => $position['deposit_due'], 'deposit_missing' => $position['deposit_missing'], 'deposit_covered' => $position['deposit_covered'], 'movimenti' => $movements ) );
+		foreach ( $rows as $index => $movement ) {
+			$allocations = json_decode( $movement['participant_allocations_json'] ?? '[]', true ) ?: array();
+			$movements[$index]['persone'] = implode( ', ', array_column( $allocations, 'name' ) );
+		}
+		$individual = MI_Payment_People::read( $r, $rows ); $summary = MI_Payment_People::summary( $individual );
+		if ( $summary['known'] ) { foreach ( array( 'total', 'paid', 'balance', 'deposit_due', 'deposit_missing' ) as $field ) $position[$field] = $summary[$field]; $position['deposit_covered'] = $position['deposit_plan'] && $summary['deposit_due'] > 0 && $summary['deposit_missing'] === 0; }
+		return array( 'ok' => true, 'data' => wp_date( 'Y-m-d' ), 'saldo' => array( 'codice' => $r['order_code'], 'referente' => trim( $r['buyer_first_name'] . ' ' . $r['buyer_last_name'] ), 'evento' => html_entity_decode( get_the_title( (int) $r['event_id'] ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ), 'totale' => $position['total'], 'versato' => $position['paid'], 'residuo' => $position['balance'], 'deposit_plan' => $position['deposit_plan'], 'deposit_due' => $position['deposit_due'], 'deposit_missing' => $position['deposit_missing'], 'deposit_covered' => $position['deposit_covered'], 'individual' => $individual, 'movimenti' => $movements ) );
 	}
 	public static function save( $id, array $input ) {
 		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( MI_Event_Deletion::registration_event( $id ) ); if ( is_wp_error( $lease ) ) return $lease; }
@@ -79,7 +114,13 @@ final class MI_Payment_Ledger {
 		$actor = 'WP#' . get_current_user_id() . ' · ' . wp_get_current_user()->display_name;
 		if ( 0 !== strpos( $payment['origin_id'], 'wp_' . get_current_user_id() . '_' ) ) return new WP_Error( 'mi_payment_forbidden', 'Operatore non valido.' );
 		$payment['registration_id'] = (int) $id;
-		$payment['request_hash'] = hash( 'sha256', wp_json_encode( $payment ) );
+		$participant_ids = isset( $input['participant_ids'] ) ? json_decode( (string) $input['participant_ids'], true ) : null;
+		if ( null !== $participant_ids && ( ! is_array( $participant_ids ) || count( $participant_ids ) > 100 || array_filter( $participant_ids, static function ( $id ) { return ! is_int( $id ) || $id < 1; } ) ) ) return array( 'ok' => true, 'saved' => false, 'message' => 'Selezione partecipanti non valida.' );
+		if ( is_array( $participant_ids ) ) {
+			sort( $participant_ids, SORT_NUMERIC );
+			if ( 'PAYMENT' === $payment['transaction_kind'] ) $payment['installment_kind'] = (string) ( $input['rata'] ?? '' );
+		}
+		$payment['request_hash'] = hash( 'sha256', wp_json_encode( null === $participant_ids ? $payment : array( $payment, $participant_ids ) ) );
 		$payment['operator_label'] = mb_substr( $actor, 0, 120 );
 		$table = $wpdb->prefix . 'mi_registrations';
 		if ( false === $wpdb->query( 'START TRANSACTION' ) ) return new WP_Error( 'mi_payment_database', 'Salvataggio non disponibile.' );
@@ -95,17 +136,34 @@ final class MI_Payment_Ledger {
 				return array( 'ok' => true, 'saved' => true, 'replayed' => true, 'message' => 'Movimento già registrato.', 'payment_id' => (int) $old['id'] );
 			}
 			$paid = self::net_paid( $id ); $amount = $payment['amount_cents']; $incoming = 'PAYMENT' === $payment['transaction_kind'];
+			$history = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d ORDER BY id", $id ), ARRAY_A );
+			if ( $wpdb->last_error ) throw new RuntimeException( 'Storico non disponibile.' );
+			$individual = MI_Payment_People::read( $r, $history );
+			if ( $incoming ) {
+				if ( ! is_array( $participant_ids ) ) throw new InvalidArgumentException( 'Riapri Pagamenti e seleziona le persone per cui registrare il versamento.' );
+				$payment['participant_allocations_json'] = wp_json_encode( MI_Payment_People::plan( $individual, $participant_ids, $payment['installment_kind'], $amount ) );
+			} elseif ( ! empty( $individual['requires_refund_allocation'] ) || is_array( $participant_ids ) ) {
+				if ( ! is_array( $participant_ids ) ) throw new InvalidArgumentException( 'Seleziona la persona a cui attribuire il rimborso o storno.' );
+				$payment['participant_allocations_json'] = wp_json_encode( MI_Payment_People::refund_plan( $individual, $participant_ids, $amount ) );
+			}
 			if ( $incoming && ! in_array( $r['status'], array( 'PENDING_PAYMENT', 'CONFIRMED' ), true ) ) throw new InvalidArgumentException( 'Questa prenotazione non può ricevere incassi.' );
 			if ( $incoming && (int) $r['total_cents'] < 1 ) throw new InvalidArgumentException( 'L’evento non prevede pagamenti.' );
-			if ( $incoming && $amount > max( 0, (int) $r['total_cents'] - $paid ) ) throw new InvalidArgumentException( 'L’importo supera il saldo residuo.' );
+			// plan() ha già verificato l'importo sulle sole persone selezionate.
 			if ( ! $incoming && $amount > max( 0, $paid ) ) throw new InvalidArgumentException( 'Il rimborso o storno supera quanto versato.' );
 			$payment['created_at'] = current_time( 'mysql', true );
 			if ( false === $wpdb->insert( $wpdb->prefix . 'mi_payments', $payment ) ) throw new RuntimeException( 'Movimento non salvato.' );
 			$payment_id = (int) $wpdb->insert_id; $paid += $incoming ? $amount : -$amount;
 			$status = $r['status']; $changes = array( 'workspace_status' => 'PENDING', 'workspace_attempts' => 0, 'workspace_last_error' => 'payment_changed', 'workspace_revision' => (int) $r['workspace_revision'] + 1 );
 			if ( in_array( $status, array( 'PENDING_PAYMENT', 'CONFIRMED' ), true ) ) {
-				$status = $paid >= (int) $r['initial_due_cents'] ? 'CONFIRMED' : 'PENDING_PAYMENT';
-				$changes['status'] = $status; $changes['expires_at'] = 'CONFIRMED' === $status ? null : $r['payment_deadline_at'];
+				$covered = $paid >= (int) $r['initial_due_cents'];
+				$updated_history = $history; $updated_history[] = $payment;
+				$updated_individual = MI_Payment_People::read( $r, $updated_history );
+				$individual_covered = MI_Payment_People::covered( $updated_individual, $r['economic_mode'] );
+				if ( null !== $individual_covered ) $covered = $individual_covered;
+				$status = $covered ? 'CONFIRMED' : 'PENDING_PAYMENT';
+				$deadline = 'CONFIRMED' === $status ? null : MI_Registration_Service::reopened_payment_deadline( $r );
+				$changes['status'] = $status; $changes['expires_at'] = $deadline;
+				if ( null !== $deadline ) $changes['payment_deadline_at'] = $deadline;
 			}
 			if ( false === $wpdb->update( $table, $changes, array( 'id' => $id ) ) || ! MI_Registration_Service::append_registration_event( $id, 'PAYMENT_RECORDED', $r['status'], $status, $actor, array( 'payment_id' => $payment_id, 'net_paid_cents' => $paid ) ) ) throw new RuntimeException( 'Registrazione incompleta.' );
 			if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma non ricevuta.' );

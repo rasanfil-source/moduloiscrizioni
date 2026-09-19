@@ -9,15 +9,19 @@ if($worker!=='worker'){
 $wpdb->db->select_db('mi_ledger_test');
 if($worker!=='worker'){
  $schema=file_get_contents(__DIR__.'/../modulo-iscrizioni/includes/class-mi-activator.php');
- foreach(['registrations','payments']as $name){
-  preg_match('/CREATE TABLE \{\$'.$name.'\} \((.*?)\) ENGINE=InnoDB/s',$schema,$m);
+ foreach(['registrations'=>'registrations','payments'=>'payments','participants'=>'participants','registration_items'=>'items']as $name=>$variable){
+  preg_match('/CREATE TABLE \{\$'.$variable.'\} \((.*?)\) ENGINE=InnoDB/s',$schema,$m);
   if(!$m)throw new RuntimeException('Schema mancante');
   $wpdb->query('DROP TABLE IF EXISTS wp_mi_'.$name);
   if($wpdb->query('CREATE TABLE wp_mi_'.$name.' ('.$m[1].') ENGINE=InnoDB')===false)throw new RuntimeException($wpdb->last_error);
  }
  $wpdb->query("INSERT INTO wp_mi_registrations (id,order_code,event_id,status,buyer_first_name,buyer_last_name,buyer_email,buyer_phone,total_qty,total_cents,initial_due_cents,idempotency_key,created_at) VALUES (1,'TEST',42,'PENDING_PAYMENT','Test','Locale','','',1,10000,2000,'test',NOW())");
+ $wpdb->query("UPDATE wp_mi_registrations SET economic_mode='DEPOSIT_BALANCE',initial_due_cents=7000 WHERE id=1");
+ $wpdb->query("INSERT INTO wp_mi_registration_items (registration_id,ticket_type_code,quantity,unit_price_cents) VALUES (1,'base',1,10000)");
+ $wpdb->query("INSERT INTO wp_mi_participants (id,registration_id,ticket_type_code,first_name,last_name,status,deposit_due_cents) VALUES (1,1,'base','Persona','Test','ACTIVE',7000)");
 }
 $input=['request_id'=>'wp_7_12345678-1234-4234-8234-'.($argv[2]??'123456789abc'),'importo'=>'70','tipo'=>'INCASSO','metodo'=>'BONIFICO','data'=>'2026-09-09'];
+$input+=['participant_ids'=>'[1]','rata'=>'DEPOSIT'];
 if($worker==='worker'){echo json_encode(MI_Payment_Ledger::save(1,$input));exit;}
 $php=PHP_BINARY;$ext=dirname($php).'/ext';$processes=[];
 foreach(['123456789abc','123456789abd']as $suffix){$cmd=[$php,'-d','extension_dir='.$ext,'-d','extension=mbstring','-d','extension=mysqli',__FILE__,'worker',$suffix];$pipes=[];$proc=proc_open($cmd,[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);fclose($pipes[0]);$processes[]=[$proc,$pipes];}

@@ -44,11 +44,21 @@ Il blu notte identifica navigazione e azioni principali. Il verde indica esiti p
 
 ## Typography
 
+La rifinitura di Gestione iscrizioni usa titoli di sezione da 20px, cifre del riepilogo da 28px e filtri su una superficie tenue. Nella scheda persona il nome precede contatti e importi; il riepilogo economico passa da tre colonne a righe etichetta/importo su mobile. I campi mantengono etichette visibili e focus da tastiera di 3px. Le regole di rifinitura sono limitate allo schermo e non sostituiscono il layout di stampa.
+
 Nel portale operativo i pesi sono 400 (testo), 600 (etichette e comandi) e 700 (titoli e cifre). Nessuna dimensione esplicita in rem sotto 0.75rem; i dati principali restano a 1rem o più. Il minimo di 12px è riservato a metadati, non ai valori da leggere e confrontare.
 
 Si usa il carattere di sistema già adottato dal portale, con testi e comandi rigorosamente in italiano. I titoli possono essere ampi, ma le istruzioni devono restare brevi e prive di slogan ridondanti.
 
 ## Layout
+
+Nel modulo pubblico, disponibilità e conferma finale condividono una colonna centrata di massimo 700px, con margini laterali minimi di 16px sugli schermi stretti. La regola comune in public.css conserva l’allineamento dei bordi e permette agli indirizzi email lunghi di andare a capo.
+
+Sotto i 480px, i link dell’evento dedicano una riga intera all’indirizzo e la riga successiva a Copia, Condividi e Apri; l’icona Condividi mantiene 44×44px. La scheda prenotazione mobile raccoglie frecce e chiusura in una barra superiore separata dal contenuto scorrevole, con margini laterali di 16px. I selettori numero camera hanno altezza minima 44px. Lo storico movimenti usa intestazioni, righe alternate sobrie e scorrimento locale accessibile da tastiera; data, tipo, importo e metodo non vengono spezzati, riferimenti e note lunghi vanno a capo.
+
+Su mobile il riepilogo operativo dispone i conteggi in due colonne, con spazi ridotti e comandi di almeno 44px. Camere, presenze e report condividono bordi, intestazioni e spazi interni; le tabelle larghe conservano lo scorrimento locale. Caricamento, errore ed esito confermato hanno superfici semantiche con messaggi testuali; l’assenza di risultati resta uno stato neutro. Verifica sintetica completa disponibile in `tools/test-management-full-event-browser.cjs`, inclusi viewport da 320 e 390px e recupero dopo errore.
+
+L’integrazione dell’audit 3.26.72 mantiene lo scorrimento naturale e le sezioni camere, presenze e servizi già richiudibili. La ricerca persone resta visibile; i filtri secondari sono raccolti in «Altri filtri», con conteggio attivo, inizialmente chiusi sotto 900px se non ci sono filtri applicati. La scheda persona mostra gli importi individuali; gli importi complessivi sono riservati a “Vedi tutta la prenotazione”. I vecchi versamenti non attribuiti restano esplicitamente da verificare. In wp-admin le tabelle di configurazione scorrono nel proprio contenitore e i dettagli secondari della prenotazione sono richiudibili.
 
 Il contenuto segue lo scorrimento naturale della pagina. Le azioni correlate sono raccolte in schede; su schermi stretti si impilano senza perdere etichette o comandi. Campi e pulsanti hanno almeno 44 px di altezza. I collegamenti completi restano selezionabili.
 
@@ -63,6 +73,14 @@ Le superfici usano bordi e ombre molto leggere. Non si usano gradienti, vetro, a
 Controlli con raggio di 10 px e schede con raggio di 14 px. Le forme circolari sono riservate a loghi, iniziali e indicatori di stato.
 
 ## Components
+
+In Pagamenti le persone della prenotazione sono righe con checkbox nativa a sinistra e Nome Cognome — quota; negli eventi con caparra compare sotto la ripartizione caparra + saldo. La tendina Versamento precede le persone. Selezione con bordo blu, superfici chiare e importi leggibili; il campo importo calcolato resta in sola lettura durante l’incasso. La persona cercata precede le altre senza sostituire la loro identità con quella del referente.
+
+La rifinitura del portale conserva fotografie, loghi e banda blu delle tessere. Il selettore superiore usa piccole icone decorative monocromatiche, etichette sempre visibili e una superficie unica con bordi discreti. I titoli delle tessere sono da 18px, peso 600; spazi interni e distanze seguono il ritmo 16/20px. I bordi delle superfici usano il token locale --line-soft; campi, focus e colori di stato mantengono il proprio contrasto. Su mobile rimane la navigazione orizzontale scorrevole. Queste finiture sono limitate allo schermo e non cambiano la stampa.
+
+La configurazione evento in wp-admin distingue Gruppo e disponibilità, Date e lista d’attesa, Quote e pagamenti, Comunicazioni e richieste mediante intestazioni interne alla griglia. I campi e i filtri del plugin condividono altezza 44px e focus 3px; riquadri e modale usano la palette della segreteria senza alterare il resto dell’amministrazione WordPress.
+
+Il consolidamento dell’audit estetico mantiene palette e geometrie esistenti: token aggiuntivi per spazi 4/32/40/48, raggio controllo 10, scheda 14 e pannello 16. Il titolo del portale è 24px. I pulsanti secondari non diventano primari al passaggio del mouse; gli stati condividono i colori semantici, con posto proposto in attenzione. Le icone di contatto usano gli SVG esistenti su bersagli da 44px. Toolbar e sfondi dei dialoghi non usano blur; l’importo evidenziato nei pagamenti usa un segnale statico, senza pulsazione. I colori configurati dai gruppi restano distinti dalla palette dell’interfaccia. I blocchi servizi mantengono etichette e raggruppamenti, con superficie tenue e bordo uniforme.
 
 L’integrazione del secondo audit distingue dati primari (inchiostro, peso 600) da contatti e metadati (secondario, peso 400). Le righe operative hanno almeno 12px verticali. La scheda attiva conserva un segnale sinistro blu di 4px senza cambiare dimensione; le superfici dati usano bordi al posto di ombre. Ombre di finestre sovrapposte e focus restano funzionali. I comandi mantengono etichette esplicite; badge in normale maiuscolo/minuscolo, senza uppercase forzato.
 
@@ -102,6 +120,8 @@ La gestione web riunisce scheda prenotazione, dati mancanti, camere e accesso al
 
 Le categorie dei servizi usano variazioni di blu: alloggio #e3edf7, pullman #edf3f9, pranzo #d5e5f3 e altre voci #f2f6fa. Le etichette restano sempre visibili: il colore è un aiuto alla scansione. Le definizioni delle voci sono condivise dal modulo pubblico e dalla proiezione Google. I relativi selettori runtime sono data-service-category in public.css e le classi dei gruppi nel wizard in portal.css.
 
+Nella scheda dell’iscritto, servizi e sistemazioni sono raggruppati in Alloggio, Supplementi, Trasferimenti, Pasti e Altro. Un gruppo compare soltanto quando l’evento prevede una voce pertinente; nel riepilogo personale compare soltanto se la persona l’ha scelta. Colazione e assicurazioni appartengono ai Supplementi, mentre le tratte in pullman appartengono ai Trasferimenti.
+
 La lista d’attesa separa tre momenti: richiesta registrata, proposta temporanea e prenotazione accettata. La prima email precisa che non occorre pagare o agire; quando si libera posto, il sistema lo riserva per 48 ore salvo diversa configurazione dell’evento e invia un collegamento personale. La pagina collegata offre due azioni esplicite, «Accetta il posto» e «Rinuncia». Solo dopo l’accettazione vengono comunicate conferma e, se applicabili, istruzioni e scadenza di pagamento.
 
 La schermata Operatori rende visibile l’ambito prima del salvataggio. Il Gestore iscrizioni non mostra selettori perché opera sull’intero servizio; il Gestore gruppo mostra i gruppi assegnabili; il Gestore evento mostra soltanto gli eventi in corso assegnabili. Ruolo e ambito sono sempre riepilogati nella tessera dell’utente.
@@ -123,4 +143,24 @@ Nelle tessere degli eventi pubblicati con iscrizioni future, «Attivo» conserva
 
 Nella seconda schermata pubblica, i servizi con massimo una unità per partecipante (pullman, pranzo, rimborso spese) usano caselle di spunta nella scheda di ciascun iscritto. Gli alloggi conservano la scelta esclusiva; le opzioni configurate con quantità multiple conservano il controllo numerico.
 
+Quando sono previsti alloggi, “Non desidero alloggio” è una spunta separata dalle alternative di sistemazione. La spunta e le sistemazioni sono reciprocamente esclusive; l’avviso prima di proseguire resta riservato a chi non ha espresso nessuna delle due decisioni. La rinuncia non viene registrata come servizio né entra nel calcolo economico.
+
+La conferma di una prenotazione con più partecipanti e costi apre con un riepilogo per persona: nome, totale individuale e descrizione sintetica per categorie. Totale, caparra e saldo seguono immediatamente. Le singole voci economiche restano in “Dettaglio dei costi”, un elemento `details` chiuso inizialmente. Per una sola persona o in assenza di costi rimane il riepilogo diretto.
+
+I cellulari del referente e dei partecipanti vengono verificati nel passaggio in cui sono inseriti. Dopo la prima uscita da un campo non valido compare un messaggio accanto al controllo; le correzioni vengono rivalutate durante la digitazione. Il passaggio alla conferma convalida di nuovo tutti i cellulari visibili e porta il focus sul primo errore, senza perdere gli altri dati compilati.
+
+I cellulari italiani completi inseriti senza prefisso (`333…`, `39 333…` o `0039 333…`) vengono completati automaticamente nel formato `+39 333…`. Il passaggio viene bloccato soltanto quando il numero è incompleto o non riconoscibile.
+
+Le email operative partono con l’identità `Segreteria parrocchiale S. Eugenio <info@parrocchiasanteugenio.it>` e usano lo stesso indirizzo per le risposte e il mittente di busta. I modelli testuali convertono gli a capo letterali e il Markdown essenziale (grassetto e collegamenti) in HTML compatibile con i client email; le istantanee già accodate vengono riparate al momento dell’invio.
+
+Le conferme degli eventi gratuiti non contengono collegamenti, pulsanti o testi relativi a stato dei pagamenti e saldo. La regola viene verificata nuovamente al momento dell’invio per proteggere anche le email già accodate. Un vecchio collegamento firmato mostra soltanto evento, codice e stato dell’iscrizione; l’interfaccia pubblica di saldo rifiuta gli eventi senza un flusso di pagamento.
+
 Gli avvisi mi-action-progress usano fondo giallo chiaro #fff4ce, testo #604b13 e bordo #e5cf83. Le righe delle voci aggiuntive allineano i controlli al margine inferiore anche con etichette su due righe. La categoria visibile «Pasti» conserva il codice interno pranzo. In Gestione il periodo precede la scelta evento e inizialmente mostra gli attivi; i collegamenti diretti a un evento passato selezionano il periodo corrispondente.
+
+
+## Iscrizione e prenotazione — 3.26.110
+L’iscrizione è individuale; la prenotazione raccoglie gli iscritti insieme. Gestione iscrizioni comprende Tutti gli eventi e sostituisce l’accesso separato. La scheda mostra importi personali e conserva la persona dopo ogni salvataggio. Vedi tutta la prenotazione espone servizi, sistemazioni e importi individuali e complessivi. Crediti e debiti di persone diverse restano separati. Modifiche servizi hanno anteprima e aggiornano atomicamente le quote, preservando i versamenti. Nessuna attribuzione inventata per lo storico.
+
+## Identità della Segreteria eventi — 3.26.111
+
+La sola area operativa usa una favicon derivata dal logo della Parrocchia Sant’Eugenio: croce, fiore e baldacchino bianchi sul blu notte del portale. Un piccolo registro dorato distingue il lavoro di segreteria dall’identità pubblica del sito. L’icona non contiene scritte e conserva una silhouette leggibile da 32 px; le pagine pubbliche continuano a usare l’icona ordinaria del sito.

@@ -18,9 +18,22 @@
     return Object.values(selection || {}).reduce((sum, value) => sum + clampQuantity(value, 20), 0);
   }
 
-  function isValidPhone(value) {
-    return /^\+[1-9][0-9().\s-]{6,30}$/.test(String(value || '').trim());
+  function normalizePhone(value) {
+    const trimmed = String(value || '').trim();
+    const digits = trimmed.replace(/\D/g, '');
+    if (/^3\d{9}$/.test(digits) && !trimmed.startsWith('+')) {
+      return `+39 ${digits.slice(0, 3)} ${digits.slice(3)}`;
+    }
+    if (/^(?:39|0039)3\d{9}$/.test(digits) && !trimmed.startsWith('+')) {
+      const italianMobile = digits.startsWith('0039') ? digits.slice(4) : digits.slice(2);
+      return `+39 ${italianMobile.slice(0, 3)} ${italianMobile.slice(3)}`;
+    }
+    return trimmed;
   }
 
-  target.MIRegistrationCore = Object.freeze({ clampQuantity, normalizeSelection, sumQuantities, isValidPhone });
+  function isValidPhone(value) {
+    return /^\+[1-9][0-9().\s-]{6,30}$/.test(normalizePhone(value));
+  }
+
+  target.MIRegistrationCore = Object.freeze({ clampQuantity, normalizeSelection, sumQuantities, normalizePhone, isValidPhone });
 }(globalThis));

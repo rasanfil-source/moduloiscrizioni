@@ -1,6 +1,6 @@
 # Consolidamento grafico della presentazione dei dati
 
-Intervento incluso nella versione 3.26.5, basato sui due audit grafici forniti dall’operatore. Per lo stato di pubblicazione vedere [note di rilascio](rilascio-3.26.5.md).
+Intervento incluso nella versione 3.26.5, basato sui due audit grafici forniti dall’operatore. Per lo stato di pubblicazione vedere note di rilascio (documento storico rimosso).
 
 ## Applicato
 
