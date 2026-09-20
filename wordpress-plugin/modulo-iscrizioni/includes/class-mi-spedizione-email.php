@@ -433,6 +433,12 @@ final class MI_Spedizione_Email {
 				$wpdb->update( $table, array( 'status' => 'SENT', 'last_error' => null, 'sent_at' => current_time( 'mysql', true ), 'processing_started_at' => null ), array( 'id' => $id ), array( '%s', '%s', '%s', '%s' ), array( '%d' ) );
 			} else {
 				$tentativi = (int) $riga['attempts'] + 1;
+				$error_data = is_wp_error( $esito ) ? $esito->get_error_data() : null;
+				$busy = is_wp_error( $esito ) && ( 'mi_workspace_busy' === $esito->get_error_code() || ( is_array( $error_data ) && in_array( $error_data['remote_code'] ?? '', array( 'EMAIL_BUSY', 'WORKSPACE_BUSY', 'EVENT_BUSY' ), true ) ) );
+				if ( $busy ) {
+					$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status=%s, attempts=GREATEST(0,attempts-1), processing_started_at=NULL, last_error=%s WHERE id=%d AND status=%s", $riga['status'], 'Google occupato: invio mantenuto in coda.', $id, $stato_invio ) );
+					continue;
+				}
 				$wpdb->update( $table, array( 'status' => $tentativi >= 5 ? ( $invio_prova ? 'TEST_FAILED' : 'FAILED' ) : ( $invio_prova ? 'TEST_PENDING' : 'PENDING' ), 'last_error' => is_wp_error( $esito ) ? sanitize_text_field( $esito->get_error_message() ) : 'Workspace non ha confermato l’accettazione.', 'processing_started_at' => null ), array( 'id' => $id ), array( '%s', '%s', '%s' ), array( '%d' ) );
 			}
 		}

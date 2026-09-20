@@ -646,7 +646,7 @@ final class MI_Portal {
 		}
 		$user_id = absint( $_POST['operator_id'] ?? 0 );
 		$user = get_user_by( 'id', $user_id );
-		if ( ! $user || $user_id === get_current_user_id() || ! array_intersect( array_keys( $roles ), (array) $user->roles ) ) return self::redirect_portal_result( 'Operatore non modificabile.', true, 'operators' );
+		if ( ! $user || user_can( $user, 'manage_options' ) || $user_id === get_current_user_id() || ! array_intersect( array_keys( $roles ), (array) $user->roles ) ) return self::redirect_portal_result( 'Operatore non modificabile.', true, 'operators' );
 		$update = array( 'ID' => $user_id, 'role' => $role );
 		$email = sanitize_email( wp_unslash( $_POST['operator_email'] ?? '' ) );
 		$name = mb_substr( sanitize_text_field( wp_unslash( $_POST['operator_name'] ?? '' ) ), 0, 120 );
@@ -670,11 +670,11 @@ final class MI_Portal {
 	}
 
 	private static function handle_event_management_action( $action ) {
-		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( absint( $_POST['event_id'] ?? 0 ) ); if ( is_wp_error( $lease ) ) wp_die( esc_html( $lease->get_error_message() ), '', array( 'response' => 409 ) ); }
 		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_manage_events' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
 		$event_id = absint( $_POST['event_id'] ?? 0 );
 		if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Evento non accessibile.', 403 );
 		check_admin_referer( 'mi_portal_manage_event_' . $event_id, 'mi_portal_nonce' );
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( absint( $_POST['event_id'] ?? 0 ) ); if ( is_wp_error( $lease ) ) wp_die( esc_html( $lease->get_error_message() ), '', array( 'response' => 409 ) ); }
 		if ( 'duplicate_event' === $action ) {
 			$result = MI_Event_Duplicator::duplicate( $event_id, sanitize_text_field( wp_unslash( $_POST['duplicate_request'] ?? '' ) ) );
 			if ( is_wp_error( $result ) ) return self::redirect_result( $result->get_error_message(), true, $event_id );
@@ -730,7 +730,7 @@ final class MI_Portal {
 		$email_result = $recipients ? MI_Spedizione_Email::accoda_comunicazione_operativa( array( 'communication_id' => 'event-cancel-' . $event_id . '-' . time(), 'event_id' => $event_id, 'template_type' => 'EVENT_CANCELLATION', 'message' => $reason, 'allow_operational' => true, 'recipients' => $recipients ) ) : array( 'count' => 0, 'mode' => MI_Spedizione_Email::modalita() );
 		if ( is_wp_error( $email_result ) ) return self::redirect_result( 'Impossibile preparare gli avvisi: evento non annullato.', true, $event_id );
 		foreach ( $rows as $row ) {
-			$result = MI_Registration_Service::cancel_registration( (int) $row['id'], wp_get_current_user()->display_name, false );
+			$result = MI_Registration_Service::cancel_registration( (int) $row['id'], wp_get_current_user()->display_name, false, false );
 			if ( is_wp_error( $result ) ) return self::redirect_result( 'Annullamento incompleto: controlla le iscrizioni prima di riprovare.', true, $event_id );
 		}
 		$secretariat_result = MI_Spedizione_Email::accoda_avviso_annullamento_segreteria( $event_id, $reason );
@@ -1072,7 +1072,7 @@ final class MI_Portal {
 
 	/** Autentica esclusivamente nella pagina autonoma della Segreteria, senza passare da wp-login.php. */
 	private static function gestisci_accesso_portale() {
-		if ( empty( $_GET['mi_portal'] ) ) wp_die( 'Richiesta di accesso non valida.', 400 );
+		// The nonce also permits login from a page containing the portal shortcode.
 		if ( is_user_logged_in() ) {
 			wp_safe_redirect( self::base_url() );
 			exit;

@@ -18,7 +18,7 @@ function aggiungiGruppo(form) {
   const slug = creaSlugGruppo_(form.slug || nome);
   if (!slug) throw new Error('Il nome del gruppo non produce un identificativo valido.');
   const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.GROUPS);
-  const existing = elencaGruppi();
+  const existing = convertiRigheInOggetti_(sheet);
   if (existing.some(function (group) { return group.slug === slug || group.nome.toLowerCase() === nome.toLowerCase(); })) throw new Error('Il gruppo esiste già.');
   const logoUrl = normalizzaUrlImmagineGruppo_(form.logo_url);
   const imageUrl = normalizzaUrlImmagineGruppo_(form.immagine_url);
@@ -26,7 +26,7 @@ function aggiungiGruppo(form) {
   const wordpressId = Math.round(Number(wordpress.group_id) || 0);
   if (wordpressId < 1) throw new Error('WordPress non ha restituito l’identificativo del gruppo.');
   const id = String(wordpressId);
-  sheet.appendRow([id, nome, slug, 'ATTIVO', logoUrl, imageUrl, new Date()]);
+  sheet.appendRow([id, neutralizzaFormula_(nome,120), slug, 'ATTIVO', logoUrl, imageUrl, new Date()]);
   return { ok: true, id: id, nome: nome, slug: slug, esistente_in_wordpress: wordpress.existing === true };
 }
 
@@ -38,7 +38,7 @@ function sincronizzaGruppiConWordPress() {
   rows.forEach(function (row) {
     const name = normalizzaTesto_(row.nome, 120);
     const slug = creaSlugGruppo_(row.slug || name);
-    if (!name || !slug) return;
+    if (!name || !slug || String(row.stato).toUpperCase() === 'ARCHIVIATO') return;
     const wordpress = inviaComandoWordPress_('CREATE_GROUP', { name: name, slug: slug, logo_url: normalizzaUrlImmagineGruppo_(row.logo_url), image_url: normalizzaUrlImmagineGruppo_(row.immagine_url) });
     const wordpressId = Math.round(Number(wordpress.group_id) || 0);
     if (wordpressId < 1) throw new Error('WordPress non ha restituito l’identificativo del gruppo ' + name + '.');

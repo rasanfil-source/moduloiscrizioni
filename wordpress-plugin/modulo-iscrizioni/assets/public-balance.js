@@ -567,7 +567,7 @@ function applyResult(card, person, data, nomeRaw, cognomeRaw) {
   }
   card.querySelector('.transfer-heading').hidden=!d.services.length;grid.hidden=!d.services.length;
   card.querySelector('.loaded-data-section').style.display='block';
-  if(d.email)emailInput.value=d.email;
+  emailInput.value=d.email_masked||'';emailInput.dataset.registeredMask=d.email_masked||'';emailInput.readOnly=false;emailInput.type='text';emailInput.placeholder='Inserisci l’email completa';
   setCardStatus(card,'ok','Prenotazione caricata ✓');updateCardTitles();resetCalcState();
   if(data.partner?.persona && !persone.some(p=>p.loaded&&p.row===data.partner.row)) person.partnerIndex=loadPartnerCard(data.partner,false);
   setTimeout(()=>{if(!person.loaded)return;const first=grid.querySelector('input');if(first){grid.scrollIntoView({behavior:'smooth',block:'center'});first.focus({preventScroll:true});first.classList.add('tr-rf-focus-hint');setTimeout(()=>first.classList.remove('tr-rf-focus-hint'),1600);}},350);
@@ -792,6 +792,7 @@ function normalizeEmailAddress(rawEmail) {
 }
 
 function getValidatedEmail() {
+  if(emailInput?.dataset.registeredMask && emailInput.value.trim()===emailInput.dataset.registeredMask)return '';
   const normalized = normalizeEmailAddress(emailInput?.value || '');
   const email = normalized.email;
 
@@ -800,7 +801,7 @@ function getValidatedEmail() {
     setGlobalStatus('ok', `Dominio email corretto automaticamente: ${escapeHtml(normalized.originalDomain)} → ${escapeHtml(normalized.correctedDomain)}.`);
   }
 
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     setGlobalStatus('error', "Inserisci un'email valida prima di confermare.");
     emailInput?.focus();
     return null;
@@ -814,7 +815,7 @@ function getValidatedEmail() {
 async function confermaEInvia() {
   if(_calcInProgress)return;
   const loaded=persone.filter(p=>p.loaded);if(!loaded.length)return;
-  const email=getValidatedEmail();if(!email)return;
+  const email=getValidatedEmail();if(email===null)return;
   _calcInProgress=true;setCalcButtons({disabled:true});
   const busyControls=[...document.querySelectorAll('#personsContainer input:not(:disabled),#personsContainer button:not(:disabled),#btnAddPerson,#emailInput')];
   busyControls.forEach(el=>el.disabled=true);
@@ -827,7 +828,7 @@ async function confermaEInvia() {
       let body='<p>Confermi la prenotazione di <strong>'+loaded.map(p=>escapeHtml(p.cognome+' '+p.nome)).join(', ')+'</strong>?</p>';
       body+='<ul>'+preview.people.flatMap(p=>p.lines.map(l=>'<li>'+escapeHtml(p.name+': '+l.name)+' — '+formatEuro(l.price/100)+'</li>')).join('')+'</ul>';
       if(preview.deposit)body+='<p>Caparra ancora da versare: <strong>'+formatEuro(preview.depositDue/100)+'</strong><br>Saldo ancora da versare: <strong>'+formatEuro(preview.saldoDue/100)+'</strong></p>';
-      body+='<p>Totale da versare: <strong>'+formatEuro(preview.balance/100)+'</strong></p><p>Verrà inviata un’email di riepilogo a <strong>'+escapeHtml(email)+'</strong>.</p>';
+      body+='<p>Totale da versare: <strong>'+formatEuro(preview.balance/100)+'</strong></p><p>Verrà inviata un’email di riepilogo a <strong>'+escapeHtml(preview.email_masked||email)+'</strong>.</p>';
       setGlobalStatus('','');if(!await showConfirmModal('Riepilogo e conferma',body))return;
       _pendingBalanceSave={hash,action:'salvaTransfer',persone:people,email,fingerprint:preview.fingerprint,requestId:crypto.randomUUID()};
     }
@@ -853,7 +854,7 @@ function resetAll() {
   // Rimuove tutte le card tranne la prima, poi resetta quella
   while (persone.length > 1) removeCard(persone[persone.length - 1].index);
   if (persone.length === 1) unlockCard(persone[0].cardEl, persone[0].index);
-  if (emailInput) emailInput.value = '';
+  if (emailInput) {emailInput.value = '';delete emailInput.dataset.registeredMask;emailInput.readOnly=false;emailInput.type='email';}
   document.getElementById('resetLink').style.display = 'none';
   const lbl = document.getElementById('totalBoxLabel');
   if (lbl) lbl.textContent = 'Saldo stimato da versare:';

@@ -124,7 +124,7 @@ function generaElencoOperativo_(eventId, fields, options) {
 	const sortColumns = grouping.concat(ordering).filter(function (column, index, list) { return list.indexOf(column) === index; });
 	if (sortColumns.length) rows.sort(function (left, right) { for (let index = 0; index < sortColumns.length; index += 1) { const column = sortColumns[index]; const comparison = String(left[column] == null ? '' : left[column]).localeCompare(String(right[column] == null ? '' : right[column]), 'it', { numeric: true, sensitivity: 'base' }); if (comparison) return comparison; } return 0; });
   limitaImportiAUnaRigaPerOrdine_(rows, fields);
-  sheet.clear(); sheet.getRange(1, 1, 1, fields.length).merge().setValue('Elenco operativo — ' + String(event.titolo || eventId) + '\nCopia sincronizzata: importi e stati possono non includere gli ultimi movimenti. Verificare nel portale WordPress prima di richiedere pagamenti o rimborsi.').setWrap(true).setBackground('#17224a').setFontColor('#ffffff').setFontWeight('bold').setFontSize(14); sheet.getRange(2, 1, 1, fields.length).setValues([fields.map(function (field) { return labels[field] || field; })]).setBackground('#1f4e78').setFontColor('#ffffff').setFontWeight('bold').setWrap(true);
+  sheet.getDataRange().breakApart(); sheet.clear(); sheet.getRange(1, 1, 1, fields.length).merge().setValue('Elenco operativo — ' + String(event.titolo || eventId) + '\nCopia sincronizzata: importi e stati possono non includere gli ultimi movimenti. Verificare nel portale WordPress prima di richiedere pagamenti o rimborsi.').setWrap(true).setBackground('#17224a').setFontColor('#ffffff').setFontWeight('bold').setFontSize(14); sheet.getRange(2, 1, 1, fields.length).setValues([fields.map(function (field) { return labels[field] || field; })]).setBackground('#1f4e78').setFontColor('#ffffff').setFontWeight('bold').setWrap(true);
   if (rows.length) sheet.getRange(3, 1, rows.length, fields.length).setValues(rows).setWrap(true).setVerticalAlignment('middle');
   if (grouping.length && rows.length) rows.forEach(function (row, index) { const previous = index ? rows[index - 1] : null; const startsGroup = !previous || grouping.some(function (column) { return String(row[column]) !== String(previous[column]); }); if (startsGroup) sheet.getRange(index + 3, 1, 1, fields.length).setBorder(true, null, null, null, null, null, '#17224a', SpreadsheetApp.BorderStyle.SOLID_MEDIUM); });
   sheet.setFrozenRows(2); sheet.setHiddenGridlines(true); sheet.autoResizeColumns(1, fields.length); for (let column = 1; column <= fields.length; column += 1) sheet.setColumnWidth(column, Math.min(210, Math.max(90, sheet.getColumnWidth(column)))); sheet.getRange(1, 1, Math.max(2, rows.length + 2), fields.length).setBorder(true, true, true, true, true, true, '#d7dde6', SpreadsheetApp.BorderStyle.SOLID);
@@ -134,7 +134,7 @@ function generaElencoOperativo_(eventId, fields, options) {
 }
 
 function preparaComunicazioneOperativa(form) {
-  form = form || {}; const eventId = normalizzaTesto_(form.event_id, 40); const templateType = normalizzaValoreElenco_(form.template_type, ['PRE_DEPARTURE_REMINDER', 'BALANCE_REMINDER']); const message = normalizzaTesto_(form.message, 4000);
+  form = form || {}; const eventId = normalizzaTesto_(form.event_id, 40); const templateType = normalizzaValoreElenco_(form.template_type, ['PRE_DEPARTURE_REMINDER', 'BALANCE_REMINDER']); const message = String(form.message || '').replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().slice(0,4000);
   if (!eventId || !templateType) throw new Error('Scegli evento e tipo di comunicazione.');
   if (templateType === 'PRE_DEPARTURE_REMINDER' && !message) throw new Error('Scrivi le informazioni operative da comunicare.');
   const recipients = destinatariComunicazioneOperativa_(eventId, templateType);
@@ -145,7 +145,7 @@ function preparaComunicazioneOperativa(form) {
 }
 
 function statoComunicazioniOperative() {
-  const result = inviaComandoWordPress_('GET_EMAIL_MODE', {});
+  const result = inviaComandoWordPress_('GET_EMAIL_MODE', {source:'WORKSPACE'});
   return { mode: String(result.mode || 'ANTEPRIMA').toUpperCase() };
 }
 
@@ -304,12 +304,22 @@ function generaVistaOperativaEvento_(idEvento, campiForzati) {
   if (partecipanti.some(p=>['PRESENT','ABSENT','UNRECORDED'].includes(decodificaOggetto_(p.dati_aggiuntivi_json).attendance)) && !colonne.some(c=>c.key==='attendance')) colonne.push({key:'attendance',label:'Presenza effettiva',gruppo:'persona',comprimibile:false});
   iscrizioni.forEach(r=>{const snapshot=decodificaOggetto_(r.snapshot_json);aggiungiColonneServizi_(colonne, (snapshot.event||{}).options||[]);});
   applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, pagamenti);
+  const ordiniEconomici = new Set();
   const righe = partecipanti.map(function (partecipante) {
     const iscrizione = iscrizioniPerCodice[String(partecipante.codice_ordine)];
     const numero = Number(partecipante.numero_partecipante) || 0;
     const dati = datiOperativiPartecipante_(partecipante, statoOperativo[String(partecipante.codice_ordine) + '|' + numero] || {});
     const valori = {};
     colonne.forEach(function (colonna) { valori[colonna.key] = valoreCampoElenco_(colonna.key, evento, iscrizione, partecipante, dati, pagamenti); });
+    const personale={total:'totale_centesimi',paid:'versato_centesimi',balance:'saldo_centesimi'};
+    Object.keys(personale).forEach(key=>{
+      const amount=partecipante[personale[key]];
+      if(amount!=='' && amount!=null && Number.isFinite(Number(amount)))valori[key]=Number(amount)/100;
+      else if(ordiniEconomici.has(String(partecipante.codice_ordine)))valori[key]='';
+    });
+    // Method subtotals are order-wide: show once, never multiply by headcount.
+    if(ordiniEconomici.has(String(partecipante.codice_ordine)))['paid_cash','paid_transfer','paid_card'].forEach(key=>{valori[key]='';});
+    ordiniEconomici.add(String(partecipante.codice_ordine));
     return { codice_ordine: String(partecipante.codice_ordine), numero_partecipante: numero, valori: valori };
   });
   return { evento: { id: idEvento, titolo: String(evento.titolo || idEvento) }, sola_lettura: vistaEventoSolaLettura_(evento, colonne), profilo: profilo.id, nome_profilo: profilo.nome, personalizzata: !!vistaSalvata.length, conservata: false, colonne: colonne, righe: righe };

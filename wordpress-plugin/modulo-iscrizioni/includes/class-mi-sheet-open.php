@@ -109,6 +109,7 @@ final class MI_Sheet_Open {
 			if ( empty( $result['ready'] ) || empty( $result['event_sheet_complete'] ) || ! preg_match( '~^https://docs\.google\.com/spreadsheets/d/[A-Za-z0-9_-]+(?:/|$)~D', $result['url_foglio'] ?? '' ) ) throw new RuntimeException( 'Il foglio non è aggiornato. Conferma prima le modifiche pendenti tramite Sincronizza nel portale, poi riprova.' );
 			if ( ( $result['operational_profile'] ?? '' ) !== $current['profile'] ) throw new RuntimeException( 'La versione Workspace non conferma il profilo corrente. Aggiorna Apps Script e la distribuzione Web App, poi riprova.' );
 			if ( MI_Workspace_Client::stable_json( $result['event_schema'] ?? null ) !== MI_Workspace_Client::stable_json( $current['schema'] ) ) throw new RuntimeException( 'Workspace non conferma i campi dell’evento. Aggiorna Apps Script e la distribuzione Web App, poi riprova.' );
+			if ( class_exists( 'MI_Event_Deletion' ) && is_wp_error( MI_Event_Deletion::enter( $event_id ) ) ) throw new RuntimeException( 'Evento non disponibile.' );
 			$after = self::snapshot( $event_id );
 			if ( ! hash_equals( $current['fingerprint'], $after['fingerprint'] ) ) throw new RuntimeException( 'I dati sono cambiati durante l’apertura. Riprova.' );
 			delete_transient( $key );

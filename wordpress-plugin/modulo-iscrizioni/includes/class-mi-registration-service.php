@@ -728,6 +728,7 @@ final class MI_Registration_Service {
 			$wpdb->query( $wpdb->prepare( "UPDATE {$registrations_table} SET workspace_status = 'PENDING', workspace_attempts = workspace_attempts + 1, workspace_last_error = %s WHERE id = %d AND workspace_revision = %d", sanitize_text_field( $error_code ), $registration_id, $registration['workspace_revision'] ) );
 			return 'PENDING';
 		}
+		if ( class_exists( 'MI_Event_Deletion' ) && is_wp_error( MI_Event_Deletion::enter( (int) $registration['event_id'] ) ) ) return 'PENDING';
 		$marked = $wpdb->query( $wpdb->prepare( "UPDATE {$registrations_table} SET workspace_status = 'SYNCED', workspace_attempts = workspace_attempts + 1, workspace_last_error = NULL, workspace_synced_at = %s WHERE id = %d AND workspace_revision = %d", current_time( 'mysql', true ), $registration_id, $registration['workspace_revision'] ) );
 		if ( 1 !== $marked ) return 'PENDING';
 		if ( class_exists( 'MI_Sheet_Open' ) ) MI_Sheet_Open::enqueue( (int) $registration['event_id'] );
@@ -859,12 +860,12 @@ final class MI_Registration_Service {
 		}
 	}
 
-	public static function cancel_registration( $registration_id, $actor_label = 'ADMIN', $promote_waitlist = true ) {
+	public static function cancel_registration( $registration_id, $actor_label = 'ADMIN', $promote_waitlist = true, $notify = true ) {
 		global $wpdb;
 		$registration_id = absint( $registration_id );
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id,event_id,order_code,status,buyer_first_name,buyer_last_name,buyer_email FROM {$wpdb->prefix}mi_registrations WHERE id=%d", $registration_id ), ARRAY_A );
 		$result = self::transition_registration_status( $registration_id, 'CANCELLED', $actor_label, (bool) $promote_waitlist );
-		if ( is_wp_error( $result ) || 'CANCELLED' !== $result || ! $row || 'CANCELLED' === $row['status'] ) return $result;
+		if ( is_wp_error( $result ) || 'CANCELLED' !== $result || ! $row || 'CANCELLED' === $row['status'] || ! $notify ) return $result;
 		$snapshot = MI_Modello_Email::crea_istantanea_annullamento_iscrizione_iscritto( (int) $row['event_id'], trim( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ), $row['order_code'] );
 		$status = MI_Spedizione_Email::stato_nuova_email( $snapshot );
 		$payload = wp_json_encode( array( 'event_title' => get_the_title( (int) $row['event_id'] ), 'order_code' => $row['order_code'], 'status' => 'CANCELLED', 'email_preview' => $snapshot ) );

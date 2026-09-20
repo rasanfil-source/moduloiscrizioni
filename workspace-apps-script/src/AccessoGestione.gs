@@ -65,11 +65,11 @@ function scriviProiezioneEvento_(scheda, vista) {
   scheda.showColumns(1,scheda.getMaxColumns());
   const colonne = [{key:'_numero',label:'Partecipante'}].concat(vista.colonne, [{key:'_ordine',label:'Prenotazione'}]);
   if (scheda.getMaxColumns() < colonne.length) scheda.insertColumnsAfter(scheda.getMaxColumns(), colonne.length - scheda.getMaxColumns());
-  const rows = vista.righe.map(function (r) { return [r.numero_partecipante].concat(vista.colonne.map(function (c) { return neutralizzaFormula_(r.valori[c.key], 5000); }), [r.codice_ordine]); });
+  const rows = vista.righe.map(function (r) { return [r.numero_partecipante].concat(vista.colonne.map(function (c) { const v=r.valori[c.key]; return typeof v==='number' && Number.isFinite(v) ? v : neutralizzaFormula_(v, 5000); }), [r.codice_ordine]); });
   if (scheda.getMaxRows() < rows.length + 1) scheda.insertRowsAfter(scheda.getMaxRows(), rows.length + 1 - scheda.getMaxRows());
   scheda.getRange(1,1,1,colonne.length).setValues([colonne.map(function (c) {return c.label;})]).setFontWeight('bold');
   colonne.forEach(function (c,i) { identificaColonnaEvento_(scheda,i+1,c.key); });
-  if (rows.length) scheda.getRange(2,1,rows.length,colonne.length).setValues(rows);
+  if (rows.length) scheda.getRange(2,1,rows.length,colonne.length).setNumberFormat('@').setValues(rows);
   scheda.setFrozenRows(1);
   const modificabili = [];
   colonne.forEach(function(c,i) {

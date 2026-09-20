@@ -80,7 +80,8 @@ function verificaBusta_(envelope) {
   if (!timestamp || Math.abs(Date.now() - timestamp) > 120000) return { ok: false, error: 'STALE_REQUEST' };
   if (nonce.length < 16 || signature.length < 32) return { ok: false, error: 'INVALID_SIGNATURE' };
   let payloadFirmato = '';
-  if (typeof envelope.payload_firmato === 'string' && envelope.payload_firmato.length <= 100000) {
+  if (typeof envelope.payload_firmato === 'string') {
+    if (envelope.payload_firmato.length > 2000000) return {ok:false,error:'PAYLOAD_TOO_LARGE'};
     payloadFirmato = envelope.payload_firmato;
     let payloadDecodificato;
     try { payloadDecodificato = JSON.parse(payloadFirmato); } catch (errore) { return { ok: false, error: 'INVALID_SIGNATURE' }; }
@@ -109,16 +110,18 @@ function verificaBusta_(envelope) {
     const cache = CacheService.getScriptCache();
 	const nonceKey = Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, nonce)).replace(/=+$/, '');
 	const properties = PropertiesService.getScriptProperties();
-	let durableNonces = {};
-	try { durableNonces = JSON.parse(properties.getProperty('MI_USED_NONCES') || '{}'); } catch (error) { durableNonces = {}; }
-	const nonceCutoff = Date.now() - 180000;
-	Object.keys(durableNonces).forEach(function (key) { if (Number(durableNonces[key]) < nonceCutoff) delete durableNonces[key]; });
-	if (cache.get('nonce_' + nonce) || durableNonces[nonceKey]) return { ok: false, error: 'REPLAYED_REQUEST' };
-    cache.put('nonce_' + nonce, '1', 180);
-	durableNonces[nonceKey] = Date.now();
-	const nonceKeys = Object.keys(durableNonces).sort(function (left, right) { return Number(durableNonces[right]) - Number(durableNonces[left]); });
-	nonceKeys.slice(500).forEach(function (key) { delete durableNonces[key]; });
-	properties.setProperty('MI_USED_NONCES', JSON.stringify(durableNonces));
+	// Shard the durable replay guard below the 9 KB property limit. Cache eviction
+	// must not authorize replay; never evict a still-valid durable nonce.
+	const bucketKey='MI_USED_NONCES_'+nonceKey.charAt(0);
+	const durableNonces=JSON.parse(properties.getProperty(bucketKey)||'{}');
+	const legacy=JSON.parse(properties.getProperty('MI_USED_NONCES')||'{}');
+	Object.keys(durableNonces).forEach(key=>{if(Number(durableNonces[key])<Date.now())delete durableNonces[key];});
+	if(cache.get('nonce_'+nonce)||durableNonces[nonceKey]||Number(legacy[nonceKey])>Date.now()-250000)return {ok:false,error:'REPLAYED_REQUEST'};
+	durableNonces[nonceKey]=timestamp+121000;
+	const encoded=JSON.stringify(durableNonces);
+	if(encoded.length>8000)return {ok:false,error:'WORKSPACE_BUSY'};
+	properties.setProperty(bucketKey,encoded);
+	cache.put('nonce_'+nonce,'1',250);
   } finally {
     lock.releaseLock();
   }
@@ -275,6 +278,7 @@ function registraIscrizioneCentrale_(payload) {
     });
     const participantSheet = ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS);
     eliminaRigheContigue_(participantSheet, convertiRigheInOggetti_(participantSheet).filter(row => String(row.codice_ordine) === orderCode));
+    assicuraRighe_(participantSheet, participantSheet.getLastRow() + participantRows.length);
     participantSheet.getRange(participantSheet.getLastRow() + 1, 1, participantRows.length, participantRows[0].length).setValues(participantRows);
     const outbox = ottieniSchedaObbligatoria_(MI_SHEETS.EMAIL_OUTBOX);
     const message = convertiRigheInOggetti_(outbox).find(function (row) { return String(row.codice_ordine) === orderCode && String(row.tipo_modello) === 'REGISTRATION_CONFIRMATION'; });
@@ -327,7 +331,12 @@ function sincronizzaCamereMysql_(eventId, rooms, revision) {
   if (previous) versions.getRange(previous._row, 1, 1, 2).setValues([[eventId, revision]]);
   else versions.appendRow([eventId, revision]);
   eliminaRigheContigue_(sheet, existing);
-  if (values.length) sheet.getRange(sheet.getLastRow()+1, 1, values.length, values[0].length).setValues(values);
+  if (values.length) { assicuraRighe_(sheet,sheet.getLastRow()+values.length); sheet.getRange(sheet.getLastRow()+1, 1, values.length, values[0].length).setValues(values); }
+}
+
+function assicuraRighe_(sheet, required) {
+  const available=sheet.getMaxRows();
+  if(required>available)sheet.insertRowsAfter(available,required-available);
 }
 
 /** Delete bottom-up, preserving rows belonging to other events and retry repair. */

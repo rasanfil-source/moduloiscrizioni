@@ -48,7 +48,6 @@ final class MI_Workspace_Client {
 				'timestamp' => $timestamp,
 				'nonce'     => $nonce,
 				'action'    => $action,
-				'payload'   => $payload,
 				'payload_firmato' => $payload_firmato,
 				'payload_hash' => $payload_hash,
 				'signature' => $signature,
@@ -63,6 +62,9 @@ final class MI_Workspace_Client {
 		// La replica gira nella coda: la formattazione Google può superare un minuto.
 		$timeout = 'PREPARA_PRODUZIONI_EVENTO' === $action ? 240 : ( 'APPEND_REGISTRATION' === $action ? 120 : ( 'ELIMINA_DATI_EVENTO' === $action ? 110 : ( 'LEGGI_MODIFICHE_FOGLIO' === $action ? 45 : ( 'INVIA_EMAIL_PROVA' === $action ? 30 : 15 ) ) ) );
 		if ( in_array( $action, array( 'PREPARA_APERTURA_FOGLIO', 'CONFERMA_MODIFICHE_FOGLIO' ), true ) ) $timeout = 180;
+		// These deliveries carry revisions and Google tombstones reject late writes.
+		// Email/deletion retain their stronger exclusion until their side effect completes.
+		if ( class_exists( 'MI_Event_Deletion' ) && in_array( $action, array( 'APPEND_REGISTRATION', 'PREPARA_APERTURA_FOGLIO' ), true ) ) MI_Event_Deletion::release( absint( $payload['event_id'] ?? 0 ) );
 		$response = wp_remote_post(
 			self::webapp_url(),
 			array(

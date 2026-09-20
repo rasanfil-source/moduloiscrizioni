@@ -167,6 +167,7 @@ function verificaFogliEventoDaWordPress_(payload) {
 		if (visti[idEvento]) return;
 		visti[idEvento] = true;
 		const stato = verificaFoglioEventoDaWordPress_({ id_evento: idEvento });
+		if (!stato.ok) return; // An inaccessible file is not evidence of deletion.
 		stati.push({ id_evento: idEvento, esiste: !!stato.esiste, id_foglio: String(stato.id_foglio || ''), url_foglio: String(stato.url_foglio || '') });
 	});
 	return { ok: true, stati: stati };
@@ -277,7 +278,6 @@ function aggiornaFoglioOperativoEvento(form) {
 function aggiornaFoglioOperativoEventoConLock_(form) {
   form = form || {};
   const idEvento = normalizzaTesto_(form.id_evento, 40);
-	PropertiesService.getScriptProperties().deleteProperty('MI_READY_VIEW_' + idEvento);
   if (!idEvento) throw new Error('Scegli un evento.');
   if (typeof eventoInEliminazione_ === 'function' && eventoInEliminazione_(idEvento)) throw new Error('Evento eliminato o in eliminazione.');
   const registro = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES));
@@ -295,6 +295,7 @@ function aggiornaFoglioOperativoEventoConLock_(form) {
   if (form.soloModificati === true && proprieta.getProperty(chiaveProiezione) === impronta && !pending.changes.length && !pending.errors.length) {
     return {ok:true, invariato:true, read_only:!!vista.sola_lettura, url_foglio:foglio.getUrl(), esito:{aggiunte:0,manuali:0,conflitti:0}};
   }
+  proprieta.deleteProperty('MI_READY_VIEW_' + idEvento);
   const esito = scriviProiezioneEvento_(scheda, vista);
   if (!esito.manuali && !esito.conflitti) configuraSchedeEconomicheEvento_(foglio, idEvento, vista.sola_lettura);
   aggiornaProiezionePagamentiEventoConLock_(foglio, idEvento);

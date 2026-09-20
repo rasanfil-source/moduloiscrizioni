@@ -21,13 +21,15 @@ class FakeRange {
 }
 
 class FakeSheet {
-  constructor(headers) { this.rows = [[...headers]]; }
+  constructor(headers) { this.rows = [[...headers]]; this.capacity=5; }
+  getMaxRows(){return this.capacity;}
+  insertRowsAfter(after,count){assert.ok(after<=this.capacity);this.capacity+=count;}
   getLastRow() { return this.rows.length; }
   getLastColumn() { return Math.max(0, ...this.rows.map((row) => row.length)); }
-  getRange(row, column, rowCount = 1, columnCount = 1) { return new FakeRange(this, row, column, rowCount, columnCount); }
-  appendRow(row) { this.rows.push([...row]); }
+  getRange(row, column, rowCount = 1, columnCount = 1) { if(row+rowCount-1>this.capacity)throw Error('OUTSIDE_GRID');return new FakeRange(this, row, column, rowCount, columnCount); }
+  appendRow(row) { this.rows.push([...row]);this.capacity=Math.max(this.capacity,this.rows.length); }
   deleteRow(row) { this.rows.splice(row - 1, 1); }
-  deleteRows(row, count) { this.rows.splice(row - 1, count); }
+  deleteRows(row, count) { this.rows.splice(row - 1, count);this.capacity-=count; }
 }
 
 function environment() {
@@ -99,6 +101,16 @@ function payload(overrides = {}) {
     ...overrides
   };
 }
+
+test('repliche ripetute ed espansione partecipanti non esauriscono la griglia',()=>{
+ const {context,sheets}=environment();
+ for(let revision=1;revision<=25;revision++){
+  const count=revision%2?20:2;
+  const participants=Array.from({length:count},(_,i)=>({ticket_type_code:'standard',ticket_index:i+1,first_name:'Persona',last_name:String(i),fields:{},options:[]}));
+  assert.equal(context.aggiungiIscrizione_(payload({workspace_revision:String(revision),participants,tickets:[{ticket_type_code:'standard',quantity:count,unit_price_cents:1000}]})).ok,true);
+  assert.equal(sheets.Partecipanti.rows.length,count+1);
+ }
+});
 
 test('una richiesta vecchia non sovrascrive la revisione nuova, anche dopo un errore di proiezione', () => {
   const { context, sheets } = environment();

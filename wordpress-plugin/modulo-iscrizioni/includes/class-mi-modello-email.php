@@ -682,33 +682,7 @@ final class MI_Modello_Email {
 		if ( array_key_exists( $event_id, $resolved ) ) return $resolved[ $event_id ];
 		$page_id = absint( get_post_meta( $event_id, '_mi_registration_page_id', true ) );
 		if ( $page_id && 'publish' === get_post_status( $page_id ) ) return $resolved[ $event_id ] = esc_url_raw( get_permalink( $page_id ) );
-		$pages = get_posts( array(
-			'post_type'              => 'page',
-			'post_status'            => 'publish',
-			'numberposts'            => -1,
-			's'                      => 'modulo_iscrizioni',
-			'orderby'                => 'ID',
-			'order'                  => 'ASC',
-			'no_found_rows'          => true,
-			'update_post_meta_cache' => false,
-			'update_post_term_cache' => false,
-		) );
-		$pattern = get_shortcode_regex( array( 'modulo_iscrizioni' ) );
-		foreach ( $pages as $page ) {
-			if ( ! preg_match_all( '/' . $pattern . '/s', (string) $page->post_content, $matches, PREG_SET_ORDER ) ) {
-				continue;
-			}
-			foreach ( $matches as $match ) {
-				if ( 'modulo_iscrizioni' !== ( $match[2] ?? '' ) ) {
-					continue;
-				}
-				$attributes = shortcode_parse_atts( $match[3] ?? '' );
-				if ( $event_id === absint( $attributes['event'] ?? 0 ) ) {
-					return $resolved[ $event_id ] = esc_url_raw( get_permalink( $page->ID ) );
-				}
-			}
-		}
-		return $resolved[ $event_id ] = '';
+		return $resolved[ $event_id ] = esc_url_raw( MI_Shortcode::url_iscrizione( $event_id ) );
 	}
 
 	public static function salva( $post_id, $post ) {

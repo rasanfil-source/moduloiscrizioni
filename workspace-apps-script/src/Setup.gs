@@ -18,6 +18,7 @@ function onOpen() {
 }
 
 function configuraCartellaDiLavoro() {
+  invalidaCacheSchede_();
   const lock = LockService.getDocumentLock();
   lock.waitLock(30000);
   try {
@@ -48,6 +49,7 @@ function configuraCartellaDiLavoro() {
       console.log('Struttura aggiornata. Email e integrazione restano in modalità PREVIEW.');
     }
   } finally {
+    invalidaCacheSchede_();
     lock.releaseLock();
   }
 }

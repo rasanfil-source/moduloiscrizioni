@@ -30,7 +30,7 @@ function salvaModelloReport(form) {
   const ordinamento = normalizzaScelteReport_(form.ordinamento, campiAmmessi, 5);
   const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.REPORT_TEMPLATES);
   const id = 'report-' + Utilities.getUuid();
-  sheet.appendRow([id, nome, 'PERSONALIZZATO', idEvento, JSON.stringify(colonne), JSON.stringify(filtri), JSON.stringify(raggruppamenti), JSON.stringify(ordinamento), 'NO', new Date(), normalizzaTesto_(Session.getActiveUser().getEmail(), 120)]);
+  sheet.appendRow([id, neutralizzaFormula_(nome,120), 'PERSONALIZZATO', idEvento, JSON.stringify(colonne), JSON.stringify(filtri), JSON.stringify(raggruppamenti), JSON.stringify(ordinamento), 'NO', new Date(), normalizzaTesto_(Session.getActiveUser().getEmail(), 120)]);
   return { ok: true, id: id, nome: nome };
 }
 

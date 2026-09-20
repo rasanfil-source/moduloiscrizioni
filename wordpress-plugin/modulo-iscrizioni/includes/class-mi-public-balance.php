@@ -124,7 +124,21 @@ final class MI_Public_Balance {
 		$editable_selected = 0; foreach ( $opts as $option ) if ( in_array( $option['code'] ?? '', $editable_codes, true ) ) $editable_selected += (int) ( $option['unit_price_cents'] ?? 0 ) * (int) ( $option['quantity'] ?? 0 );
 		$fixed = $managed ? (int) $individual['total'] - $editable_selected : 0;
 		$extra = self::decode( $p['extra_json'] ); $email = sanitize_email( $extra['email'] ?? $r['buyer_email'] );
-		return array( 'success' => true, 'row' => $id, 'persona' => array( 'nome' => $p['first_name'], 'cognome' => $p['last_name'], 'email' => $email, 'siglaAlloggio' => $p['room_code'], 'alloggio' => $p['room_code'], 'locked' => $locked, 'services' => $editable, 'fixed' => $fixed, 'paid' => $managed ? (int) $individual['paid'] : 0, 'deposit' => $managed && 'DEPOSIT_BALANCE' === $r['economic_mode'] ? (int) $individual['deposit'] : 0, 'managed' => $managed, 'shared' => count( $active ) > 1, 'token' => self::token( $event, $id ), 'version' => $b['version'] ) );
+		return array( 'success' => true, 'row' => $id, 'persona' => array( 'nome' => $p['first_name'], 'cognome' => $p['last_name'], 'email_masked' => self::masked_email( $email ), 'siglaAlloggio' => $p['room_code'], 'alloggio' => $p['room_code'], 'locked' => $locked, 'services' => $editable, 'fixed' => $fixed, 'paid' => $managed ? (int) $individual['paid'] : 0, 'deposit' => $managed && 'DEPOSIT_BALANCE' === $r['economic_mode'] ? (int) $individual['deposit'] : 0, 'managed' => $managed, 'shared' => count( $active ) > 1, 'token' => self::token( $event, $id ), 'version' => $b['version'] ) );
+	}
+	private static function public_receipt( $receipt ) {
+		$receipt['email_masked'] = self::masked_email( $receipt['email'] ?? '' );
+		unset( $receipt['email'] );
+		return $receipt;
+	}
+	private static function masked_email( $email ) {
+		if ( ! is_email( $email ) ) return '';
+		list( $local, $domain ) = explode( '@', $email, 2 );
+		$dot = strrpos( $domain, '.' );
+		$host = false === $dot ? $domain : substr( $domain, 0, $dot );
+		$suffix = false === $dot ? '' : substr( $domain, $dot );
+		$visible = strlen( $local ) > 4 ? substr( $local, 0, 2 ) . '*****' . substr( $local, -2 ) : substr( $local, 0, 1 ) . '*****';
+		return $visible . '@' . substr( $host, 0, 1 ) . '***' . $suffix;
 	}
 	private static function queue_email( $event, $receipt, $key, $registration ) {
 		global $wpdb;
@@ -176,7 +190,7 @@ final class MI_Public_Balance {
 		global $wpdb;
 		self::event( $event );
 		$people = $data['persone'] ?? null; $email = sanitize_email( $data['email'] ?? '' );
-		if ( ! is_array( $people ) || ! count( $people ) || count( $people ) > 20 || ( ! $preview && ! is_email( $email ) ) ) throw new InvalidArgumentException( 'Carica le persone e inserisci un’email valida prima di confermare.' );
+		if ( ! is_array( $people ) || ! count( $people ) || count( $people ) > 20 || ( '' !== $email && ! is_email( $email ) ) ) throw new InvalidArgumentException( 'Carica le persone e inserisci un’email valida prima di confermare.' );
 		$request = (string) ( $data['requestId'] ?? '' );
 		if ( ! $preview && ! preg_match( '/^[a-f0-9-]{36}$/i', $request ) ) throw new InvalidArgumentException( 'Identificativo richiesta non valido.' );
 		$hash = hash( 'sha256', wp_json_encode( array( $event, $people, $email ) ) );
@@ -192,7 +206,7 @@ final class MI_Public_Balance {
 			MI_Management_Service::lock_room_event( $event );
 			if ( ! $preview ) {
 				$prior = $wpdb->get_var( $wpdb->prepare( "SELECT detail_json FROM {$wpdb->prefix}mi_registration_events WHERE event_type='public_balance' AND actor_label=%s LIMIT 1", $key ) ); self::check();
-				if ( $prior ) { $prior = self::decode( $prior ); if ( ! hash_equals( $hash, $prior['hash'] ) ) throw new InvalidArgumentException( 'Richiesta già utilizzata con dati diversi.' ); $wpdb->query( 'COMMIT' ); return $prior['receipt']; }
+				if ( $prior ) { $prior = self::decode( $prior ); if ( ! hash_equals( $hash, $prior['hash'] ) ) throw new InvalidArgumentException( 'Richiesta già utilizzata con dati diversi.' ); $wpdb->query( 'COMMIT' ); return self::public_receipt( $prior['receipt'] ); }
 			}
 			$bundles = array(); $changes = array(); $deltas = array(); $person_deltas = array(); $receipt = array( 'success' => true, 'people' => array(), 'total' => 0, 'paid' => 0, 'email' => $email, 'deposit' => 0, 'depositPaid' => 0, 'depositDue' => 0, 'saldoDue' => 0, 'balance' => 0 );
 			foreach ( $people as $person ) {
@@ -241,9 +255,19 @@ final class MI_Public_Balance {
 				$receipt_person['deposit'] = $deposit;
 				foreach ( self::payment_position( $receipt_person['total'], $deposit, $receipt_person['paid'] ) as $field => $amount ) $receipt[$field] += $amount;
 			} unset( $receipt_person );
+			if ( '' === $email ) {
+				$last_person = end( $people ); $selected = (int) $last_person['row'];
+				foreach ( $bundles as $bundle ) foreach ( $bundle['people'] as $registered ) if ( (int) $registered['id'] === $selected ) {
+					$extra = self::decode( $registered['extra_json'] );
+					$email = sanitize_email( $extra['email'] ?? '' );
+					if ( ! is_email( $email ) ) $email = sanitize_email( $bundle['registration']['buyer_email'] );
+				}
+				if ( ! is_email( $email ) ) throw new InvalidArgumentException( 'Non è presente un’email valida nella prenotazione. Inseriscila per ricevere il riepilogo.' );
+				$receipt['email'] = $email;
+			}
 			$receipt['causale'] = 'Saldo ' . get_the_title( $event ) . ' — ' . implode( ', ', array_column( $receipt['people'], 'name' ) );
 			$receipt['fingerprint'] = hash( 'sha256', wp_json_encode( $receipt ) );
-			if ( $preview ) { $wpdb->query( 'ROLLBACK' ); return $receipt; }
+			if ( $preview ) { $wpdb->query( 'ROLLBACK' ); return self::public_receipt( $receipt ); }
 			if ( ! hash_equals( $receipt['fingerprint'], (string) ( $data['fingerprint'] ?? '' ) ) ) throw new InvalidArgumentException( 'Il riepilogo è cambiato. Controlla di nuovo gli importi prima di confermare.' );
 			foreach ( $changes as $id => $change ) if ( $change['before'] !== $change['after'] && false === $wpdb->update( $wpdb->prefix . 'mi_participants', array( 'options_json' => wp_json_encode( $change['after'] ) ), array( 'id' => $id ) ) ) throw new RuntimeException( 'Servizi non salvati.' );
 			foreach ( $bundles as $rid => $b ) {
@@ -268,7 +292,7 @@ final class MI_Public_Balance {
 		} catch ( Throwable $error ) { $wpdb->query( 'ROLLBACK' ); throw $error; }
 		MI_Spedizione_Email::pianifica_spedizione();
 		foreach ( $bundles as $rid => $b ) try { MI_Registration_Service::accoda_iscrizione_workspace( $rid ); } catch ( Throwable $error ) { /* Durable workspace queue will retry. */ }
-		return $receipt;
+		return self::public_receipt( $receipt );
 	}
 	public static function render( $event, $prefill = array() ) {
 		try { self::event( $event ); } catch ( Throwable $error ) { wp_die( esc_html( $error->getMessage() ) ); }

@@ -14,7 +14,7 @@ class BalanceDB{
 	function __construct(){$this->reg=['id'=>1,'event_id'=>42,'economic_mode'=>'DEPOSIT_BALANCE','status'=>'PENDING_PAYMENT','total_cents'=>50000,'initial_due_cents'=>15000,'balance_cents'=>35000,'buyer_email'=>'demo@example.invalid','snapshot_json'=>json_encode(['event'=>['participant_extra_scope'=>'ALL','options'=>[],'deposit_mode'=>'FIXED','deposit_fixed_cents'=>15000]]),'payment_deadline_at'=>'2026-10-01'];$this->persons=[['id'=>1,'registration_id'=>1,'ticket_type_code'=>'base','first_name'=>'Marco','last_name'=>"D’Ecclesia",'status'=>'ACTIVE','room_code'=>'S1','options_json'=>'[]','extra_json'=>'{}','deposit_due_cents'=>15000]];}
  function prepare($sql,...$args){if(count($args)===1&&is_array($args[0]))$args=$args[0];return [$sql,$args];}
  function get_row($query,$format){[$sql,$args]=$query;return $args[0]===42?$this->reg:null;}
-	function get_results($query,$format){[$sql,$args]=$query;if(strpos($sql,'mi_payments')!==false)return $this->payments;if(strpos($sql,'mi_registration_items')!==false)return [['ticket_type_code'=>'base','unit_price_cents'=>50000]];return $this->persons;}
+	function get_results($query,$format){[$sql,$args]=$query;if(strpos($sql,'mi_payments')!==false)return $this->payments;if(strpos($sql,'mi_registration_items')!==false)return [['ticket_type_code'=>'base','unit_price_cents'=>50000]];return array_map(static function($p){$p['buyer_phone']='+390001234567';return $p;},$this->persons);}
  function get_var($query){[$sql,$args]=$query;return isset($this->events[$args[0]])?json_encode($this->events[$args[0]]):null;}
  function query($query){$sql=is_array($query)?$query[0]:$query;if($sql==='START TRANSACTION')$this->backup=[$this->reg,$this->persons,$this->events,$this->writes];if($sql==='ROLLBACK')[$this->reg,$this->persons,$this->events,$this->writes]=$this->backup;return 1;}
  function update($table,$data,$where){$this->writes++;if(strpos($table,'participants')!==false){foreach($this->persons as &$p)if($p['id']===$where['id'])$p=array_merge($p,$data);}else $this->reg=array_merge($this->reg,$data);return 1;}
@@ -25,6 +25,7 @@ foreach([[0,15000,35000,50000],[5000,10000,35000,45000],[15000,0,35000,35000],[2
 $wpdb=new BalanceDB();
 check_balance(MI_Public_Balance::normalize("  D’Ècclesia ")===MI_Public_Balance::normalize('decclesia'),'Normalizzazione');
 $lookup=MI_Public_Balance::lookup(42,['action'=>'lookupByCognome','cognome'=>'decclesia']);check_balance($lookup['success']&&$lookup['row']===1,'Cognome normalizzato');
+check_balance(!isset($lookup['persona']['email']) && $lookup['persona']['email_masked']==='d*****@e***.invalid','Email mascherata sul server senza indirizzo completo');
 $wpdb->persons[] = array_merge($wpdb->persons[0],['id'=>2,'first_name'=>'Maria','room_code'=>'S2']);
 $wpdb->reg['total_cents']=100000;$wpdb->reg['initial_due_cents']=30000;$wpdb->reg['balance_cents']=70000;
 $duplicates=MI_Public_Balance::lookup(42,['action'=>'lookupByCognome','cognome'=>'decclesia']);check_balance($duplicates['error']==='duplicate'&&count($duplicates['candidates'])===2,'Disambiguazione');
@@ -32,8 +33,9 @@ $chosen=MI_Public_Balance::lookup(42,['action'=>'lookupPersona','cognome'=>'decc
 array_pop($wpdb->persons);
 $wpdb->reg['total_cents']=50000;$wpdb->reg['initial_due_cents']=15000;$wpdb->reg['balance_cents']=35000;
 $lookup=MI_Public_Balance::lookup(42,['action'=>'lookupByCognome','cognome'=>'decclesia']);
-$data=['persone'=>[['row'=>1,'token'=>$lookup['persona']['token'],'version'=>$lookup['persona']['version'],'services'=>['pullman-a'=>1]]],'email'=>'demo@example.invalid','requestId'=>'12345678-1234-4234-8234-123456789abc'];
+$data=['persone'=>[['row'=>1,'token'=>$lookup['persona']['token'],'version'=>$lookup['persona']['version'],'services'=>['pullman-a'=>1]]],'email'=>'','requestId'=>'12345678-1234-4234-8234-123456789abc'];
 $quote=MI_Public_Balance::save(42,$data,true);check_balance($quote['total']===51000&&$quote['depositDue']===15000&&$quote['saldoDue']===36000,'Caparra non presunta e transfer');check_balance($wpdb->writes===0,'Anteprima non modifica dati');
+check_balance(!isset($quote['email']) && $quote['email_masked']==='d*****@e***.invalid','Anteprima senza email digitata e senza rivelare indirizzo');
 $data['fingerprint']=$quote['fingerprint'];$saved=MI_Public_Balance::save(42,$data);check_balance($saved['balance']===51000&&!$saved['emailQueued']&&$wpdb->reg['total_cents']===51000,'Conferma e modalità email');
 $writes=$wpdb->writes;$again=MI_Public_Balance::save(42,$data);check_balance($again===$saved&&$writes===$wpdb->writes,'Retry idempotente');
 $data['requestId']='22345678-1234-4234-8234-123456789abc';

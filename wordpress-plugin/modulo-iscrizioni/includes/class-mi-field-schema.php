@@ -248,7 +248,7 @@ final class MI_Field_Schema {
 				return new WP_Error( 'mi_participant_field_invalid', 'Controlla i dati aggiuntivi dei partecipanti.', array( 'status' => 400 ) );
 			}
 			$value = trim( (string) $value );
-			if ( empty( $value ) ) {
+			if ( '' === $value ) {
 				if ( ! empty( $field['required'] ) ) {
 					return new WP_Error( 'mi_participant_field_required', 'Completa tutti i dati obbligatori dei partecipanti.', array( 'status' => 400 ) );
 				}

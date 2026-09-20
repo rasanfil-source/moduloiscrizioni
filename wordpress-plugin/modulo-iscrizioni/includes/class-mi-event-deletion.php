@@ -22,6 +22,15 @@ final class MI_Event_Deletion {
 		return is_user_logged_in() && ! MI_Access::is_suspended() && MI_Access::is_global_manager() && ( current_user_can( 'mi_manage_events' ) || current_user_can( 'manage_options' ) );
 	}
 	public static function job( $id ) { return get_option( 'mi_delete_event_' . absint( $id ), array() ); }
+	/** Release only after a local commit/snapshot, before an idempotent Google call. */
+	public static function release( $id ) {
+		global $wpdb;
+		$id = absint( $id );
+		if ( ! isset( self::$leases[$id] ) ) return;
+		$name = self::$leases[$id];
+		$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $name ) );
+		unset( self::$leases[$id] );
+	}
 	public static function enter( $id, $deleting = false ) {
 		global $wpdb;
 		$id = absint( $id );
@@ -30,7 +39,7 @@ final class MI_Event_Deletion {
 			$name = 'mi_event_' . md5( $wpdb->prefix . ':' . $id );
 			if ( '1' !== (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $name ) ) ) return new WP_Error( 'mi_event_busy', 'È in corso un’altra operazione sull’evento. Riprova tra poco.' );
 			self::$leases[ $id ] = $name;
-			register_shutdown_function( static function () use ( $name ) { global $wpdb; $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $name ) ); } );
+			register_shutdown_function( static function () use ( $id ) { self::release( $id ); } );
 		}
 		// Refresh after acquiring the lease: another request may have started deletion.
 		wp_cache_delete( 'mi_delete_event_' . $id, 'options' );

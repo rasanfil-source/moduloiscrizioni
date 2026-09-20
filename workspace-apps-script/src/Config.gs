@@ -65,7 +65,11 @@ const MI_LEGACY_HEADERS = Object.freeze({
   'Registro controlli': ['audit_id', 'occurred_at', 'channel', 'action', 'entity_type', 'entity_ref', 'outcome', 'actor_label', 'detail_code']
 });
 
+let miFoglioMemo_=null;
+let miSchedeMemo_=Object.create(null);
+function invalidaCacheSchede_(){miFoglioMemo_=null;miSchedeMemo_=Object.create(null);}
 function ottieniFoglioDiLavoroAssociato_() {
+  if(miFoglioMemo_)return miFoglioMemo_;
   const properties = typeof PropertiesService !== 'undefined' ? PropertiesService.getScriptProperties() : null;
   const configuredId = properties ? String(properties.getProperty('MI_SPREADSHEET_ID') || '').trim() : '';
   // Quando il codice viene eseguito dal menu di un progetto associato,
@@ -77,16 +81,17 @@ function ottieniFoglioDiLavoroAssociato_() {
       const activeId = String(active.getId());
       if (properties && configuredId !== activeId) properties.setProperty('MI_SPREADSHEET_ID', activeId);
     }
-    return active;
+    return (miFoglioMemo_=active);
   }
-  if (configuredId) return SpreadsheetApp.openById(configuredId);
+  if (configuredId) return (miFoglioMemo_=SpreadsheetApp.openById(configuredId));
   throw new Error('Foglio operativo non configurato. Esegui Inizializza/aggiorna struttura dal Google Sheet.');
 }
 
 function ottieniSchedaObbligatoria_(name) {
+  if(miSchedeMemo_[name])return miSchedeMemo_[name];
   const sheet = ottieniFoglioDiLavoroAssociato_().getSheetByName(name);
   if (!sheet) throw new Error('Foglio mancante: ' + name + '. Esegui configuraCartellaDiLavoro().');
-  return sheet;
+  return (miSchedeMemo_[name]=sheet);
 }
 
 function ottieniSegretoScript_() {

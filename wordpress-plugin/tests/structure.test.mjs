@@ -425,7 +425,8 @@ test('WooCommerce viene alleggerito soltanto fuori dai percorsi commerciali', as
   assert.match(performance, /wc-ajax/);
   assert.match(performance, /wp:woocommerce\//);
   assert.match(performance, /woocommerce-general/);
-  assert.match(performance, /wc-cart-fragments/);
+  assert.doesNotMatch(performance, /'wc-cart-fragments'|'wc-add-to-cart'|'jquery-blockui'/);
+  assert.match(performance, /et_pb_shop\|et_pb_wc_/);
   assert.match(performance, /wc-order-attribution/);
 });
 
@@ -756,8 +757,8 @@ test('il guscio email usa il branding dello snapshot e componenti email-safe', a
   assert.match(model, /#337ab7/);
   assert.doesNotMatch(model, /#1a365d|#F97316/i);
   assert.match(model, /url_pubblica_evento/);
-  assert.match(model, /'post_status'\s*=>\s*'publish'/);
-  assert.match(model, /shortcode_parse_atts/);
+  assert.match(model, /get_post_status/);
+  assert.match(model, /MI_Shortcode::url_iscrizione/);
 });
 
 test('i segnaposto email coprono evento, riepilogo economico e pagamento', async () => {

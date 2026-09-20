@@ -28,11 +28,13 @@ final class MI_Site_Performance {
 	}
 
 	public static function filter_unused_woocommerce_style( $html, $handle ) {
+		if ( ! in_array( $handle, self::woocommerce_style_handles(), true ) ) return $html;
 		if ( self::needs_woocommerce_frontend() ) return $html;
 		return in_array( $handle, self::woocommerce_style_handles(), true ) ? '' : $html;
 	}
 
 	public static function filter_unused_woocommerce_script( $tag, $handle ) {
+		if ( ! in_array( $handle, self::woocommerce_script_handles(), true ) ) return $tag;
 		if ( self::needs_woocommerce_frontend() ) return $tag;
 		return in_array( $handle, self::woocommerce_script_handles(), true ) ? '' : $tag;
 	}
@@ -42,7 +44,7 @@ final class MI_Site_Performance {
 	}
 
 	private static function woocommerce_script_handles() {
-		return array( 'jquery-blockui', 'js-cookie', 'wc-add-to-cart', 'woocommerce', 'wc-cart-fragments', 'sourcebuster-js', 'wc-order-attribution', 'wc-stripe-express-checkout', 'woocommerce_stripe_payment_request', 'wc-stripe-upe-classic', 'wcpay-express-checkout', 'wcpay-frontend-tracks' );
+		return array( 'sourcebuster-js', 'wc-order-attribution', 'wc-stripe-express-checkout', 'woocommerce_stripe_payment_request', 'wc-stripe-upe-classic', 'wcpay-express-checkout', 'wcpay-frontend-tracks' );
 	}
 
 	private static function needs_woocommerce_frontend() {
@@ -57,7 +59,7 @@ final class MI_Site_Performance {
 		if ( ! $post || ! isset( $post->post_content ) ) return false;
 		$content = (string) $post->post_content;
 		if ( false !== strpos( $content, '<!-- wp:woocommerce/' ) ) return true;
-		if ( preg_match( '/\[(?:woocommerce_|product(?:s|_category|_page)?|add_to_cart|shop_messages|wc_)[^\]]*\]/i', $content ) ) return true;
+		if ( preg_match( '/\[(?:et_pb_shop|et_pb_wc_|woocommerce_|product(?:s|_category|_page)?|add_to_cart|shop_messages|wc_)[^\]]*\]/i', $content ) ) return true;
 
 		return false;
 	}
