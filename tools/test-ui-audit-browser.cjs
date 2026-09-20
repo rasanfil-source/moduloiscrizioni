@@ -1,0 +1,41 @@
+const fs=require('fs'),assert=require('node:assert/strict');
+const {chromium}=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright');
+const assets='wordpress-plugin/modulo-iscrizioni/assets/';
+(async()=>{
+ const browser=await chromium.launch({channel:'msedge',headless:true});
+ try{
+  const page=await browser.newPage({viewport:{width:390,height:844}});
+  await page.route('https://ui-audit.invalid/',route=>route.fulfill({body:'<!doctype html><html></html>',contentType:'text/html'}));
+  await page.goto('https://ui-audit.invalid/');
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.setContent('<html lang="it"><body><form data-mi-confirm="Eliminare la bozza di prova?"><input required name="title"><button type="submit" name="action" value="delete">Elimina bozza</button></form></body></html>');
+  await page.addStyleTag({content:fs.readFileSync(assets+'portal-management.css','utf8')});
+  await page.addScriptTag({content:fs.readFileSync(assets+'portal-management.js','utf8')});
+  await page.evaluate(()=>{window.submissions=[];document.querySelector('form').addEventListener('submit',e=>{e.preventDefault();window.submissions.push(e.submitter.value);});});
+  await page.getByRole('button',{name:'Elimina bozza',exact:true}).click();
+  assert.equal(await page.locator('dialog').count(),0);
+  await page.locator('input').fill('Prova');
+  await page.getByRole('button',{name:'Elimina bozza',exact:true}).click();
+  await page.getByRole('dialog').waitFor();
+  assert.deepEqual(await page.evaluate(()=>window.submissions),[]);
+  await page.keyboard.press('Escape');
+  await page.locator('dialog').waitFor({state:'detached'});
+  assert.equal(await page.locator('form > button').evaluate(e=>e===document.activeElement),true);
+  await page.locator('form > button').click();
+  await page.getByRole('dialog').getByRole('button',{name:'Elimina bozza'}).click();
+  await page.waitForFunction(()=>window.submissions.length===1);
+  assert.deepEqual(await page.evaluate(()=>window.submissions),['delete']);
+  await page.setContent('<html><body class="post-type-mi_event"><div class="mi-responsive-table mi-config-table"><table id="mi-ticket-types"><thead><tr><th>Codice</th><th>Nome</th><th>Azioni</th></tr></thead><tbody><tr><td><input value="base"></td><td><input value="Quota base"></td><td><button class="mi-remove-ticket">Rimuovi</button></td></tr></tbody></table></div><button id="mi-add-ticket">Aggiungi</button></body></html>');
+  await page.addStyleTag({content:fs.readFileSync(assets+'admin.css','utf8')});
+  await page.addScriptTag({content:fs.readFileSync(assets+'admin.js','utf8')});
+  assert.equal(await page.getByRole('button',{name:'Rimuovi Quota base'}).count(),1);
+  await page.getByRole('textbox',{name:'Nome — Quota base',exact:true}).fill('Quota nuova');
+  assert.equal(await page.getByRole('button',{name:'Rimuovi Quota nuova'}).count(),1);
+  await page.getByRole('button',{name:'Aggiungi',exact:true}).click();
+  await page.getByRole('button',{name:'Rimuovi riga 2'}).waitFor();
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  assert.equal(await page.locator('.mi-responsive-table').evaluate(e=>e.scrollWidth>e.clientWidth),true);
+  assert.deepEqual(errors,[]);
+  console.log('Conferme: validazione, Escape, focus e invio singolo; tabelle: etichette dinamiche e overflow mobile verificati.');
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

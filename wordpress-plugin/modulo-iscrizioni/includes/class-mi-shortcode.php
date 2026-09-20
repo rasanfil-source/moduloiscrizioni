@@ -1,0 +1,207 @@
+<?php
+defined( 'ABSPATH' ) || exit;
+
+final class MI_Shortcode {
+	private static $rendered = 0;
+	const FOCUSED_TEMPLATE = 'mi-pagina-iscrizione-concentrata.php';
+
+	public static function boot() {
+		add_shortcode( 'modulo_iscrizioni', array( __CLASS__, 'render' ) );
+		add_action( 'template_redirect', array( __CLASS__, 'mostra_pagina_iscrizione_pubblica' ), -80 );
+		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'maybe_enqueue_assets' ) );
+		add_action( 'template_redirect', array( __CLASS__, 'maybe_disable_page_cache' ), 0 );
+		add_filter( 'theme_page_templates', array( __CLASS__, 'register_focused_template' ) );
+		add_filter( 'template_include', array( __CLASS__, 'use_focused_template' ) );
+		add_action( 'admin_post_mi_anteprima_evento', array( __CLASS__, 'mostra_anteprima_riservata' ) );
+		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'dequeue_focused_divi_assets' ), PHP_INT_MAX );
+		add_action( 'wp_print_styles', array( __CLASS__, 'dequeue_focused_divi_assets' ), PHP_INT_MAX );
+		add_filter( 'style_loader_tag', array( __CLASS__, 'filter_focused_divi_asset' ), PHP_INT_MAX, 4 );
+		add_filter( 'script_loader_tag', array( __CLASS__, 'filter_focused_divi_asset' ), PHP_INT_MAX, 3 );
+	}
+
+	public static function dequeue_focused_divi_assets() {
+		if ( ! absint( $_GET['mi_iscrizione'] ?? 0 ) ) return;
+		foreach ( array( wp_styles(), wp_scripts() ) as $registry ) {
+			foreach ( (array) $registry->queue as $handle ) {
+				$source = isset( $registry->registered[ $handle ] ) ? (string) $registry->registered[ $handle ]->src : '';
+				if ( self::is_divi_asset_url( $source ) ) $registry->dequeue( $handle );
+			}
+		}
+	}
+
+	public static function filter_focused_divi_asset( $html, $handle = '', $source = '' ) {
+		if ( ! absint( $_GET['mi_iscrizione'] ?? 0 ) ) return $html;
+		return self::is_divi_asset_url( $source ?: $html ) ? '' : $html;
+	}
+
+	private static function is_divi_asset_url( $source ) {
+		return (bool) preg_match( '#/(?:themes/Divi/|plugins/divi-[^/]+/|et-cache/)#i', (string) $source );
+	}
+
+	public static function url_iscrizione( $event_id ) {
+		$slug = (string) get_post_meta( $event_id, '_mi_public_slug', true );
+		if ( $slug && (int) get_option( 'mi_public_slug_' . $slug ) === (int) $event_id ) return home_url( '/v/' . $slug );
+		return add_query_arg( 'mi_iscrizione', absint( $event_id ), home_url( '/' ) );
+	}
+
+	/** Hold the namespace lock through event creation and alias assignment. */
+	public static function validate_public_slug( $raw, $event_id = 0 ) {
+		$slug = strtolower( trim( (string) $raw ) );
+		if ( '' === $slug ) return '';
+		if ( strlen( $slug ) > 60 || ! preg_match( '/^[a-z0-9]+(?:-[a-z0-9]+)*$/D', $slug ) ) return new WP_Error( 'mi_slug_invalid', 'Usa da 1 a 60 lettere senza accenti, numeri o trattini, senza spazi. Inserisci solo il nome abbreviato, non l’indirizzo completo.' );
+		global $wpdb;
+		$lock = 'mi_slug_' . substr( hash( 'sha256', $wpdb->prefix . $slug ), 0, 48 );
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $lock ) ) ) return new WP_Error( 'mi_slug_busy', 'Verifica indirizzo occupata. Riprova tra qualche secondo.' );
+		register_shutdown_function( static function () use ( $wpdb, $lock ) { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); } );
+		$owner = get_option( 'mi_public_slug_' . $slug, false );
+		if ( false !== $owner && (int) $owner !== (int) $event_id ) return new WP_Error( 'mi_slug_taken', 'Questo indirizzo è già stato utilizzato. Scegli un altro nome abbreviato.' );
+		if ( get_page_by_path( 'v/' . $slug ) ) return new WP_Error( 'mi_slug_page', 'Questo indirizzo è già utilizzato da una pagina del sito.' );
+		return $slug;
+	}
+
+	public static function save_public_slug( $event_id, $slug ) {
+		if ( '' === $slug ) return true;
+		$key = 'mi_public_slug_' . $slug;
+		if ( ! add_option( $key, (int) $event_id, '', false ) && (int) get_option( $key ) !== (int) $event_id ) return new WP_Error( 'mi_slug_taken', 'Indirizzo non assegnato: il nome è già utilizzato.' );
+		update_post_meta( $event_id, '_mi_public_slug', $slug );
+		update_post_meta( $event_id, '_mi_registration_url', self::url_iscrizione( $event_id ) );
+		return true;
+	}
+
+	public static function mostra_pagina_iscrizione_pubblica() {
+		$path = wp_parse_url( wp_unslash( $_SERVER['REQUEST_URI'] ?? '' ), PHP_URL_PATH );
+		$base = rtrim( (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH ), '/' );
+		if ( preg_match( '#^' . preg_quote( $base, '#' ) . '/v/([a-z0-9-]{1,60})/?$#D', (string) $path, $match ) ) {
+			$owner = absint( get_option( 'mi_public_slug_' . $match[1] ) );
+			if ( $owner ) $_GET['mi_iscrizione'] = $owner;
+		}
+		$event_id = absint( $_GET['mi_iscrizione'] ?? 0 );
+		if ( ! $event_id ) return;
+		$content = self::render( array( 'event' => $event_id ) );
+		if ( '' === trim( $content ) ) {
+			status_header( 404 );
+			$content = '<p class="mi-registration__notice">Questo evento non è disponibile.</p>';
+		} else {
+			status_header( 200 );
+		}
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) define( 'DONOTCACHEPAGE', true );
+		nocache_headers();
+		header( 'X-Robots-Tag: noindex, nofollow, noarchive', true );
+		show_admin_bar( false );
+		self::render_focused_document( $content );
+		exit;
+	}
+
+	private static function render_focused_document( $content ) {
+		$page_title = get_bloginfo( 'name' ) . ' — Iscrizione evento';
+		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><title><?php echo esc_html( $page_title ); ?></title><?php wp_print_styles( 'mi-public' ); ?></head><body class="mi-focused-page"><main class="mi-focused-page__main"><?php echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- HTML protetto dal renderer. ?></main><?php wp_print_scripts( array( 'mi-core', 'mi-public' ) ); ?></body></html><?php
+	}
+
+	public static function maybe_disable_page_cache() {
+		if ( ! is_singular() ) return;
+		$post = get_post();
+		if ( ! $post || ( ! has_shortcode( $post->post_content, 'modulo_iscrizioni' ) && ! has_shortcode( $post->post_content, 'mi_divi_modulo_iscrizioni' ) ) ) return;
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) define( 'DONOTCACHEPAGE', true );
+		nocache_headers();
+	}
+
+	public static function register_focused_template( $templates ) {
+		$templates[ self::FOCUSED_TEMPLATE ] = 'Iscrizione — modalità concentrata';
+		return $templates;
+	}
+
+	public static function use_focused_template( $template ) {
+		$focused = MI_PLUGIN_DIR . 'templates/pagina-iscrizione-concentrata.php';
+		return is_page() && self::FOCUSED_TEMPLATE === get_page_template_slug() && is_readable( $focused ) ? $focused : $template;
+	}
+
+	public static function maybe_enqueue_assets() {
+		global $post;
+		if ( is_singular() && $post instanceof WP_Post && ( has_shortcode( $post->post_content, 'modulo_iscrizioni' ) || has_shortcode( $post->post_content, 'mi_divi_modulo_iscrizioni' ) ) ) self::enqueue_assets();
+	}
+
+	private static function enqueue_assets() {
+		wp_enqueue_style( 'mi-public', MI_PLUGIN_URL . 'assets/public.css', array(), MI_VERSION );
+		wp_enqueue_script( 'mi-core', MI_PLUGIN_URL . 'assets/core.js', array(), MI_VERSION, true );
+		wp_enqueue_script( 'mi-public', MI_PLUGIN_URL . 'assets/public.js', array( 'mi-core' ), MI_VERSION, true );
+	}
+
+	public static function render( $attributes ) {
+		if ( ! headers_sent() ) nocache_headers();
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) define( 'DONOTCACHEPAGE', true );
+		$attributes = shortcode_atts( array( 'event' => 0, 'anteprima' => 0 ), $attributes, 'modulo_iscrizioni' );
+		$event_id = absint( $attributes['event'] );
+		$is_preview = ! empty( $attributes['anteprima'] ) && current_user_can( 'mi_manage_events' ) && MI_Access::can_access_event( $event_id );
+		$event = MI_Registration_Service::public_event( $event_id, $is_preview );
+		if ( is_wp_error( $event ) ) return current_user_can( 'mi_manage_events' ) ? '<p class="mi-registration__notice">Evento non pubblicato o configurazione incompleta.</p>' : '';
+		self::$rendered++;
+		$instance_id = 'mi-registration-' . self::$rendered . '-' . $event_id;
+		self::enqueue_assets();
+		$config = array( 'event' => $event, 'state' => $is_preview ? 'OPEN' : MI_Registration_Service::registration_state( $event ), 'preview' => $is_preview, 'endpoint' => esc_url_raw( rest_url( MI_REST_Controller::NAMESPACE . '/events/' . $event_id . '/registrations' ) ), 'instanceId' => $instance_id, 'homeUrl' => esc_url_raw( home_url( '/' ) ), 'privacyUrl' => $event['privacy_url'], 'qrScriptUrl' => esc_url_raw( MI_PLUGIN_URL . 'assets/qrcode-generator-2.0.4.js?ver=2.0.4' ) );
+		$formatted_date = self::formatted_event_date( $event['event_starts_at'] );
+		$formatted_opens = self::formatted_event_date( $event['opens_at'] );
+		$formatted_closes = self::formatted_event_date( $event['closes_at'] );
+		ob_start(); ?>
+		<section id="<?php echo esc_attr( $instance_id ); ?>" class="mi-registration" style="--mi-primary:<?php echo esc_attr( $event['accent_color'] ); ?>;--mi-primary-dark:<?php echo esc_attr( self::darken_color( $event['accent_color'] ) ); ?>" data-mi-config="<?php echo esc_attr( wp_json_encode( $config ) ); ?>">
+			<?php if ( $is_preview ) : ?><p class="mi-registration__preview-notice" role="status">Anteprima riservata: puoi provare tutti i passaggi, ma nessuna iscrizione verrà inviata.</p><?php endif; ?>
+			<header class="mi-registration__hero<?php echo $event['cover_image'] ? ' mi-registration__hero--with-image' : ''; ?>">
+				<?php if ( $event['cover_image'] ) : ?><img class="mi-registration__cover" src="<?php echo esc_url( $event['cover_image'] ); ?>" alt="<?php echo esc_attr( $event['cover_image_alt'] ?: $event['title'] ); ?>"><?php endif; ?>
+				<div class="mi-registration__hero-content">
+					<?php if ( $event['activity_logo'] ) : ?><img class="mi-registration__logo" src="<?php echo esc_url( $event['activity_logo'] ); ?>" alt="<?php echo esc_attr( $event['activity_logo_alt'] ); ?>" width="180" height="80"><?php endif; ?>
+					<p class="mi-registration__eyebrow"><?php echo esc_html( $event['activity'] ); ?></p><h1 class="mi-registration__title"><?php echo esc_html( $event['title'] ); ?></h1>
+					<?php if ( $formatted_date || $event['event_location'] ) : ?><dl class="mi-registration__facts"><?php if ( $formatted_date ) : ?><div><dt>Quando</dt><dd><?php echo esc_html( $formatted_date ); ?></dd></div><?php endif; ?><?php if ( $event['event_location'] ) : ?><div><dt>Dove</dt><dd><?php echo esc_html( $event['event_location'] ); ?></dd></div><?php endif; ?></dl><?php endif; ?>
+					<?php if ( $event['description'] ) : ?><p class="mi-registration__lead"><?php echo nl2br( esc_html( $event['description'] ) ); ?></p><?php endif; ?>
+				</div>
+			</header>
+			<?php if ( 'OPEN' !== $config['state'] ) : ?><p class="mi-registration__notice" role="status"><?php echo esc_html( self::state_message( $config['state'], $formatted_opens ) ); ?></p><?php else : ?>
+			<?php if ( $event['availability']['full'] && $event['waitlist_enabled'] ) : ?><p class="mi-registration__availability mi-registration__availability--waitlist" role="status"><span><strong>Posti ordinari esauriti.</strong> Puoi inviare la richiesta: sarà inserita in lista d’attesa.</span><?php if ( $formatted_closes ) : ?><small>Richieste aperte fino a <?php echo esc_html( $formatted_closes ); ?>.</small><?php endif; ?></p><?php else : ?><p class="mi-registration__availability" role="status"><span><strong><?php echo esc_html( (string) $event['availability']['remaining'] ); ?> posti disponibili</strong> su <?php echo esc_html( (string) $event['availability']['capacity'] ); ?>.</span><?php if ( $formatted_closes ) : ?><small>Iscrizioni aperte fino a <?php echo esc_html( $formatted_closes ); ?>.</small><?php endif; ?></p><?php endif; ?>
+			<nav class="mi-registration__progress" aria-label="Avanzamento iscrizione"><ol><li aria-current="step" data-mi-progress="1"><span>1</span> Iscrizioni</li><li data-mi-progress="2"><span>2</span> Informazioni</li><li data-mi-progress="3"><span>3</span> Conferma</li></ol></nav>
+			<form class="mi-registration__form" novalidate>
+				<section class="mi-registration__step" data-mi-step="1" aria-labelledby="<?php echo esc_attr( $instance_id ); ?>-step-1"><h2 id="<?php echo esc_attr( $instance_id ); ?>-step-1" tabindex="-1">Iscrizioni</h2>
+					<div class="mi-registration__tickets"><?php foreach ( $event['ticket_types'] as $ticket ) : ?><?php $type_availability = $event['availability']['ticket_types'][ $ticket['code'] ] ?? array(); $type_remaining = $type_availability['remaining'] ?? null; $maximum = ( $event['waitlist_enabled'] || null === $type_remaining ) ? $ticket['max_per_order'] : min( $ticket['max_per_order'], $type_remaining ); ?><label class="mi-registration__ticket"><span><strong>Seleziona la quantità</strong></span><span class="mi-registration__quantity"><input type="number" min="0" max="<?php echo esc_attr( max( 0, $maximum ) ); ?>" value="0" data-mi-ticket="<?php echo esc_attr( $ticket['code'] ); ?>" aria-label="Quantità <?php echo esc_attr( $ticket['name'] ); ?>" <?php disabled( 0 === $maximum && ! $event['waitlist_enabled'] ); ?>></span></label><?php endforeach; ?></div>
+					<?php $order_options = array_values( array_filter( $event['options'], static function ( $option ) { return 'ORDER' === ( $option['scope'] ?? '' ); } ) ); if ( $order_options ) : ?><fieldset class="mi-registration__options"><legend>Opzioni per l’ordine</legend><?php foreach ( $order_options as $option ) : ?><label><span><?php echo esc_html( $option['name'] ); ?><?php if ( in_array( $event['pricing_mode'], array( 'FIXED', 'CALCULATED' ), true ) && (int) $option['price_cents'] > 0 ) : ?> · <?php echo esc_html( number_format_i18n( $option['price_cents'] / 100, 2 ) ); ?> €<?php endif; ?></span><input type="number" min="0" max="<?php echo esc_attr( $option['max_quantity'] ); ?>" value="0" data-mi-order-option="<?php echo esc_attr( $option['code'] ); ?>"></label><?php endforeach; ?></fieldset><?php endif; ?>
+				</section>
+				<?php $waitlist_email_required = $event['availability']['full'] && $event['waitlist_enabled']; ?>
+				<section class="mi-registration__step" data-mi-step="2" aria-labelledby="<?php echo esc_attr( $instance_id ); ?>-step-2" hidden><h2 id="<?php echo esc_attr( $instance_id ); ?>-step-2" tabindex="-1">Informazioni di contatto</h2><div class="mi-registration__grid mi-registration__contact"><label>Nome *<input name="buyerFirstName" maxlength="80" autocomplete="given-name" required></label><label>Cognome *<input name="buyerLastName" maxlength="80" autocomplete="family-name" required></label><label>Indirizzo email<?php echo $waitlist_email_required ? ' *' : ''; ?><input name="buyerEmail" type="email" maxlength="254" <?php echo $waitlist_email_required ? 'required ' : ''; ?>autocomplete="email"><?php if ( $waitlist_email_required ) : ?><small class="mi-registration__field-help">Necessaria per ricevere la proposta quando si libera un posto.</small><?php endif; ?></label><label>Telefono cellulare *<input name="buyerPhone" type="tel" maxlength="32" autocomplete="tel" placeholder="+39 …" required><small class="mi-registration__field-help">Inserire il prefisso internazionale, per esempio +39.</small></label></div><h3 data-mi-participants-heading>Prenotazione</h3><div class="mi-registration__participants" data-mi-participants></div></section>
+				<section class="mi-registration__step" data-mi-step="3" aria-labelledby="<?php echo esc_attr( $instance_id ); ?>-step-3" hidden><h2 id="<?php echo esc_attr( $instance_id ); ?>-step-3" tabindex="-1">Conferma</h2><div class="mi-registration__honeypot" aria-hidden="true"><label>Lascia vuoto <input name="website" tabindex="-1" autocomplete="off"></label></div><label class="mi-registration__consent"><input name="privacyAccepted" type="checkbox" required> <span>Ho letto l’<?php if ( $config['privacyUrl'] ) : ?><a href="<?php echo esc_url( $config['privacyUrl'] ); ?>" target="_blank" rel="noopener noreferrer">informativa privacy</a><?php else : ?>informativa privacy<?php endif; ?><?php if ( $event['privacy_policy_version'] ) : ?> versione <?php echo esc_html( $event['privacy_policy_version'] ); ?><?php endif; ?> applicabile all’evento.</span></label><?php if ( $event['marketing_enabled'] ) : ?><label class="mi-registration__consent"><input name="marketingAccepted" type="checkbox"> <span><strong>Comunicazioni su future iniziative.</strong> Acconsento a ricevere informazioni su altre attività organizzate dalla parrocchia. Il consenso è facoltativo.</span></label><?php endif; ?></section>
+				<p class="mi-registration__error" data-mi-error role="alert" tabindex="-1" hidden></p>
+				<div class="mi-registration__action-bar"><div aria-live="polite"><small>Selezione</small><strong data-mi-sticky-summary>Nessuna iscrizione</strong></div><div class="mi-registration__actions"><button class="mi-registration__back" type="button" data-mi-back hidden>Indietro</button><button class="mi-registration__next" type="button" data-mi-next>Continua</button><button class="mi-registration__submit" type="submit" hidden>Invia iscrizione</button></div></div>
+			</form><div class="mi-registration__success" data-mi-success role="status" tabindex="-1" hidden></div><?php endif; ?>
+		</section><?php return ob_get_clean();
+	}
+
+	private static function formatted_event_date( $value ) {
+		if ( ! $value ) return '';
+		$date = DateTimeImmutable::createFromFormat( 'Y-m-d\TH:i', $value, wp_timezone() );
+		return $date ? wp_date( 'l j F Y, H:i', $date->getTimestamp(), wp_timezone() ) : '';
+	}
+
+	public static function mostra_anteprima_riservata() {
+		$event_id = isset( $_GET['event'] ) ? absint( $_GET['event'] ) : 0;
+		if ( ! current_user_can( 'mi_manage_events' ) || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Non hai accesso a questo evento.', 'Accesso negato', array( 'response' => 403 ) );
+		check_admin_referer( 'mi_anteprima_evento_' . $event_id );
+		// admin-post.php non inizializza uno screen: Divi e la toolbar lo assumono presente negli hook di pagina.
+		if ( function_exists( 'get_current_screen' ) && function_exists( 'set_current_screen' ) && ! get_current_screen() ) {
+			set_current_screen( 'mi_event_preview' );
+		}
+		show_admin_bar( false );
+		$content = self::render( array( 'event' => $event_id, 'anteprima' => 1 ) );
+		nocache_headers();
+		self::render_focused_document( $content );
+		exit;
+	}
+
+	private static function darken_color( $color ) {
+		$color = sanitize_hex_color( $color ) ?: '#c43b2f';
+		$red = max( 0, (int) round( hexdec( substr( $color, 1, 2 ) ) * .72 ) );
+		$green = max( 0, (int) round( hexdec( substr( $color, 3, 2 ) ) * .72 ) );
+		$blue = max( 0, (int) round( hexdec( substr( $color, 5, 2 ) ) * .72 ) );
+		return sprintf( '#%02x%02x%02x', $red, $green, $blue );
+	}
+
+	private static function state_message( $state, $formatted_opens = '' ) {
+		if ( 'NOT_OPEN' === $state && $formatted_opens ) return 'Le iscrizioni apriranno ' . str_replace( ', ', ' alle ', $formatted_opens ) . '.';
+		$messages = array( 'NOT_OPEN' => 'Le iscrizioni non sono ancora aperte.', 'CLOSED' => 'Le iscrizioni sono chiuse.', 'SOLD_OUT' => 'I posti sono esauriti e la lista d’attesa non è attiva.', 'MISCONFIGURED' => 'Le iscrizioni non sono al momento disponibili.' );
+		return $messages[ $state ] ?? 'Le iscrizioni non sono disponibili.';
+	}
+}

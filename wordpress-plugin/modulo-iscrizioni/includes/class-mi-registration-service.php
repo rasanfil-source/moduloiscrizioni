@@ -1,0 +1,1501 @@
+<?php
+
+defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/class-mi-option-rules.php';
+require_once __DIR__ . '/class-mi-payment-people.php';
+
+final class MI_Registration_Service {
+	/**
+	 * Restituisce una scadenza UTC utilizzabile quando una posizione già confermata
+	 * torna in attesa di pagamento. Una scadenza storica non deve provocare
+	 * l'annullamento automatico al cron immediatamente successivo.
+	 */
+	public static function reopened_payment_deadline( array $registration, $now = null ) {
+		$now = null === $now ? time() : (int) $now;
+		$deadline = trim( (string) ( $registration['payment_deadline_at'] ?? '' ) );
+		$deadline_timestamp = '' === $deadline ? false : strtotime( $deadline . ' UTC' );
+		if ( false !== $deadline_timestamp && $deadline_timestamp > $now ) return $deadline;
+		$snapshot = json_decode( (string) ( $registration['snapshot_json'] ?? '' ), true );
+		$snapshot_hours = is_array( $snapshot ) ? absint( $snapshot['event']['waitlist_offer_hours'] ?? 0 ) : 0;
+		$stored_hours = function_exists( 'get_post_meta' ) ? absint( get_post_meta( (int) ( $registration['event_id'] ?? 0 ), '_mi_waitlist_offer_hours', true ) ) : 0;
+		$hours = min( 168, max( 1, $snapshot_hours ?: ( $stored_hours ?: 48 ) ) );
+		return gmdate( 'Y-m-d H:i:s', $now + $hours * 3600 );
+	}
+
+	private static function payment_coverage( array $registration ) {
+		global $wpdb;
+		$payments = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d ORDER BY id", $registration['id'] ), ARRAY_A );
+		if ( $wpdb->last_error ) throw new RuntimeException( 'Movimenti non disponibili.' );
+		$paid = 0; foreach ( $payments as $payment ) $paid += ( 'REFUND' === $payment['transaction_kind'] ? -1 : 1 ) * (int) $payment['amount_cents'];
+		$position = MI_Payment_People::read( $registration, $payments );
+		$covered = MI_Payment_People::covered( $position, $registration['economic_mode'] ?? '' );
+		if ( null === $covered ) $covered = $paid >= (int) ( $registration['initial_due_cents'] ?? 0 );
+		return array( 'covered' => $covered, 'paid' => $paid, 'position' => $position );
+	}
+	public static function ensure_published_revision( $event_id, $force = false ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( $event_id ); if ( is_wp_error( $lease ) ) return $lease; }
+		global $wpdb;
+		$event_id = absint( $event_id );
+		$event = get_post( $event_id );
+		if ( ! $event || MI_Event_Post_Type::EVENT_TYPE !== $event->post_type || 'publish' !== $event->post_status ) {
+			return null;
+		}
+		$table = $wpdb->prefix . 'mi_event_revisions';
+		$config = self::public_event( $event_id, true );
+		if ( is_wp_error( $config ) ) {
+			return null;
+		}
+		unset( $config['availability'], $config['revision'] );
+		$config['schema_version'] = MI_VERSION;
+		$canonical = MI_Workspace_Client::stable_json( $config );
+		$hash = hash( 'sha256', $canonical );
+		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, revision_number, config_hash, config_json FROM {$table} WHERE event_id = %d AND config_hash = %s", $event_id, $hash ), ARRAY_A );
+		if ( $existing ) {
+			update_post_meta( $event_id, '_mi_published_revision_id', (int) $existing['id'] );
+			delete_post_meta( $event_id, '_mi_needs_republish' );
+			return $existing;
+		}
+		if ( ! $force && get_post_meta( $event_id, '_mi_published_revision_id', true ) ) {
+			return self::published_revision_row( $event_id );
+		}
+		$inserted = false;
+		$revision_number = 0;
+		for ( $attempt = 0; $attempt < 3 && false === $inserted; $attempt++ ) {
+			$revision_number = 1 + (int) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(MAX(revision_number), 0) FROM {$table} WHERE event_id = %d", $event_id ) );
+			$inserted = $wpdb->insert( $table, array( 'event_id' => $event_id, 'revision_number' => $revision_number, 'config_hash' => $hash, 'config_json' => $canonical, 'created_at' => current_time( 'mysql', true ) ), array( '%d', '%d', '%s', '%s', '%s' ) );
+			if ( false === $inserted ) {
+				// Un salvataggio concorrente può aver creato lo stesso hash o occupato il numero di revisione.
+				$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, revision_number, config_hash, config_json FROM {$table} WHERE event_id = %d AND config_hash = %s", $event_id, $hash ), ARRAY_A );
+				if ( $existing ) {
+					update_post_meta( $event_id, '_mi_published_revision_id', (int) $existing['id'] );
+					delete_post_meta( $event_id, '_mi_needs_republish' );
+					return $existing;
+				}
+			}
+		}
+		if ( false === $inserted ) {
+			return null;
+		}
+		$revision = array( 'id' => (int) $wpdb->insert_id, 'revision_number' => $revision_number, 'config_hash' => $hash, 'config_json' => $canonical );
+		update_post_meta( $event_id, '_mi_published_revision_id', $revision['id'] );
+		delete_post_meta( $event_id, '_mi_needs_republish' );
+		return $revision;
+	}
+
+	private static function published_revision_row( $event_id ) {
+		global $wpdb;
+		$table = $wpdb->prefix . 'mi_event_revisions';
+		$revision_id = absint( get_post_meta( $event_id, '_mi_published_revision_id', true ) );
+		if ( $revision_id ) {
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, revision_number, config_hash, config_json FROM {$table} WHERE id = %d AND event_id = %d", $revision_id, $event_id ), ARRAY_A );
+			if ( $row ) {
+				return $row;
+			}
+		}
+		return $wpdb->get_row( $wpdb->prepare( "SELECT id, revision_number, config_hash, config_json FROM {$table} WHERE event_id = %d ORDER BY revision_number DESC LIMIT 1", $event_id ), ARRAY_A );
+	}
+
+	public static function public_event( $event_id, $allow_unpublished = false ) {
+		if ( class_exists( 'MI_Event_Deletion' ) && MI_Event_Deletion::job( $event_id ) ) return new WP_Error( 'mi_event_deleting', 'Evento non disponibile: eliminazione in corso.', array( 'status' => 410 ) );
+		$event = get_post( $event_id );
+		$allowed_status = $allow_unpublished ? array( 'publish', 'draft', 'private' ) : array( 'publish' );
+		if ( ! $event || MI_Event_Post_Type::EVENT_TYPE !== $event->post_type || ! in_array( $event->post_status, $allowed_status, true ) ) {
+			return new WP_Error( 'mi_event_not_found', 'Evento non disponibile.', array( 'status' => 404 ) );
+		}
+
+		$ticket_types = get_post_meta( $event_id, '_mi_ticket_types', true );
+		if ( ! is_array( $ticket_types ) || empty( $ticket_types ) ) {
+			return new WP_Error( 'mi_event_invalid', 'Configurazione evento incompleta.', array( 'status' => 409 ) );
+		}
+		$privacy_url = self::privacy_policy_url();
+		$privacy_policy_version = (string) get_post_meta( $event_id, '_mi_privacy_policy_version', true );
+		$privacy_consent_id = (string) get_post_meta( $event_id, '_mi_privacy_consent_id', true );
+		if ( '' === $privacy_policy_version ) {
+			$privacy_policy_version = wp_date( 'Y-m' );
+			update_post_meta( $event_id, '_mi_privacy_policy_version', $privacy_policy_version );
+		}
+		if ( '' === $privacy_consent_id ) {
+			$privacy_consent_id = 'privacy-' . absint( $event_id );
+			update_post_meta( $event_id, '_mi_privacy_consent_id', $privacy_consent_id );
+		}
+
+		$activity_id = absint( get_post_meta( $event_id, '_mi_activity_id', true ) );
+		$activity = get_post( $activity_id );
+		$field_configuration = MI_Field_Schema::event_configuration( $event_id );
+		$activity_thumbnail_id = $activity ? get_post_thumbnail_id( $activity ) : 0;
+		$event_thumbnail_id = get_post_thumbnail_id( $event_id );
+		$group_cover_id = $activity ? absint( get_post_meta( $activity_id, '_mi_group_cover_image_id', true ) ) : 0;
+		$resolved_cover_id = $event_thumbnail_id ?: ( $group_cover_id ?: $activity_thumbnail_id );
+		$external_group_logo = $activity ? esc_url_raw( get_post_meta( $activity_id, '_mi_group_logo_url', true ), array( 'https' ) ) : '';
+		$external_group_cover = $activity ? esc_url_raw( get_post_meta( $activity_id, '_mi_group_cover_image_url', true ), array( 'https' ) ) : '';
+		$legacy_activity_color = $activity ? sanitize_hex_color( get_post_meta( $activity_id, '_mi_accent_color', true ) ) : '';
+		$activity_primary_color = $activity ? sanitize_hex_color( get_post_meta( $activity_id, '_mi_primary_color', true ) ) : '';
+		$activity_secondary_color = $activity ? sanitize_hex_color( get_post_meta( $activity_id, '_mi_secondary_color', true ) ) : '';
+		$activity_primary_color = $activity_primary_color ?: ( $legacy_activity_color ?: '#151b38' );
+		$activity_secondary_color = $activity_secondary_color ?: '#337ab7';
+		$public_event = array(
+			'id'               => $event_id,
+			'title'            => get_the_title( $event_id ),
+			'description'      => mb_substr( wp_strip_all_tags( $event->post_content ), 0, 5000 ),
+			'activity'         => $activity ? $activity->post_title : '',
+			'activity_logo'    => $activity ? ( get_the_post_thumbnail_url( $activity, 'medium' ) ?: $external_group_logo ) : '',
+			'activity_logo_alt'=> $activity_thumbnail_id ? (string) get_post_meta( $activity_thumbnail_id, '_wp_attachment_image_alt', true ) : '',
+			'accent_color'     => $activity_primary_color,
+			'resolved_branding'=> array(
+				'primary_color'   => $activity_primary_color,
+				'secondary_color' => $activity_secondary_color,
+			),
+			'cover_image'      => $resolved_cover_id ? (string) wp_get_attachment_image_url( $resolved_cover_id, 'large' ) : ( $external_group_cover ?: $external_group_logo ),
+			'cover_image_alt'  => $resolved_cover_id ? (string) get_post_meta( $resolved_cover_id, '_wp_attachment_image_alt', true ) : '',
+			'event_starts_at'  => (string) get_post_meta( $event_id, '_mi_event_starts_at', true ),
+			'event_location'   => (string) get_post_meta( $event_id, '_mi_event_location', true ),
+			'capacity'         => max( 1, absint( get_post_meta( $event_id, '_mi_capacity', true ) ) ),
+			'waitlist_enabled' => '1' === get_post_meta( $event_id, '_mi_waitlist_enabled', true ),
+			'waitlist_offer_hours' => min( 168, max( 1, absint( get_post_meta( $event_id, '_mi_waitlist_offer_hours', true ) ?: 48 ) ) ),
+			'opens_at'         => (string) get_post_meta( $event_id, '_mi_registration_opens_at', true ),
+			'closes_at'        => (string) get_post_meta( $event_id, '_mi_registration_closes_at', true ),
+			'pricing_mode'     => (string) get_post_meta( $event_id, '_mi_pricing_mode', true ),
+			'fixed_price_cents'=> max( 0, (int) get_post_meta( $event_id, '_mi_fixed_price_cents', true ) ),
+			'economic_mode'    => (string) ( get_post_meta( $event_id, '_mi_economic_mode', true ) ?: 'REGISTRATION_ONLY' ),
+			'operational_profile' => MI_Field_Schema::resolved_operational_profile( $event_id ),
+			'deposit_percentage' => min( 99, max( 1, absint( get_post_meta( $event_id, '_mi_deposit_percentage', true ) ?: 30 ) ) ),
+			'deposit_mode'       => 'FIXED' === strtoupper( (string) get_post_meta( $event_id, '_mi_deposit_mode', true ) ) ? 'FIXED' : 'PERCENTAGE',
+			'deposit_fixed_cents'=> max( 0, (int) get_post_meta( $event_id, '_mi_deposit_fixed_cents', true ) ),
+			'payment_methods'  => (array) get_post_meta( $event_id, '_mi_payment_methods', true ),
+			'identifier_display' => in_array( strtoupper( (string) get_post_meta( $event_id, '_mi_identifier_display', true ) ), array( 'NONE', 'TEXT', 'QR', 'BARCODE' ), true ) ? strtoupper( (string) get_post_meta( $event_id, '_mi_identifier_display', true ) ) : 'TEXT',
+			'ticket_types'     => array_values( $ticket_types ),
+			'options'          => array_values( array_filter( (array) get_post_meta( $event_id, '_mi_options', true ), 'is_array' ) ),
+			'data_profile'     => $field_configuration['profile'],
+			'participant_fields'=> array_merge( MI_Field_Schema::public_fields( $field_configuration ), MI_Field_Schema::sanitize_custom_fields( get_post_meta( $event_id, '_mi_custom_participant_fields', true ) ) ),
+			'participant_extra_scope' => 'ALL' === strtoupper( (string) get_post_meta( $event_id, '_mi_participant_extra_scope', true ) ) ? 'ALL' : 'ONE',
+			'special_requests_enabled' => '1' === get_post_meta( $event_id, '_mi_special_requests_enabled', true ),
+			'completion_url' => esc_url_raw( (string) get_post_meta( $event_id, '_mi_completion_url', true ), array( 'http', 'https' ) ),
+			'payment_deadline_at'=> (string) get_post_meta( $event_id, '_mi_payment_deadline_at', true ),
+			'reservation_minutes'=> min( 10080, absint( get_post_meta( $event_id, '_mi_reservation_minutes', true ) ) ),
+			'privacy_url'      => $privacy_url,
+			'privacy_policy_version' => $privacy_policy_version,
+			'privacy_consent_id' => $privacy_consent_id,
+			'marketing_enabled' => '1' === get_post_meta( $event_id, '_mi_marketing_enabled', true ),
+			'marketing_consent_id' => (string) get_post_meta( $event_id, '_mi_marketing_consent_id', true ),
+		);
+		if ( ! $allow_unpublished ) {
+			$revision = self::published_revision_row( $event_id );
+			if ( ! $revision ) {
+				$revision = self::ensure_published_revision( $event_id, true );
+			}
+			if ( ! $revision ) {
+				return new WP_Error( 'mi_event_revision_unavailable', 'La revisione pubblicata non è disponibile. Riprova più tardi.', array( 'status' => 503 ) );
+			}
+			$revision_config = $revision ? json_decode( (string) $revision['config_json'], true ) : null;
+			if ( is_array( $revision_config ) && ( empty( $revision_config['privacy_url'] ) || empty( $revision_config['privacy_policy_version'] ) || empty( $revision_config['privacy_consent_id'] ) ) ) {
+				$revision = self::ensure_published_revision( $event_id, true );
+				$revision_config = $revision ? json_decode( (string) $revision['config_json'], true ) : null;
+			}
+			if ( is_array( $revision_config ) ) {
+				$public_event = $revision_config;
+				$public_event['revision'] = array( 'id' => (int) $revision['id'], 'number' => (int) $revision['revision_number'], 'hash' => (string) $revision['config_hash'] );
+			}
+		}
+		$public_event['availability'] = self::availability( $public_event );
+		return $public_event;
+	}
+
+	public static function privacy_policy_url() {
+		$url = get_privacy_policy_url();
+		if ( $url ) return $url;
+		$page = get_page_by_path( 'privacy-policy' );
+		return $page instanceof WP_Post && 'publish' === $page->post_status ? (string) get_permalink( $page ) : '';
+	}
+
+	public static function registration_state( $event ) {
+		$time_state = self::registration_time_state( $event );
+		if ( 'OPEN' !== $time_state ) {
+			return $time_state;
+		}
+		$availability = isset( $event['availability'] ) && is_array( $event['availability'] ) ? $event['availability'] : self::availability( $event );
+		return $availability['full'] && empty( $event['waitlist_enabled'] ) ? 'SOLD_OUT' : 'OPEN';
+	}
+
+	public static function registration_time_state( $event ) {
+		$now = new DateTimeImmutable( 'now', wp_timezone() );
+		$opens = self::local_datetime( $event['opens_at'] );
+		$closes = self::local_datetime( $event['closes_at'] );
+		if ( ! $opens || ! $closes || $closes <= $opens ) {
+			return 'MISCONFIGURED';
+		}
+		if ( $now < $opens ) {
+			return 'NOT_OPEN';
+		}
+		if ( $now > $closes ) {
+			return 'CLOSED';
+		}
+		return 'OPEN';
+	}
+
+	public static function availability( $event ) {
+		global $wpdb;
+		$event_id = absint( $event['id'] ?? 0 );
+		$capacity = max( 1, absint( $event['capacity'] ?? 1 ) );
+		$confirmed = 0;
+		$waitlisted = 0;
+		if ( $event_id ) {
+			$table = $wpdb->prefix . 'mi_event_counters';
+			$counter = $wpdb->get_row( $wpdb->prepare( "SELECT confirmed_count, waitlisted_count FROM {$table} WHERE event_id = %d", $event_id ), ARRAY_A );
+			$confirmed = max( 0, (int) ( $counter['confirmed_count'] ?? 0 ) );
+			$waitlisted = max( 0, (int) ( $counter['waitlisted_count'] ?? 0 ) );
+		}
+		$remaining = max( 0, $capacity - $confirmed );
+		$ticket_availability = array();
+		$any_ticket_available = false;
+		if ( $event_id ) {
+			$ticket_table = $wpdb->prefix . 'mi_ticket_counters';
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code, confirmed_count, waitlisted_count FROM {$ticket_table} WHERE event_id = %d", $event_id ), ARRAY_A );
+			$indexed = array();
+			foreach ( $rows as $row ) {
+				$indexed[ $row['ticket_type_code'] ] = $row;
+			}
+			foreach ( (array) ( $event['ticket_types'] ?? array() ) as $ticket ) {
+				$code = (string) $ticket['code'];
+				$type_capacity = absint( $ticket['capacity'] ?? 0 );
+				$type_confirmed = (int) ( $indexed[ $code ]['confirmed_count'] ?? 0 );
+				$type_remaining = $type_capacity ? max( 0, $type_capacity - $type_confirmed ) : null;
+				if ( null === $type_remaining || $type_remaining > 0 ) {
+					$any_ticket_available = true;
+				}
+				$ticket_availability[ $code ] = array( 'capacity' => $type_capacity, 'confirmed' => $type_confirmed, 'waitlisted' => (int) ( $indexed[ $code ]['waitlisted_count'] ?? 0 ), 'remaining' => $type_remaining );
+			}
+		}
+		return array( 'capacity' => $capacity, 'confirmed' => $confirmed, 'waitlisted' => $waitlisted, 'remaining' => $remaining, 'full' => 0 === $remaining || ( ! empty( $event['ticket_types'] ) && ! $any_ticket_available ), 'ticket_types' => $ticket_availability );
+	}
+
+	public static function create( $event_id, $payload, $idempotency_key, $allow_unpublished = false, $audit_actor = 'PUBLIC_FORM', $trusted_operator = false ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( $event_id ); if ( is_wp_error( $lease ) ) return $lease; }
+		global $wpdb;
+		$event_id = absint( $event_id );
+		$idempotency_key = preg_replace( '/[^a-zA-Z0-9_-]/', '', (string) $idempotency_key );
+		if ( strlen( $idempotency_key ) < 16 || strlen( $idempotency_key ) > 64 ) {
+			return new WP_Error( 'mi_idempotency', 'Identificativo richiesta non valido.', array( 'status' => 400 ) );
+		}
+		$registrations_table = $wpdb->prefix . 'mi_registrations';
+		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, workspace_status, economic_mode, total_cents, initial_due_cents, balance_cents, payment_methods_json FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
+		if ( $existing ) {
+			$workspace_status = self::accoda_sincronizzazione_workspace( (int) $existing['id'], $existing['workspace_status'] );
+			return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'workspace_status' => $workspace_status, 'economic_summary' => self::riepilogo_salvato( $existing ), 'replayed' => true );
+		}
+
+		$event = self::public_event( $event_id, (bool) $allow_unpublished );
+		if ( is_wp_error( $event ) ) {
+			return $event;
+		}
+		if ( ! $allow_unpublished && 'OPEN' !== self::registration_state( $event ) ) {
+			return new WP_Error( 'mi_registration_closed', 'Le iscrizioni non sono aperte.', array( 'status' => 409 ) );
+		}
+
+		if ( ! $trusted_operator && ! empty( $payload['website'] ) ) {
+			return new WP_Error( 'mi_spam', 'Richiesta non valida.', array( 'status' => 400 ) );
+		}
+		$started_at = isset( $payload['started_at'] ) ? absint( $payload['started_at'] ) : 0;
+		if ( ! $trusted_operator && ( ! $started_at || time() - $started_at < 2 || time() - $started_at > DAY_IN_SECONDS ) ) {
+			return new WP_Error( 'mi_form_timing', 'Aggiorna la pagina e riprova.', array( 'status' => 400 ) );
+		}
+
+		$selection = self::validate_selection( $event, $payload['tickets'] ?? array() );
+		if ( is_wp_error( $selection ) ) {
+			return $selection;
+		}
+		$order_options = self::validate_options( $payload['order_options'] ?? array(), $event['options'] ?? array(), 'ORDER' );
+		if ( is_wp_error( $order_options ) ) {
+			return $order_options;
+		}
+		$participants = self::validate_participants( $payload['participants'] ?? array(), $selection, $event['participant_fields'], $event['options'] ?? array(), $event['participant_extra_scope'] ?? 'ONE' );
+		if ( is_wp_error( $participants ) ) {
+			return $participants;
+		}
+		$buyer = self::validate_buyer( $payload['buyer'] ?? array() );
+		if ( is_wp_error( $buyer ) ) {
+			return $buyer;
+		}
+		$special_requests = ! empty( $event['special_requests_enabled'] ) ? sanitize_textarea_field( $payload['special_requests'] ?? '' ) : '';
+		if ( strlen( $special_requests ) > 2000 ) return new WP_Error( 'mi_special_requests_invalid', 'Le richieste particolari sono troppo lunghe.', array( 'status' => 400 ) );
+		if ( true !== ( $payload['privacy_accepted'] ?? false ) ) {
+			return new WP_Error( 'mi_privacy_required', 'È necessario accettare l’informativa privacy.', array( 'status' => 400 ) );
+		}
+		if ( empty( $event['privacy_url'] ) || empty( $event['privacy_policy_version'] ) || empty( $event['privacy_consent_id'] ) ) {
+			return new WP_Error( 'mi_privacy_misconfigured', 'L’informativa privacy dell’evento non è configurata.', array( 'status' => 409 ) );
+		}
+		if ( ! empty( $event['marketing_enabled'] ) && empty( $event['marketing_consent_id'] ) ) {
+			return new WP_Error( 'mi_marketing_misconfigured', 'Le comunicazioni su future iniziative non sono configurate correttamente. Salva nuovamente l’evento oppure disattiva questa opzione.', array( 'status' => 409 ) );
+		}
+		$marketing_accepted = ! empty( $event['marketing_enabled'] ) && true === ( $payload['marketing_accepted'] ?? false );
+		if ( ! $allow_unpublished && ! $trusted_operator ) {
+			$rate_limit = self::consume_registration_rate_limit( $event_id, $buyer['email'] ?: $buyer['phone'] );
+			if ( is_wp_error( $rate_limit ) ) return $rate_limit;
+		}
+
+		$counters_table = $wpdb->prefix . 'mi_event_counters';
+		$ticket_counters_table = $wpdb->prefix . 'mi_ticket_counters';
+		$items_table = $wpdb->prefix . 'mi_registration_items';
+		$participants_table = $wpdb->prefix . 'mi_participants';
+		$payments_table = $wpdb->prefix . 'mi_payments';
+		$outbox_table = $wpdb->prefix . 'mi_email_outbox';
+		$now = current_time( 'mysql', true );
+		$order_code = '';
+		$options_total = 'ZERO' === ( $event['pricing_mode'] ?? '' ) ? 0 : self::options_total( $order_options, $participants );
+		if ( $selection['total_cents'] + $options_total > 100000000 ) {
+			return new WP_Error( 'mi_total_limit', 'Il totale dell’iscrizione supera il limite di 1.000.000 €. Riduci le quantità o contatta la segreteria.', array( 'status' => 400 ) );
+		}
+
+		$wpdb->query( 'START TRANSACTION' );
+		try {
+			if ( class_exists( 'MI_Management_Service' ) ) MI_Management_Service::lock_room_event( $event_id );
+			$wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$counters_table} (event_id, confirmed_count, waitlisted_count, updated_at) VALUES (%d, 0, 0, %s)", $event_id, $now ) );
+			$counter = $wpdb->get_row( $wpdb->prepare( "SELECT confirmed_count, waitlisted_count FROM {$counters_table} WHERE event_id = %d FOR UPDATE", $event_id ), ARRAY_A );
+			if ( ! $counter ) {
+				throw new RuntimeException( 'Contatore non disponibile.' );
+			}
+			if ( ! $allow_unpublished && 'OPEN' !== self::registration_time_state( $event ) ) {
+				$wpdb->query( 'ROLLBACK' );
+				return new WP_Error( 'mi_registration_closed', 'Le iscrizioni sono state chiuse. Aggiorna la pagina.', array( 'status' => 409 ) );
+			}
+			$ticket_counts = array();
+			foreach ( $selection['items'] as $item ) {
+				$wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$ticket_counters_table} (event_id, ticket_type_code, confirmed_count, waitlisted_count, updated_at) VALUES (%d, %s, 0, 0, %s)", $event_id, $item['code'], $now ) );
+			}
+			$ticket_codes = array_column( $selection['items'], 'code' );
+			sort( $ticket_codes, SORT_STRING );
+			foreach ( $ticket_codes as $ticket_code ) {
+				$ticket_counts[ $ticket_code ] = $wpdb->get_row( $wpdb->prepare( "SELECT confirmed_count, waitlisted_count FROM {$ticket_counters_table} WHERE event_id = %d AND ticket_type_code = %s FOR UPDATE", $event_id, $ticket_code ), ARRAY_A );
+			}
+			$remaining = max( 0, (int) $event['capacity'] - (int) $counter['confirmed_count'] );
+			$type_capacity_available = true;
+			foreach ( $selection['items'] as $item ) {
+				$type_capacity = absint( $item['capacity'] ?? 0 );
+				if ( $type_capacity && (int) ( $ticket_counts[ $item['code'] ]['confirmed_count'] ?? 0 ) + (int) $item['quantity'] > $type_capacity ) {
+					$type_capacity_available = false;
+					break;
+				}
+			}
+			if ( $selection['quantity'] <= $remaining && $type_capacity_available ) {
+				$status = in_array( $event['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) && ( $selection['total_cents'] + $options_total ) > 0 ? 'PENDING_PAYMENT' : 'CONFIRMED';
+				$counter_field = 'confirmed_count';
+			} elseif ( $event['waitlist_enabled'] ) {
+				$status = 'WAITLISTED';
+				$counter_field = 'waitlisted_count';
+				if ( empty( $buyer['email'] ) ) {
+					$wpdb->query( 'ROLLBACK' );
+					return new WP_Error( 'mi_waitlist_email_required', 'Per entrare in lista d’attesa è necessario indicare un indirizzo email.', array( 'status' => 400 ) );
+				}
+			} else {
+				$wpdb->query( 'ROLLBACK' );
+				return new WP_Error( 'mi_sold_out', 'Posti esauriti.', array( 'status' => 409 ) );
+			}
+			$quote_people = array(); $quote_items = array();
+			foreach ( $participants as $n => $person ) $quote_people[] = array( 'id' => $n + 1, 'ticket_type_code' => $person['ticket_type_code'], 'options_json' => wp_json_encode( $person['options'] ) );
+			foreach ( $selection['items'] as $item ) $quote_items[] = array( 'ticket_type_code' => $item['code'], 'unit_price_cents' => $item['unit_price_cents'] );
+			$quote_totals = MI_Payment_People::quote_totals( array( 'order_options_json' => wp_json_encode( $order_options ) ), $quote_people, $quote_items );
+			$economic_summary = self::riepilogo_economico( $event, $selection['total_cents'] + $options_total, $status, count( $participants ), $quote_totals );
+			// Una caparra nulla non deve creare un'attesa di pagamento impossibile da soddisfare.
+			if ( 'PENDING_PAYMENT' === $status && (int) $economic_summary['initial_due_cents'] < 1 ) $status = 'CONFIRMED';
+			$order_code = self::generate_order_code( $event_id, $event['title'] );
+			$expires_at = self::registration_expiry( $event, $status, $now );
+			$revision = (array) ( $event['revision'] ?? array() );
+			$accepted_at = current_time( 'mysql', true );
+			$snapshot = self::build_order_snapshot( $event, $selection, $participants, $order_options, $buyer, $economic_summary, $status, $accepted_at, $marketing_accepted, $special_requests );
+			$snapshot_json = wp_json_encode( $snapshot );
+			if ( false === $snapshot_json || strlen( $snapshot_json ) > 45000 ) {
+				throw new RuntimeException( 'Istantanea ordine non serializzabile.' );
+			}
+
+			$inserted = $wpdb->insert(
+				$registrations_table,
+				array(
+					'order_code'      => $order_code,
+					'event_id'        => $event_id,
+					'status'          => $status,
+					'buyer_first_name'=> $buyer['first_name'],
+					'buyer_last_name' => $buyer['last_name'],
+					'buyer_email'     => $buyer['email'],
+					'buyer_phone'     => $buyer['phone'],
+					'special_requests'=> $special_requests,
+					'total_qty'       => $selection['quantity'],
+					'economic_mode'   => $economic_summary['mode'],
+					'total_cents'     => $economic_summary['total_cents'],
+					'initial_due_cents'=> $economic_summary['initial_due_cents'],
+					'balance_cents'   => $economic_summary['balance_cents'],
+					'payment_methods_json' => wp_json_encode( $economic_summary['payment_methods'] ),
+					'order_options_json' => wp_json_encode( $order_options ),
+					'event_revision_id' => absint( $revision['id'] ?? 0 ) ?: null,
+					'event_revision_hash' => sanitize_text_field( $revision['hash'] ?? '' ),
+					'snapshot_json'   => $snapshot_json,
+					'privacy_consent_id' => sanitize_key( $event['privacy_consent_id'] ),
+					'privacy_policy_version' => sanitize_text_field( $event['privacy_policy_version'] ),
+					'privacy_accepted_at' => $accepted_at,
+					'marketing_consent_id' => $marketing_accepted ? sanitize_key( $event['marketing_consent_id'] ) : null,
+					'marketing_accepted_at' => $marketing_accepted ? $accepted_at : null,
+					'expires_at'      => $expires_at,
+					'payment_deadline_at' => $expires_at,
+					'idempotency_key' => $idempotency_key,
+					'created_at'      => $now,
+				),
+				null
+			);
+			if ( ! $inserted ) {
+				$wpdb->query( 'ROLLBACK' );
+				$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, workspace_status, economic_mode, total_cents, initial_due_cents, balance_cents, payment_methods_json FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
+				if ( $existing ) {
+					$workspace_status = self::accoda_sincronizzazione_workspace( (int) $existing['id'], $existing['workspace_status'] );
+					return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'workspace_status' => $workspace_status, 'economic_summary' => self::riepilogo_salvato( $existing ), 'replayed' => true );
+				}
+				throw new RuntimeException( 'Registrazione non salvata.' );
+			}
+			$registration_id = (int) $wpdb->insert_id;
+			foreach ( $selection['items'] as $item ) {
+				if ( false === $wpdb->insert( $items_table, array( 'registration_id' => $registration_id, 'ticket_type_code' => $item['code'], 'ticket_type_name' => $item['name'], 'quantity' => $item['quantity'], 'unit_price_cents' => $item['unit_price_cents'] ), array( '%d', '%s', '%s', '%d', '%d' ) ) ) {
+					throw new RuntimeException( 'Quota non salvata.' );
+				}
+			}
+			$participant_management = array();
+			foreach ( $participants as $participant ) {
+				$cancel_token = bin2hex( random_bytes( 32 ) );
+				if ( false === $wpdb->insert( $participants_table, array( 'registration_id' => $registration_id, 'ticket_type_code' => $participant['ticket_type_code'], 'ticket_index' => $participant['ticket_index'], 'first_name' => $participant['first_name'], 'last_name' => $participant['last_name'], 'extra_json' => wp_json_encode( $participant['fields'] ), 'options_json' => wp_json_encode( $participant['options'] ), 'status' => 'ACTIVE', 'cancellation_token_hash' => hash( 'sha256', $cancel_token ) ), array( '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s' ) ) ) {
+					throw new RuntimeException( 'Partecipante non salvato.' );
+				}
+				$participant_management[] = array( 'name' => trim( $participant['first_name'] . ' ' . $participant['last_name'] ), 'url' => MI_Portal::participant_cancel_url( (int) $wpdb->insert_id, $cancel_token ) );
+			}
+			if ( class_exists( 'MI_Management_Service' ) ) MI_Management_Service::auto_assign_rooms_locked( $registration_id );
+			$counter_updated = $wpdb->query( $wpdb->prepare( "UPDATE {$counters_table} SET {$counter_field} = {$counter_field} + %d, updated_at = %s WHERE event_id = %d", $selection['quantity'], $now, $event_id ) );
+			if ( 1 !== $counter_updated ) {
+				throw new RuntimeException( 'Contatore non aggiornato.' );
+			}
+			foreach ( $selection['items'] as $item ) {
+				$ticket_updated = $wpdb->query( $wpdb->prepare( "UPDATE {$ticket_counters_table} SET {$counter_field} = {$counter_field} + %d, updated_at = %s WHERE event_id = %d AND ticket_type_code = %s", $item['quantity'], $now, $event_id, $item['code'] ) );
+				if ( 1 !== $ticket_updated ) {
+					throw new RuntimeException( 'Contatore tipologia non aggiornato.' );
+				}
+			}
+			if ( ! self::append_registration_event( $registration_id, 'CREATED', '', $status, sanitize_key( $audit_actor ), array( 'expires_at' => $expires_at ) ) ) {
+				throw new RuntimeException( 'Evento di audit non salvato.' );
+			}
+			$email_items = array_merge( $selection['items'], $order_options );
+			$email_values = MI_Modello_Email::valori_ordine( $event, $order_code, 'CONFIRMED' === $status ? 'Confermata' : ( 'PENDING_PAYMENT' === $status ? 'Da pagare' : 'Lista d’attesa' ), $selection['quantity'], $buyer['first_name'] . ' ' . $buyer['last_name'], $economic_summary, $email_items );
+			$email_values['_participant_management'] = $participant_management;
+			$email_snapshot = 'WAITLISTED' === $status
+				? MI_Modello_Email::crea_istantanea_lista_attesa( $event_id, $email_values )
+				: MI_Modello_Email::crea_istantanea( $event_id, $email_values );
+			if ( 'WAITLISTED' !== $status && in_array( $economic_summary['mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) && (int) $economic_summary['total_cents'] > 0 ) {
+				$email_snapshot['status_url'] = MI_Portal::status_url( $registration_id, $order_code, $buyer['email'] );
+			}
+			if ( $buyer['email'] ) {
+				$email_status = MI_Spedizione_Email::stato_nuova_email( $email_snapshot );
+				$payload_json = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $order_code, 'status' => $status, 'quantity' => $selection['quantity'], 'total_cents' => $economic_summary['total_cents'], 'economic_summary' => $economic_summary, 'email_preview' => $email_snapshot ) );
+				if ( false === $wpdb->insert( $outbox_table, array( 'registration_id' => $registration_id, 'recipient' => $buyer['email'], 'template_type' => 'REGISTRATION_CONFIRMATION', 'payload_json' => $payload_json, 'status' => $email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) {
+					throw new RuntimeException( 'Outbox non salvata.' );
+				}
+			}
+			$secretariat_recipient = MI_Spedizione_Email::destinatario_evento( $event_id );
+			$secretariat_snapshot = MI_Modello_Email::crea_istantanea_nuova_iscrizione_segreteria( $event_id, $email_values, $registration_id );
+			$secretariat_status = MI_Spedizione_Email::stato_nuova_email( $secretariat_snapshot );
+			$secretariat_payload = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $order_code, 'status' => $status, 'quantity' => $selection['quantity'], 'email_preview' => $secretariat_snapshot ) );
+			if ( false === $secretariat_payload || false === $wpdb->insert( $outbox_table, array( 'registration_id' => $registration_id, 'recipient' => $secretariat_recipient, 'template_type' => 'REGISTRATION_SECRETARIAT_NOTIFICATION', 'payload_json' => $secretariat_payload, 'status' => $secretariat_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) {
+				throw new RuntimeException( 'Notifica alla segreteria non salvata.' );
+			}
+			$wpdb->query( 'COMMIT' );
+			if ( MI_Spedizione_Email::email_da_spedire( $email_status ) || MI_Spedizione_Email::email_da_spedire( $secretariat_status ) ) {
+				MI_Spedizione_Email::pianifica_spedizione();
+			}
+			$workspace_status = self::accoda_sincronizzazione_workspace( $registration_id, 'PENDING' );
+			return array( 'order_code' => $order_code, 'status' => $status, 'workspace_status' => $workspace_status, 'economic_summary' => $economic_summary, 'replayed' => false );
+		} catch ( Throwable $error ) {
+			$wpdb->query( 'ROLLBACK' );
+			return new WP_Error( 'mi_storage_error', 'Non è stato possibile completare l’iscrizione.', array( 'status' => 500 ) );
+		}
+	}
+
+	/**
+	 * Incrementa i limiti sotto un named lock MySQL: get/set_transient da soli
+	 * non sono atomici. Il limite per IP è volutamente più ampio per non
+	 * penalizzare gruppi collegati dalla stessa rete; quello per email frena
+	 * invece le ripetizioni sulla stessa identità.
+	 */
+	private static function consume_registration_rate_limit( $event_id, $email ) {
+		global $wpdb;
+		$identities = array(
+			array( 'ip|' . (string) ( $_SERVER['REMOTE_ADDR'] ?? 'unknown' ), 60 ),
+			array( 'email|' . strtolower( (string) $email ), 12 ),
+		);
+		foreach ( $identities as $identity ) {
+			$hash = hash( 'sha256', $identity[0] . '|' . absint( $event_id ) );
+			$transient_key = 'mi_rate_' . $hash;
+			$lock_name = 'mi_rate_' . substr( $hash, 0, 48 );
+			$locked = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 2)', $lock_name ) );
+			if ( 1 !== $locked ) return new WP_Error( 'mi_rate_busy', 'Servizio momentaneamente occupato. Riprova.', array( 'status' => 503 ) );
+			try {
+				$attempts = absint( get_transient( $transient_key ) );
+				if ( $attempts >= (int) $identity[1] ) return new WP_Error( 'mi_rate_limited', 'Troppi tentativi. Riprova più tardi.', array( 'status' => 429 ) );
+				set_transient( $transient_key, $attempts + 1, HOUR_IN_SECONDS );
+			} finally {
+				$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+			}
+		}
+		return true;
+	}
+
+	public static function riepilogo_economico( $event, $total_cents, $status, $participant_count = 1, $participant_totals = null ) {
+		$total_cents = max( 0, (int) $total_cents );
+		$mode = in_array( $event['economic_mode'] ?? '', array( 'REGISTRATION_ONLY', 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ? $event['economic_mode'] : 'REGISTRATION_ONLY';
+		$initial_due = 0;
+		$balance = 0;
+		if ( in_array( $status, array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) && 'FULL_PAYMENT' === $mode ) {
+			$initial_due = $total_cents;
+		} elseif ( in_array( $status, array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) && 'DEPOSIT_BALANCE' === $mode ) {
+			if ( 'FIXED' === strtoupper( (string) ( $event['deposit_mode'] ?? '' ) ) ) {
+				$fixed = max( 0, (int) ( $event['deposit_fixed_cents'] ?? 0 ) );
+				$initial_due = is_array( $participant_totals ) ? array_sum( array_map( static function ( $total ) use ( $fixed ) { return min( max( 0, (int) $total ), $fixed ); }, $participant_totals ) ) : min( $total_cents, $fixed * max( 0, (int) $participant_count ) );
+			} else {
+				$percentage = min( 99, max( 1, absint( $event['deposit_percentage'] ?? 30 ) ) );
+				$initial_due = (int) round( $total_cents * $percentage / 100 );
+			}
+			$balance = max( 0, $total_cents - $initial_due );
+		}
+		return array( 'mode' => $mode, 'total_cents' => $total_cents, 'initial_due_cents' => $initial_due, 'balance_cents' => $balance, 'payment_methods' => in_array( $mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ? array_values( (array) ( $event['payment_methods'] ?? array() ) ) : array() );
+	}
+
+	private static function riepilogo_salvato( $registration ) {
+		$payment_methods = json_decode( (string) ( $registration['payment_methods_json'] ?? '' ), true );
+		return array( 'mode' => (string) $registration['economic_mode'], 'total_cents' => (int) $registration['total_cents'], 'initial_due_cents' => (int) $registration['initial_due_cents'], 'balance_cents' => (int) $registration['balance_cents'], 'payment_methods' => is_array( $payment_methods ) ? $payment_methods : array() );
+	}
+
+	public static function sync_workspace( $registration_id, $force = false ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( MI_Event_Deletion::registration_event( $registration_id ) ); if ( is_wp_error( $lease ) ) return 'PENDING'; }
+		global $wpdb;
+		$registration_id = absint( $registration_id );
+		$registrations_table = $wpdb->prefix . 'mi_registrations';
+		$items_table = $wpdb->prefix . 'mi_registration_items';
+		$participants_table = $wpdb->prefix . 'mi_participants';
+		$payments_table = $wpdb->prefix . 'mi_payments';
+		$registration = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$registrations_table} WHERE id = %d", $registration_id ), ARRAY_A );
+		if ( ! $registration ) {
+			return 'UNAVAILABLE';
+		}
+		if ( ! $force && 'SYNCED' === $registration['workspace_status'] ) {
+			return 'SYNCED';
+		}
+		// Ripetere il payload completo: una vecchia ricevuta non prova la replica dei movimenti nuovi.
+		$items = $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code, ticket_type_name, quantity, unit_price_cents, options_json FROM {$items_table} WHERE registration_id = %d ORDER BY id", $registration_id ), ARRAY_A );
+		if ( $wpdb->last_error ) return 'PENDING';
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, ticket_type_code, ticket_index, first_name, last_name, extra_json, room_code, options_json, status, cancelled_at, deposit_due_cents FROM {$participants_table} WHERE registration_id = %d ORDER BY id", $registration_id ), ARRAY_A );
+		if ( $wpdb->last_error ) return 'PENDING';
+		$all_payments = $wpdb->get_results( $wpdb->prepare( "SELECT id AS payment_id, transaction_kind, movement_kind, installment_kind, effective_at, amount_cents, payment_source, external_reference, operator_label, administrative_note, participant_allocations_json, origin_channel FROM {$payments_table} WHERE registration_id = %d ORDER BY effective_at, id", $registration_id ), ARRAY_A );
+		if ( $wpdb->last_error ) return 'PENDING';
+		// I movimenti acquisiti da DB_MODULI sono già nel registro centrale: non rimandarli come nuovi versamenti.
+		$payments = array_values( array_map( static function ( $payment ) { unset( $payment['origin_channel'] ); return $payment; }, array_filter( $all_payments, static function ( $payment ) { return 'WORKSPACE' !== ( $payment['origin_channel'] ?? '' ); } ) ) );
+		try {
+			$position = MI_Payment_Ledger::position( $registration, MI_Payment_Ledger::net_paid( $registration_id ) );
+			$individual = MI_Payment_People::calculate( $registration, $rows, $items, $all_payments );
+			$individual_summary = MI_Payment_People::summary( $individual );
+			$individual_by_id = array_column( $individual['people'], null, 'id' );
+		} catch ( Throwable $error ) {
+			return 'PENDING';
+		}
+		$attendance = array();
+		$attendance_rows = $wpdb->get_results( $wpdb->prepare( "SELECT detail_json FROM {$wpdb->prefix}mi_registration_events WHERE registration_id=%d AND event_type='MANAGEMENT_attendance' ORDER BY id", $registration_id ), ARRAY_A );
+		if ( $wpdb->last_error ) return 'PENDING';
+		foreach ( $attendance_rows as $entry ) { $detail = json_decode( $entry['detail_json'], true ); if ( isset( $detail['participant_id'], $detail['attendance'] ) ) $attendance[(int) $detail['participant_id']] = $detail['attendance']; }
+		// A mutation committed while reading would mix two revisions in one payload.
+		$read_revision = $wpdb->get_var( $wpdb->prepare( "SELECT workspace_revision FROM {$registrations_table} WHERE id=%d", $registration_id ) );
+		if ( null === $read_revision || (string) $read_revision !== (string) $registration['workspace_revision'] ) return 'PENDING';
+		$event_revision = $wpdb->get_var( $wpdb->prepare( "SELECT revision FROM {$wpdb->prefix}mi_management_state WHERE event_id=%d", $registration['event_id'] ) );
+		if ( $wpdb->last_error ) return 'PENDING';
+		$rooms = $wpdb->get_results( $wpdb->prepare( "SELECT code,name,capacity FROM {$wpdb->prefix}mi_rooms WHERE event_id=%d ORDER BY code", $registration['event_id'] ), ARRAY_A );
+		if ( $wpdb->last_error ) return 'PENDING';
+		$current_event_revision = $wpdb->get_var( $wpdb->prepare( "SELECT revision FROM {$wpdb->prefix}mi_management_state WHERE event_id=%d", $registration['event_id'] ) );
+		if ( $wpdb->last_error || (string) $current_event_revision !== (string) $event_revision ) return 'PENDING';
+		$participants = array_map(
+			static function ( $row ) use ( $individual_by_id, $individual_summary, $attendance ) {
+				$fields = json_decode( (string) $row['extra_json'], true );
+				$options = json_decode( (string) $row['options_json'], true );
+				$economic = $individual_by_id[(int) $row['id']] ?? array();
+				return array(
+					'ticket_type_code' => $row['ticket_type_code'],
+					'ticket_index' => (int) $row['ticket_index'],
+					'first_name' => $row['first_name'],
+					'last_name'  => $row['last_name'],
+					'fields'     => array_merge( is_array( $fields ) ? $fields : array(), array( 'room' => (string) $row['room_code'] ), isset( $attendance[(int) $row['id']] ) ? array( 'attendance' => $attendance[(int) $row['id']] ) : array() ),
+					'options'    => is_array( $options ) ? $options : array(),
+					'status'     => $row['status'] ?: 'ACTIVE',
+					'cancelled_at' => $row['cancelled_at'],
+					'total_cents' => $individual_summary['known'] ? max( 0, (int) ( $economic['total'] ?? 0 ) ) : null,
+					'paid_cents' => $individual_summary['known'] ? max( 0, (int) ( $economic['paid'] ?? 0 ) ) : null,
+					'balance_cents' => $individual_summary['known'] ? max( 0, (int) ( $economic['balance'] ?? 0 ) ) : null,
+					'deposit_due_cents' => $individual_summary['known'] ? max( 0, (int) ( $economic['deposit'] ?? 0 ) ) : null,
+					'deposit_missing_cents' => $individual_summary['known'] ? max( 0, (int) ( $economic['deposit_missing'] ?? 0 ) ) : null,
+				);
+			},
+			$rows
+		);
+		$ticket_slots = array();
+		foreach ( $items as $item ) {
+			for ( $ticket_index = 1; $ticket_index <= (int) $item['quantity']; $ticket_index++ ) {
+				$ticket_slots[] = array( 'ticket_type_code' => $item['ticket_type_code'], 'ticket_index' => $ticket_index );
+			}
+		}
+		$mapping_valid = count( $ticket_slots ) === count( $participants );
+		$seen_slots = array();
+		foreach ( $participants as $participant ) {
+			$slot_key = $participant['ticket_type_code'] . ':' . $participant['ticket_index'];
+			if ( ! $participant['ticket_type_code'] || $participant['ticket_index'] < 1 || isset( $seen_slots[ $slot_key ] ) || ! in_array( array( 'ticket_type_code' => $participant['ticket_type_code'], 'ticket_index' => $participant['ticket_index'] ), $ticket_slots, true ) ) {
+				$mapping_valid = false;
+				break;
+			}
+			$seen_slots[ $slot_key ] = true;
+		}
+		if ( ! $mapping_valid && count( $ticket_slots ) === count( $participants ) ) {
+			foreach ( $participants as $index => &$participant ) {
+				$participant['ticket_type_code'] = $ticket_slots[ $index ]['ticket_type_code'];
+				$participant['ticket_index'] = $ticket_slots[ $index ]['ticket_index'];
+			}
+			unset( $participant );
+		}
+		$order_options = json_decode( (string) ( $registration['order_options_json'] ?? '' ), true );
+		$order_options = is_array( $order_options ) ? $order_options : array();
+		$snapshot_json = (string) ( $registration['snapshot_json'] ?? '' );
+		$revision_id = (string) ( $registration['event_revision_id'] ?? '' );
+		$revision_hash = (string) ( $registration['event_revision_hash'] ?? '' );
+		$privacy_consent_id = (string) ( $registration['privacy_consent_id'] ?? '' );
+		$privacy_policy_version = (string) ( $registration['privacy_policy_version'] ?? '' );
+		$privacy_accepted_at = (string) ( $registration['privacy_accepted_at'] ?? '' );
+		if ( ! $snapshot_json || ! $revision_id || ! preg_match( '/^[a-f0-9]{64}$/i', $revision_hash ) ) {
+			$legacy_snapshot = array( 'schema_version' => MI_VERSION, 'legacy_record' => true, 'order_code' => $registration['order_code'], 'event_id' => (int) $registration['event_id'], 'status' => $registration['status'], 'buyer' => array( 'first_name' => $registration['buyer_first_name'], 'last_name' => $registration['buyer_last_name'], 'email' => $registration['buyer_email'], 'phone' => $registration['buyer_phone'] ), 'tickets' => $items, 'participants' => $participants, 'order_options' => $order_options, 'economic_summary' => self::riepilogo_salvato( $registration ), 'created_at' => $registration['created_at'] );
+			$snapshot_json = MI_Workspace_Client::stable_json( $legacy_snapshot );
+			$revision_id = '0';
+			$revision_hash = hash( 'sha256', $snapshot_json );
+			$privacy_consent_id = $privacy_consent_id ?: 'legacy-unavailable';
+			$privacy_policy_version = $privacy_policy_version ?: 'legacy-unavailable';
+			$privacy_accepted_at = $privacy_accepted_at ?: (string) $registration['created_at'];
+		}
+		$result = MI_Workspace_Client::request(
+			'APPEND_REGISTRATION',
+			array(
+				'workspace_revision' => (string) $registration['workspace_revision'],
+				'workspace_event_revision' => (string) ( $event_revision ?? '0' ),
+				'canonical_source' => 'MYSQL',
+				'rooms' => $rooms,
+				'order_code'     => $registration['order_code'],
+				'event_id'       => (string) $registration['event_id'],
+				'idempotency_key'=> $registration['idempotency_key'],
+				// Workspace mantiene la richiesta in lista fino all'accettazione della proposta.
+				'status'         => 'WAITLIST_OFFERED' === $registration['status'] ? 'WAITLISTED' : $registration['status'],
+				'buyer'          => array(
+					'first_name' => $registration['buyer_first_name'],
+					'last_name'  => $registration['buyer_last_name'],
+					'email'      => $registration['buyer_email'],
+					'phone'      => $registration['buyer_phone'],
+				),
+				'special_requests'=> (string) ( $registration['special_requests'] ?? '' ),
+				'participants'   => $participants,
+				'tickets'        => $items,
+				'order_options'  => $order_options,
+				'total_cents'    => $individual_summary['known'] ? $individual_summary['total'] : (int) $registration['total_cents'],
+				'economic_mode'  => (string) $registration['economic_mode'],
+				'initial_due_cents' => $individual_summary['known'] ? $individual_summary['deposit_due'] : (int) $registration['initial_due_cents'],
+				// La replica espone le somme delle posizioni attive senza compensare persone diverse.
+				'balance_cents'  => $individual_summary['known'] ? $individual_summary['balance'] : $position['balance'],
+				'paid_cents'     => $individual_summary['known'] ? $individual_summary['paid'] : $position['paid'],
+				'payment_methods'=> (array) json_decode( (string) $registration['payment_methods_json'], true ),
+				'event_revision_id' => $revision_id,
+				'event_revision_hash' => $revision_hash,
+				'snapshot_json' => $snapshot_json,
+				'privacy_consent_id' => $privacy_consent_id,
+				'privacy_policy_version' => $privacy_policy_version,
+				'privacy_accepted_at' => $privacy_accepted_at,
+				'marketing_consent_id' => (string) $registration['marketing_consent_id'],
+				'marketing_accepted_at' => (string) $registration['marketing_accepted_at'],
+				'payments'       => array_map( static function ( $payment ) {
+					$allocations = json_decode( (string) ( $payment['participant_allocations_json'] ?? '' ), true );
+					$payment = array_map( 'sanitize_text_field', $payment );
+					$payment['participant_allocations_json'] = is_array( $allocations ) && $allocations ? wp_json_encode( $allocations ) : '';
+					return $payment;
+				}, $payments ),
+			)
+		);
+		if ( is_wp_error( $result ) || empty( $result['complete'] ) || (string) ( $result['workspace_revision'] ?? '' ) !== (string) $registration['workspace_revision'] ) {
+			$error_code = is_wp_error( $result ) ? $result->get_error_code() : 'incomplete_replica';
+			if ( is_wp_error( $result ) ) {
+				$error_data = $result->get_error_data();
+				if ( is_array( $error_data ) && ! empty( $error_data['remote_code'] ) ) $error_code .= '_' . sanitize_key( $error_data['remote_code'] );
+				if ( ! empty( $error_data['diagnostic'] ) ) $error_code = substr( sanitize_text_field( $error_data['diagnostic'] ), 0, 80 );
+			}
+			$wpdb->query( $wpdb->prepare( "UPDATE {$registrations_table} SET workspace_status = 'PENDING', workspace_attempts = workspace_attempts + 1, workspace_last_error = %s WHERE id = %d AND workspace_revision = %d", sanitize_text_field( $error_code ), $registration_id, $registration['workspace_revision'] ) );
+			return 'PENDING';
+		}
+		$marked = $wpdb->query( $wpdb->prepare( "UPDATE {$registrations_table} SET workspace_status = 'SYNCED', workspace_attempts = workspace_attempts + 1, workspace_last_error = NULL, workspace_synced_at = %s WHERE id = %d AND workspace_revision = %d", current_time( 'mysql', true ), $registration_id, $registration['workspace_revision'] ) );
+		if ( 1 !== $marked ) return 'PENDING';
+		return 'SYNCED';
+	}
+
+	public static function sync_pending_workspace() {
+		global $wpdb;
+		$table = $wpdb->prefix . 'mi_registrations';
+		$ids = $wpdb->get_col( "SELECT id FROM {$table} WHERE workspace_status = 'PENDING' ORDER BY workspace_attempts,id LIMIT 10" );
+		$started = microtime( true );
+		foreach ( $ids as $registration_id ) {
+			if ( microtime( true ) - $started > 20 ) break;
+			self::sync_workspace_safely( (int) $registration_id );
+		}
+	}
+
+	public static function expire_due_registrations() {
+		global $wpdb;
+		$registrations = $wpdb->prefix . 'mi_registrations';
+		$now = current_time( 'mysql', true );
+		// La riconciliazione migliora la coerenza con Workspace, ma un endpoint GAS
+		// temporaneamente non aggiornato non deve sospendere le scadenze WordPress.
+		// I pagamenti autorevoli sono locali: Google non interviene nelle scadenze.
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT id FROM {$registrations}
+				 WHERE status = 'PENDING_PAYMENT' AND capacity_released_at IS NULL AND expires_at IS NOT NULL AND expires_at <= %s
+				 ORDER BY id LIMIT 50",
+				$now
+			)
+		);
+		foreach ( $ids as $registration_id ) {
+			self::transition_registration_status( (int) $registration_id, 'EXPIRED', 'SYSTEM_CRON' );
+		}
+	}
+
+	/** Compatibilità dei vecchi chiamanti: il registro MySQL non importa più pagamenti Google. */
+	public static function reconcile_workspace_payments( $requested_order_codes = array() ) { return 0; }
+
+	public static function public_status_token( $registration_id, $order_code, $email ) {
+		$message = absint( $registration_id ) . '|' . sanitize_text_field( (string) $order_code ) . '|' . strtolower( sanitize_email( (string) $email ) );
+		return hash_hmac( 'sha256', $message, wp_salt( 'auth' ) );
+	}
+
+	public static function public_status_by_name( $event_id, $first_name, $last_name ) {
+		global $wpdb;
+		$event_id = absint( $event_id );
+		$first_name = trim( sanitize_text_field( (string) $first_name ) );
+		$last_name = trim( sanitize_text_field( (string) $last_name ) );
+		if ( ! $event_id || 'publish' !== get_post_status( $event_id ) || ! $last_name ) return new WP_Error( 'mi_status_not_found', 'Indica il cognome nella pagina dell’evento.' );
+		$sql = "SELECT p.id,r.id registration_id,r.order_code,r.buyer_email FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d AND p.last_name=%s AND p.status <> 'CANCELLED' AND r.status NOT IN ('CANCELLED','EXPIRED')";
+		$args = array( $event_id, $last_name );
+		if ( $first_name ) { $sql .= ' AND p.first_name=%s'; $args[] = $first_name; }
+		$matches = $wpdb->get_results( $wpdb->prepare( $sql . ' LIMIT 2', $args ), ARRAY_A );
+		if ( $wpdb->last_error ) return new WP_Error( 'mi_status_unavailable', 'Consultazione momentaneamente non disponibile. Riprova più tardi.' );
+		if ( ! $matches ) return new WP_Error( 'mi_status_not_found', 'Nessuna iscrizione trovata per questo evento. Controlla cognome e nome.' );
+		if ( count( $matches ) > 1 ) return new WP_Error( 'mi_status_ambiguous', $first_name ? 'Sono presenti più persone con questo nome e cognome. Contatta la segreteria.' : 'Sono presenti più persone con questo cognome. Inserisci anche il nome.' );
+		$row = $matches[0];
+		return self::public_status( $row['order_code'], '', self::public_status_token( $row['registration_id'], $row['order_code'], $row['buyer_email'] ), $event_id );
+	}
+
+	public static function public_status( $order_code, $email = '', $token = '', $event_id = 0 ) {
+		global $wpdb;
+		$order_code = strtoupper( substr( sanitize_text_field( (string) $order_code ), 0, 32 ) );
+		$email = strtolower( sanitize_email( (string) $email ) );
+		$token = strtolower( sanitize_text_field( (string) $token ) );
+		if ( ! $order_code || ( ! $email && ! preg_match( '/^[a-f0-9]{64}$/', $token ) ) ) return new WP_Error( 'mi_status_not_found', 'Non è stato possibile verificare la prenotazione.' );
+		$registration = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_registrations WHERE order_code=%s LIMIT 1", $order_code ), ARRAY_A );
+		if ( ! $registration ) return new WP_Error( 'mi_status_not_found', 'Non è stato possibile verificare la prenotazione.' );
+		if ( $event_id && absint( $registration['event_id'] ) !== absint( $event_id ) ) return new WP_Error( 'mi_status_not_found', 'Non è stato possibile verificare la prenotazione per questo evento.' );
+		$valid = $email
+			? hash_equals( strtolower( (string) $registration['buyer_email'] ), $email )
+			: hash_equals( self::public_status_token( $registration['id'], $registration['order_code'], $registration['buyer_email'] ), $token );
+		if ( ! $valid ) return new WP_Error( 'mi_status_not_found', 'Non è stato possibile verificare la prenotazione.' );
+		try { $coverage = self::payment_coverage( $registration ); }
+		catch ( Throwable $error ) { return new WP_Error( 'mi_status_unavailable', 'Saldo momentaneamente non disponibile. Riprova più tardi.' ); }
+		$individual = MI_Payment_People::summary( $coverage['position'] );
+		$paid = $individual['known'] ? $individual['paid'] : (int) $coverage['paid'];
+		$total = $individual['known'] ? $individual['total'] : max( 0, (int) $registration['total_cents'] );
+		$balance = $individual['known'] ? $individual['balance'] : max( 0, $total - $paid );
+		$deposit_due = $individual['known'] ? $individual['deposit_due'] : max( 0, (int) $registration['initial_due_cents'] );
+		$deposit_missing = $individual['known'] ? $individual['deposit_missing'] : max( 0, $deposit_due - $paid );
+		$managed = in_array( $registration['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
+		$collectible = $managed && in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true );
+		$status_labels = array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'Da pagare', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto', 'CANCELLED' => 'Annullata', 'EXPIRED' => 'Scaduta' );
+		if ( 'WAITLISTED' === $registration['status'] ) $payment_label = 'Nessun pagamento richiesto durante la lista d’attesa';
+		elseif ( 'WAITLIST_OFFERED' === $registration['status'] ) $payment_label = 'Nessun pagamento richiesto prima dell’accettazione';
+		elseif ( in_array( $registration['status'], array( 'CANCELLED', 'EXPIRED' ), true ) ) $payment_label = 'Prenotazione chiusa: contatta l’organizzazione per eventuali rimborsi';
+		elseif ( ! $managed ) $payment_label = 'Pagamento non gestito da questo portale';
+		elseif ( 0 === $total ) $payment_label = 'Nessun pagamento previsto';
+		elseif ( 0 === $balance ) $payment_label = 'Saldo completato';
+		elseif ( 'DEPOSIT_BALANCE' === $registration['economic_mode'] && $deposit_due > 0 && 0 === $deposit_missing ) $payment_label = 'Caparra ricevuta, saldo ancora dovuto';
+		elseif ( $paid > 0 ) $payment_label = 'Versamento parziale ricevuto';
+		else $payment_label = 'DEPOSIT_BALANCE' === $registration['economic_mode'] && $deposit_due > 0 ? 'Caparra ancora da versare' : 'Pagamento ancora da completare';
+		return array(
+			'order_code'       => (string) $registration['order_code'],
+			'event_title'      => get_the_title( (int) $registration['event_id'] ),
+			'status'           => $status_labels[ $registration['status'] ] ?? sanitize_text_field( (string) $registration['status'] ),
+			'payment_status'   => $payment_label,
+			'paid_cents'       => max( 0, $paid ),
+			'balance_cents'    => $balance,
+			'total_cents'      => $total,
+			'collectible'      => $collectible,
+			'is_free'          => 0 === $total,
+			'payment_methods'  => $collectible ? array_values( array_intersect( array( 'BANK_TRANSFER', 'CARD', 'CASH' ), (array) json_decode( (string) $registration['payment_methods_json'], true ) ) ) : array(),
+			'payment_deadline' => $collectible ? (string) $registration['payment_deadline_at'] : '',
+		);
+	}
+
+	private static function reconcile_payment_status( $registration_id, $actor_label ) {
+		global $wpdb;
+		$registrations = $wpdb->prefix . 'mi_registrations';
+		$wpdb->query( 'START TRANSACTION' );
+		try {
+			$registration = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$registrations} WHERE id = %d FOR UPDATE", $registration_id ), ARRAY_A );
+			if ( ! $registration || ! in_array( $registration['status'], array( 'PENDING_PAYMENT', 'CONFIRMED' ), true ) ) { $wpdb->query( 'COMMIT' ); return; }
+			$coverage = self::payment_coverage( $registration );
+			$paid = (int) $coverage['paid'];
+			$new_status = $coverage['covered'] ? 'CONFIRMED' : 'PENDING_PAYMENT';
+			if ( $new_status === $registration['status'] ) { $wpdb->query( 'COMMIT' ); return; }
+			$expires_at = 'CONFIRMED' === $new_status ? null : self::reopened_payment_deadline( $registration );
+			$deadline_at = 'CONFIRMED' === $new_status ? $registration['payment_deadline_at'] : $expires_at;
+			if ( false === $wpdb->update( $registrations, array( 'status' => $new_status, 'expires_at' => $expires_at, 'payment_deadline_at' => $deadline_at, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_status_changed' ), array( 'id' => $registration_id ), array( '%s', '%s', '%s', '%s', '%s' ), array( '%d' ) ) || ! self::append_registration_event( $registration_id, 'PAYMENT_STATUS_CHANGED', $registration['status'], $new_status, $actor_label, array( 'net_paid_cents' => $paid, 'initial_due_cents' => (int) $registration['initial_due_cents'], 'payment_deadline_at' => $expires_at ) ) ) throw new RuntimeException( 'Stato pagamento non aggiornato.' );
+			self::mark_workspace_changed_locked( $registration_id );
+			$wpdb->query( 'COMMIT' );
+		} catch ( Throwable $error ) {
+			$wpdb->query( 'ROLLBACK' );
+		}
+	}
+
+	public static function cancel_registration( $registration_id, $actor_label = 'ADMIN', $promote_waitlist = true ) {
+		global $wpdb;
+		$registration_id = absint( $registration_id );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id,event_id,order_code,status,buyer_first_name,buyer_last_name,buyer_email FROM {$wpdb->prefix}mi_registrations WHERE id=%d", $registration_id ), ARRAY_A );
+		$result = self::transition_registration_status( $registration_id, 'CANCELLED', $actor_label, (bool) $promote_waitlist );
+		if ( is_wp_error( $result ) || 'CANCELLED' !== $result || ! $row || 'CANCELLED' === $row['status'] ) return $result;
+		$snapshot = MI_Modello_Email::crea_istantanea_annullamento_iscrizione_iscritto( (int) $row['event_id'], trim( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ), $row['order_code'] );
+		$status = MI_Spedizione_Email::stato_nuova_email( $snapshot );
+		$payload = wp_json_encode( array( 'event_title' => get_the_title( (int) $row['event_id'] ), 'order_code' => $row['order_code'], 'status' => 'CANCELLED', 'email_preview' => $snapshot ) );
+		if ( false !== $payload && is_email( $row['buyer_email'] ) ) {
+			$wpdb->insert( $wpdb->prefix . 'mi_email_outbox', array( 'registration_id' => $registration_id, 'recipient' => $row['buyer_email'], 'template_type' => 'REGISTRATION_CANCELLATION', 'payload_json' => $payload, 'status' => $status, 'created_at' => current_time( 'mysql', true ) ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) );
+			if ( MI_Spedizione_Email::email_da_spedire( $status ) ) MI_Spedizione_Email::pianifica_spedizione();
+		}
+		$recipient = MI_Spedizione_Email::destinatario_evento( (int) $row['event_id'] );
+		$internal = MI_Modello_Email::crea_istantanea_istituzionale( (int) $row['event_id'], 'Iscrizione annullata — ' . get_the_title( (int) $row['event_id'] ), 'Una prenotazione è stata annullata.', '<p>È stata annullata la prenotazione a nome di <strong>' . esc_html( trim( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ) ) . '</strong>.</p>', 'È stata annullata la prenotazione a nome di ' . trim( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ) . '.' );
+		$internal_status = MI_Spedizione_Email::stato_nuova_email( $internal );
+		$internal_payload = wp_json_encode( array( 'event_title' => get_the_title( (int) $row['event_id'] ), 'order_code' => $row['order_code'], 'status' => 'CANCELLED', 'email_preview' => $internal ) );
+		if ( false === $internal_payload || false === $wpdb->insert( $wpdb->prefix . 'mi_email_outbox', array( 'registration_id' => $registration_id, 'recipient' => $recipient, 'template_type' => 'REGISTRATION_CANCELLATION_ORGANIZER', 'payload_json' => $internal_payload, 'status' => $internal_status, 'created_at' => current_time( 'mysql', true ) ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) return new WP_Error( 'mi_cancel_notification', 'Iscrizione annullata, ma notifica agli organizzatori non salvata.' );
+		if ( MI_Spedizione_Email::email_da_spedire( $internal_status ) ) MI_Spedizione_Email::pianifica_spedizione();
+		return $result;
+	}
+
+	public static function participant_from_token( $participant_id, $token ) {
+		global $wpdb;
+		$participant_id = absint( $participant_id );
+		$token = (string) $token;
+		if ( ! $participant_id || ! preg_match( '/^[a-f0-9]{64}$/', $token ) ) return new WP_Error( 'mi_cancel_token_invalid', 'Collegamento non valido.' );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT p.id,p.registration_id,p.first_name,p.last_name,p.status,p.cancellation_token_hash,r.event_id,r.order_code,r.status registration_status FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE p.id=%d", $participant_id ), ARRAY_A );
+		if ( ! $row || empty( $row['cancellation_token_hash'] ) || ! hash_equals( (string) $row['cancellation_token_hash'], hash( 'sha256', $token ) ) ) return new WP_Error( 'mi_cancel_token_invalid', 'Collegamento non valido o non più utilizzabile.' );
+		unset( $row['cancellation_token_hash'] );
+		return $row;
+	}
+
+	public static function cancel_participant_with_token( $participant_id, $token ) {
+		$participant = self::participant_from_token( $participant_id, $token );
+		if ( is_wp_error( $participant ) ) return $participant;
+		return self::cancel_participant( $participant_id, 'PARTICIPANT_LINK' );
+	}
+
+	public static function cancel_participant( $participant_id, $actor_label = 'ADMIN' ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( MI_Event_Deletion::participant_event( $participant_id ) ); if ( is_wp_error( $lease ) ) return $lease; }
+		global $wpdb;
+		$participants = $wpdb->prefix . 'mi_participants';
+		$registrations = $wpdb->prefix . 'mi_registrations';
+		$counters = $wpdb->prefix . 'mi_event_counters';
+		$ticket_counters = $wpdb->prefix . 'mi_ticket_counters';
+		$outbox = $wpdb->prefix . 'mi_email_outbox';
+		$participant_id = absint( $participant_id );
+		$secretariat_email_status = '';
+		$wpdb->query( 'START TRANSACTION' );
+		try {
+			$participant = $wpdb->get_row( $wpdb->prepare( "SELECT id,registration_id,ticket_type_code,first_name,last_name,status FROM {$participants} WHERE id=%d FOR UPDATE", $participant_id ), ARRAY_A );
+			if ( ! $participant ) throw new RuntimeException( 'Partecipante non trovato.' );
+			if ( 'CANCELLED' === $participant['status'] ) { $wpdb->query( 'COMMIT' ); return 'CANCELLED'; }
+			$registration = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$registrations} WHERE id=%d FOR UPDATE", $participant['registration_id'] ), ARRAY_A );
+			if ( ! $registration || ! in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'WAITLIST_OFFERED' ), true ) || $registration['capacity_released_at'] ) throw new RuntimeException( 'Partecipazione non annullabile.' );
+			$event_id = (int) $registration['event_id'];
+			$counter_field = in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLIST_OFFERED' ), true ) ? 'confirmed_count' : 'waitlisted_count';
+			$wpdb->get_row( $wpdb->prepare( "SELECT event_id FROM {$counters} WHERE event_id=%d FOR UPDATE", $event_id ), ARRAY_A );
+			$wpdb->get_row( $wpdb->prepare( "SELECT event_id FROM {$ticket_counters} WHERE event_id=%d AND ticket_type_code=%s FOR UPDATE", $event_id, $participant['ticket_type_code'] ), ARRAY_A );
+			$now = current_time( 'mysql', true );
+			if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$counters} SET {$counter_field}=GREATEST(0,{$counter_field}-1),updated_at=%s WHERE event_id=%d", $now, $event_id ) ) ) throw new RuntimeException( 'Contatore evento non aggiornato.' );
+			if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$ticket_counters} SET {$counter_field}=GREATEST(0,{$counter_field}-1),updated_at=%s WHERE event_id=%d AND ticket_type_code=%s", $now, $event_id, $participant['ticket_type_code'] ) ) ) throw new RuntimeException( 'Contatore quota non aggiornato.' );
+			$actor_label = substr( sanitize_text_field( $actor_label ), 0, 120 );
+			$participant_updated = $wpdb->query( $wpdb->prepare( "UPDATE {$participants} SET status='CANCELLED',cancelled_at=%s,cancellation_actor=%s,cancellation_token_hash=NULL WHERE id=%d AND status='ACTIVE'", $now, $actor_label, $participant_id ) );
+			if ( 1 !== $participant_updated ) throw new RuntimeException( 'Partecipante non aggiornato.' );
+			$remaining = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$participants} WHERE registration_id=%d AND status='ACTIVE'", $registration['id'] ) );
+			// total_qty rappresenta le persone ancora attive; le righe annullate restano
+			// nello storico dei partecipanti e nella replica Workspace.
+			$registration_update = array( 'total_qty' => $remaining, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'participant_cancelled' );
+			$formats = array( '%d', '%s', '%s' );
+			if ( 0 === $remaining ) {
+				$registration_update['status'] = 'CANCELLED';
+				$registration_update['capacity_released_at'] = $now;
+				$registration_update['waitlist_offer_token_hash'] = null;
+				$registration_update['waitlist_offer_expires_at'] = null;
+				$registration_update['expires_at'] = null;
+				$formats = array_merge( $formats, array( '%s', '%s', '%s', '%s', '%s' ) );
+			} elseif ( in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) && in_array( $registration['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) {
+				$coverage = self::payment_coverage( $registration );
+				$registration_update['status'] = $coverage['covered'] ? 'CONFIRMED' : 'PENDING_PAYMENT';
+				$registration_update['expires_at'] = $coverage['covered'] ? null : self::reopened_payment_deadline( $registration );
+				$registration_update['payment_deadline_at'] = $coverage['covered'] ? $registration['payment_deadline_at'] : $registration_update['expires_at'];
+				$formats = array_merge( $formats, array( '%s', '%s', '%s' ) );
+			}
+			if ( false === $wpdb->update( $registrations, $registration_update, array( 'id' => $registration['id'] ), $formats, array( '%d' ) ) ) throw new RuntimeException( 'Prenotazione non aggiornata.' );
+			self::mark_workspace_changed_locked( (int) $registration['id'] );
+			$new_registration_status = $registration_update['status'] ?? $registration['status'];
+			if ( ! self::append_registration_event( (int) $registration['id'], 'PARTICIPANT_CANCELLED', $registration['status'], $new_registration_status, $actor_label, array( 'participant_id' => $participant_id, 'remaining_participants' => $remaining ) ) ) throw new RuntimeException( 'Audit non aggiornato.' );
+			{
+				$secretariat_recipient = MI_Spedizione_Email::destinatario_evento( $event_id );
+				$secretariat_snapshot = MI_Modello_Email::crea_istantanea_annullamento_partecipazione_segreteria( $event_id, trim( $participant['first_name'] . ' ' . $participant['last_name'] ), $registration['order_code'] );
+				$secretariat_email_status = MI_Spedizione_Email::stato_nuova_email( $secretariat_snapshot );
+				$secretariat_payload = wp_json_encode( array( 'event_title' => get_the_title( $event_id ), 'order_code' => $registration['order_code'], 'status' => 'CANCELLED', 'participant_id' => $participant_id, 'email_preview' => $secretariat_snapshot ) );
+				if ( false === $secretariat_payload || false === $wpdb->insert( $outbox, array( 'registration_id' => $registration['id'], 'recipient' => $secretariat_recipient, 'template_type' => 'PARTICIPANT_CANCELLATION_SECRETARIAT_NOTIFICATION', 'payload_json' => $secretariat_payload, 'status' => $secretariat_email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) throw new RuntimeException( 'Notifica di annullamento alla segreteria non salvata.' );
+			}
+			$promoted = in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLIST_OFFERED' ), true ) ? self::promote_waitlisted_locked( $event_id, $now ) : array();
+			$wpdb->query( 'COMMIT' );
+			self::accoda_sincronizzazione_workspace( (int) $registration['id'], 'PENDING' );
+			foreach ( $promoted as $promoted_id ) self::accoda_sincronizzazione_workspace( $promoted_id, 'PENDING' );
+			if ( $promoted || MI_Spedizione_Email::email_da_spedire( $secretariat_email_status ) ) MI_Spedizione_Email::pianifica_spedizione();
+			return 'CANCELLED';
+		} catch ( Throwable $error ) {
+			$wpdb->query( 'ROLLBACK' );
+			return new WP_Error( 'mi_participant_cancel_failed', 'Non è stato possibile annullare la partecipazione.' );
+		}
+	}
+
+	private static function transition_registration_status( $registration_id, $target_status, $actor_label, $promote_waitlist = true ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( MI_Event_Deletion::registration_event( $registration_id ) ); if ( is_wp_error( $lease ) ) return $lease; }
+		global $wpdb;
+		$registrations = $wpdb->prefix . 'mi_registrations';
+		$items_table = $wpdb->prefix . 'mi_registration_items';
+		$participants = $wpdb->prefix . 'mi_participants';
+		$counters = $wpdb->prefix . 'mi_event_counters';
+		$ticket_counters = $wpdb->prefix . 'mi_ticket_counters';
+		$target_status = strtoupper( sanitize_key( $target_status ) );
+		if ( ! in_array( $target_status, array( 'CANCELLED', 'EXPIRED' ), true ) ) {
+			return new WP_Error( 'mi_status_invalid', 'Stato non valido.' );
+		}
+		$wpdb->query( 'START TRANSACTION' );
+		try {
+			$registration = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$registrations} WHERE id = %d FOR UPDATE", $registration_id ), ARRAY_A );
+			if ( ! $registration ) {
+				throw new RuntimeException( 'Iscrizione non trovata.' );
+			}
+			if ( in_array( $registration['status'], array( 'CANCELLED', 'EXPIRED' ), true ) ) {
+				$wpdb->query( 'COMMIT' );
+				return $registration['status'];
+			}
+			if ( ! in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'WAITLIST_OFFERED' ), true ) || $registration['capacity_released_at'] ) {
+				throw new RuntimeException( 'Iscrizione non annullabile.' );
+			}
+			if ( 'EXPIRED' === $target_status ) {
+				$coverage = self::payment_coverage( $registration );
+				if ( $coverage['covered'] ) {
+					if ( false === $wpdb->update( $registrations, array( 'status' => 'CONFIRMED', 'expires_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_status_changed' ), array( 'id' => $registration_id ), array( '%s', '%s', '%s', '%s' ), array( '%d' ) ) ) throw new RuntimeException( 'Stato pagamento non aggiornato.' );
+					self::mark_workspace_changed_locked( $registration_id );
+					if ( 'CONFIRMED' !== $registration['status'] && ! self::append_registration_event( $registration_id, 'PAYMENT_STATUS_CHANGED', $registration['status'], 'CONFIRMED', $actor_label, array( 'net_paid_cents' => (int) $coverage['paid'], 'initial_due_cents' => (int) $registration['initial_due_cents'] ) ) ) throw new RuntimeException( 'Audit pagamento non aggiornato.' );
+					$wpdb->query( 'COMMIT' );
+					return 'CONFIRMED';
+				}
+			}
+			$event_id = (int) $registration['event_id'];
+			$counter_field = in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLIST_OFFERED' ), true ) ? 'confirmed_count' : 'waitlisted_count';
+			$wpdb->get_row( $wpdb->prepare( "SELECT event_id FROM {$counters} WHERE event_id = %d FOR UPDATE", $event_id ), ARRAY_A );
+			$items = $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code, COUNT(*) quantity FROM {$participants} WHERE registration_id = %d AND status = 'ACTIVE' GROUP BY ticket_type_code ORDER BY ticket_type_code", $registration_id ), ARRAY_A );
+			$remaining_qty = array_sum( array_map( 'intval', wp_list_pluck( $items, 'quantity' ) ) );
+			foreach ( $items as $item ) {
+				$wpdb->get_row( $wpdb->prepare( "SELECT event_id FROM {$ticket_counters} WHERE event_id = %d AND ticket_type_code = %s FOR UPDATE", $event_id, $item['ticket_type_code'] ), ARRAY_A );
+			}
+			$now = current_time( 'mysql', true );
+			if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$counters} SET {$counter_field} = GREATEST(0, {$counter_field} - %d), updated_at = %s WHERE event_id = %d", $remaining_qty, $now, $event_id ) ) ) throw new RuntimeException( 'Contatore evento non aggiornato.' );
+			foreach ( $items as $item ) {
+				if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$ticket_counters} SET {$counter_field} = GREATEST(0, {$counter_field} - %d), updated_at = %s WHERE event_id = %d AND ticket_type_code = %s", $item['quantity'], $now, $event_id, $item['ticket_type_code'] ) ) ) throw new RuntimeException( 'Contatore quota non aggiornato.' );
+			}
+			$updated = $wpdb->update( $registrations, array( 'status' => $target_status, 'total_qty' => 0, 'capacity_released_at' => $now, 'waitlist_offer_token_hash' => null, 'waitlist_offer_expires_at' => null, 'expires_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'status_changed' ), array( 'id' => $registration_id ), array( '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s' ), array( '%d' ) );
+			if ( false === $updated || ! self::append_registration_event( $registration_id, $target_status, $registration['status'], $target_status, $actor_label ) ) {
+				throw new RuntimeException( 'Stato non aggiornato.' );
+			}
+			self::mark_workspace_changed_locked( $registration_id );
+			$promoted = $promote_waitlist && in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLIST_OFFERED' ), true ) ? self::promote_waitlisted_locked( $event_id, $now ) : array();
+			$wpdb->query( 'COMMIT' );
+			self::accoda_sincronizzazione_workspace( $registration_id, 'PENDING' );
+			foreach ( $promoted as $promoted_id ) self::accoda_sincronizzazione_workspace( $promoted_id, 'PENDING' );
+			if ( $promoted ) MI_Spedizione_Email::pianifica_spedizione();
+			return $target_status;
+		} catch ( Throwable $error ) {
+			$wpdb->query( 'ROLLBACK' );
+			return new WP_Error( 'mi_status_transition_failed', 'Impossibile aggiornare lo stato dell’iscrizione.' );
+		}
+	}
+
+	public static function waitlist_offer_from_token( $registration_id, $token ) {
+		global $wpdb;
+		$registration_id = absint( $registration_id );
+		$token = (string) $token;
+		if ( ! $registration_id || ! preg_match( '/^[a-f0-9]{64}$/', $token ) ) return new WP_Error( 'mi_waitlist_offer_invalid', 'Collegamento non valido.' );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id,event_id,status,buyer_first_name,buyer_last_name,waitlist_offer_token_hash,waitlist_offer_expires_at FROM {$wpdb->prefix}mi_registrations WHERE id=%d", $registration_id ), ARRAY_A );
+		if ( ! $row || empty( $row['waitlist_offer_token_hash'] ) || ! hash_equals( (string) $row['waitlist_offer_token_hash'], hash( 'sha256', $token ) ) ) return new WP_Error( 'mi_waitlist_offer_invalid', 'Collegamento non valido o non più utilizzabile.' );
+		if ( 'WAITLIST_OFFERED' !== $row['status'] ) return new WP_Error( 'mi_waitlist_offer_closed', 'Questa proposta è già stata conclusa.' );
+		$expires = strtotime( (string) $row['waitlist_offer_expires_at'] . ' UTC' );
+		if ( ! $expires || $expires <= time() ) return new WP_Error( 'mi_waitlist_offer_expired', 'Il tempo per rispondere è scaduto.' );
+		unset( $row['waitlist_offer_token_hash'] );
+		$row['event_title'] = get_the_title( (int) $row['event_id'] );
+		$row['expires_label'] = wp_date( 'j F Y, \\o\\r\\e H:i', $expires, wp_timezone() );
+		return $row;
+	}
+
+	public static function respond_waitlist_offer( $registration_id, $token, $decision, $system_expiry = false ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( MI_Event_Deletion::registration_event( $registration_id ) ); if ( is_wp_error( $lease ) ) return $lease; }
+		global $wpdb;
+		$registrations = $wpdb->prefix . 'mi_registrations';
+		$participants = $wpdb->prefix . 'mi_participants';
+		$counters = $wpdb->prefix . 'mi_event_counters';
+		$ticket_counters = $wpdb->prefix . 'mi_ticket_counters';
+		$outbox = $wpdb->prefix . 'mi_email_outbox';
+		$registration_id = absint( $registration_id );
+		$decision = strtoupper( sanitize_key( $decision ) );
+		if ( ! in_array( $decision, array( 'ACCEPT', 'DECLINE', 'EXPIRE' ), true ) ) return new WP_Error( 'mi_waitlist_decision_invalid', 'Scelta non valida.' );
+		$room_event_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$registrations} WHERE id=%d", $registration_id ) );
+		$wpdb->query( 'START TRANSACTION' );
+		try {
+			if ( class_exists( 'MI_Management_Service' ) ) MI_Management_Service::lock_room_event( $room_event_id );
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$registrations} WHERE id=%d FOR UPDATE", $registration_id ), ARRAY_A );
+			if ( ! $row || 'WAITLIST_OFFERED' !== $row['status'] ) throw new RuntimeException( 'Proposta non disponibile.' );
+			if ( ! $system_expiry && ( ! preg_match( '/^[a-f0-9]{64}$/', (string) $token ) || ! hash_equals( (string) $row['waitlist_offer_token_hash'], hash( 'sha256', (string) $token ) ) ) ) throw new RuntimeException( 'Collegamento non valido.' );
+			$expires_at = ! empty( $row['waitlist_offer_expires_at'] ) ? strtotime( $row['waitlist_offer_expires_at'] . ' UTC' ) : false;
+			if ( 'EXPIRE' === $decision && $expires_at && $expires_at > time() ) throw new RuntimeException( 'Proposta non ancora scaduta.' );
+			if ( ! $expires_at || $expires_at <= time() ) $decision = 'EXPIRE';
+			$event_id = (int) $row['event_id'];
+			$now = current_time( 'mysql', true );
+			$items = $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code,COUNT(*) quantity FROM {$participants} WHERE registration_id=%d AND status='ACTIVE' GROUP BY ticket_type_code ORDER BY ticket_type_code", $registration_id ), ARRAY_A );
+			$active_qty = array_sum( array_map( 'intval', wp_list_pluck( $items, 'quantity' ) ) );
+			if ( 'ACCEPT' === $decision ) {
+				$event = self::public_event( $event_id, 'publish' !== get_post_status( $event_id ) );
+				if ( is_wp_error( $event ) ) throw new RuntimeException( 'Evento non disponibile.' );
+				$target = in_array( $event['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) && (int) $row['total_cents'] > 0 ? 'PENDING_PAYMENT' : 'CONFIRMED';
+				$position = MI_Payment_People::read( $row, array() );
+				if ( empty( $position['quotes_known'] ) ) throw new RuntimeException( 'Quote individuali non disponibili.' );
+				$economic = self::riepilogo_economico( $event, (int) $row['total_cents'], $target, $active_qty, array_column( $position['people'], 'total' ) );
+				$payment_deadline = self::registration_expiry( $event, $target, $now );
+				if ( 'PENDING_PAYMENT' === $target && ( ! $payment_deadline || strtotime( $payment_deadline . ' UTC' ) <= time() ) ) {
+					$hours = min( 168, max( 1, absint( $event['waitlist_offer_hours'] ?? 48 ) ) );
+					$payment_deadline = gmdate( 'Y-m-d H:i:s', time() + $hours * HOUR_IN_SECONDS );
+				}
+				$updated = $wpdb->update( $registrations, array( 'status' => $target, 'initial_due_cents' => $economic['initial_due_cents'], 'balance_cents' => $economic['balance_cents'], 'expires_at' => $payment_deadline, 'payment_deadline_at' => $payment_deadline, 'waitlist_offer_token_hash' => null, 'waitlist_offer_expires_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'waitlist_offer_accepted' ), array( 'id' => $registration_id, 'status' => 'WAITLIST_OFFERED' ), array( '%s', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s' ), array( '%d', '%s' ) );
+				if ( 1 !== $updated || ! self::append_registration_event( $registration_id, 'WAITLIST_ACCEPTED', 'WAITLIST_OFFERED', $target, 'PUBLIC_LINK', array( 'payment_deadline_at' => $payment_deadline ) ) ) throw new RuntimeException( 'Accettazione non salvata.' );
+				if ( class_exists( 'MI_Management_Service' ) ) MI_Management_Service::auto_assign_rooms_locked( $registration_id );
+				self::mark_workspace_changed_locked( $registration_id );
+				$event['payment_deadline_at'] = $payment_deadline ? wp_date( 'Y-m-d\TH:i', strtotime( $payment_deadline . ' UTC' ), wp_timezone() ) : '';
+				self::queue_waitlist_acceptance_email_locked( $row, $event, $economic, $target, $items, $outbox, $participants, $now );
+				$promoted = array();
+			} else {
+				$wpdb->get_row( $wpdb->prepare( "SELECT event_id FROM {$counters} WHERE event_id=%d FOR UPDATE", $event_id ), ARRAY_A );
+				foreach ( $items as $item ) $wpdb->get_row( $wpdb->prepare( "SELECT event_id FROM {$ticket_counters} WHERE event_id=%d AND ticket_type_code=%s FOR UPDATE", $event_id, $item['ticket_type_code'] ), ARRAY_A );
+				if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$counters} SET confirmed_count=GREATEST(0,confirmed_count-%d),updated_at=%s WHERE event_id=%d", $active_qty, $now, $event_id ) ) ) throw new RuntimeException( 'Contatore evento non aggiornato.' );
+				foreach ( $items as $item ) if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$ticket_counters} SET confirmed_count=GREATEST(0,confirmed_count-%d),updated_at=%s WHERE event_id=%d AND ticket_type_code=%s", $item['quantity'], $now, $event_id, $item['ticket_type_code'] ) ) ) throw new RuntimeException( 'Contatore tipologia non aggiornato.' );
+				$target = 'DECLINE' === $decision ? 'CANCELLED' : 'EXPIRED';
+				$closed = $wpdb->update( $registrations, array( 'status' => $target, 'capacity_released_at' => $now, 'waitlist_offer_token_hash' => null, 'waitlist_offer_expires_at' => null, 'expires_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'waitlist_offer_closed' ), array( 'id' => $registration_id, 'status' => 'WAITLIST_OFFERED' ), array( '%s', '%s', '%s', '%s', '%s', '%s', '%s' ), array( '%d', '%s' ) );
+				if ( 1 !== $closed || ! self::append_registration_event( $registration_id, 'DECLINE' === $decision ? 'WAITLIST_DECLINED' : 'WAITLIST_OFFER_EXPIRED', 'WAITLIST_OFFERED', $target, $system_expiry ? 'SYSTEM_CRON' : 'PUBLIC_LINK' ) ) throw new RuntimeException( 'Chiusura proposta non salvata.' );
+				self::mark_workspace_changed_locked( $registration_id );
+				$promoted = self::promote_waitlisted_locked( $event_id, $now );
+			}
+			$wpdb->query( 'COMMIT' );
+			self::accoda_sincronizzazione_workspace( $registration_id, 'PENDING' );
+			foreach ( $promoted as $promoted_id ) self::accoda_sincronizzazione_workspace( $promoted_id, 'PENDING' );
+			MI_Spedizione_Email::pianifica_spedizione();
+			return 'ACCEPT' === $decision ? 'ACCEPTED' : ( 'DECLINE' === $decision ? 'DECLINED' : 'EXPIRED' );
+		} catch ( Throwable $error ) {
+			$wpdb->query( 'ROLLBACK' );
+			return new WP_Error( 'mi_waitlist_offer_failed', 'Non è stato possibile registrare la scelta. Riprova tra poco.' );
+		}
+	}
+
+	private static function queue_waitlist_acceptance_email_locked( $row, $event, $economic, $target, $items, $outbox, $participants, $now ) {
+		global $wpdb;
+		$email_items = array();
+		foreach ( $items as $item ) foreach ( $event['ticket_types'] as $ticket ) if ( $ticket['code'] === $item['ticket_type_code'] ) { $email_items[] = array( 'name' => $ticket['name'], 'quantity' => $item['quantity'] ); break; }
+		$values = MI_Modello_Email::valori_ordine( $event, $row['order_code'], 'PENDING_PAYMENT' === $target ? 'Da pagare' : 'Confermata', array_sum( array_map( 'intval', wp_list_pluck( $items, 'quantity' ) ) ), trim( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ), $economic, $email_items );
+		$management = array();
+		foreach ( $wpdb->get_results( $wpdb->prepare( "SELECT id,first_name,last_name FROM {$participants} WHERE registration_id=%d AND status='ACTIVE' ORDER BY id", $row['id'] ), ARRAY_A ) as $participant ) {
+			$cancel_token = bin2hex( random_bytes( 32 ) );
+			if ( false === $wpdb->update( $participants, array( 'cancellation_token_hash' => hash( 'sha256', $cancel_token ) ), array( 'id' => (int) $participant['id'] ), array( '%s' ), array( '%d' ) ) ) throw new RuntimeException( 'Gestione partecipante non preparata.' );
+			$management[] = array( 'name' => trim( $participant['first_name'] . ' ' . $participant['last_name'] ), 'url' => MI_Portal::participant_cancel_url( (int) $participant['id'], $cancel_token ) );
+		}
+		$values['_participant_management'] = $management;
+		$snapshot = MI_Modello_Email::crea_istantanea( (int) $row['event_id'], $values );
+		if ( in_array( $economic['mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) && (int) ( $economic['total_cents'] ?? 0 ) > 0 ) {
+			$snapshot['status_url'] = MI_Portal::status_url( (int) $row['id'], $row['order_code'], $row['buyer_email'] );
+		}
+		$status = MI_Spedizione_Email::stato_nuova_email( $snapshot );
+		$payload_json = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $row['order_code'], 'status' => $target, 'email_preview' => $snapshot ) );
+		if ( false === $payload_json || false === $wpdb->insert( $outbox, array( 'registration_id' => $row['id'], 'recipient' => $row['buyer_email'], 'template_type' => 'WAITLIST_ACCEPTED', 'payload_json' => $payload_json, 'status' => $status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) throw new RuntimeException( 'Email di conferma non accodata.' );
+	}
+
+	public static function expire_due_waitlist_offers() {
+		global $wpdb;
+		$now = current_time( 'mysql', true );
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}mi_registrations WHERE status='WAITLIST_OFFERED' AND waitlist_offer_expires_at IS NOT NULL AND waitlist_offer_expires_at<=%s ORDER BY waitlist_offer_expires_at,id LIMIT 50", $now ) );
+		foreach ( $ids as $id ) self::respond_waitlist_offer( (int) $id, '', 'EXPIRE', true );
+	}
+
+	private static function promote_waitlisted_locked( $event_id, $now ) {
+		global $wpdb;
+		$registrations = $wpdb->prefix . 'mi_registrations';
+		$participants = $wpdb->prefix . 'mi_participants';
+		$counters = $wpdb->prefix . 'mi_event_counters';
+		$ticket_counters = $wpdb->prefix . 'mi_ticket_counters';
+		$outbox = $wpdb->prefix . 'mi_email_outbox';
+		$event = self::public_event( $event_id, 'publish' !== get_post_status( $event_id ) );
+		if ( is_wp_error( $event ) || empty( $event['waitlist_enabled'] ) ) return array();
+		$counter = $wpdb->get_row( $wpdb->prepare( "SELECT confirmed_count, waitlisted_count FROM {$counters} WHERE event_id = %d FOR UPDATE", $event_id ), ARRAY_A );
+		if ( ! $counter ) return array();
+		$type_limits = array();
+		foreach ( $event['ticket_types'] as $ticket ) $type_limits[ $ticket['code'] ] = absint( $ticket['capacity'] ?? 0 );
+		$type_counts = array();
+		foreach ( $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code, confirmed_count, waitlisted_count FROM {$ticket_counters} WHERE event_id = %d ORDER BY ticket_type_code FOR UPDATE", $event_id ), ARRAY_A ) as $row ) $type_counts[ $row['ticket_type_code'] ] = $row;
+		$candidates = $wpdb->get_results( $wpdb->prepare( "SELECT id, total_qty, total_cents, buyer_first_name, buyer_last_name, buyer_email, order_code FROM {$registrations} WHERE event_id = %d AND status = 'WAITLISTED' AND buyer_email <> '' AND capacity_released_at IS NULL ORDER BY created_at, id FOR UPDATE", $event_id ), ARRAY_A );
+		$promoted = array();
+		foreach ( $candidates as $candidate ) {
+			$items = $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code, COUNT(*) quantity FROM {$participants} WHERE registration_id = %d AND status = 'ACTIVE' GROUP BY ticket_type_code ORDER BY ticket_type_code", $candidate['id'] ), ARRAY_A );
+			$active_qty = array_sum( array_map( 'intval', wp_list_pluck( $items, 'quantity' ) ) );
+			if ( ! $active_qty || (int) $counter['confirmed_count'] + $active_qty > (int) $event['capacity'] ) continue;
+			$fits = true;
+			foreach ( $items as $item ) {
+				$limit = (int) ( $type_limits[ $item['ticket_type_code'] ] ?? 0 );
+				$current = (int) ( $type_counts[ $item['ticket_type_code'] ]['confirmed_count'] ?? 0 );
+				if ( $limit && $current + (int) $item['quantity'] > $limit ) { $fits = false; break; }
+			}
+			if ( ! $fits ) continue;
+			$offer_token = bin2hex( random_bytes( 32 ) );
+			$offer_hours = min( 168, max( 1, absint( $event['waitlist_offer_hours'] ?? 48 ) ) );
+			$base = DateTimeImmutable::createFromFormat( 'Y-m-d H:i:s', $now, new DateTimeZone( 'UTC' ) );
+			if ( ! $base ) throw new RuntimeException( 'Scadenza proposta non calcolabile.' );
+			$offer_expires = $base->modify( '+' . $offer_hours . ' hours' )->format( 'Y-m-d H:i:s' );
+			$updated_offer = $wpdb->update( $registrations, array( 'status' => 'WAITLIST_OFFERED', 'waitlist_offer_token_hash' => hash( 'sha256', $offer_token ), 'waitlist_offered_at' => $now, 'waitlist_offer_expires_at' => $offer_expires, 'expires_at' => $offer_expires, 'payment_deadline_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'waitlist_offer_created' ), array( 'id' => $candidate['id'], 'status' => 'WAITLISTED' ), array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' ), array( '%d', '%s' ) );
+			if ( 1 !== $updated_offer ) throw new RuntimeException( 'Proposta lista d’attesa non salvata.' );
+			self::mark_workspace_changed_locked( (int) $candidate['id'] );
+			if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$counters} SET waitlisted_count = GREATEST(0, waitlisted_count - %d), confirmed_count = confirmed_count + %d, updated_at = %s WHERE event_id = %d", $active_qty, $active_qty, $now, $event_id ) ) ) throw new RuntimeException( 'Contatore evento non aggiornato.' );
+			$counter['confirmed_count'] += $active_qty;
+			foreach ( $items as $item ) {
+				if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$ticket_counters} SET waitlisted_count = GREATEST(0, waitlisted_count - %d), confirmed_count = confirmed_count + %d, updated_at = %s WHERE event_id = %d AND ticket_type_code = %s", $item['quantity'], $item['quantity'], $now, $event_id, $item['ticket_type_code'] ) ) ) throw new RuntimeException( 'Contatore tipologia non aggiornato.' );
+				$type_counts[ $item['ticket_type_code'] ]['confirmed_count'] = (int) ( $type_counts[ $item['ticket_type_code'] ]['confirmed_count'] ?? 0 ) + (int) $item['quantity'];
+			}
+			if ( ! self::append_registration_event( (int) $candidate['id'], 'WAITLIST_OFFERED', 'WAITLISTED', 'WAITLIST_OFFERED', 'SYSTEM', array( 'expires_at' => $offer_expires ) ) ) throw new RuntimeException( 'Audit proposta non aggiornato.' );
+			$email_items = array();
+			foreach ( $items as $item ) {
+				foreach ( $event['ticket_types'] as $ticket ) {
+					if ( $ticket['code'] === $item['ticket_type_code'] ) {
+						$email_items[] = array( 'name' => $ticket['name'], 'quantity' => $item['quantity'] );
+						break;
+					}
+				}
+			}
+			$economic = self::riepilogo_economico( $event, (int) $candidate['total_cents'], 'WAITLISTED', $active_qty );
+			$email_values = MI_Modello_Email::valori_ordine( $event, $candidate['order_code'], 'Posto disponibile: risposta richiesta', $active_qty, $candidate['buyer_first_name'] . ' ' . $candidate['buyer_last_name'], $economic, $email_items );
+			$offer_url = MI_Portal::waitlist_offer_url( (int) $candidate['id'], $offer_token );
+			$expires_timestamp = DateTimeImmutable::createFromFormat( 'Y-m-d H:i:s', $offer_expires, new DateTimeZone( 'UTC' ) )->getTimestamp();
+			$expires_label = wp_date( 'j F Y, \\o\\r\\e H:i', $expires_timestamp, wp_timezone() );
+			$email_snapshot = MI_Modello_Email::crea_istantanea_offerta_lista_attesa( $event_id, $email_values, $offer_url, $expires_label );
+			$email_status = MI_Spedizione_Email::stato_nuova_email( $email_snapshot );
+			$payload_json = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $candidate['order_code'], 'status' => 'WAITLIST_OFFERED', 'email_preview' => $email_snapshot ) );
+			if ( false === $payload_json || false === $wpdb->insert( $outbox, array( 'registration_id' => $candidate['id'], 'recipient' => $candidate['buyer_email'], 'template_type' => 'WAITLIST_OFFER', 'payload_json' => $payload_json, 'status' => $email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) throw new RuntimeException( 'Email proposta non accodata.' );
+			$promoted[] = (int) $candidate['id'];
+		}
+		return $promoted;
+	}
+
+	public static function sincronizza_iscrizione_workspace( $registration_id ) {
+		return self::sync_workspace_safely( absint( $registration_id ) );
+	}
+
+	public static function accoda_iscrizione_workspace( $registration_id ) {
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( MI_Event_Deletion::registration_event( $registration_id ) ); if ( is_wp_error( $lease ) ) return $lease; }
+		global $wpdb;
+		$registration_id = absint( $registration_id );
+		$table = $wpdb->prefix . 'mi_registrations';
+		$current_status = $wpdb->get_var( $wpdb->prepare( "SELECT workspace_status FROM {$table} WHERE id = %d", $registration_id ) );
+		if ( ! $current_status ) {
+			return 'UNAVAILABLE';
+		}
+		return self::accoda_sincronizzazione_workspace( $registration_id, $current_status );
+	}
+
+	private static function accoda_sincronizzazione_workspace( $registration_id, $current_status ) {
+		if ( 'SYNCED' === $current_status ) {
+			return 'SYNCED';
+		}
+		$registration_id = absint( $registration_id );
+		$args = array( $registration_id );
+		if ( $registration_id && ! wp_next_scheduled( 'mi_sync_workspace_registration', $args ) ) {
+			wp_schedule_single_event( time() + 1, 'mi_sync_workspace_registration', $args );
+		}
+		return 'PENDING';
+	}
+
+	private static function sync_workspace_safely( $registration_id ) {
+		$retry_key = 'mi_workspace_retry_' . absint( $registration_id );
+		if ( get_transient( $retry_key ) ) return 'PENDING';
+		static $started = null;
+		if ( null === $started ) $started = microtime( true );
+		// Un cron può contenere molte richieste arretrate: non concatenare chiamate
+		// Google oltre il budget del singolo processo PHP sull'hosting condiviso.
+		if ( microtime( true ) - $started > 20 ) {
+			self::accoda_sincronizzazione_workspace( $registration_id, 'PENDING' );
+			return 'PENDING';
+		}
+		try {
+			$result = self::sync_workspace( $registration_id );
+		} catch ( Throwable $sync_error ) {
+			$result = 'PENDING';
+		}
+		if ( 'PENDING' === $result ) {
+			global $wpdb;
+			$attempts = absint( $wpdb->get_var( $wpdb->prepare( "SELECT workspace_attempts FROM {$wpdb->prefix}mi_registrations WHERE id = %d", $registration_id ) ) );
+			$delay = min( 3600, 30 * ( 2 ** min( $attempts, 7 ) ) );
+			set_transient( $retry_key, 1, $delay );
+			$args = array( absint( $registration_id ) );
+			if ( ! wp_next_scheduled( 'mi_sync_workspace_registration', $args ) ) wp_schedule_single_event( time() + $delay, 'mi_sync_workspace_registration', $args );
+		} else delete_transient( $retry_key );
+		return $result;
+	}
+
+	private static function validate_selection( $event, $raw_tickets ) {
+		$allowed = array();
+		foreach ( $event['ticket_types'] as $ticket ) {
+			$allowed[ $ticket['code'] ] = $ticket;
+		}
+		$items = array();
+		$quantity = 0;
+		$total = 0;
+		foreach ( (array) $raw_tickets as $code => $raw_quantity ) {
+			$code = sanitize_key( $code );
+			if ( ! isset( $allowed[ $code ] ) ) {
+				return new WP_Error( 'mi_ticket_invalid', 'Tipologia di iscrizione non valida.', array( 'status' => 400 ) );
+			}
+			if ( ( is_int( $raw_quantity ) && $raw_quantity < 0 ) || ( ! is_int( $raw_quantity ) && ! ( is_string( $raw_quantity ) && preg_match( '/^\d+$/', $raw_quantity ) ) ) ) {
+				return new WP_Error( 'mi_ticket_quantity_invalid', 'La quantità deve essere un numero intero.', array( 'status' => 400 ) );
+			}
+			$item_quantity = absint( $raw_quantity );
+			if ( $item_quantity > (int) $allowed[ $code ]['max_per_order'] ) {
+				return new WP_Error( 'mi_ticket_limit', 'Quantità superiore al limite per ordine.', array( 'status' => 400 ) );
+			}
+			if ( $item_quantity > 0 ) {
+				$unit_price = 'FIXED' === $event['pricing_mode'] ? max( 0, (int) ( $event['fixed_price_cents'] ?? 0 ) ) : ( 'CALCULATED' === $event['pricing_mode'] ? (int) $allowed[ $code ]['price_cents'] : 0 );
+				$items[] = array( 'code' => $code, 'name' => sanitize_text_field( $allowed[ $code ]['name'] ), 'quantity' => $item_quantity, 'unit_price_cents' => $unit_price, 'capacity' => absint( $allowed[ $code ]['capacity'] ?? 0 ) );
+				$quantity += $item_quantity;
+				$total += $item_quantity * $unit_price;
+			}
+		}
+		if ( $quantity < 1 || $quantity > 20 ) {
+			return new WP_Error( 'mi_quantity', 'Seleziona da 1 a 20 partecipanti.', array( 'status' => 400 ) );
+		}
+		return array( 'items' => $items, 'quantity' => $quantity, 'total_cents' => $total );
+	}
+
+	private static function validate_participants( $raw_participants, $selection, $fields, $option_definitions, $extra_scope = 'ONE' ) {
+		$expected = (int) $selection['quantity'];
+		$extra_scope = 'ALL' === strtoupper( (string) $extra_scope ) ? 'ALL' : 'ONE';
+		if ( ! is_array( $raw_participants ) || count( $raw_participants ) !== $expected ) {
+			return new WP_Error( 'mi_participants', 'Inserisci nome e cognome di ogni partecipante.', array( 'status' => 400 ) );
+		}
+		$participants = array();
+		$remaining = array();
+		$seen_indexes = array();
+		foreach ( $selection['items'] as $item ) {
+			$remaining[ $item['code'] ] = (int) $item['quantity'];
+			$seen_indexes[ $item['code'] ] = array();
+		}
+		foreach ( $raw_participants as $participant_position => $raw ) {
+			if ( ! is_array( $raw ) ) {
+				return new WP_Error( 'mi_participant_invalid', 'Controlla i dati dei partecipanti.', array( 'status' => 400 ) );
+			}
+			$ticket_type_code = sanitize_key( $raw['ticket_type_code'] ?? '' );
+			$ticket_index = absint( $raw['ticket_index'] ?? 0 );
+			$selected_quantity = isset( $seen_indexes[ $ticket_type_code ] ) ? (int) $remaining[ $ticket_type_code ] + count( $seen_indexes[ $ticket_type_code ] ) : 0;
+			if ( empty( $remaining[ $ticket_type_code ] ) || $ticket_index < 1 || $ticket_index > $selected_quantity || isset( $seen_indexes[ $ticket_type_code ][ $ticket_index ] ) ) {
+				return new WP_Error( 'mi_participant_ticket_invalid', 'Associazione tra partecipante e tipologia non valida.', array( 'status' => 400 ) );
+			}
+			$seen_indexes[ $ticket_type_code ][ $ticket_index ] = true;
+			$remaining[ $ticket_type_code ]--;
+			$first_name = sanitize_text_field( $raw['first_name'] ?? '' );
+			$last_name = sanitize_text_field( $raw['last_name'] ?? '' );
+			$raw_fields = is_array( $raw['fields'] ?? null ) ? $raw['fields'] : array();
+			$raw_options = is_array( $raw['options'] ?? null ) ? $raw['options'] : array();
+			$has_extra_data = array_filter( $raw_fields, static function ( $value ) { return '' !== trim( (string) $value ); } ) || array_filter( $raw_options, static function ( $value ) { return (int) $value > 0; } );
+			if ( ! $first_name || ! $last_name || strlen( $first_name ) > 80 || strlen( $last_name ) > 80 ) {
+				return new WP_Error( 'mi_participant_invalid', 'Controlla i dati dei partecipanti.', array( 'status' => 400 ) );
+			}
+			$requires_extra_data = 'ALL' === $extra_scope || 0 === $participant_position;
+			$validation_fields = array_map( static function ( $field ) use ( $requires_extra_data ) {
+				$field['required'] = $requires_extra_data && ! empty( $field['required'] );
+				return $field;
+			}, $fields );
+			$answers = $requires_extra_data || $has_extra_data ? MI_Field_Schema::validate_answers( $raw_fields, $validation_fields ) : array();
+			if ( is_wp_error( $answers ) ) {
+				return $answers;
+			}
+			$options = self::validate_options( $raw_options, $option_definitions, 'TICKET' );
+			if ( is_wp_error( $options ) ) {
+				return $options;
+			}
+			$accommodation_count = count( array_filter( $options, static function ( $option ) {
+				return 0 === strpos( (string) ( $option['code'] ?? '' ), 'alloggio-' ) && ! empty( $option['quantity'] );
+			} ) );
+			if ( $accommodation_count > 1 ) {
+				return new WP_Error( 'mi_accommodation_multiple', 'Scegli un solo tipo di alloggio per partecipante.', array( 'status' => 400 ) );
+			}
+			$participants[] = array( 'ticket_type_code' => $ticket_type_code, 'ticket_index' => $ticket_index, 'first_name' => $first_name, 'last_name' => $last_name, 'fields' => $answers, 'options' => $options );
+		}
+		if ( array_sum( $remaining ) !== 0 ) {
+			return new WP_Error( 'mi_participant_ticket_invalid', 'Associazione tra partecipanti e tipologie incompleta.', array( 'status' => 400 ) );
+		}
+		return $participants;
+	}
+
+	/** Shared pure validation for initial registration and reviewed service changes. */
+	public static function validate_options( $raw, $definitions, $scope ) {
+		$allowed = array();
+		foreach ( (array) $definitions as $definition ) {
+			if ( strtoupper( (string) ( $definition['scope'] ?? '' ) ) === $scope ) {
+				$allowed[ sanitize_key( $definition['code'] ?? '' ) ] = $definition;
+			}
+		}
+		$result = array();
+		$choice_groups = array();
+		foreach ( (array) $raw as $raw_code => $raw_quantity ) {
+			$code = sanitize_key( $raw_code );
+			if ( ! isset( $allowed[ $code ] ) ) {
+				return new WP_Error( 'mi_option_invalid', 'Opzione non valida.', array( 'status' => 400 ) );
+			}
+			if ( ( is_int( $raw_quantity ) && $raw_quantity < 0 ) || ( ! is_int( $raw_quantity ) && ! ( is_string( $raw_quantity ) && preg_match( '/^\d+$/', $raw_quantity ) ) ) ) {
+				return new WP_Error( 'mi_option_quantity_invalid', 'Quantità opzione non valida.', array( 'status' => 400 ) );
+			}
+			$quantity = absint( $raw_quantity );
+			if ( $quantity > absint( $allowed[ $code ]['max_quantity'] ?? 1 ) ) {
+				return new WP_Error( 'mi_option_limit', 'Quantità opzione superiore al limite.', array( 'status' => 400 ) );
+			}
+			if ( $quantity ) {
+				$group = MI_Option_Rules::choice_group( $allowed[$code] );
+				if ( $group && isset( $choice_groups[$group] ) ) return new WP_Error( 'mi_option_alternative', 'Scegli una sola voce per il gruppo ' . $group . '.', array( 'status' => 400 ) );
+				if ( $group ) $choice_groups[$group] = true;
+				$result[] = array( 'code' => $code, 'name' => sanitize_text_field( $allowed[ $code ]['name'] ), 'quantity' => $quantity, 'unit_price_cents' => max( 0, (int) $allowed[ $code ]['price_cents'] ) );
+			}
+		}
+		return $result;
+	}
+
+	private static function options_total( $order_options, $participants ) {
+		$total = 0;
+		foreach ( (array) $order_options as $option ) {
+			$total += (int) $option['quantity'] * (int) $option['unit_price_cents'];
+		}
+		foreach ( (array) $participants as $participant ) {
+			foreach ( (array) $participant['options'] as $option ) {
+				$total += (int) $option['quantity'] * (int) $option['unit_price_cents'];
+			}
+		}
+		return max( 0, $total );
+	}
+
+	private static function registration_expiry( $event, $status, $now ) {
+		if ( 'PENDING_PAYMENT' !== $status || ! in_array( $event['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) {
+			return null;
+		}
+		$deadline = (string) ( $event['payment_deadline_at'] ?? '' );
+		if ( $deadline && preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $deadline ) ) {
+			$local = DateTimeImmutable::createFromFormat( 'Y-m-d\TH:i', $deadline, wp_timezone() );
+			return $local ? $local->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' ) : null;
+		}
+		// Compatibilità con eventi salvati prima della versione 3.4.9.
+		$minutes = absint( $event['reservation_minutes'] ?? 0 );
+		if ( ! $minutes ) return null;
+		$base = DateTimeImmutable::createFromFormat( 'Y-m-d H:i:s', $now, new DateTimeZone( 'UTC' ) );
+		return $base ? $base->modify( '+' . $minutes . ' minutes' )->format( 'Y-m-d H:i:s' ) : null;
+	}
+
+	private static function build_order_snapshot( $event, $selection, $participants, $order_options, $buyer, $economic_summary, $status, $accepted_at, $marketing_accepted, $special_requests = '' ) {
+		$relay_keys = MI_Field_Schema::relay_only_keys( $event['participant_fields'] ?? array() );
+		$snapshot_participants = array_map( static function ( $participant ) use ( $relay_keys ) {
+			$participant['fields'] = array_diff_key( (array) ( $participant['fields'] ?? array() ), array_flip( $relay_keys ) );
+			return $participant;
+		}, $participants );
+		return array(
+			'schema_version' => MI_VERSION,
+			'event' => $event,
+			'status' => $status,
+			'buyer' => $buyer,
+			'special_requests' => $special_requests,
+			'tickets' => $selection['items'],
+			'participants' => $snapshot_participants,
+			'order_options' => $order_options,
+			'economic_summary' => $economic_summary,
+			'consents' => array(
+				'privacy' => array( 'id' => $event['privacy_consent_id'], 'policy_version' => $event['privacy_policy_version'], 'accepted_at' => $accepted_at ),
+				'marketing' => array( 'id' => $event['marketing_consent_id'] ?? '', 'accepted' => (bool) $marketing_accepted, 'accepted_at' => $marketing_accepted ? $accepted_at : null ),
+			),
+		);
+	}
+
+	/** Call inside the transaction that changes the registration or its participants. */
+	public static function mark_workspace_changed_locked( $registration_id ) {
+		global $wpdb;
+		$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}mi_registrations SET workspace_revision=workspace_revision+1,workspace_status='PENDING',workspace_attempts=0 WHERE id=%d", $registration_id ) );
+		if ( 1 !== $changed ) throw new RuntimeException( 'Revisione della prenotazione non aggiornata.' );
+	}
+
+	public static function append_registration_event( $registration_id, $event_type, $from_status, $to_status, $actor_label, $detail = array() ) {
+		global $wpdb;
+		$saved = false !== $wpdb->insert( $wpdb->prefix . 'mi_registration_events', array( 'registration_id' => absint( $registration_id ), 'event_type' => sanitize_key( $event_type ), 'from_status' => sanitize_key( $from_status ), 'to_status' => sanitize_key( $to_status ), 'actor_label' => sanitize_text_field( $actor_label ), 'detail_json' => wp_json_encode( $detail ), 'created_at' => current_time( 'mysql', true ) ), array( '%d', '%s', '%s', '%s', '%s', '%s', '%s' ) );
+		if ( $saved && class_exists( 'MI_Booking_Update_Email' ) ) MI_Booking_Update_Email::enqueue( (int) $registration_id, $event_type, (int) $wpdb->insert_id );
+		return $saved;
+	}
+
+	private static function validate_buyer( $raw ) {
+		$buyer = array(
+			'first_name' => sanitize_text_field( $raw['first_name'] ?? '' ),
+			'last_name'  => sanitize_text_field( $raw['last_name'] ?? '' ),
+			'email'      => sanitize_email( $raw['email'] ?? '' ),
+			'phone'      => MI_Field_Schema::normalize_phone( $raw['phone'] ?? '' ),
+		);
+		if ( ! $buyer['first_name'] || ! $buyer['last_name'] || ( $buyer['email'] && ! is_email( $buyer['email'] ) ) || ! preg_match( '/^\+[1-9][0-9().\s-]{6,30}$/', $buyer['phone'] ) ) {
+			return new WP_Error( 'mi_buyer_invalid', 'Controlla le informazioni di contatto.', array( 'status' => 400 ) );
+		}
+		return $buyer;
+	}
+
+	private static function local_datetime( $value ) {
+		try {
+			return DateTimeImmutable::createFromFormat( '!Y-m-d\TH:i', (string) $value, wp_timezone() ) ?: null;
+		} catch ( Exception $error ) {
+			return null;
+		}
+	}
+
+	private static function generate_order_code( $event_id, $title ) {
+		global $wpdb;
+		$table = $wpdb->prefix . 'mi_booking_codes';
+		// Called inside the registration transaction, after locking this event.
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT prefix,sequence FROM {$table} WHERE event_id=%d FOR UPDATE", $event_id ), ARRAY_A );
+		if ( $wpdb->last_error ) throw new RuntimeException( 'Codice prenotazione non disponibile.' );
+		if ( ! $row ) {
+			$words = preg_split( '/[^A-Z]+/', strtoupper( remove_accents( wp_strip_all_tags( $title ) ) ), -1, PREG_SPLIT_NO_EMPTY );
+			$base = substr( implode( '', array_map( static function( $word ) { return $word[0]; }, $words ) ), 0, 5 );
+			$base = $base ?: 'EV';
+			if ( strlen( $base ) === 1 ) $base .= 'E';
+			for ( $attempt=0; $attempt<80; $attempt++ ) {
+				$prefix = $base;
+				if ( $attempt ) for ( $i=0; $i<1+intdiv( $attempt, 26 ); $i++ ) $prefix .= chr( random_int( 65, 90 ) );
+				$inserted = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$table} (event_id,prefix,sequence) VALUES (%d,%s,0)", $event_id, $prefix ) );
+				if ( false === $inserted ) throw new RuntimeException( 'Sigla evento non disponibile.' );
+				if ( $inserted ) { $row = array( 'prefix'=>$prefix, 'sequence'=>0 ); break; }
+			}
+			if ( ! $row ) throw new RuntimeException( 'Impossibile assegnare una sigla libera.' );
+		}
+		$next = (int) $row['sequence'] + 1;
+		if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET sequence=%d WHERE event_id=%d", $next, $event_id ) ) ) throw new RuntimeException( 'Progressivo non disponibile.' );
+		return $row['prefix'] . $next;
+	}
+}

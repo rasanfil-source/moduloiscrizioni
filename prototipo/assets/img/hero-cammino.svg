@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title description">
+  <title id="title">Sentiero dimostrativo del Cammino</title>
+  <desc id="description">Un sentiero chiaro attraversa colline verdi verso una città all'orizzonte.</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b8dcf3"/>
+      <stop offset="1" stop-color="#edf7fc"/>
+    </linearGradient>
+    <linearGradient id="path" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#f1d5a0"/>
+      <stop offset="1" stop-color="#d8b479"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#sky)"/>
+  <circle cx="1240" cy="170" r="74" fill="#f5cf70" opacity=".9"/>
+  <path d="M0 510C260 380 445 410 676 525c225 112 419 45 924-92v467H0Z" fill="#86ae83"/>
+  <path d="M0 620c306-152 572-86 828 44 274 139 490 82 772-24v260H0Z" fill="#5f8f6b"/>
+  <path d="M665 900c71-154 176-274 339-363 70-38 147-72 230-107-121 80-218 158-292 237-91 98-143 177-174 233Z" fill="url(#path)"/>
+  <g fill="#3d5f50">
+    <path d="m1263 422 28-65 28 65Z"/><rect x="1286" y="419" width="10" height="42"/>
+    <path d="m1332 441 23-53 23 53Z"/><rect x="1351" y="439" width="8" height="35"/>
+    <path d="m1187 447 22-51 22 51Z"/><rect x="1205" y="444" width="8" height="34"/>
+  </g>
+  <g transform="translate(1043 388)" fill="#e9ecef" stroke="#67458f" stroke-width="6">
+    <rect x="0" y="28" width="104" height="72"/>
+    <path d="m-12 29 64-40 64 40ZM43-11v-30h18v30M51-42v-18M42-52h28"/>
+  </g>
+</svg>

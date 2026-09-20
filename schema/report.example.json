@@ -1,0 +1,49 @@
+{
+  "versione": 1,
+  "modelli": [
+    {
+      "codice": "partecipanti",
+      "nome": "Elenco partecipanti",
+      "sezioni": ["anagrafica", "contatti", "iscrizione"],
+      "filtri": ["evento", "stato_iscrizione", "gruppo"],
+      "ordinamento": ["cognome", "nome"]
+    },
+    {
+      "codice": "documenti",
+      "nome": "Documenti e dati anagrafici",
+      "sezioni": ["anagrafica", "documenti", "contatti"],
+      "filtri": ["evento", "documenti_mancanti"],
+      "ordinamento": ["cognome", "nome"]
+    },
+    {
+      "codice": "logistica",
+      "nome": "Camere e sistemazioni",
+      "sezioni": ["anagrafica", "alloggio", "camera", "note"],
+      "filtri": ["evento", "sistemazione", "camera"],
+      "ordinamento": ["camera", "cognome", "nome"]
+    },
+    {
+      "codice": "pullman",
+      "nome": "Assegnazione pullman",
+      "sezioni": ["anagrafica", "trasporto", "contatti"],
+      "filtri": ["evento", "pullman"],
+      "ordinamento": ["pullman", "cognome", "nome"]
+    },
+    {
+      "codice": "pagamenti",
+      "nome": "Situazione pagamenti",
+      "sezioni": ["anagrafica", "totali", "versamenti", "saldo"],
+      "filtri": ["evento", "stato_pagamento", "fonte_pagamento", "data_versamento"],
+      "ordinamento": ["stato_pagamento", "cognome", "nome"]
+    }
+  ],
+  "report_personalizzato": {
+    "nome": "",
+    "evento_id": "",
+    "colonne": [],
+    "filtri": [],
+    "raggruppamenti": [],
+    "ordinamento": [],
+    "salvabile_come_modello": true
+  }
+}

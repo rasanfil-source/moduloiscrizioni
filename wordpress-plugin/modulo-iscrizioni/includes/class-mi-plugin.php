@@ -1,0 +1,46 @@
+<?php
+
+defined( 'ABSPATH' ) || exit;
+
+final class MI_Plugin {
+	private static $instance;
+
+	public static function instance() {
+		if ( ! self::$instance ) {
+			self::$instance = new self();
+		}
+		return self::$instance;
+	}
+
+	private function __construct() {}
+
+	public function boot() {
+		add_filter( 'cron_schedules', array( 'MI_Activator', 'cron_schedules' ) );
+		add_action( 'plugins_loaded', array( 'MI_Activator', 'maybe_upgrade' ), 5 );
+		add_action( 'plugins_loaded', array( $this, 'load_textdomain' ) );
+		MI_Event_Deletion::boot();
+		MI_Event_Post_Type::boot();
+		MI_Event_Activity_Migration::boot();
+		MI_Access::boot();
+		MI_Admin::boot();
+		MI_Modello_Email::avvia();
+		MI_Spedizione_Email::avvia();
+		MI_Workspace_Settings::boot();
+		MI_REST_Controller::boot();
+		MI_Shortcode::boot();
+		MI_Portal::boot();
+		MI_Portal_Payments::boot();
+		MI_Portal_Management::boot();
+		MI_Sheet_Open::boot();
+		MI_Site_Performance::boot();
+		MI_Integrazione_Divi::avvia();
+		add_action( 'mi_sync_workspace_pending', array( 'MI_Registration_Service', 'sync_pending_workspace' ) );
+		add_action( 'mi_sync_workspace_registration', array( 'MI_Registration_Service', 'sincronizza_iscrizione_workspace' ) );
+		add_action( 'mi_expire_registrations', array( 'MI_Registration_Service', 'expire_due_registrations' ) );
+		add_action( 'mi_expire_registrations', array( 'MI_Registration_Service', 'expire_due_waitlist_offers' ), 20 );
+	}
+
+	public function load_textdomain() {
+		load_plugin_textdomain( 'modulo-iscrizioni', false, dirname( plugin_basename( MI_PLUGIN_FILE ) ) . '/languages' );
+	}
+}

@@ -1,0 +1,72 @@
+name: Sanitization check
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify Workspace and WordPress behavior
+        run: node --test workspace-apps-script/tests/*.test.mjs wordpress-plugin/tests/*.test.mjs
+      - name: Verify public balance workflow and actual payments
+        run: |
+          php wordpress-plugin/tests/public-balance.php
+          php wordpress-plugin/tests/public-balance-model.php
+          php wordpress-plugin/tests/operational-profile.php
+          php wordpress-plugin/tests/option-rules.php
+          php wordpress-plugin/tests/sheet-open.php
+          php wordpress-plugin/tests/attendance-report.php
+          php wordpress-plugin/tests/event-wizard.php
+          php wordpress-plugin/tests/management-list.php
+
+  economic-innodb:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: local-ledger-test-only
+          MARIADB_ROOT_HOST: '%'
+          MARIADB_DATABASE: mi_ledger_test
+        ports:
+          - 33317:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mysqli, mbstring
+          coverage: none
+      - name: Verify economic logic with MariaDB
+        run: |
+          php wordpress-plugin/tests/payment-people-innodb.php
+          php wordpress-plugin/tests/individual-management-innodb.php
+          php wordpress-plugin/tests/combined-services-innodb.php
+          php wordpress-plugin/tests/attendance-inline-innodb.php
+          php wordpress-plugin/tests/accommodation-change-innodb.php
+          php wordpress-plugin/tests/percentage-deposit-unit.php
+          php wordpress-plugin/tests/sheet-receipts-innodb.php
+
+  sanitization:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Scan public files
+        shell: pwsh
+        run: ./tools/check-sanitization.ps1
