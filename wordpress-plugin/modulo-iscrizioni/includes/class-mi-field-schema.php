@@ -113,6 +113,17 @@ final class MI_Field_Schema {
 		);
 	}
 
+	/** Exact event configuration used by the Google projection, including empty events. */
+	public static function workspace_event_schema( $event_id ) {
+		return array(
+			'fields' => array_merge( self::public_fields( self::event_configuration( $event_id ) ), self::sanitize_custom_fields( get_post_meta( $event_id, '_mi_custom_participant_fields', true ) ) ),
+			'options' => array_values( (array) get_post_meta( $event_id, '_mi_options', true ) ),
+			'room' => '1' === get_post_meta( $event_id, '_mi_overnight_enabled', true ),
+			'special_requests' => '1' === get_post_meta( $event_id, '_mi_special_requests_enabled', true ),
+			'pricing' => strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ),
+		);
+	}
+
 	public static function resolved_operational_profile( $event_id ) {
 		$stored = self::sanitize_operational_profile( get_post_meta( $event_id, '_mi_operational_profile', true ) );
 		if ( 'AUTOMATICO' !== $stored ) return $stored;

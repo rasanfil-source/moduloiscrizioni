@@ -303,6 +303,7 @@ function generaVistaOperativaEvento_(idEvento, campiForzati) {
   aggiungiColonneDomande_(colonne, evento, iscrizioni, partecipanti);
   if (partecipanti.some(p=>['PRESENT','ABSENT','UNRECORDED'].includes(decodificaOggetto_(p.dati_aggiuntivi_json).attendance)) && !colonne.some(c=>c.key==='attendance')) colonne.push({key:'attendance',label:'Presenza effettiva',gruppo:'persona',comprimibile:false});
   iscrizioni.forEach(r=>{const snapshot=decodificaOggetto_(r.snapshot_json);aggiungiColonneServizi_(colonne, (snapshot.event||{}).options||[]);});
+  applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, pagamenti);
   const righe = partecipanti.map(function (partecipante) {
     const iscrizione = iscrizioniPerCodice[String(partecipante.codice_ordine)];
     const numero = Number(partecipante.numero_partecipante) || 0;

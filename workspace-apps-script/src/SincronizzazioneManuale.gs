@@ -163,10 +163,11 @@ function preparaAperturaFoglio_(payload) {
     const revision=convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REPLICA_REVISIONS)).find(row=>String(row.id_evento)===eventId);
     if (!revision || String(revision.revisione_camere)!==String(payload.workspace_event_revision)) throw new Error('REPLICA_MISMATCH');
     if (payload.operational_profile !== undefined) aggiornaProfiloEventoMysql_(eventId, payload.operational_profile);
+    if (payload.event_schema !== undefined) aggiornaSchemaEventoMysql_(eventId, payload.event_schema);
     const result=aggiornaFoglioOperativoEventoConLock_({id_evento:eventId,soloModificati:true});
     const complete=!!result.ok && !!result.esito && !result.esito.manuali && !result.esito.conflitti;
     SpreadsheetApp.flush();
-    return {ok:true,ready:complete,event_sheet_complete:complete,operational_profile:payload.operational_profile,url_foglio:complete?result.url_foglio:undefined};
+    return {ok:true,ready:complete,event_sheet_complete:complete,event_schema:payload.event_schema,operational_profile:payload.operational_profile,url_foglio:complete?result.url_foglio:undefined};
   } finally {lock.releaseLock();}
 }
 
@@ -179,4 +180,15 @@ function aggiornaProfiloEventoMysql_(eventId, profile) {
   if (sheet.getMaxColumns()<12) sheet.insertColumnsAfter(sheet.getMaxColumns(),12-sheet.getMaxColumns());
   sheet.getRange(1,12).setValue('profilo_operativo');
   sheet.getRange(row._row,12).setValue(profile);
+}
+
+function aggiornaSchemaEventoMysql_(eventId, schema) {
+  if (!schema || !Array.isArray(schema.fields) || !Array.isArray(schema.options) || typeof schema.room !== 'boolean' || typeof schema.pricing !== 'string') throw new Error('INVALID_EVENT_SCHEMA');
+  const sheet=ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS);
+  const row=convertiRigheInOggetti_(sheet).find(value=>String(value.id_evento)===eventId);
+  if (!row) throw new Error('EVENT_NOT_FOUND');
+  if (sheet.getMaxColumns()<13) sheet.insertColumnsAfter(sheet.getMaxColumns(),13-sheet.getMaxColumns());
+  sheet.getRange(1,13).setValue('schema_vista_json');
+  sheet.getRange(row._row,13).setValue(JSON.stringify(schema));
+  sheet.getRange(row._row,8).setValue(schema.pricing);
 }

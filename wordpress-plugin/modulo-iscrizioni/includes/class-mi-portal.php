@@ -433,6 +433,7 @@ final class MI_Portal {
 			'modalita_prezzo' => (string) get_post_meta( $event_id, '_mi_pricing_mode', true ),
 			'evento_gratuito' => 'ZERO' === strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ),
 			'profilo_operativo' => $profilo_operativo,
+			'event_schema' => MI_Field_Schema::workspace_event_schema( $event_id ),
 			'domande_partecipanti' => MI_Field_Schema::sanitize_custom_fields( get_post_meta( $event_id, '_mi_custom_participant_fields', true ) ),
 			'servizi' => array_values( (array) get_post_meta( $event_id, '_mi_options', true ) ),
 			'url_iscrizione' => $url_iscrizione,

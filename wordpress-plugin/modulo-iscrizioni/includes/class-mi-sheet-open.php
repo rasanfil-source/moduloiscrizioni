@@ -18,8 +18,9 @@ final class MI_Sheet_Open {
 		if ( $wpdb->last_error ) throw new RuntimeException( 'Camere non disponibili.' );
 		wp_cache_delete( $event_id, 'post_meta' );
 		$profile = MI_Field_Schema::resolved_operational_profile( $event_id );
+		$schema = MI_Field_Schema::workspace_event_schema( $event_id );
 		$versions = array_map( static function ( $row ) { return array( 'id' => (int) $row['id'], 'order_code' => $row['order_code'], 'revision' => (string) $row['workspace_revision'] ); }, $rows );
-		return array( 'profile' => $profile, 'rows' => $rows, 'versions' => $versions, 'rooms' => $rooms, 'revision' => (string) ( $revision ?? '0' ), 'fingerprint' => hash( 'sha256', wp_json_encode( array( $versions, $revision, $rooms, $profile ) ) ) );
+		return array( 'schema' => $schema, 'profile' => $profile, 'rows' => $rows, 'versions' => $versions, 'rooms' => $rooms, 'revision' => (string) ( $revision ?? '0' ), 'fingerprint' => hash( 'sha256', wp_json_encode( array( $versions, $revision, $rooms, $profile, $schema ) ) ) );
 	}
 	public static function step( $event_id, $token = '' ) {
 		if ( ! MI_Portal_Management::allowed() || ! MI_Access::can_access_event( $event_id ) ) return new WP_Error( 'mi_sheet_access', 'Evento non accessibile.' );
@@ -43,7 +44,7 @@ final class MI_Sheet_Open {
 				set_transient( $key, $session, 600 );
 				return array( 'ready' => false, 'token' => $token );
 			}
-			$result = MI_Workspace_Client::request( 'PREPARA_APERTURA_FOGLIO', array( 'event_id' => (string) $event_id, 'operational_profile' => $current['profile'], 'registrations' => $current['versions'], 'rooms' => $current['rooms'], 'workspace_event_revision' => $current['revision'] ) );
+			$result = MI_Workspace_Client::request( 'PREPARA_APERTURA_FOGLIO', array( 'event_id' => (string) $event_id, 'event_schema' => $current['schema'], 'operational_profile' => $current['profile'], 'registrations' => $current['versions'], 'rooms' => $current['rooms'], 'workspace_event_revision' => $current['revision'] ) );
 			if ( is_wp_error( $result ) ) throw new RuntimeException( $result->get_error_message() );
 			if ( ! empty( $result['needs_sync'] ) && ! $session['repaired'] ) {
 				$by_code = array_column( $current['rows'], 'id', 'order_code' );
@@ -53,6 +54,7 @@ final class MI_Sheet_Open {
 			}
 			if ( empty( $result['ready'] ) || empty( $result['event_sheet_complete'] ) || ! preg_match( '~^https://docs\.google\.com/spreadsheets/d/[A-Za-z0-9_-]+(?:/|$)~D', $result['url_foglio'] ?? '' ) ) throw new RuntimeException( 'Il foglio non è aggiornato. Conferma prima le modifiche pendenti tramite Sincronizza nel portale, poi riprova.' );
 			if ( ( $result['operational_profile'] ?? '' ) !== $current['profile'] ) throw new RuntimeException( 'La versione Workspace non conferma il profilo corrente. Aggiorna Apps Script e la distribuzione Web App, poi riprova.' );
+			if ( ( $result['event_schema'] ?? null ) !== $current['schema'] ) throw new RuntimeException( 'Workspace non conferma i campi dell’evento. Aggiorna Apps Script e la distribuzione Web App, poi riprova.' );
 			$after = self::snapshot( $event_id );
 			if ( ! hash_equals( $current['fingerprint'], $after['fingerprint'] ) ) throw new RuntimeException( 'I dati sono cambiati durante l’apertura. Riprova.' );
 			delete_transient( $key );

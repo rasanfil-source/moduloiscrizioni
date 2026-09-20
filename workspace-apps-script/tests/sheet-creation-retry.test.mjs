@@ -15,7 +15,7 @@ test('interrupted formatting resumes the registered file; access errors never du
  ottieniSchedaObbligatoria_:k=>k==='links'?registry:[],convertiRigheInOggetti_:s=>s===registry?links:s,
  DriveApp:{getFileById:()=>{if(denied)throw Error('denied');return {isTrashed:()=>false};}},
  SpreadsheetApp:{create:()=>{creates++;return file;},openById:()=>file,flush(){}},
- aggiungiColonneServizi_(){},aggiungiControllo_(){},Session:{getActiveUser:()=>({getEmail:()=>''})}});
+ applicaSchemaColonneEvento_(){},aggiungiColonneServizi_(){},aggiungiControllo_(){},Session:{getActiveUser:()=>({getEmail:()=>''})}});
  vm.runInContext(source,c);
  c.generaVistaOperativaIniziale_=c.generaVistaOperativaEvento_=()=>({evento:{titolo:'Test'},colonne:[],righe:[]});
  c.spostaFoglioAccantoAlDatabase_=()=>'';c.configuraSchedeEconomicheEvento_=()=>{};

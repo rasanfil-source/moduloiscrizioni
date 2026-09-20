@@ -38,6 +38,7 @@ function preparaProduzioniEventoConLock_(payload) {
   eventi.getRange(1, 11).setValue('domande_json');
   if (esistente) eventi.getRange(esistente._row, 1, 1, valori.length).setValues([valori]);
   else eventi.appendRow(valori);
+  if (payload.event_schema !== undefined) aggiornaSchemaEventoMysql_(idEvento, payload.event_schema);
 	const profiloOperativo = normalizzaValoreElenco_(payload.profilo_operativo, ['AUTOMATICO', 'MINIMO', 'QUOTA_UNICA', 'SERVIZI_MULTIPLI', 'VIAGGIO_COMPLESSO']) || 'AUTOMATICO';
   const risultato = apriFoglioOperativoConLock_({ id_evento: idEvento, titolo: titolo, profilo_operativo: profiloOperativo });
 	const urlIscrizione = normalizzaUrlPubblico_(payload.url_iscrizione);
@@ -102,6 +103,7 @@ function apriFoglioOperativoConLock_(form) {
 	const vista = esistente ? generaVistaOperativaEvento_(idEvento) : generaVistaOperativaIniziale_(idEvento, normalizzaTesto_(form.titolo, 200), normalizzaTesto_(form.profilo_operativo, 30));
 	const datiEvento = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS)).find(r=>String(r.id_evento)===idEvento);
 	aggiungiColonneServizi_(vista.colonne, decodificaElenco_(datiEvento && datiEvento.servizi_json));
+	applicaSchemaColonneEvento_(vista.colonne, datiEvento || {}, [], [], []);
 	const titoloPulito = String(vista.evento.titolo || idEvento).replace(/[\\/:*?"<>|#%{}]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140);
 	const titolo = 'Evento ' + idEvento + ' - ' + titoloPulito;
   const foglio = foglioDaCompletare || SpreadsheetApp.create(titolo);
@@ -136,6 +138,7 @@ function generaVistaOperativaIniziale_(idEvento, titolo, profiloRichiesto) {
 	});
 	const evento = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS)).find(r => String(r.id_evento) === String(idEvento)) || {};
 	aggiungiColonneDomande_(colonne, evento, [], []);
+	applicaSchemaColonneEvento_(colonne, evento, [], [], []);
 	return { evento: { id: idEvento, titolo: titolo || idEvento }, profilo: profilo, nome_profilo: profilo, personalizzata: false, conservata: false, colonne: colonne, righe: [] };
 }
 

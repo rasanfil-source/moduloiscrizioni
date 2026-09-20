@@ -1,6 +1,6 @@
 # Backend Workspace
 
-Rilascio 3.26.134: schema 1.13.0, ricevute delle correzioni testuali e apertura verificata dal portale con il pulsante «Apri». Dopo l'aggiornamento dei sorgenti eseguire `configuraCartellaDiLavoro()` e aggiornare la distribuzione Web App. La replica completa viene certificata nella colonna `replica_completa_revision`; le modifiche pendenti non vengono sovrascritte. Vedere [installazione e collaudo](../docs/rilascio-3.26.134.md).
+Rilascio 3.26.135: schema 1.13.0, ricevute delle correzioni testuali e apertura verificata dal portale con il pulsante «Apri». Dopo l'aggiornamento dei sorgenti eseguire `configuraCartellaDiLavoro()` e aggiornare la distribuzione Web App. La replica completa viene certificata nella colonna `replica_completa_revision`; le modifiche pendenti non vengono sovrascritte. Vedere [installazione e collaudo](../docs/rilascio-3.26.135.md).
 
 La versione corrente usa MySQL WordPress come registro autorevole. I fogli evento sono proiezioni con celle operative modificabili: Sincronizza apre il confronto e la conferma nel portale. Il centrale non richiede inserimenti manuali.
 

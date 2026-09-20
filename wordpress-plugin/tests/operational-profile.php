@@ -14,4 +14,10 @@ foreach([
  [['_mi_participant_fields'=>['document_country']], 'VIAGGIO_COMPLESSO'],
  [['_mi_operational_profile'=>'MINIMO','_mi_overnight_enabled'=>'1'], 'MINIMO'],
 ] as [$meta,$expected]){ $GLOBALS['meta']=$meta;check(MI_Field_Schema::resolved_operational_profile(42)===$expected,'Wrong resolved profile: '.$expected); }
-echo "PASS: current event profile, empty event, explicit choice and document fields.\n";
+$GLOBALS['meta']=['_mi_pricing_mode'=>'ZERO','_mi_participant_fields'=>['birth_date'],'_mi_custom_participant_fields'=>[],'_mi_options'=>[]];
+$schema=MI_Field_Schema::workspace_event_schema(42);
+check(array_column($schema['fields'],'key')===['birth_date'],'Schema added documents not requested by event');
+check($schema['options']===[] && !$schema['room'] && $schema['pricing']==='ZERO','Free event gained services or payments');
+$GLOBALS['meta']['_mi_data_profile']='TRAVEL';$GLOBALS['meta']['_mi_participant_fields']=['document_expiry','document_country'];
+check(array_column(MI_Field_Schema::workspace_event_schema(42)['fields'],'key')===['document_expiry','document_country'],'Configured field keys not preserved');
+echo "PASS: current event profile, exact field schema, empty event, explicit choice and document fields.\n";

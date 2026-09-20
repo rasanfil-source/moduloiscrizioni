@@ -19,3 +19,26 @@ function aggiungiColonneDomande_(colonne, evento, iscrizioni, partecipanti) {
     else colonne.push({key:key,label:label,gruppo:'Domande',comprimibile:false});
   });
 }
+
+/** The configured fields, not a generic travel profile, define the event sheet. */
+function applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, pagamenti) {
+  const schema = decodificaOggetto_(evento.schema_vista_json);
+  if (!Array.isArray(schema.fields) || !Array.isArray(schema.options)) return;
+  const catalogo = campiElencoOperativo_(false);
+  const result = [];
+  const add = (key, label) => {
+    if (!/^[a-z][a-z0-9_-]{0,79}$/.test(String(key)) || result.some(c=>c.key===key)) return;
+    const known = catalogo.find(c=>c.key===key);
+    result.push({key:key,label:String(label || (known && known.label) || key),gruppo:gruppoCampoVistaOperativa_(key),comprimibile:['paid_cash','paid_transfer','paid_card'].includes(key)});
+  };
+  ['last_name','first_name','phone'].forEach(key=>add(key));
+  schema.fields.forEach(field=>{if (field) add(field.key, field.label);});
+  if (schema.room) add('room');
+  aggiungiColonneServizi_(result, schema.options);
+  if (schema.special_requests) add('special_requests');
+  const codes = new Set(iscrizioni.map(r=>String(r.codice_ordine)));
+  const economic = schema.pricing !== 'ZERO' || iscrizioni.some(r=>Number(r.totale_centesimi)>0 || Number(r.versato_centesimi)>0) || pagamenti.some(p=>codes.has(String(p.codice_ordine)));
+  if (economic) ['total','paid','paid_cash','paid_transfer','paid_card','balance'].forEach(key=>add(key));
+  if (partecipanti.some(p=>['PRESENT','ABSENT','UNRECORDED'].includes(decodificaOggetto_(p.dati_aggiuntivi_json).attendance))) add('attendance','Presenza effettiva');
+  colonne.splice(0, colonne.length, ...result);
+}

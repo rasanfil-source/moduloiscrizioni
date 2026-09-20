@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
-const source = (await Promise.all(['DomandeEvento.gs','InterfacciaMovimentiEvento.gs','PagamentiEvento.gs','Segreteria.gs','FogliOperativi.gs','Core.gs'].map(f=>readFile(new URL('../src/'+f,import.meta.url),'utf8')))).join('\n');
+const source = (await Promise.all(['DomandeEvento.gs','InterfacciaMovimentiEvento.gs','PagamentiEvento.gs','Segreteria.gs','FogliOperativi.gs','Core.gs','SincronizzazioneManuale.gs'].map(f=>readFile(new URL('../src/'+f,import.meta.url),'utf8')))).join('\n');
 function context(rows={}) { const c=vm.createContext({MI_SHEETS:{EVENTS:'events',REGISTRATIONS:'orders',PAYMENTS:'payments'},ottieniSchedaObbligatoria_:s=>s});vm.runInContext(source,c);c.convertiRigheInOggetti_=s=>rows[s]||[];return c; }
 test('required and optional questions are included, labels preserved, no cross-event columns',()=>{
  const c=context(),columns=[{key:'first_name',label:'Nome'}];
