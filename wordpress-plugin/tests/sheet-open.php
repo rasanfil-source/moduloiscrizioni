@@ -12,7 +12,7 @@ class SheetDatabase {
  function prepare($sql,...$args){return $sql;} function get_results($sql,$mode){return str_contains($sql,'mi_registrations')?$this->rows:[];} function get_var($sql){return '0';}
 }
 class MI_Registration_Service {static $calls=[]; static function sync_workspace($id,$force=false){self::$calls[]=[$id,$force];$GLOBALS['wpdb']->rows[0]['workspace_status']='SYNCED';return $GLOBALS['sync_result']??'SYNCED';}}
-class MI_Workspace_Client {static $calls=0;static function request($action,$payload){self::$calls++;check($payload['event_schema']===MI_Field_Schema::workspace_event_schema(42),'Schema missing from request');check($payload['operational_profile']===MI_Field_Schema::resolved_operational_profile(42),'Profile missing from request');if(isset($GLOBALS['on_remote']))($GLOBALS['on_remote'])();return $GLOBALS['remote']??['ok'=>true,'ready'=>true,'event_schema'=>$payload['event_schema'],'operational_profile'=>$payload['operational_profile'],'event_sheet_complete'=>true,'url_foglio'=>'https://docs.google.com/spreadsheets/d/synthetic/edit'];}}
+class MI_Workspace_Client {static function stable_json($v){if(is_array($v)){if(!array_is_list($v))ksort($v);foreach($v as &$item)$item=json_decode(self::stable_json($item),true);}return json_encode($v);} static $calls=0;static function request($action,$payload){self::$calls++;check($payload['event_schema']===MI_Field_Schema::workspace_event_schema(42),'Schema missing from request');check($payload['operational_profile']===MI_Field_Schema::resolved_operational_profile(42),'Profile missing from request');if(isset($GLOBALS['on_remote']))($GLOBALS['on_remote'])();return $GLOBALS['remote']??['ok'=>true,'ready'=>true,'event_schema'=>array_reverse($payload['event_schema'],true),'operational_profile'=>$payload['operational_profile'],'event_sheet_complete'=>true,'url_foglio'=>'https://docs.google.com/spreadsheets/d/synthetic/edit'];}}
 require __DIR__.'/../modulo-iscrizioni/includes/class-mi-sheet-open.php';
 function check($ok,$message){if(!$ok)throw new RuntimeException($message);}
 $wpdb=new SheetDatabase();
@@ -39,4 +39,11 @@ $GLOBALS['remote']=['ready'=>true,'event_sheet_complete'=>true,'url_foglio'=>'ht
 $GLOBALS['on_remote']=function(){$GLOBALS['profile']='MINIMO';};check(MI_Sheet_Open::step(42) instanceof WP_Error,'Concurrent profile change ignored');unset($GLOBALS['on_remote']);
 $GLOBALS['on_remote']=function(){$GLOBALS['schema']=['fields'=>[['key'=>'birth_date']],'options'=>[],'room'=>false,'pricing'=>'ZERO'];};check(MI_Sheet_Open::step(42) instanceof WP_Error,'Concurrent field configuration change ignored');unset($GLOBALS['on_remote']);
 $GLOBALS['remote']=['ready'=>true,'event_sheet_complete'=>true,'operational_profile'=>MI_Field_Schema::resolved_operational_profile(42),'url_foglio'=>'https://docs.google.com/spreadsheets/d/synthetic/edit'];check(MI_Sheet_Open::step(42) instanceof WP_Error,'Missing field schema confirmation accepted');unset($GLOBALS['remote']);
-echo "PASS: apertura obbligatoria, replica, recupero, permessi, sessioni isolate, modifiche concorrenti, celle pendenti ed errori.\n";
+$GLOBALS['remote']=['ok'=>true,'ready'=>false,'busy'=>true];
+$waiting=MI_Sheet_Open::step(42);check(!$waiting['ready']&&$waiting['retry_after']===3,'Busy request failed instead of retrying');
+$again=MI_Sheet_Open::step(42,$waiting['token']);check($again['token']===$waiting['token'],'Busy request discarded session');
+unset($GLOBALS['remote']);check(MI_Sheet_Open::step(42,$waiting['token'])['ready'],'Busy request did not recover');
+$GLOBALS['remote']=['ok'=>true,'busy'=>true];$waiting=MI_Sheet_Open::step(42);$key='mi_sheet_open_7_'.$waiting['token'];
+$GLOBALS['sessions'][$key]['busy_since']=time()-121;
+check(MI_Sheet_Open::step(42,$waiting['token']) instanceof WP_Error,'Unbounded busy retry');check(!isset($GLOBALS['sessions'][$key]),'Expired wait retained session');
+echo "PASS: apertura obbligatoria, replica, recupero, permessi, sessioni isolate, modifiche concorrenti, celle pendenti, attesa limitata ed errori.\n";

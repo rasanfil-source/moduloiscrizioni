@@ -59,7 +59,7 @@
       status.classList.toggle('mi-management-status--success',!error&&!busy&&/^(dati aggiornati|salvataggio completato|assegnazioni salvate|presenze salvate|esportati\b)/i.test(text));
     };
     async function request(operation,data={}) {
-      const abort=new AbortController(),timeout=setTimeout(()=>abort.abort(),90000);
+      const abort=new AbortController(),timeout=setTimeout(()=>abort.abort(),operation==='open_sheet'?240000:90000);
       try{const response=await fetch(root.dataset.endpoint,{method:'POST',credentials:'same-origin',cache:'no-store',signal:abort.signal,body:new URLSearchParams({action:'mi_portal_management',nonce:root.dataset.nonce,event_id:event,order_code:order,operation,...data})});
       const json=await response.json();if(!response.ok||!json.success)throw new Error(json.data?.message||'Operazione non riuscita.');
       const sheetLink=root.querySelector('[data-open-sheet]');
@@ -67,6 +67,28 @@
       if(['participant','room_save','room_delete','change_options','identity_link','adjust_due','attendance','attendance_bulk','request_review','cancel','sheet_save','room_swap','room_assign','event_room_save','event_room_delete'].includes(operation)&&json.data?.saved!==false)document.dispatchEvent(new Event('mi:operational-saved'));
       return json.data;}finally{clearTimeout(timeout);}
     }
+    const sheetButton=root.querySelector('[data-open-sheet]');
+    if(sheetButton)sheetButton.addEventListener('click',async e=>{
+      e.preventDefault();
+      if(!await canLeave()||busy)return;
+      const openingEvent=event;busy=true;sheetButton.setAttribute('aria-disabled','true');
+      say('Aggiornamento del foglio in corso…');
+      try {
+        let token='';
+        for(;;){
+          const result=await request('open_sheet',{event_id:openingEvent,token});
+          if(result.ready){
+            const url=new URL(result.url);
+            if(url.origin!=='https://docs.google.com'||!url.pathname.startsWith('/spreadsheets/d/'))throw new Error('Collegamento al foglio non valido.');
+            busy=false;location.assign(url.href);return;
+          }
+          if(!result.token)throw new Error('Aggiornamento incompleto. Riprova.');
+          token=result.token;
+          if(result.retry_after){say(result.message||'Aggiornamento Google in corso…');await new Promise(resolve=>setTimeout(resolve,Math.min(5,Math.max(1,Number(result.retry_after)))*1000));}
+        }
+      }catch(error){say('Apertura non completata. '+(error.name==='AbortError'?'Aggiornamento non completato in tempo. Riprova con Apri.':error.message));}
+      finally{busy=false;sheetButton.removeAttribute('aria-disabled');}
+    });
     const paymentDraft=()=>!!content.querySelector('[data-payment-draft="1"]');
     root.addEventListener('mi:before-booking-navigation',e=>{if(dirty||pending||busy||paymentDraft()){e.preventDefault();say('Salva le modifiche oppure scarta la bozza prima di uscire dalla scheda.');}});
     const annualButton=root.querySelector('[data-load-annual]');

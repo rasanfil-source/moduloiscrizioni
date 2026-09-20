@@ -30,6 +30,7 @@ function aggiornaProiezionePagamentiEventoConLock_(foglio, idEvento) {
     s.setFrozenRows(1);proteggiProiezione_(s);
 }
 function sincronizzaFogliEventi() {
+  if (Number(PropertiesService.getScriptProperties().getProperty('MI_INTERACTIVE_OPEN_UNTIL')) > Date.now()) return [];
   const collegamenti = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES)).filter(function (riga) { return !!riga.id_foglio && !(typeof eventoInEliminazione_ === 'function' && eventoInEliminazione_(riga.id_evento)); });
   if (!collegamenti.length) return [];
   const proprieta = PropertiesService.getScriptProperties();
@@ -42,7 +43,8 @@ function sincronizzaFogliEventi() {
     // Avanzare prima dell'evento evita che un timeout sullo stesso file blocchi gli altri.
     proprieta.setProperty('MI_EVENT_SYNC_CURSOR', String((indice + 1) % collegamenti.length));
     try {
-      const risultato = aggiornaFoglioOperativoEvento({ id_evento: String(riga.id_evento), soloModificati: true });
+      const risultato = aggiornaFoglioOperativoEvento({ id_evento: String(riga.id_evento), soloModificati: true, background: true });
+      if (risultato.busy) { proprieta.setProperty('MI_EVENT_SYNC_CURSOR', String(indice)); break; }
       risultati.push({ id_evento: String(riga.id_evento), ok: true, esito: risultato.esito });
     } catch (errore) {
       aggiungiControllo_('FOGLIO_OPERATIVO', 'RETRY', String(riga.id_evento), 'ERROR', 'SEGRETERIA', normalizzaTesto_(errore.message, 300), 'SEGRETERIA');

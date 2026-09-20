@@ -21,6 +21,11 @@ function aggiungiColonneDomande_(colonne, evento, iscrizioni, partecipanti) {
 }
 
 /** The configured fields, not a generic travel profile, define the event sheet. */
+function vistaEventoSolaLettura_(evento, colonne) {
+  const schema = decodificaOggetto_(evento.schema_vista_json);
+  return Array.isArray(schema.fields) && Array.isArray(schema.options) && schema.pricing === 'ZERO' && !colonne.some(c => c.key === 'total');
+}
+
 function applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, pagamenti) {
   const schema = decodificaOggetto_(evento.schema_vista_json);
   if (!Array.isArray(schema.fields) || !Array.isArray(schema.options)) return;

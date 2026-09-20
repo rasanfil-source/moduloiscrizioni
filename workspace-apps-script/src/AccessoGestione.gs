@@ -73,7 +73,7 @@ function scriviProiezioneEvento_(scheda, vista) {
   scheda.setFrozenRows(1);
   const modificabili = [];
   colonne.forEach(function(c,i) {
-    if (campoModificabileFoglio_(c.key) && rows.length) {
+    if (!vista.sola_lettura && campoModificabileFoglio_(c.key) && rows.length) {
       const range = scheda.getRange(2,i+1,rows.length,1);
       range.setNumberFormat('@').setBackground('#eef5fc');
       modificabili.push(range);
