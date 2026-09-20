@@ -730,6 +730,7 @@ final class MI_Registration_Service {
 		}
 		$marked = $wpdb->query( $wpdb->prepare( "UPDATE {$registrations_table} SET workspace_status = 'SYNCED', workspace_attempts = workspace_attempts + 1, workspace_last_error = NULL, workspace_synced_at = %s WHERE id = %d AND workspace_revision = %d", current_time( 'mysql', true ), $registration_id, $registration['workspace_revision'] ) );
 		if ( 1 !== $marked ) return 'PENDING';
+		if ( class_exists( 'MI_Sheet_Open' ) ) MI_Sheet_Open::enqueue( (int) $registration['event_id'] );
 		return 'SYNCED';
 	}
 
@@ -1230,7 +1231,11 @@ final class MI_Registration_Service {
 		$registration_id = absint( $registration_id );
 		$args = array( $registration_id );
 		if ( $registration_id && ! wp_next_scheduled( 'mi_sync_workspace_registration', $args ) ) {
-			wp_schedule_single_event( time() + 1, 'mi_sync_workspace_registration', $args );
+			wp_schedule_single_event( time(), 'mi_sync_workspace_registration', $args );
+		}
+		if ( class_exists( 'MI_Sheet_Open' ) ) {
+			global $wpdb;
+			MI_Sheet_Open::enqueue( (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$wpdb->prefix}mi_registrations WHERE id=%d", $registration_id ) ) );
 		}
 		return 'PENDING';
 	}

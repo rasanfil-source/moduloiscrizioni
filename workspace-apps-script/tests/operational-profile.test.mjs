@@ -15,6 +15,8 @@ test('profilo corrente prevale su snapshot vecchi e parole nelle opzioni, anche 
 });
 test('apertura aggiorna il profilo prima della proiezione e non scrive un evento diverso',()=>{
  const c=context();let width=11,profile='',projected=false,locked=false;
+ c.PropertiesService={getScriptProperties:()=>({getProperty:()=>null,deleteProperty(){},setProperty(){}})};
+ c.Utilities={DigestAlgorithm:{SHA_256:'sha256'},computeDigest:()=>[1],base64EncodeWebSafe:()=> 'test'};
  const sheet={getMaxColumns:()=>width,insertColumnsAfter:(last,n)=>{assert.equal(last,11);width+=n;},getRange:(row,col)=>({setValue(value){assert.equal(col,12);if(row===3)profile=value;else assert.equal(row,1);}})};
  Object.assign(c,{MI_SHEETS:{EVENTS:'events',REGISTRATIONS:'orders',REPLICA_REVISIONS:'revisions'},LockService:{getScriptLock:()=>({tryLock(){locked=true;return true;},waitLock(){locked=true;},releaseLock(){locked=false;}})},SpreadsheetApp:{flush(){}},ottieniSchedaObbligatoria_:key=>key==='events'?sheet:key,sincronizzaCamereMysql_(){},aggiornaFoglioOperativoEventoConLock_(){assert.equal(profile,'QUOTA_UNICA');assert.equal(locked,true);projected=true;return {ok:true,esito:{},url_foglio:'synthetic'};}});
  c.convertiRigheInOggetti_=s=>s===sheet?[{id_evento:'99',_row:2},{id_evento:'42',_row:3}]:s==='revisions'?[{id_evento:'42',revisione_camere:'0'}]:[];

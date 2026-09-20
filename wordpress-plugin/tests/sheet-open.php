@@ -3,6 +3,12 @@ define('ABSPATH',__DIR__);define('ARRAY_A','ARRAY_A');
 class WP_Error {function __construct(public $code,private $message){} function get_error_message(){return $this->message;}}
 function is_wp_error($v){return $v instanceof WP_Error;} function wp_json_encode($v){return json_encode($v);} function get_current_user_id(){return $GLOBALS['user']??7;}
 function wp_cache_delete($id,$group){}
+function get_post_meta($id,$key,$single=true){return $GLOBALS['sheet_url']??'https://docs.google.com/spreadsheets/d/synthetic/edit';}
+function absint($v){return abs((int)$v);} function get_post_status($id){return 'publish';}
+function wp_next_scheduled($hook,$args){return $GLOBALS['scheduled'][$hook.':'.json_encode($args)]??false;}
+function wp_schedule_single_event($at,$hook,$args){$GLOBALS['scheduled'][$hook.':'.json_encode($args)]=$at;}
+function wp_clear_scheduled_hook($hook,$args){unset($GLOBALS['scheduled'][$hook.':'.json_encode($args)]);}
+function wp_doing_cron(){return true;} function add_action(...$args){}
 function get_transient($key){return $GLOBALS['sessions'][$key]??false;} function set_transient($key,$value,$ttl){$GLOBALS['sessions'][$key]=$value;} function delete_transient($key){unset($GLOBALS['sessions'][$key]);}
 class MI_Portal_Management {static function allowed(){return $GLOBALS['allowed']??true;}}
 class MI_Access {static function can_access_event($id){return $id===42;}}
@@ -47,3 +53,19 @@ $GLOBALS['remote']=['ok'=>true,'busy'=>true];$waiting=MI_Sheet_Open::step(42);$k
 $GLOBALS['sessions'][$key]['busy_since']=time()-121;
 check(MI_Sheet_Open::step(42,$waiting['token']) instanceof WP_Error,'Unbounded busy retry');check(!isset($GLOBALS['sessions'][$key]),'Expired wait retained session');
 echo "PASS: apertura obbligatoria, replica, recupero, permessi, sessioni isolate, modifiche concorrenti, celle pendenti, attesa limitata ed errori.\n";
+
+unset($GLOBALS['remote'],$GLOBALS['sync_result']);
+$GLOBALS['remote']=['ready'=>true,'event_sheet_complete'=>true,'read_only'=>true,'event_schema'=>MI_Field_Schema::workspace_event_schema(42),'operational_profile'=>MI_Field_Schema::resolved_operational_profile(42),'url_foglio'=>'https://docs.google.com/spreadsheets/d/synthetic/edit'];
+$GLOBALS['allowed']=false;
+MI_Sheet_Open::enqueue(42);MI_Sheet_Open::enqueue(42);check(count($GLOBALS['scheduled'])===1,'Duplicate event jobs');
+MI_Sheet_Open::refresh_background(42);check(!$GLOBALS['scheduled'],'Successful job did not clear recovery');
+check(MI_Sheet_Open::step(42) instanceof WP_Error,'Receipt bypassed access control');$GLOBALS['allowed']=true;
+$calls=MI_Workspace_Client::$calls;check(MI_Sheet_Open::step(42)['ready'],'Prepared sheet did not open');check(MI_Workspace_Client::$calls===$calls,'Prepared read-only sheet called Google');
+$wpdb->rows[0]['workspace_revision']='4';check(MI_Sheet_Open::step(42)['ready'],'Changed revision did not recover');check(MI_Workspace_Client::$calls===$calls+1,'New revision reused obsolete receipt');
+$GLOBALS['sheet_url']='https://docs.google.com/spreadsheets/d/replaced/edit';$calls=MI_Workspace_Client::$calls;MI_Sheet_Open::step(42);check(MI_Workspace_Client::$calls===$calls+1,'Replacement sheet reused receipt');
+$GLOBALS['schema']['pricing']='FIXED';$GLOBALS['remote']['event_schema']=$GLOBALS['schema'];$GLOBALS['remote']['read_only']=false;
+MI_Sheet_Open::step(42);$calls=MI_Workspace_Client::$calls;MI_Sheet_Open::step(42);check(MI_Workspace_Client::$calls===$calls+1,'Editable sheet skipped remote edit check');
+$GLOBALS['remote']=new WP_Error('offline','Offline');MI_Sheet_Open::refresh_background(42);check(count($GLOBALS['scheduled'])===1,'Offline job lost durable retry');
+unset($GLOBALS['remote']);MI_Sheet_Open::refresh_background(42);check(!$GLOBALS['scheduled'],'Retry did not recover');
+delete_transient('mi_sheet_ready_42');$calls=MI_Workspace_Client::$calls;MI_Sheet_Open::step(42);check(MI_Workspace_Client::$calls===$calls+1,'Expired receipt did not verify Google');
+echo "PASS: coda accorpata, preparazione senza utente, ricevute, revisioni, sostituzione foglio, permessi, retry e fogli modificabili.\n";

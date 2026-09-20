@@ -389,6 +389,7 @@ final class MI_Portal {
 			delete_post_meta( $event_id, '_mi_workspace_event_pending', $token );
 			delete_post_meta( $event_id, '_mi_workspace_event_error' );
 			delete_post_meta( $event_id, '_mi_workspace_event_attempts' );
+			MI_Sheet_Open::enqueue( $event_id );
 			return;
 		}
 		$attempts = 1 + absint( get_post_meta( $event_id, '_mi_workspace_event_attempts', true ) );

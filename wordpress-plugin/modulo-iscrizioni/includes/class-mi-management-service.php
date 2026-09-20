@@ -431,6 +431,7 @@ final class MI_Management_Service {
 				if ( false === $wpdb->insert( $wpdb->prefix . 'mi_management_requests', array( 'request_id' => $request_id, 'event_id' => $event_id, 'registration_id' => 0, 'request_hash' => $hash, 'actor_id' => get_current_user_id(), 'created_at' => current_time( 'mysql', true ) ) ) ) throw new RuntimeException();
 			}
 			if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException();
+			if ( class_exists( 'MI_Sheet_Open' ) ) MI_Sheet_Open::enqueue( $event_id );
 			return array( 'saved' => true, 'replayed' => (bool) $previous, 'message' => 'Inventario camere salvato. Le prenotazioni sono in attesa di replica sul foglio.' );
 		} catch ( Throwable $error ) {
 			$wpdb->query( 'ROLLBACK' );
@@ -678,6 +679,7 @@ final class MI_Management_Service {
 			return new WP_Error( 'mi_management_save', 'Salvataggio non confermato. Riprova la stessa richiesta.' );
 		}
 		try { if ( ! in_array( $operation, array( 'request_review', 'identity_link' ), true ) ) MI_Registration_Service::accoda_iscrizione_workspace( $id ); } catch ( Throwable $error ) { /* Persistent queue retains the committed change. */ }
+		if ( class_exists( 'MI_Sheet_Open' ) ) MI_Sheet_Open::enqueue( $event_id );
 		if ( class_exists( 'MI_Booking_Update_Email' ) ) try { MI_Spedizione_Email::pianifica_spedizione(); } catch ( Throwable $error ) {}
 		return array( 'ok' => true, 'saved' => true, 'message' => 'change_options' === $operation ? 'Servizi e importi aggiornati. Eventuali crediti restano da restituire; nessun rimborso è stato registrato.' : ( 'attendance' === $operation ? 'Presenza salvata.' : ( 'request_review' === $operation ? 'Verifica della richiesta salvata.' : 'Modifica salvata. Il foglio Google verrà allineato.' ) ) );
 	}

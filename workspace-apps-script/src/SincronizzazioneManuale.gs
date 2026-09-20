@@ -160,6 +160,19 @@ function preparaAperturaFoglio_(payload) {
       return found.length!==1 || String(found[0].workspace_revision)!==String(row.revision) || String(found[0].replica_completa_revision)!==String(row.revision);
     }).map(row=>String(row.order_code));
     if (needs.length) return {ok:true,ready:false,needs_sync:needs};
+	const properties=PropertiesService.getScriptProperties(), readyKey='MI_READY_VIEW_'+eventId;
+	const identity=serializzaInModoStabile_({registrations:expected,rooms:payload.rooms,revision:payload.workspace_event_revision,schema:payload.event_schema,profile:payload.operational_profile});
+	const signature=Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,identity));
+	let receipt;try{receipt=JSON.parse(properties.getProperty(readyKey)||'null');}catch(error){}
+	if(receipt && receipt.signature===signature && Date.now()-receipt.at<300000){
+	  try{
+	    const link=trovaCollegamentoFoglioOperativo_(eventId), book=SpreadsheetApp.openById(String(link.id_foglio));
+	    const sheet=book.getSheetByName('Dati operativi')||book.getSheets()[0];
+	    const edits=modificheCorrentiFoglio_(sheet);
+	    if(book.getUrl()===receipt.url && !edits.changes.length && !edits.errors.length)return {ok:true,ready:true,event_sheet_complete:true,read_only:receipt.read_only===true,event_schema:payload.event_schema,operational_profile:payload.operational_profile,url_foglio:receipt.url};
+	  }catch(error){/* Rebuild and verify when a sheet has been replaced or is unavailable. */}
+	}
+	properties.deleteProperty(readyKey);
     sincronizzaCamereMysql_(eventId,payload.rooms,payload.workspace_event_revision);
     const revision=convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REPLICA_REVISIONS)).find(row=>String(row.id_evento)===eventId);
     if (!revision || String(revision.revisione_camere)!==String(payload.workspace_event_revision)) throw new Error('REPLICA_MISMATCH');
@@ -168,7 +181,9 @@ function preparaAperturaFoglio_(payload) {
     const result=aggiornaFoglioOperativoEventoConLock_({id_evento:eventId,soloModificati:true});
     const complete=!!result.ok && !!result.esito && !result.esito.manuali && !result.esito.conflitti;
     SpreadsheetApp.flush();
-    return {ok:true,ready:complete,event_sheet_complete:complete,event_schema:payload.event_schema,operational_profile:payload.operational_profile,url_foglio:complete?result.url_foglio:undefined};
+    const response={ok:true,ready:complete,event_sheet_complete:complete,read_only:result.read_only===true,event_schema:payload.event_schema,operational_profile:payload.operational_profile,url_foglio:complete?result.url_foglio:undefined};
+	if(complete)properties.setProperty(readyKey,JSON.stringify({signature:signature,at:Date.now(),url:response.url_foglio,read_only:response.read_only}));
+	return response;
   } finally {lock.releaseLock();}
 }
 

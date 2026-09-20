@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import vm from 'node:vm';
+import {createHash} from 'node:crypto';
 
 const sourceDir = new URL('../src/', import.meta.url);
 const source = (await Promise.all(['Config.gs', 'Core.gs', 'WebApp.gs', 'SincronizzazioneManuale.gs'].map((name) => readFile(new URL(name, sourceDir), 'utf8')))).join('\n');
@@ -40,11 +41,13 @@ function environment() {
   const sheets = Object.fromEntries(Object.entries(headers).map(([name, row]) => [name, new FakeSheet(row)]));
   const spreadsheet = { getSheetByName: (name) => sheets[name] || null };
   let uuid = 0;
+	const properties=new Map();
   const context = {
     console, Date, JSON, Math, Number, String, Array, Object, RegExp, Boolean,
     SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet },
     LockService: { getScriptLock: () => ({ tryLock() {return true;}, waitLock() {}, releaseLock() {} }) },
-    Utilities: { getUuid: () => `00000000-0000-4000-8000-${String(++uuid).padStart(12, '0')}` },
+    PropertiesService:{getScriptProperties:()=>({getProperty:k=>properties.get(k)||null,setProperty:(k,v)=>properties.set(k,v),deleteProperty:k=>properties.delete(k)})},
+    Utilities: { DigestAlgorithm:{SHA_256:'sha256'},computeDigest:(alg,text)=>Array.from(createHash(alg).update(text).digest()),base64EncodeWebSafe:v=>Buffer.from(v).toString('base64url'), getUuid: () => `00000000-0000-4000-8000-${String(++uuid).padStart(12, '0')}` },
     ContentService: { MimeType: { JSON: 'JSON' }, createTextOutput: () => ({ setMimeType() { return this; } }) }
   };
   vm.createContext(context);
@@ -219,6 +222,24 @@ test('replica conserva TEST_INVIATA e cancella solo blocchi contigui selezionati
  const rows=['header','a','b','foreign','c','d','e','foreign2'];const calls=[];
  context.eliminaRigheContigue_({deleteRows:(start,count)=>{calls.push([start,count]);rows.splice(start-1,count);}},[2,3,5,6,7].map(_row=>({_row})));
  assert.deepEqual(calls,[[5,3],[2,2]]);assert.deepEqual(rows,['header','foreign','foreign2']);
+});
+
+test('prepared view skips reconstruction, but manual edits and changed revisions invalidate it',()=>{
+ const {context:c}=environment();let writes=0,manual=false;
+ const url='https://docs.google.com/spreadsheets/d/synthetic/edit';
+ c.SpreadsheetApp.flush=()=>{};
+ c.trovaCollegamentoFoglioOperativo_=()=>({id_foglio:'synthetic'});
+ c.SpreadsheetApp.openById=()=>({getUrl:()=>url,getSheetByName:()=>({})});
+ c.modificheCorrentiFoglio_=()=>({changes:manual?[{}]:[],errors:[]});
+ c.aggiornaFoglioOperativoEventoConLock_=()=>{writes++;return {ok:true,read_only:false,url_foglio:url,esito:{manuali:manual?1:0,conflitti:0}};};
+ const p=payload({canonical_source:'MYSQL',workspace_revision:'3',workspace_event_revision:'2',rooms:[]});c.aggiungiIscrizione_(p);
+ const req={event_id:'42',registrations:[{order_code:p.order_code,revision:'3'}],rooms:[],workspace_event_revision:'2'};
+ assert.equal(c.preparaAperturaFoglio_(req).ready,true);assert.equal(writes,1);
+ assert.equal(c.preparaAperturaFoglio_({...req,background:true}).ready,true);assert.equal(writes,1);
+ manual=true;assert.equal(c.preparaAperturaFoglio_(req).ready,false);assert.equal(writes,2);
+ manual=false;assert.equal(c.preparaAperturaFoglio_(req).ready,true);assert.equal(writes,3);
+ req.registrations[0].revision='4';assert.equal(c.preparaAperturaFoglio_(req).needs_sync.length,1);assert.equal(writes,3);
+ c.aggiungiIscrizione_({...p,workspace_revision:'4'});assert.equal(c.preparaAperturaFoglio_(req).ready,true);assert.equal(writes,4);
 });
 
 test('una replica interrotta non autorizza Apri anche se la revisione è già scritta',()=>{

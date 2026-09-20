@@ -102,7 +102,7 @@ function verificaBusta_(envelope) {
   if (!confrontaInTempoCostante_(expected, signature)) return { ok: false, error: 'INVALID_SIGNATURE' };
   // Only authenticated requests can pause background projections. A short lease
   // gives the interactive opener a turn after the current writer finishes.
-  if (envelope.action === 'PREPARA_APERTURA_FOGLIO') PropertiesService.getScriptProperties().setProperty('MI_INTERACTIVE_OPEN_UNTIL', String(Date.now()+90000));
+  if (envelope.action === 'PREPARA_APERTURA_FOGLIO' && envelope.payload.background !== true) PropertiesService.getScriptProperties().setProperty('MI_INTERACTIVE_OPEN_UNTIL', String(Date.now()+90000));
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return {ok:false,error:'WORKSPACE_BUSY'};
   try {

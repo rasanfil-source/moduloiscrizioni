@@ -277,6 +277,7 @@ function aggiornaFoglioOperativoEvento(form) {
 function aggiornaFoglioOperativoEventoConLock_(form) {
   form = form || {};
   const idEvento = normalizzaTesto_(form.id_evento, 40);
+	PropertiesService.getScriptProperties().deleteProperty('MI_READY_VIEW_' + idEvento);
   if (!idEvento) throw new Error('Scegli un evento.');
   if (typeof eventoInEliminazione_ === 'function' && eventoInEliminazione_(idEvento)) throw new Error('Evento eliminato o in eliminazione.');
   const registro = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES));
@@ -292,7 +293,7 @@ function aggiornaFoglioOperativoEventoConLock_(form) {
   const impronta = versioneGestione_({versioneProiezione:2,vista:vista,movimenti:movimentiEvento});
   const pending = modificheCorrentiFoglio_(scheda);
   if (form.soloModificati === true && proprieta.getProperty(chiaveProiezione) === impronta && !pending.changes.length && !pending.errors.length) {
-    return {ok:true, invariato:true, url_foglio:foglio.getUrl(), esito:{aggiunte:0,manuali:0,conflitti:0}};
+    return {ok:true, invariato:true, read_only:!!vista.sola_lettura, url_foglio:foglio.getUrl(), esito:{aggiunte:0,manuali:0,conflitti:0}};
   }
   const esito = scriviProiezioneEvento_(scheda, vista);
   if (!esito.manuali && !esito.conflitti) configuraSchedeEconomicheEvento_(foglio, idEvento, vista.sola_lettura);
@@ -302,7 +303,7 @@ function aggiornaFoglioOperativoEventoConLock_(form) {
   if (!esito.manuali && !esito.conflitti) proprieta.setProperty(chiaveProiezione, impronta);
   else proprieta.deleteProperty(chiaveProiezione);
   aggiungiControllo_('FOGLIO_OPERATIVO', 'REFRESH', idEvento, 'SUCCESS', normalizzaTesto_(Session.getActiveUser().getEmail() || 'SEGRETERIA', 120), 'DATABASE_TO_EVENT_SHEET', 'SEGRETERIA');
-  return { ok: true, url_foglio: foglio.getUrl(), righe: vista.righe.length, esito: esito, message: 'Controllo completato. Le modifiche nelle celle blu si inviano con Sincronizza.' };
+  return { ok: true, read_only:!!vista.sola_lettura, url_foglio: foglio.getUrl(), righe: vista.righe.length, esito: esito, message: 'Controllo completato. Le modifiche nelle celle blu si inviano con Sincronizza.' };
 }
 
 function rimuoviRaggruppamentiColonne_(scheda) {
