@@ -32,6 +32,11 @@ final class MI_Portal_Management {
 		}
 		$event_id = absint( $_POST['event_id'] ?? 0 );
 		if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_send_json_error( array( 'message' => 'Evento non accessibile.' ), 403 );
+		if ( 'open_sheet' === $operation ) {
+			$result = MI_Sheet_Open::step( $event_id, sanitize_text_field( wp_unslash( $_POST['token'] ?? '' ) ) );
+			if ( is_wp_error( $result ) ) wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
+			wp_send_json_success( $result );
+		}
 		if ( in_array( $operation, array( 'summary', 'list_page' ), true ) ) {
 			$result = MI_Management_Service::summary( $event_id );
 			if ( ! is_wp_error( $result ) ) $result['rooms_version'] = hash( 'sha256', wp_json_encode( $result['rooms'] ) );

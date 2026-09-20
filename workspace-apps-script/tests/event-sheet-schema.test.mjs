@@ -14,6 +14,7 @@ test('free event with birth date does not inherit travel columns, even empty or 
  const {c}=fixture(free);
  for(const view of [c.generaVistaOperativaIniziale_('42','12 ceste','VIAGGIO_COMPLESSO'),c.generaVistaOperativaEvento_('42')]) {
   assert.deepEqual(Array.from(view.colonne,x=>x.key),['last_name','first_name','phone','birth_date','custom_food']);
+  assert.equal(view.sola_lettura,true);
  }
 });
 test('only configured documents, services and rooms appear; questions stay present when unanswered',()=>{
@@ -29,7 +30,7 @@ test('free event preserves historical economics and attendance without importing
  rows.payments.push({codice_ordine:'OTHER',importo_centesimi:100});
  let view=c.generaVistaOperativaEvento_('42');assert.ok(!view.colonne.some(x=>x.key==='paid'));assert.equal(view.righe[0].valori.attendance,'Presente');
  rows.payments.push({codice_ordine:'A',importo_centesimi:100});
- view=c.generaVistaOperativaEvento_('42');assert.ok(view.colonne.some(x=>x.key==='paid'));
+ view=c.generaVistaOperativaEvento_('42');assert.ok(view.colonne.some(x=>x.key==='paid'));assert.equal(view.sola_lettura,false);
 });
 test('schema update targets the event and updates price mode before rendering',()=>{
  const {c}=fixture(free);let width=12;const writes=[];

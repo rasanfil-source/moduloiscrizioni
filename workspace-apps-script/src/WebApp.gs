@@ -7,7 +7,7 @@ function doPost(event) {
     if (!event || !event.postData || !event.postData.contents) return creaRispostaJson_({ ok: false, error: 'EMPTY_PAYLOAD' });
     const envelope = JSON.parse(event.postData.contents);
     const verified = verificaBusta_(envelope);
-    if (!verified.ok) return creaRispostaJson_({ ok: false, error: verified.error });
+    if (!verified.ok) return creaRispostaJson_(verified.error === 'WORKSPACE_BUSY' && envelope.action === 'PREPARA_APERTURA_FOGLIO' ? {ok:true,ready:false,busy:true,retry_after:3} : { ok: false, error: verified.error });
     if (envelope.action === 'ELIMINA_DATI_EVENTO') return creaRispostaJson_(eliminaDatiEventoDaWordPress_(envelope.payload));
     if (envelope.action === 'PING') return creaRispostaJson_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, mode: 'PREVIEW' });
 	if (envelope.action === 'STATO_SCHEMA') return creaRispostaJson_({ ok: true, schema_version: MI_SCHEMA_VERSION, registration_headers: MI_HEADERS[MI_SHEETS.REGISTRATIONS], participant_headers: MI_HEADERS[MI_SHEETS.PARTICIPANTS], accommodation_headers: MI_HEADERS[MI_SHEETS.ACCOMMODATIONS], group_headers: MI_HEADERS[MI_SHEETS.GROUPS], report_template_headers: MI_HEADERS[MI_SHEETS.REPORT_TEMPLATES], event_headers: MI_HEADERS[MI_SHEETS.EVENTS], mode: 'PREVIEW' });
@@ -100,8 +100,11 @@ function verificaBusta_(envelope) {
   const digest = Utilities.computeHmacSha256Signature(message, ottieniSegretoScript_());
   const expected = Utilities.base64EncodeWebSafe(digest).replace(/=+$/, '');
   if (!confrontaInTempoCostante_(expected, signature)) return { ok: false, error: 'INVALID_SIGNATURE' };
+  // Only authenticated requests can pause background projections. A short lease
+  // gives the interactive opener a turn after the current writer finishes.
+  if (envelope.action === 'PREPARA_APERTURA_FOGLIO') PropertiesService.getScriptProperties().setProperty('MI_INTERACTIVE_OPEN_UNTIL', String(Date.now()+90000));
   const lock = LockService.getScriptLock();
-  lock.waitLock(5000);
+  if (!lock.tryLock(1000)) return {ok:false,error:'WORKSPACE_BUSY'};
   try {
     const cache = CacheService.getScriptCache();
 	const nonceKey = Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, nonce)).replace(/=+$/, '');
@@ -315,11 +318,15 @@ function sincronizzaCamereMysql_(eventId, rooms, revision) {
   const previous = convertiRigheInOggetti_(versions).find(r => String(r.id_evento) === eventId);
   const old = String(previous && previous.revisione_camere || '0');
   if (old.length > revision.length || (old.length === revision.length && old > revision)) return;
+  const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.ACCOMMODATIONS);
+  const existing = convertiRigheInOggetti_(sheet).filter(r => String(r.id_evento) === eventId);
+  // The revision alone is insufficient: a prior writer may have stopped mid-write.
+  const actual = existing.map(r => [String(r.id_evento), String(r.codice), String(r.nome), Number(r.capienza), String(r.attiva), String(r.note || '')]);
+  if (previous && old === revision && serializzaInModoStabile_(actual) === serializzaInModoStabile_(values)) return;
   // Record the high-water mark before changing rows; an identical retry repairs a partial write.
   if (previous) versions.getRange(previous._row, 1, 1, 2).setValues([[eventId, revision]]);
   else versions.appendRow([eventId, revision]);
-  const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.ACCOMMODATIONS);
-  eliminaRigheContigue_(sheet, convertiRigheInOggetti_(sheet).filter(r => String(r.id_evento) === eventId));
+  eliminaRigheContigue_(sheet, existing);
   if (values.length) sheet.getRange(sheet.getLastRow()+1, 1, values.length, values[0].length).setValues(values);
 }
 

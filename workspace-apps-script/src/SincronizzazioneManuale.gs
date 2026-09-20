@@ -148,7 +148,8 @@ function confermaModificheFoglio_(payload) {
 function preparaAperturaFoglio_(payload) {
   const eventId=String(payload.event_id||''), expected=payload.registrations;
   if (!/^[1-9][0-9]*$/.test(eventId) || !Array.isArray(expected)) throw new Error('INVALID_OPEN_REQUEST');
-  const lock=LockService.getScriptLock(); lock.waitLock(30000);
+  const lock=LockService.getScriptLock();
+  if (!lock.tryLock(1000)) return {ok:true,ready:false,busy:true,retry_after:3};
   try {
     if (typeof eventoInEliminazione_==='function' && eventoInEliminazione_(eventId)) throw new Error('EVENT_DELETED');
     const rows=convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(row=>String(row.id_evento)===eventId);
@@ -177,6 +178,7 @@ function aggiornaProfiloEventoMysql_(eventId, profile) {
   const sheet=ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS);
   const row=convertiRigheInOggetti_(sheet).find(value=>String(value.id_evento)===eventId);
   if (!row) throw new Error('EVENT_NOT_FOUND');
+  if (String(row.profilo_operativo || '') === profile) return;
   if (sheet.getMaxColumns()<12) sheet.insertColumnsAfter(sheet.getMaxColumns(),12-sheet.getMaxColumns());
   sheet.getRange(1,12).setValue('profilo_operativo');
   sheet.getRange(row._row,12).setValue(profile);
@@ -187,6 +189,7 @@ function aggiornaSchemaEventoMysql_(eventId, schema) {
   const sheet=ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS);
   const row=convertiRigheInOggetti_(sheet).find(value=>String(value.id_evento)===eventId);
   if (!row) throw new Error('EVENT_NOT_FOUND');
+  if (serializzaInModoStabile_(decodificaOggetto_(row.schema_vista_json)) === serializzaInModoStabile_(schema) && String(row.modalita_prezzo) === schema.pricing) return;
   if (sheet.getMaxColumns()<13) sheet.insertColumnsAfter(sheet.getMaxColumns(),13-sheet.getMaxColumns());
   sheet.getRange(1,13).setValue('schema_vista_json');
   sheet.getRange(row._row,13).setValue(JSON.stringify(schema));

@@ -101,9 +101,6 @@ function apriFoglioOperativoConLock_(form) {
 	// Un evento appena creato non possiede ancora iscrizioni: evitiamo di rileggere
 	// l'intero database e prepariamo subito la struttura scelta in WordPress.
 	const vista = esistente ? generaVistaOperativaEvento_(idEvento) : generaVistaOperativaIniziale_(idEvento, normalizzaTesto_(form.titolo, 200), normalizzaTesto_(form.profilo_operativo, 30));
-	const datiEvento = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS)).find(r=>String(r.id_evento)===idEvento);
-	aggiungiColonneServizi_(vista.colonne, decodificaElenco_(datiEvento && datiEvento.servizi_json));
-	applicaSchemaColonneEvento_(vista.colonne, datiEvento || {}, [], [], []);
 	const titoloPulito = String(vista.evento.titolo || idEvento).replace(/[\\/:*?"<>|#%{}]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140);
 	const titolo = 'Evento ' + idEvento + ' - ' + titoloPulito;
   const foglio = foglioDaCompletare || SpreadsheetApp.create(titolo);
@@ -117,7 +114,7 @@ function apriFoglioOperativoConLock_(form) {
   const scheda = foglio.getSheetByName('Dati operativi') || foglio.getSheets()[0];
   scheda.setName('Dati operativi');
   scriviProiezioneEvento_(scheda, vista);
-  configuraSchedeEconomicheEvento_(foglio, idEvento);
+  configuraSchedeEconomicheEvento_(foglio, idEvento, vista.sola_lettura);
   SpreadsheetApp.flush();
   proprieta.deleteProperty(chiavePreparazione);
   aggiungiControllo_('FOGLIO_OPERATIVO', 'CREATE', idEvento, 'SUCCESS', normalizzaTesto_(Session.getActiveUser().getEmail() || 'SEGRETERIA', 120), 'CREATED', 'SEGRETERIA');
@@ -138,8 +135,9 @@ function generaVistaOperativaIniziale_(idEvento, titolo, profiloRichiesto) {
 	});
 	const evento = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS)).find(r => String(r.id_evento) === String(idEvento)) || {};
 	aggiungiColonneDomande_(colonne, evento, [], []);
+	aggiungiColonneServizi_(colonne, decodificaElenco_(evento.servizi_json));
 	applicaSchemaColonneEvento_(colonne, evento, [], [], []);
-	return { evento: { id: idEvento, titolo: titolo || idEvento }, profilo: profilo, nome_profilo: profilo, personalizzata: false, conservata: false, colonne: colonne, righe: [] };
+	return { evento: { id: idEvento, titolo: titolo || idEvento }, sola_lettura: vistaEventoSolaLettura_(evento, colonne), profilo: profilo, nome_profilo: profilo, personalizzata: false, conservata: false, colonne: colonne, righe: [] };
 }
 
 /** Controlla che il documento registrato esista davvero e sia accessibile. */
@@ -266,10 +264,12 @@ function normalizzaUrlPubblico_(valore) {
 	return neutralizzaFormula_(url, 1000);
 }
 
-/** Riallinea dal database soltanto dopo una conferma esplicita nell'interfaccia. */
+/** Riallinea dal database; le richieste interattive precedono i giri automatici. */
 function aggiornaFoglioOperativoEvento(form) {
   const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
+  if (form && form.background) {
+    if (Number(PropertiesService.getScriptProperties().getProperty('MI_INTERACTIVE_OPEN_UNTIL')) > Date.now() || !lock.tryLock(100)) return {ok:false,busy:true};
+  } else lock.waitLock(30000);
   try { return aggiornaFoglioOperativoEventoConLock_(form); }
   finally { lock.releaseLock(); }
 }
@@ -295,7 +295,7 @@ function aggiornaFoglioOperativoEventoConLock_(form) {
     return {ok:true, invariato:true, url_foglio:foglio.getUrl(), esito:{aggiunte:0,manuali:0,conflitti:0}};
   }
   const esito = scriviProiezioneEvento_(scheda, vista);
-  configuraSchedeEconomicheEvento_(foglio, idEvento);
+  if (!esito.manuali && !esito.conflitti) configuraSchedeEconomicheEvento_(foglio, idEvento, vista.sola_lettura);
   aggiornaProiezionePagamentiEventoConLock_(foglio, idEvento);
   // Store only after all writes succeed. Pending edits remain in the sheet;
   // a new canonical value changes the fingerprint and retries acknowledgment.

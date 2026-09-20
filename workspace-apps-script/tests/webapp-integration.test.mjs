@@ -43,7 +43,7 @@ function environment() {
   const context = {
     console, Date, JSON, Math, Number, String, Array, Object, RegExp, Boolean,
     SpreadsheetApp: { getActiveSpreadsheet: () => spreadsheet },
-    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
+    LockService: { getScriptLock: () => ({ tryLock() {return true;}, waitLock() {}, releaseLock() {} }) },
     Utilities: { getUuid: () => `00000000-0000-4000-8000-${String(++uuid).padStart(12, '0')}` },
     ContentService: { MimeType: { JSON: 'JSON' }, createTextOutput: () => ({ setMimeType() { return this; } }) }
   };
@@ -54,6 +54,16 @@ function environment() {
   context.aggiornaFoglioOperativoEvento = () => ({ ok: true });
   return { context, sheets };
 }
+
+test('identical room snapshot skips writes but repairs partial data at the same revision',()=>{
+ const {context:c,sheets}=environment();const rooms=[{code:'double',name:'Doppia',capacity:2}];
+ c.sincronizzaCamereMysql_('42',rooms,'3');
+ const sheet=sheets.Sistemazioni;let writes=0;const range=sheet.getRange.bind(sheet),remove=sheet.deleteRows.bind(sheet);
+ sheet.deleteRows=(...args)=>{writes++;return remove(...args);};
+ sheet.getRange=(...args)=>{const r=range(...args),set=r.setValues.bind(r);r.setValues=v=>{writes++;return set(v);};return r;};
+ c.sincronizzaCamereMysql_('42',rooms,'3');assert.equal(writes,0);
+ sheet.rows[1][2]='Parziale';c.sincronizzaCamereMysql_('42',rooms,'3');assert.equal(writes,2);assert.equal(sheet.rows[1][2],'Doppia');
+});
 
 test('replica MySQL conserva movimenti identici distinti, oltre 100 righe e revisione', () => {
   const {context,sheets}=environment();

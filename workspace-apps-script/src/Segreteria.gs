@@ -312,7 +312,7 @@ function generaVistaOperativaEvento_(idEvento, campiForzati) {
     colonne.forEach(function (colonna) { valori[colonna.key] = valoreCampoElenco_(colonna.key, evento, iscrizione, partecipante, dati, pagamenti); });
     return { codice_ordine: String(partecipante.codice_ordine), numero_partecipante: numero, valori: valori };
   });
-  return { evento: { id: idEvento, titolo: String(evento.titolo || idEvento) }, profilo: profilo.id, nome_profilo: profilo.nome, personalizzata: !!vistaSalvata.length, conservata: false, colonne: colonne, righe: righe };
+  return { evento: { id: idEvento, titolo: String(evento.titolo || idEvento) }, sola_lettura: vistaEventoSolaLettura_(evento, colonne), profilo: profilo.id, nome_profilo: profilo.nome, personalizzata: !!vistaSalvata.length, conservata: false, colonne: colonne, righe: righe };
 }
 
 function nomeSchedaVistaOperativa_(idEvento) {

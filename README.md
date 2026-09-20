@@ -12,7 +12,7 @@ La parrocchia è l'ente base. Ogni gruppo può avere logo, immagine, colori e co
 
 ## Stato
 
-Il codice locale contiene la versione **3.26.135**. La versione installata sul sito richiede una verifica separata. Il [manuale del segretario](docs/manuale-segretario/Manuale_del_segretario.docx) descrive criteri e procedure operative. Le modifiche dell’ultimo rilascio sono descritte nelle [correzioni del percorso guidato, servizi e presenze](docs/rilascio-3.26.135.md).
+Il codice locale contiene la versione **3.26.136**. La versione installata sul sito richiede una verifica separata. Il [manuale del segretario](docs/manuale-segretario/Manuale_del_segretario.docx) descrive criteri e procedure operative. Le modifiche dell’ultimo rilascio sono descritte nelle [correzioni del percorso guidato, servizi e presenze](docs/rilascio-3.26.136.md).
 
 Una bozza è una creazione interrotta: selezionandola da **Gestisci eventi** si riapre dal primo passaggio incompleto, già popolato con i dati salvati. Se la configurazione è completa, si apre direttamente **Attiva l’evento**, con gli indirizzi pronti per i pulsanti **Iscriviti** e, quando previsto, **Saldo**, oltre allo shortcode per WordPress e Divi. Workspace crea in modo idempotente un foglio operativo dedicato nella stessa cartella Drive di `DB_MODULI`, con nome `Evento ID - Titolo`, e ne restituisce il collegamento. La preparazione non pubblica l’evento e non invia email.
 
