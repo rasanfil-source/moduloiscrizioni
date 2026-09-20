@@ -1,0 +1,72 @@
+{
+  "admin.css": {
+    "file": "min/admin.css",
+    "source": "cd6a3c5992b06364d969a08eb97465bcab697250a7e2a50a0a28e994391fb28c",
+    "hash": "00af904dbf07bdfff1f68fb7449d3592728bcdf2d60594154cfd37ad44b46deb"
+  },
+  "admin.js": {
+    "file": "min/admin.js",
+    "source": "e55be1bbfc40e1da72037d8fc702e0065d155e627eaff273ba3acfb525096180",
+    "hash": "01513bc49a38fb15d77663a4409b7796f009b31b1851ff11136e94b67de19f94"
+  },
+  "core.js": {
+    "file": "min/core.js",
+    "source": "fb6e08eac7b616f637139852ee681b190091bf796ef64f3c46b7b3a1d0d86969",
+    "hash": "9357f935c40b372d8a04e6e5647c4103378924cd03681fb6c00a10c818cf3ca4"
+  },
+  "portal-management.css": {
+    "file": "min/portal-management.css",
+    "source": "0b15d1c36dded7566d78b34b5a7cb1b907819fdfebaa43bd2ae602bb469bce67",
+    "hash": "5e922d8961479eedd3dcd4125add7a789916478cc14197d9f90a1e5b1eae29eb"
+  },
+  "portal-management.js": {
+    "file": "min/portal-management.js",
+    "source": "f37ba8b3240d180122e9bcae3f2d38f9a64f50c35a0b7f4fc1f3d3e7a77d00ff",
+    "hash": "9e736d324c208fe983669857a12a7e6adf5e3803931b988ca2c1744ecf6f189b"
+  },
+  "portal-payments.css": {
+    "file": "min/portal-payments.css",
+    "source": "299070d058e38cf21acf5eddbf1237d4e8fa6aa1568124803557f159056cda0d",
+    "hash": "60a0b128722f9868ed34bb1c7bedf7ef2060e0849c9e669e975ca47b3c287bb6"
+  },
+  "portal-payments.js": {
+    "file": "min/portal-payments.js",
+    "source": "67ff59989a4ade9036e2ce3e67e991f94875de1bfc1ca0adc28cb4ff319f5c07",
+    "hash": "8af1d9f268963adf831ebca8c7a52583d172f6f396b6532e524de2a44b5b3f85"
+  },
+  "portal.css": {
+    "file": "min/portal.css",
+    "source": "4f542033a8931e56b4ebee1a732ac8457f08c6ac309daf2d93eb3359175a9f9b",
+    "hash": "42d6285be37f4de057fa5d1b974b3b8479d901524e52768731ca6d960ee93918"
+  },
+  "portal.js": {
+    "file": "min/portal.js",
+    "source": "179b779cad2e713d922ec4e50d990221010a1080d71f00a69f6da1ddfd7d95a7",
+    "hash": "efcc9041410ac743274c6bdb18c6d7d0f339dad325d4de9cbbee8c1367090a55"
+  },
+  "public-balance.css": {
+    "file": "min/public-balance.css",
+    "source": "b8642161717f8d73fb5b61b1fc37deadbdd2c01351f19d348085d8b031546c97",
+    "hash": "c353c4e6839ae96fd3f8821374a79de7994b4d5bf20a67d005fff872a1c8fb76"
+  },
+  "public-balance.js": {
+    "file": "min/public-balance.js",
+    "source": "d897677f5aa78565d3f73c600bf1af3f021f12ccc0963f366521407780241041",
+    "hash": "e24b427c1ada95bbd26fbbbf92c071ac8ad86da8519be26506b1ddf7e17dfabb"
+  },
+  "public.css": {
+    "file": "min/public.css",
+    "source": "79bd66e5bc15099d04a8941a18ed40c6209ceab359bb72603921439c82b92f03",
+    "hash": "b235afbd8175f85169ee6b228d64f29821738db65267ced4c74fd44557006b95"
+  },
+  "public.js": {
+    "file": "min/public.js",
+    "source": "2c50a56b4d5bf761a195187299efc86f4f7e51cacbc468b2af8bbb0f1ca129e4",
+    "hash": "8eb181804dd0a7ee06d51f0bf09b62a11409f392384361aa93c7bc6d1c8a2242"
+  },
+  "qrcode-generator-2.0.4.js": {
+    "file": "min/qrcode-generator-2.0.4.js",
+    "source": "79ec86f82856005b1c887905cfccfcfbec3821ca61c7fd5a952faa5f778f791c",
+    "hash": "aa16820550b1b326bbc221383bf89de4eef7d5688874cf34fb9769c3fb0eab3f"
+  }
+}

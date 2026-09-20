@@ -1,0 +1,153 @@
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('Modulo iscrizioni')
+    .addItem('Apri gestione web', 'apriGestioneWeb')
+    .addItem('Inizializza/aggiorna struttura', 'configuraCartellaDiLavoro')
+    .addSeparator()
+    .addItem('Configura elenco operativo', 'apriConfigurazioneElencoOperativo')
+    .addItem('Configura modelli report', 'apriConfigurazioneModelliReport')
+    .addItem('Gestisci gruppi', 'apriGestioneGruppi')
+    .addItem('Allinea gruppi con WordPress', 'sincronizzaGruppiConWordPress')
+    .addItem('Configura collegamento WordPress', 'configuraEndpointWordPress')
+    .addSeparator()
+    .addItem('Sincronizza fogli e pagamenti degli eventi', 'sincronizzaFogliEventi')
+    .addItem('Attiva sincronizzazione automatica eventi', 'attivaSincronizzazioneFogliEventi')
+    .addSeparator()
+    .addItem('Configura destinatario email di test', 'configuraDestinatarioTestEmail')
+    .addItem('Invia coda al solo destinatario di test', 'inviaCodaEmailDiTest')
+    .addToUi();
+}
+
+function configuraCartellaDiLavoro() {
+  const lock = LockService.getDocumentLock();
+  lock.waitLock(30000);
+  try {
+    const spreadsheet = ottieniFoglioDiLavoroAssociato_();
+    PropertiesService.getScriptProperties().setProperty('MI_SPREADSHEET_ID', spreadsheet.getId());
+    rinominaSchedePrecedenti_(spreadsheet);
+    const existing = spreadsheet.getSheets();
+    if (!spreadsheet.getSheetByName(MI_SHEETS.CONFIG) && existing.length === 1 && existing[0].getLastRow() <= 1 && existing[0].getLastColumn() <= 1) {
+      existing[0].clear();
+      existing[0].setName(MI_SHEETS.CONFIG);
+    }
+
+    Object.keys(MI_HEADERS).forEach(function (name) {
+      const sheet = spreadsheet.getSheetByName(name) || spreadsheet.insertSheet(name);
+      inizializzaScheda_(sheet, MI_HEADERS[name]);
+    });
+
+    inizializzaConfigurazione_();
+    ['Registra movimento','Inserimento pagamenti','Registra iscrizione'].forEach(function(nome) { const s=spreadsheet.getSheetByName(nome); if(s && spreadsheet.getSheets().length>1)spreadsheet.deleteSheet(s); });
+		inizializzaGruppi_();
+		inizializzaModelliReport_();
+    applicaProtezioniConAvviso_();
+    aggiungiControllo_('SETUP_WORKBOOK', 'WORKBOOK', 'BOUND', 'SUCCESS', Session.getActiveUser().getEmail(), MI_SCHEMA_VERSION, 'WORKSPACE_UI');
+    SpreadsheetApp.flush();
+    try {
+      SpreadsheetApp.getUi().alert('Struttura aggiornata. Email e integrazione restano in modalità PREVIEW.');
+    } catch (error) {
+      console.log('Struttura aggiornata. Email e integrazione restano in modalità PREVIEW.');
+    }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Crea i gruppi iniziali soltanto quando la scheda Gruppi non contiene dati. */
+function inizializzaGruppi_() {
+  const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.GROUPS);
+  if (sheet.getLastRow() > 1) return;
+  const now = new Date();
+  sheet.getRange(2, 1, 5, 7).setValues([
+    ['parrocchia', 'Parrocchia', 'parrocchia', 'ATTIVO', '', '', now],
+    ['12-ceste', '12 Ceste', '12-ceste', 'ATTIVO', '', '', now],
+    ['icef', 'ICEF', 'icef', 'ATTIVO', '', '', now],
+    ['escursioni', 'Escursioni', 'escursioni', 'ATTIVO', '', '', now],
+    ['visite', 'Visite', 'visite', 'ATTIVO', '', '', now]
+  ]);
+}
+
+/** Inserisce i modelli standard soltanto se il catalogo è ancora vuoto. */
+function inizializzaModelliReport_() {
+  const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.REPORT_TEMPLATES);
+  if (sheet.getLastRow() > 1) return;
+  const modelli = [
+    ['partecipanti', 'Elenco partecipanti', 'STANDARD', '', '["participant_number","last_name","first_name","email","phone","status"]', '["evento","stato_iscrizione","gruppo"]', '[]', '["last_name","first_name"]', 'SI', new Date(), 'SISTEMA'],
+    ['documenti', 'Documenti e dati anagrafici', 'STANDARD', '', '["last_name","first_name","birth_date","document_type","document_number","document_issue_date","document_expiry_date","nationality"]', '["evento","documenti_mancanti"]', '[]', '["last_name","first_name"]', 'SI', new Date(), 'SISTEMA'],
+    ['logistica', 'Camere e sistemazioni', 'STANDARD', '', '["last_name","first_name","room","special_requests"]', '["evento","sistemazione","camera"]', '["room"]', '["room","last_name","first_name"]', 'SI', new Date(), 'SISTEMA'],
+    ['pullman', 'Assegnazione pullman', 'STANDARD', '', '["last_name","first_name","transport","phone"]', '["evento","pullman"]', '["transport"]', '["transport","last_name","first_name"]', 'SI', new Date(), 'SISTEMA'],
+    ['pagamenti', 'Situazione pagamenti', 'STANDARD', '', '["order_code","last_name","first_name","total","paid","balance"]', '["evento","stato_pagamento","fonte_pagamento","data_versamento"]', '[]', '["last_name","first_name"]', 'SI', new Date(), 'SISTEMA']
+  ];
+  sheet.getRange(2, 1, modelli.length, modelli[0].length).setValues(modelli);
+}
+
+function configuraModelliReport() {
+  inizializzaModelliReport_();
+  SpreadsheetApp.getUi().alert('Modelli report pronti. La webapp potrà crearne di personalizzati senza alterare quelli standard.');
+}
+
+function rinominaSchedePrecedenti_(spreadsheet) {
+  Object.keys(MI_LEGACY_SHEET_NAMES).forEach(function (oldName) {
+    const newName = MI_LEGACY_SHEET_NAMES[oldName];
+    const oldSheet = spreadsheet.getSheetByName(oldName);
+    if (oldSheet && !spreadsheet.getSheetByName(newName)) oldSheet.setName(newName);
+  });
+}
+
+function inizializzaScheda_(sheet, headers) {
+  if (sheet.getMaxColumns() < headers.length) sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length-sheet.getMaxColumns());
+  const current = sheet.getRange(1, 1, 1, headers.length).getDisplayValues()[0];
+  const hasData = sheet.getLastRow() > 1;
+  const previous = MI_LEGACY_HEADERS[sheet.getName()] || [];
+	const usesPreviousHeaders = previous.length > 0 && current.slice(0, previous.length).join('|') === previous.join('|') && current.slice(previous.length).every(function (value) { return value === ''; });
+	const italianPrevious = MI_INTESTAZIONI_PRECEDENTI[sheet.getName()] || [];
+	const usesItalianPrevious = italianPrevious.length > 0 && current.slice(0, italianPrevious.length).join('|') === italianPrevious.join('|') && current.slice(italianPrevious.length).every(function (value) { return value === ''; });
+	const immediatelyPrevious = sheet.getName() === MI_SHEETS.EVENTS ? [headers.slice(0, -1), headers.slice(0, -2), headers.slice(0, -3)] : sheet.getName() === MI_SHEETS.PARTICIPANTS ? [headers.slice(0, -5), headers.slice(0, -7)] : ([MI_SHEETS.REGISTRATIONS, MI_SHEETS.PAYMENTS, MI_SHEETS.EVENTS].indexOf(sheet.getName()) >= 0 ? [headers.slice(0, -1)] : []);
+	const usesImmediatelyPrevious = immediatelyPrevious.some(function (candidate) { return candidate.length > 0 && current.slice(0, candidate.length).join('|') === candidate.join('|') && current.slice(candidate.length).every(function (value) { return value === ''; }); });
+  if (hasData && current.join('|') !== headers.join('|') && !usesPreviousHeaders && !usesItalianPrevious && !usesImmediatelyPrevious) {
+    throw new Error('Intestazioni inattese nel foglio ' + sheet.getName() + '. Intervento manuale richiesto.');
+  }
+  if (hasData && sheet.getName() === MI_SHEETS.PARTICIPANTS && (usesItalianPrevious || usesPreviousHeaders)) {
+    const oldRows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
+    const migratedRows = oldRows.map(function (row) {
+      return [row[0], row[1], '', 0, row[2], row[3], row[4], '[]', 'ATTIVO', ''];
+    });
+    sheet.getRange(2, 1, migratedRows.length, headers.length).clearContent().setValues(migratedRows);
+  }
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  sheet.setFrozenRows(1);
+  sheet.setHiddenGridlines(true);
+  const header = sheet.getRange(1, 1, 1, headers.length);
+  header.setBackground('#1f4e78').setFontColor('#ffffff').setFontWeight('bold').setWrap(true);
+  sheet.autoResizeColumns(1, headers.length);
+  for (let column = 1; column <= headers.length; column += 1) {
+    sheet.setColumnWidth(column, Math.min(220, Math.max(110, sheet.getColumnWidth(column))));
+  }
+  sheet.getRange(2, 1, Math.max(1, sheet.getMaxRows() - 1), headers.length).setVerticalAlignment('top');
+}
+
+function inizializzaConfigurazione_() {
+  const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.CONFIG);
+	if (sheet.getLastRow() > 1) {
+		const keys = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getDisplayValues().map(function (row) { return String(row[0]); });
+		let versionIndex = keys.indexOf('versione_schema');
+		if (versionIndex < 0) versionIndex = keys.indexOf('schema_version');
+		if (versionIndex >= 0) sheet.getRange(versionIndex + 2, 2).setValue(MI_SCHEMA_VERSION);
+		return;
+	}
+  sheet.getRange(2, 1, 5, 3).setValues([
+    ['versione_schema', MI_SCHEMA_VERSION, 'Versione della struttura Workspace'],
+    ['ambiente', 'ANTEPRIMA', 'Anteprima finché il collaudo non è concluso'],
+    ['fuso_orario', 'Europe/Rome', 'Fuso operativo'],
+    ['valuta', 'EUR', 'Valuta degli importi'],
+    ['modalita_email', 'ANTEPRIMA', 'Nessuna email reale in questa fase']
+  ]);
+}
+
+function applicaProtezioniConAvviso_() {
+  const editable = [MI_SHEETS.SECRETARY_OPERATIONS, MI_SHEETS.OPERATIONAL_VIEWS, MI_SHEETS.ACCOMMODATIONS];
+  Object.keys(MI_HEADERS).forEach(function (name) {
+    const sheet = ottieniSchedaObbligatoria_(name);
+    sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET).forEach(function (protection) { protection.remove(); });
+    if (editable.indexOf(name) < 0) sheet.protect().setDescription('Gestito da Modulo Iscrizioni').setWarningOnly(true);
+  });
+}

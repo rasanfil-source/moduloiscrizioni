@@ -1,0 +1,4 @@
+qrcode-generator 2.0.4
+
+Licenza: MIT.
+Il codice locale qrcode-generator è distribuito con il permesso dei rispettivi autori secondo la licenza MIT. Il testo integrale e le indicazioni d’uso sono nel file qrcode-generator-LICENZA-MIT.txt e nella documentazione del pacchetto sorgente.
