@@ -1483,7 +1483,11 @@ final class MI_Portal {
 		if ( ! empty( $_GET['mi_portal_history'] ) ) $list_args['mi_portal_history'] = '1';
 		$list_url = add_query_arg( $list_args, self::base_url() ) . '#mi-elenco-eventi';
 		echo '<section class="mi-event-management" data-mi-selected-event tabindex="-1"><a class="mi-event-management__back" href="' . esc_url( $list_url ) . '" aria-label="Comprimi la scheda dell’evento" title="Comprimi la scheda"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 11 6-6 6 6M6 18l6-6 6 6"/></svg></a><div class="mi-event-management__heading"><div><span class="mi-portal-eyebrow">Evento selezionato</span><h2>' . esc_html( $event->post_title ) . '</h2></div><span class="mi-event-management__state">' . esc_html( $cancelled ? 'Annullato' : ( $expired ? 'Scaduto' : ( 'publish' === $event->post_status ? 'Attivo' : 'Bozza' ) ) ) . '</span></div>';
-		echo '<p><a class="mi-primary" href="' . esc_url( MI_Portal_Management::url( $event_id ) ) . '">Gestisci iscrizioni di questo evento</a></p>';
+		echo '<div class="mi-event-management__toolbar"><a class="mi-primary" href="' . esc_url( MI_Portal_Management::url( $event_id ) ) . '">Gestisci iscrizioni di questo evento</a>';
+		if ( get_post_meta( $event_id, '_mi_operational_sheet_url', true ) && MI_Portal_Management::allowed() ) {
+			echo '<a class="mi-sheet-button" href="' . esc_url( MI_Sheet_Open::url( $event_id ) ) . '" aria-label="Apri il foglio Google dell’evento"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true" focusable="false"><path d="M6 2h8l5 5v15H6zM14 2v6h5"/><path d="M9 11h7v8H9zM9 15h7M12.5 11v8"/></svg><span>Apri</span><span aria-hidden="true">↗</span></a>';
+		}
+		echo '</div>';
 		if ( $cancelled ) { echo '<div class="mi-portal-notice mi-portal-error"><strong>Evento annullato</strong><p>La scheda e le iscrizioni sono conservate nello storico.</p></div></section>'; return; }
 		if ( get_post_meta( $event_id, '_mi_workspace_event_pending', true ) ) {
 			echo '<p class="mi-portal-muted" role="status">Salvato in WordPress · sincronizzazione Google in attesa. I tentativi proseguono automaticamente.</p>';
