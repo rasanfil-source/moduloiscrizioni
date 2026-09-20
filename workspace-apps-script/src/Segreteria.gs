@@ -330,7 +330,9 @@ function generaVistaOperativaEvento_(idEvento, campiForzati) {
     // Method subtotals are order-wide: show once, never multiply by headcount.
     if(ordiniEconomici.has(String(partecipante.codice_ordine)))['paid_cash','paid_transfer','paid_card'].forEach(key=>{valori[key]='';});
     ordiniEconomici.add(String(partecipante.codice_ordine));
-    return { codice_ordine: String(partecipante.codice_ordine), numero_partecipante: numero, valori: valori };
+    // A partial replica cannot acknowledge a signed receipt, even at the same revision.
+    const revision=String(iscrizione.workspace_revision||'');
+    return { codice_ordine: String(partecipante.codice_ordine), numero_partecipante: numero, valori: valori, workspace_revision: revision && revision===String(iscrizione.replica_completa_revision) ? revision : null };
   });
   return { evento: { id: idEvento, titolo: String(evento.titolo || idEvento) }, sola_lettura: vistaEventoSolaLettura_(evento, colonne), profilo: profilo.id, nome_profilo: profilo.nome, personalizzata: !!vistaSalvata.length, conservata: false, colonne: colonne, righe: righe };
 }

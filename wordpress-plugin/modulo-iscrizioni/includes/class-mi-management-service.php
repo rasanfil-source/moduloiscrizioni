@@ -764,7 +764,7 @@ final class MI_Management_Service {
 	/** A receipt is emitted only while MySQL still contains this request's accepted value. */
 	private static function sheet_confirmations( $event_id, array $changes ) {
 		global $wpdb;
-		$bookings = array(); $receipts = array();
+		$bookings = array(); $receipts = array(); $revisions = array();
 		try {
 			foreach ( $changes as $change ) {
 				$code = $change['order_code'];
@@ -772,13 +772,19 @@ final class MI_Management_Service {
 					$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND order_code=%s", $event_id, $code ), ARRAY_A );
 					self::check_database(); if ( ! $row ) continue;
 					$bookings[$code] = self::booking( $row );
+					// A receipt must identify the replica that includes the accepted edit.
+					// Do not bind newer participant data to an older registration revision.
+					$revision = $wpdb->get_var( $wpdb->prepare( "SELECT workspace_revision FROM {$wpdb->prefix}mi_registrations WHERE id=%d", $row['id'] ) );
+					self::check_database();
+					if ( null === $revision || (string) $revision !== (string) $row['workspace_revision'] ) return array();
+					$revisions[$code] = (string) $revision;
 				}
 				$booking = $bookings[$code]; $person = array_column( $booking['participants'], null, 'number' )[$change['number']] ?? null;
 				if ( ! $person ) continue;
 				$key = self::sheet_field_key( $change['key'], $booking, $person );
 				$expected = 'room' === $key ? $change['after'] : ( in_array( $key, array( 'first_name', 'last_name' ), true ) ? sanitize_text_field( $change['after'] ) : sanitize_textarea_field( $change['after'] ) );
 				$current = in_array( $key, array( 'first_name', 'last_name', 'room' ), true ) ? $person[$key] : ( $person['fields'][$key] ?? '' );
-				if ( (string) $current === (string) $expected ) $receipts[] = array_replace( $change, array( 'accepted' => (string) $current ) );
+				if ( (string) $current === (string) $expected ) $receipts[] = array_replace( $change, array( 'accepted' => (string) $current, 'workspace_revision' => $revisions[$code] ) );
 			}
 		} catch ( Throwable $error ) { return array(); }
 		return $receipts;

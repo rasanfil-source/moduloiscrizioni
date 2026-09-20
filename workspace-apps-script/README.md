@@ -1,6 +1,6 @@
 # Backend Workspace
 
-Rilascio 3.26.146: schema 1.13.0, preparazione dei fogli in background e apertura rapida delle viste già verificate. Aggiornare i sorgenti e la distribuzione Web App: questo rilascio non modifica lo schema e non richiede di rieseguire la configurazione. La replica completa viene certificata nella colonna `replica_completa_revision`; le modifiche pendenti non vengono sovrascritte. Vedere [installazione e collaudo](../docs/rilascio-3.26.146.md).
+Rilascio 3.26.147: lettura dei fogli evento tramite link senza login e conferme di sincronizzazione legate alla revisione MySQL. Solo gli editor già autorizzati possono scrivere; DB_MODULI resta privato. Aggiornare sorgenti e distribuzione Web App esistente. Nessuna modifica allo schema. Vedere [installazione e collaudo](../docs/rilascio-3.26.147.md).
 
 La versione corrente usa MySQL WordPress come registro autorevole. I fogli evento sono proiezioni con celle operative modificabili: Sincronizza apre il confronto e la conferma nel portale. Il centrale non richiede inserimenti manuali.
 

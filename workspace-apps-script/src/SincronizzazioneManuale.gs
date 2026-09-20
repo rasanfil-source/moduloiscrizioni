@@ -72,25 +72,43 @@ function salvaBaseFoglio_(sheet) {
   base.hideSheet();
 }
 
-/** Confirm only cells whose edited value has actually returned from MySQL. */
+/** A signed receipt can be acknowledged by a newer complete replica too:
+ * the queue may coalesce the intermediate revision containing the accepted text.
+ * Until that revision arrives, leave the base intact to prevent stale overwrites.
+ */
 function allineaBaseConVista_(sheet, vista) {
   const pending = modificheCorrentiFoglio_(sheet);
   if (!pending.changes.length || pending.errors.length) return;
   const incoming = Object.create(null);
-  vista.righe.forEach(row=>incoming[JSON.stringify([String(row.codice_ordine),Number(row.numero_partecipante)])]=row.valori);
+  vista.righe.forEach(row=>incoming[JSON.stringify([String(row.codice_ordine),Number(row.numero_partecipante)])]=row);
+  const base=sheet.getParent().getSheetByName('_MI_BASE');
+  if (!base || base.getLastRow()<2) return;
+  const baseRows=base.getRange(2,1,base.getLastRow()-1,4).getValues();
+  const receipts=Object.create(null);
+  baseRows.forEach(row=>receipts[JSON.stringify([String(row[0]),Number(row[1])])]=JSON.parse(String(row[3]||'{}')));
   const confirmed = Object.create(null);
   pending.changes.forEach(change=>{
-    const id=JSON.stringify([change.order_code,change.number]), values=incoming[id];
-    if (values && Object.prototype.hasOwnProperty.call(values,change.key) && normalizzaTesto_(values[change.key],5000)===change.after) {
+    const id=JSON.stringify([change.order_code,change.number]), row=incoming[id], values=row&&row.valori;
+    const receipt=receipts[id] && receipts[id][change.key];
+    if (receipt) {
+      const revision=Number(row && row.workspace_revision);
+      if (Number.isSafeInteger(revision) && revision>=receipt.revision && change.before===receipt.before) {
+        if (!confirmed[id]) confirmed[id]={};
+        // A later local edit stays pending, now against the accepted database value.
+        confirmed[id][change.key]=receipt.accepted;
+        delete receipts[id][change.key];
+      }
+    } else if (values && Object.prototype.hasOwnProperty.call(values,change.key) && normalizzaTesto_(values[change.key],5000)===change.after) {
       if (!confirmed[id]) confirmed[id]={};
       confirmed[id][change.key]=change.after;
     }
   });
-  const base=sheet.getParent().getSheetByName('_MI_BASE');
-  if (!base || base.getLastRow()<2) return;
-  base.getRange(2,1,base.getLastRow()-1,3).getValues().forEach((row,index)=>{
-    const changes=confirmed[JSON.stringify([String(row[0]),Number(row[1])])];
-    if (changes) base.getRange(index+2,3).setValue(JSON.stringify(Object.assign(JSON.parse(String(row[2])),changes)));
+  baseRows.forEach((row,index)=>{
+    const id=JSON.stringify([String(row[0]),Number(row[1])]), changes=confirmed[id];
+    if (changes) {
+      base.getRange(index+2,3).setValue(JSON.stringify(Object.assign(JSON.parse(String(row[2])),changes)));
+      base.getRange(index+2,4).setValue(JSON.stringify(receipts[id]));
+    }
   });
 }
 
@@ -129,15 +147,29 @@ function confermaModificheFoglio_(payload) {
     const base=leggiBaseFoglio_(sheet.getParent()), columns=mappaColonneEvento_(sheet);
     if (!base || !columns._ordine || !columns._numero) throw new Error('SHEET_BASE_MISSING');
     const rows=sheet.getLastRow()>1?sheet.getRange(2,1,sheet.getLastRow()-1,sheet.getLastColumn()).getDisplayValues():[];
+    // Index once, retaining ambiguous identities as null rather than picking a row.
+    const positions=new Map();
+    rows.forEach((row,index)=>{const id=JSON.stringify([String(row[columns._ordine-1]),Number(row[columns._numero-1])]);positions.set(id,positions.has(id)?null:index);});
+    const baseSheet=sheet.getParent().getSheetByName('_MI_BASE');
+    const baseRows=baseSheet.getLastRow()>1?baseSheet.getRange(2,1,baseSheet.getLastRow()-1,4).getValues():[];
+    const basePositions=new Map();
+    baseRows.forEach((row,index)=>basePositions.set(JSON.stringify([String(row[0]),Number(row[1])]),index));
     receipts.forEach(receipt=>{
       if (!campoModificabileFoglio_(receipt.key) || !columns[receipt.key] || typeof receipt.accepted!=='string') return;
       const identity=JSON.stringify([String(receipt.order_code),Number(receipt.number)]);
       if (!base[identity] || String(base[identity][receipt.key]??'')!==receipt.before) return;
-      const matches=rows.map((row,index)=>({row,index})).filter(item=>String(item.row[columns._ordine-1])===String(receipt.order_code) && Number(item.row[columns._numero-1])===Number(receipt.number));
-      if (matches.length!==1) return;
-      const cell=sheet.getRange(matches[0].index+2,columns[receipt.key]);
-      if (cell.getDisplayValue()!==receipt.after) return;
+      const position=positions.get(identity), basePosition=basePositions.get(identity);
+      if (position==null || basePosition==null) return;
+      const revision=Number(receipt.workspace_revision), versioned=Number.isSafeInteger(revision) && revision>0;
+      const cell=sheet.getRange(position+2,columns[receipt.key]);
+      if (cell.getDisplayValue()!==receipt.after && !(versioned && cell.getDisplayValue()===receipt.accepted)) return;
       cell.setNumberFormat('@').setValue(neutralizzaFormula_(receipt.accepted,5000)); updated++;
+      if (versioned) {
+        const stored=JSON.parse(String(baseRows[basePosition][3]||'{}'));
+        stored[receipt.key]={before:receipt.before,accepted:receipt.accepted,revision:revision};
+        baseRows[basePosition][3]=JSON.stringify(stored);
+        baseSheet.getRange(basePosition+2,4).setValue(baseRows[basePosition][3]);
+      }
     }); SpreadsheetApp.flush();
     } finally {proteggiProiezione_(sheet,editable);}
     return {ok:true,updated:updated};

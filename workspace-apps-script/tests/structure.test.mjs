@@ -163,11 +163,12 @@ test('la segreteria essenziale apre un foglio operativo dedicato per evento', ()
 	assert.doesNotMatch(segreteriaHtml.match(/function navigazioneSegreteria[\s\S]*?\n/)[0], /Viste operative|Camere e pullman/);
 });
 
-test('la preparazione del foglio non modifica le condivisioni e accetta il gestore assente', () => {
+test('la preparazione abilita il link in lettura e accetta il gestore assente', () => {
   const source = sources['FogliOperativi.gs'];
   assert.match(source, /normalizzaEmailGestore_\(payload\.email_gestore\)/);
   const preparazione = source.slice(0, source.indexOf('function condividiFoglioSoltantoConGestore_'));
-  assert.doesNotMatch(preparazione, /addEditor|removeEditor|removeViewer|setSharing/);
+  assert.doesNotMatch(preparazione, /addEditor|removeEditor|removeViewer/);
+  assert.match(preparazione, /setSharing\(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW\)/);
   assert.match(preparazione, /payload\.email_gestore \? normalizzaEmailGestore_\(payload\.email_gestore\) : ''/);
   assert.match(source, /addViewer\(emailGestore\)/);
 });

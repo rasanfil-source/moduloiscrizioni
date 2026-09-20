@@ -7,6 +7,7 @@ $request='wp_7_12345678-1234-4234-8234-123456789090';
 $saved=MI_Management_Service::save_sheet(42,[$change],$request);
 check(!empty($saved['saved']),'Sheet change not saved');
 check(($saved['confirmations'][0]['accepted']??null)==='Ada Maria','Receipt missing canonical accepted value');
+check(($saved['confirmations'][0]['workspace_revision']??null)===(string)$wpdb->get_var('SELECT workspace_revision FROM wp_mi_registrations WHERE id=90'),'Receipt missing the accepted database revision');
 $replay=MI_Management_Service::save_sheet(42,[$change],$request);
 check(!empty($replay['replayed'])&&$replay['confirmations']===$saved['confirmations'],'Lost receipt not recoverable on retry');
 $retry=MI_Management_Service::save_sheet(42,[$change],'wp_7_12345678-1234-4234-8234-123456789091');

@@ -27,7 +27,7 @@ for (const email of [undefined, '', 'gestore@example.invalid']) {
     const risultato = ambiente.preparaProduzioniEventoDaWordPress_({ id_evento: '123', titolo: 'Evento dimostrativo', email_gestore: email });
     assert.equal(risultato.ok, true);
     assert.equal(risultato.condivisione.email, email || '');
-    assert.equal(risultato.condivisione.ok, false);
+    assert.equal(risultato.condivisione.ok, true);
     assert.throws(() => ambiente.normalizzaEmailGestore_('non-valida'), /non valido/);
   });
 }

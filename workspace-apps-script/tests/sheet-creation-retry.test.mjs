@@ -13,7 +13,7 @@ test('interrupted formatting resumes the registered file; access errors never du
  normalizzaTesto_:String,neutralizzaFormula_:v=>v,decodificaElenco_:()=>[],
  PropertiesService:{getScriptProperties:()=>({getProperty:k=>props.get(k),setProperty:(k,v)=>props.set(k,v),deleteProperty:k=>props.delete(k)})},
  ottieniSchedaObbligatoria_:k=>k==='links'?registry:[],convertiRigheInOggetti_:s=>s===registry?links:s,
- DriveApp:{getFileById:()=>{if(denied)throw Error('denied');return {isTrashed:()=>false};}},
+ DriveApp:{Access:{ANYONE_WITH_LINK:'LINK'},Permission:{VIEW:'VIEW'},getFileById:()=>{if(denied)throw Error('denied');return {isTrashed:()=>false,getSharingAccess:()=> 'LINK',getSharingPermission:()=> 'VIEW'};}},
  SpreadsheetApp:{create:()=>{creates++;return file;},openById:()=>file,flush(){}},
  applicaSchemaColonneEvento_(){},aggiungiColonneServizi_(){},aggiungiControllo_(){},Session:{getActiveUser:()=>({getEmail:()=>''})}});
  vm.runInContext(source,c);

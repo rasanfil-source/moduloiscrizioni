@@ -1,4 +1,16 @@
 /** Prepara il registro dell'evento e il relativo foglio operativo su richiesta firmata di WordPress. */
+/** Accesso anonimo solo in lettura al singolo foglio evento, mai al database centrale.
+ * Il link espone tutte le schede del documento: non concede scritture anonime.
+ * Non memorizziamo un esito in cache: un errore di dominio deve essere visibile e
+ * una successiva preparazione/verifica deve poter ripristinare la condivisione.
+ */
+function abilitaLetturaFoglioEventoConLink_(idFoglio) {
+  const file = DriveApp.getFileById(String(idFoglio));
+  if (file.getSharingAccess() !== DriveApp.Access.ANYONE_WITH_LINK || file.getSharingPermission() !== DriveApp.Permission.VIEW) {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  }
+}
+
 function trovaCollegamentoFoglioOperativo_(idEvento) {
   const id=String(idEvento);
   const rows=convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES)).filter(row=>String(row.id_evento)===id);
@@ -44,7 +56,7 @@ function preparaProduzioniEventoConLock_(payload) {
 	const urlIscrizione = normalizzaUrlPubblico_(payload.url_iscrizione);
 	const urlSaldo = normalizzaUrlPubblico_(payload.url_saldo);
 	const emailGestore = payload.email_gestore ? normalizzaEmailGestore_(payload.email_gestore) : '';
-	const condivisione = { ok: false, email: emailGestore, avviso: emailGestore ? 'Il foglio è privato. La condivisione al gestore va completata separatamente secondo le regole del dominio Workspace.' : 'Nessun gestore indicato: nessuna nuova condivisione. Restano invariati gli accessi Google già autorizzati.' };
+	const condivisione = { ok: true, email: emailGestore, avviso: 'Il foglio è consultabile in sola lettura da chiunque abbia il link.' };
 	aggiornaCollegamentiProduzioneEvento_(idEvento, urlIscrizione, urlSaldo);
   aggiungiControllo_('PRODUZIONI_EVENTO', 'PREPARE', idEvento, 'SUCCESS', 'WORDPRESS', risultato.creato ? 'SHEET_CREATED' : 'SHEET_REUSED', 'WORDPRESS_PROXY');
   return { ok: true, id_evento: idEvento, id_foglio: risultato.id_foglio, url_foglio: risultato.url_foglio, url_iscrizione: urlIscrizione, url_saldo: urlSaldo, cartella: risultato.cartella || '', creato: risultato.creato, condivisione: condivisione, mode: 'PREVIEW' };
@@ -90,6 +102,7 @@ function apriFoglioOperativoConLock_(form) {
 		try {
 			const fileEsistente = DriveApp.getFileById(String(esistente.id_foglio));
 			if (!fileEsistente.isTrashed()) {
+				abilitaLetturaFoglioEventoConLink_(esistente.id_foglio);
 				const aperto = SpreadsheetApp.openById(String(esistente.id_foglio));
 				if (proprieta.getProperty(chiavePreparazione) === String(esistente.id_foglio)) foglioDaCompletare = aperto;
 				else return { id_evento: idEvento, id_foglio: String(esistente.id_foglio), url_foglio: String(esistente.url_foglio || ('https://docs.google.com/spreadsheets/d/' + esistente.id_foglio + '/edit')), cartella: '', creato: false };
@@ -116,6 +129,7 @@ function apriFoglioOperativoConLock_(form) {
   scriviProiezioneEvento_(scheda, vista);
   configuraSchedeEconomicheEvento_(foglio, idEvento, vista.sola_lettura);
   SpreadsheetApp.flush();
+  abilitaLetturaFoglioEventoConLink_(foglio.getId());
   proprieta.deleteProperty(chiavePreparazione);
   aggiungiControllo_('FOGLIO_OPERATIVO', 'CREATE', idEvento, 'SUCCESS', normalizzaTesto_(Session.getActiveUser().getEmail() || 'SEGRETERIA', 120), 'CREATED', 'SEGRETERIA');
   return { id_evento: idEvento, id_foglio: foglio.getId(), url_foglio: foglio.getUrl(), cartella: cartella, creato: true };
@@ -151,6 +165,7 @@ function verificaFoglioEventoDaWordPress_(payload) {
 		const file = DriveApp.getFileById(String(collegamento.id_foglio));
 		if (file.isTrashed()) return { ok: true, esiste: false, id_evento: idEvento };
 		if (PropertiesService.getScriptProperties().getProperty('MI_SHEET_PREPARING_' + idEvento) === String(collegamento.id_foglio)) return { ok: true, esiste: false, id_evento: idEvento, preparazione_in_corso: true };
+		abilitaLetturaFoglioEventoConLink_(collegamento.id_foglio);
 		return { ok: true, esiste: true, id_evento: idEvento, id_foglio: String(collegamento.id_foglio), url_foglio: String(collegamento.url_foglio || file.getUrl()) };
 	} catch (errore) {
 		return { ok: false, error: 'SHEET_UNAVAILABLE', id_evento: idEvento };
@@ -283,6 +298,7 @@ function aggiornaFoglioOperativoEventoConLock_(form) {
   const collegamento = registro.find(function (riga) { return String(riga.id_evento) === idEvento; });
   if (!collegamento || !collegamento.id_foglio) throw new Error('Crea prima il foglio operativo dell’evento.');
   const foglio = SpreadsheetApp.openById(String(collegamento.id_foglio));
+  abilitaLetturaFoglioEventoConLink_(collegamento.id_foglio);
   const scheda = foglio.getSheetByName('Dati operativi') || foglio.getSheets()[0];
   const vista = generaVistaOperativaEvento_(idEvento);
   const proprieta = PropertiesService.getScriptProperties();
