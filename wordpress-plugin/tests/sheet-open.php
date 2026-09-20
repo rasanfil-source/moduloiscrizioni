@@ -22,37 +22,38 @@ class MI_Registration_Service {static $calls=[]; static function sync_workspace(
 class MI_Workspace_Client {static function stable_json($v){if(is_array($v)){if(!array_is_list($v))ksort($v);foreach($v as &$item)$item=json_decode(self::stable_json($item),true);}return json_encode($v);} static $calls=0;static function request($action,$payload){self::$calls++;check($payload['event_schema']===MI_Field_Schema::workspace_event_schema(42),'Schema missing from request');check($payload['operational_profile']===MI_Field_Schema::resolved_operational_profile(42),'Profile missing from request');if(isset($GLOBALS['on_remote']))($GLOBALS['on_remote'])();return $GLOBALS['remote']??['ok'=>true,'ready'=>true,'event_schema'=>array_reverse($payload['event_schema'],true),'operational_profile'=>$payload['operational_profile'],'event_sheet_complete'=>true,'url_foglio'=>'https://docs.google.com/spreadsheets/d/synthetic/edit'];}}
 require __DIR__.'/../modulo-iscrizioni/includes/class-mi-sheet-open.php';
 function check($ok,$message){if(!$ok)throw new RuntimeException($message);}
+function fresh_step($id,$token=''){unset($GLOBALS['post_meta'][$id]['_mi_sheet_ready']);return MI_Sheet_Open::step($id,$token);}
 $wpdb=new SheetDatabase();
-$first=MI_Sheet_Open::step(42);check(!$first['ready']&&MI_Workspace_Client::$calls===0,'Opened before replica');
+$first=fresh_step(42);check(!$first['ready']&&MI_Workspace_Client::$calls===0,'Opened before replica');
 check(MI_Registration_Service::$calls===[[1,true]],'Authoritative replica not forced');
-$done=MI_Sheet_Open::step(42,$first['token']);check($done['ready']&&isset($done['url']),'Verified sheet did not open');
-check(MI_Sheet_Open::step(43) instanceof WP_Error,'Wrong event accepted');
-$GLOBALS['allowed']=false;check(MI_Sheet_Open::step(42) instanceof WP_Error,'Unauthorized user accepted');$GLOBALS['allowed']=true;
-check(MI_Sheet_Open::step(42,str_repeat('a',32)) instanceof WP_Error,'Unknown session accepted');
+$done=fresh_step(42,$first['token']);check($done['ready']&&isset($done['url']),'Verified sheet did not open');
+check(fresh_step(43) instanceof WP_Error,'Wrong event accepted');
+$GLOBALS['allowed']=false;check(fresh_step(42) instanceof WP_Error,'Unauthorized user accepted');$GLOBALS['allowed']=true;
+check(fresh_step(42,str_repeat('a',32)) instanceof WP_Error,'Unknown session accepted');
 $GLOBALS['remote']=['ok'=>true,'ready'=>false,'needs_sync'=>['DEMO']];
-$repair=MI_Sheet_Open::step(42);check(!$repair['ready'],'Missing replica ignored');
-$GLOBALS['user']=8;check(MI_Sheet_Open::step(42,$repair['token']) instanceof WP_Error,'Session crossed users');$GLOBALS['user']=7;
-$repair2=MI_Sheet_Open::step(42,$repair['token']);check(!$repair2['ready'],'Repair did not run');
-unset($GLOBALS['remote']);check(MI_Sheet_Open::step(42,$repair['token'])['ready'],'Repaired replica failed');
-$GLOBALS['remote']=['ok'=>true,'ready'=>false,'event_sheet_complete'=>false];check(MI_Sheet_Open::step(42) instanceof WP_Error,'Pending edits opened stale sheet');
-$GLOBALS['remote']=new WP_Error('offline','Offline');check(MI_Sheet_Open::step(42) instanceof WP_Error,'Offline opened stale sheet');
-$GLOBALS['remote']=['ok'=>true,'ready'=>true,'event_sheet_complete'=>true,'url_foglio'=>'https://example.invalid/sheet'];check(MI_Sheet_Open::step(42) instanceof WP_Error,'Unsafe URL accepted');
-unset($GLOBALS['remote']);$GLOBALS['on_remote']=function()use($wpdb){$wpdb->rows[0]['workspace_revision']='2';};check(MI_Sheet_Open::step(42) instanceof WP_Error,'Concurrent edit during refresh ignored');unset($GLOBALS['on_remote']);
-$wpdb->rows[0]['workspace_status']='PENDING';$state=MI_Sheet_Open::step(42);$wpdb->rows[0]['workspace_revision']='3';check(MI_Sheet_Open::step(42,$state['token']) instanceof WP_Error,'Concurrent edit between batches ignored');
-$GLOBALS['sync_result']='PENDING';$wpdb->rows[0]['workspace_status']='PENDING';check(MI_Sheet_Open::step(42) instanceof WP_Error,'Failed replica accepted');
-$wpdb->last_error='synthetic';check(MI_Sheet_Open::step(42) instanceof WP_Error,'Database error treated as empty event');
+$repair=fresh_step(42);check(!$repair['ready'],'Missing replica ignored');
+$GLOBALS['user']=8;check(fresh_step(42,$repair['token']) instanceof WP_Error,'Session crossed users');$GLOBALS['user']=7;
+$repair2=fresh_step(42,$repair['token']);check(!$repair2['ready'],'Repair did not run');
+unset($GLOBALS['remote']);check(fresh_step(42,$repair['token'])['ready'],'Repaired replica failed');
+$GLOBALS['remote']=['ok'=>true,'ready'=>false,'event_sheet_complete'=>false];check(fresh_step(42) instanceof WP_Error,'Pending edits opened stale sheet');
+$GLOBALS['remote']=new WP_Error('offline','Offline');check(fresh_step(42) instanceof WP_Error,'Offline opened stale sheet');
+$GLOBALS['remote']=['ok'=>true,'ready'=>true,'event_sheet_complete'=>true,'url_foglio'=>'https://example.invalid/sheet'];check(fresh_step(42) instanceof WP_Error,'Unsafe URL accepted');
+unset($GLOBALS['remote']);$GLOBALS['on_remote']=function()use($wpdb){$wpdb->rows[0]['workspace_revision']='2';};check(fresh_step(42) instanceof WP_Error,'Concurrent edit during refresh ignored');unset($GLOBALS['on_remote']);
+$wpdb->rows[0]['workspace_status']='PENDING';$state=fresh_step(42);$wpdb->rows[0]['workspace_revision']='3';check(fresh_step(42,$state['token']) instanceof WP_Error,'Concurrent edit between batches ignored');
+$GLOBALS['sync_result']='PENDING';$wpdb->rows[0]['workspace_status']='PENDING';check(fresh_step(42) instanceof WP_Error,'Failed replica accepted');
+$wpdb->last_error='synthetic';check(fresh_step(42) instanceof WP_Error,'Database error treated as empty event');
 $wpdb->last_error='';$wpdb->rows[0]['workspace_status']='SYNCED';
-$GLOBALS['remote']=['ready'=>true,'event_sheet_complete'=>true,'url_foglio'=>'https://docs.google.com/spreadsheets/d/synthetic/edit'];check(MI_Sheet_Open::step(42) instanceof WP_Error,'Old Workspace opened without confirming profile');unset($GLOBALS['remote']);
-$GLOBALS['on_remote']=function(){$GLOBALS['profile']='MINIMO';};check(MI_Sheet_Open::step(42) instanceof WP_Error,'Concurrent profile change ignored');unset($GLOBALS['on_remote']);
-$GLOBALS['on_remote']=function(){$GLOBALS['schema']=['fields'=>[['key'=>'birth_date']],'options'=>[],'room'=>false,'pricing'=>'ZERO'];};check(MI_Sheet_Open::step(42) instanceof WP_Error,'Concurrent field configuration change ignored');unset($GLOBALS['on_remote']);
-$GLOBALS['remote']=['ready'=>true,'event_sheet_complete'=>true,'operational_profile'=>MI_Field_Schema::resolved_operational_profile(42),'url_foglio'=>'https://docs.google.com/spreadsheets/d/synthetic/edit'];check(MI_Sheet_Open::step(42) instanceof WP_Error,'Missing field schema confirmation accepted');unset($GLOBALS['remote']);
+$GLOBALS['remote']=['ready'=>true,'event_sheet_complete'=>true,'url_foglio'=>'https://docs.google.com/spreadsheets/d/synthetic/edit'];check(fresh_step(42) instanceof WP_Error,'Old Workspace opened without confirming profile');unset($GLOBALS['remote']);
+$GLOBALS['on_remote']=function(){$GLOBALS['profile']='MINIMO';};check(fresh_step(42) instanceof WP_Error,'Concurrent profile change ignored');unset($GLOBALS['on_remote']);
+$GLOBALS['on_remote']=function(){$GLOBALS['schema']=['fields'=>[['key'=>'birth_date']],'options'=>[],'room'=>false,'pricing'=>'ZERO'];};check(fresh_step(42) instanceof WP_Error,'Concurrent field configuration change ignored');unset($GLOBALS['on_remote']);
+$GLOBALS['remote']=['ready'=>true,'event_sheet_complete'=>true,'operational_profile'=>MI_Field_Schema::resolved_operational_profile(42),'url_foglio'=>'https://docs.google.com/spreadsheets/d/synthetic/edit'];check(fresh_step(42) instanceof WP_Error,'Missing field schema confirmation accepted');unset($GLOBALS['remote']);
 $GLOBALS['remote']=['ok'=>true,'ready'=>false,'busy'=>true];
-$waiting=MI_Sheet_Open::step(42);check(!$waiting['ready']&&$waiting['retry_after']===3,'Busy request failed instead of retrying');
-$again=MI_Sheet_Open::step(42,$waiting['token']);check($again['token']===$waiting['token'],'Busy request discarded session');
-unset($GLOBALS['remote']);check(MI_Sheet_Open::step(42,$waiting['token'])['ready'],'Busy request did not recover');
-$GLOBALS['remote']=['ok'=>true,'busy'=>true];$waiting=MI_Sheet_Open::step(42);$key='mi_sheet_open_7_'.$waiting['token'];
+$waiting=fresh_step(42);check(!$waiting['ready']&&$waiting['retry_after']===3,'Busy request failed instead of retrying');
+$again=fresh_step(42,$waiting['token']);check($again['token']===$waiting['token'],'Busy request discarded session');
+unset($GLOBALS['remote']);check(fresh_step(42,$waiting['token'])['ready'],'Busy request did not recover');
+$GLOBALS['remote']=['ok'=>true,'busy'=>true];$waiting=fresh_step(42);$key='mi_sheet_open_7_'.$waiting['token'];
 $GLOBALS['sessions'][$key]['busy_since']=time()-121;
-check(MI_Sheet_Open::step(42,$waiting['token']) instanceof WP_Error,'Unbounded busy retry');check(!isset($GLOBALS['sessions'][$key]),'Expired wait retained session');
+check(fresh_step(42,$waiting['token']) instanceof WP_Error,'Unbounded busy retry');check(!isset($GLOBALS['sessions'][$key]),'Expired wait retained session');
 echo "PASS: apertura obbligatoria, replica, recupero, permessi, sessioni isolate, modifiche concorrenti, celle pendenti, attesa limitata ed errori.\n";
 
 unset($GLOBALS['remote'],$GLOBALS['sync_result']);
@@ -65,10 +66,12 @@ $calls=MI_Workspace_Client::$calls;check(MI_Sheet_Open::step(42)['ready'],'Prepa
 $wpdb->rows[0]['workspace_revision']='4';check(MI_Sheet_Open::step(42)['ready'],'Changed revision did not recover');check(MI_Workspace_Client::$calls===$calls+1,'New revision reused obsolete receipt');
 $GLOBALS['sheet_url']='https://docs.google.com/spreadsheets/d/replaced/edit';$calls=MI_Workspace_Client::$calls;MI_Sheet_Open::step(42);check(MI_Workspace_Client::$calls===$calls+1,'Replacement sheet reused receipt');
 $GLOBALS['schema']['pricing']='FIXED';$GLOBALS['remote']['event_schema']=$GLOBALS['schema'];$GLOBALS['remote']['read_only']=false;
-MI_Sheet_Open::step(42);$calls=MI_Workspace_Client::$calls;MI_Sheet_Open::step(42);check(MI_Workspace_Client::$calls===$calls+1,'Editable sheet skipped remote edit check');
+MI_Sheet_Open::step(42);$calls=MI_Workspace_Client::$calls;MI_Sheet_Open::step(42);check(MI_Workspace_Client::$calls===$calls,'Unchanged paid sheet called Google');
+$GLOBALS['sessions']=[];check(MI_Sheet_Open::step(42)['ready']&&MI_Workspace_Client::$calls===$calls,'Paid receipt expired with transient cache');
+$wpdb->rows[0]['workspace_revision']='5';
 $GLOBALS['remote']=new WP_Error('offline','Offline');MI_Sheet_Open::refresh_background(42);check(count($GLOBALS['scheduled'])===1,'Offline job lost durable retry');
 unset($GLOBALS['remote']);MI_Sheet_Open::refresh_background(42);check(!$GLOBALS['scheduled'],'Retry did not recover');
-delete_transient('mi_sheet_ready_42');$calls=MI_Workspace_Client::$calls;MI_Sheet_Open::step(42);check(MI_Workspace_Client::$calls===$calls+1,'Expired receipt did not verify Google');
+delete_transient('mi_sheet_ready_42');unset($GLOBALS['post_meta'][42]['_mi_sheet_ready']);$calls=MI_Workspace_Client::$calls;MI_Sheet_Open::step(42);check(MI_Workspace_Client::$calls===$calls+1,'Expired receipt did not verify Google');
 echo "PASS: coda accorpata, preparazione senza utente, ricevute, revisioni, sostituzione foglio, permessi, retry e fogli modificabili.\n";
 
 // Un evento vuoto non diventa obsoleto quando scade la vecchia cache di 5 minuti.

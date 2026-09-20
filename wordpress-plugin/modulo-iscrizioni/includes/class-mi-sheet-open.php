@@ -48,16 +48,16 @@ final class MI_Sheet_Open {
 		} finally { self::$working = false; }
 	}
 	public static function url( $event_id ) { return add_query_arg( 'mi_open_sheet', absint( $event_id ), home_url( '/' ) ); }
-	/** La scadenza del tempo non rende obsoleta una proiezione in sola lettura.
+	/** La scadenza del tempo non rende obsoleta una proiezione già sincronizzata.
 	 * La ricevuta vive con l'evento; impronta, coda e permessi restano verificati
-	 * a ogni apertura. I fogli modificabili richiedono ancora il confronto Google.
+	 * a ogni apertura, indipendentemente dalla presenza di quote economiche.
 	 */
 	private static function receipt( $event_id ) {
 		$receipt = get_post_meta( $event_id, '_mi_sheet_ready', true );
 		return is_array( $receipt ) ? $receipt : get_transient( 'mi_sheet_ready_' . $event_id );
 	}
 	private static function reusable( $event_id, $current, $receipt ) {
-		if ( ! is_array( $receipt ) || empty( $receipt['read_only'] ) || 'ZERO' !== $current['schema']['pricing'] ) return false;
+		if ( ! is_array( $receipt ) ) return false;
 		if ( get_post_meta( $event_id, '_mi_sheet_missing', true ) === '1' ) return false;
 		foreach ( $current['rows'] as $row ) if ( 'SYNCED' !== $row['workspace_status'] ) return false;
 		return hash_equals( $current['fingerprint'], (string) ( $receipt['fingerprint'] ?? '' ) )
@@ -86,7 +86,9 @@ final class MI_Sheet_Open {
 		try {
 			$current = self::snapshot( $event_id );
 			$receipt = self::receipt( $event_id );
-			// Editable sheets still need Google's check for uncommitted operator edits.
+			// Aprire un foglio invariato non scrive celle: anche eventuali modifiche
+			// manuali restano intatte. Il confronto Google rimane obbligatorio quando
+			// cambia MySQL, prima di riscrivere la proiezione, o tramite Sincronizza.
 			if ( '' === $token && self::reusable( $event_id, $current, $receipt ) ) return array( 'ready' => true, 'url' => $receipt['url'] );
 			$owner = $background ? 'background' : get_current_user_id();
 			if ( '' === $token ) {
