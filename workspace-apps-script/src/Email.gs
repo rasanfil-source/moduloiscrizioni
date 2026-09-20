@@ -35,6 +35,10 @@ function inviaEmailConfermaDaWordPress_(payload) {
     const options = { to: recipient, subject: String(p.oggetto), body: String(p.testo), htmlBody: String(p.html), name: 'Parrocchia Sant’Eugenio', replyTo: recipient };
     if (p.mode === 'OPERATIVO') options.replyTo = replyTo;
     if (p.codice_svg) options.inlineImages = { 'mi-registration-code': Utilities.newBlob(String(p.codice_svg), 'image/svg+xml', 'codice-iscrizione.svg') };
+    // La quota viene controllata prima di registrare SENDING. Dopo sendEmail,
+    // un'eccezione non prova che Google non abbia accettato il messaggio:
+    // conserviamo l'intento per evitare duplicati, senza dedurlo dal testo
+    // dell'errore (localizzato e non un codice di consegna affidabile).
     try { MailApp.sendEmail(options); }
     catch (error) { console.error('EMAIL_SEND_FAILED', String(error)); return { ok: false, error: 'EMAIL_DELIVERY_UNCERTAIN' }; }
     sheet.getRange(row, 2).setValue('ACCEPTED');

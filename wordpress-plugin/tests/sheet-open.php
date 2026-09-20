@@ -3,7 +3,8 @@ define('ABSPATH',__DIR__);define('ARRAY_A','ARRAY_A');
 class WP_Error {function __construct(public $code,private $message){} function get_error_message(){return $this->message;}}
 function is_wp_error($v){return $v instanceof WP_Error;} function wp_json_encode($v){return json_encode($v);} function get_current_user_id(){return $GLOBALS['user']??7;}
 function wp_cache_delete($id,$group){}
-function get_post_meta($id,$key,$single=true){return $GLOBALS['sheet_url']??'https://docs.google.com/spreadsheets/d/synthetic/edit';}
+function update_post_meta($id,$key,$value){$GLOBALS['post_meta'][$id][$key]=$value;}
+function get_post_meta($id,$key,$single=true){if($key==='_mi_sheet_ready')return $GLOBALS['post_meta'][$id][$key]??'';if($key==='_mi_sheet_missing')return $GLOBALS['missing']??'';return $GLOBALS['sheet_url']??'https://docs.google.com/spreadsheets/d/synthetic/edit';}
 function absint($v){return abs((int)$v);} function get_post_status($id){return 'publish';}
 function wp_next_scheduled($hook,$args){return $GLOBALS['scheduled'][$hook.':'.json_encode($args)]??false;}
 function wp_schedule_single_event($at,$hook,$args){$GLOBALS['scheduled'][$hook.':'.json_encode($args)]=$at;}
@@ -69,3 +70,15 @@ $GLOBALS['remote']=new WP_Error('offline','Offline');MI_Sheet_Open::refresh_back
 unset($GLOBALS['remote']);MI_Sheet_Open::refresh_background(42);check(!$GLOBALS['scheduled'],'Retry did not recover');
 delete_transient('mi_sheet_ready_42');$calls=MI_Workspace_Client::$calls;MI_Sheet_Open::step(42);check(MI_Workspace_Client::$calls===$calls+1,'Expired receipt did not verify Google');
 echo "PASS: coda accorpata, preparazione senza utente, ricevute, revisioni, sostituzione foglio, permessi, retry e fogli modificabili.\n";
+
+// Un evento vuoto non diventa obsoleto quando scade la vecchia cache di 5 minuti.
+$wpdb->rows=[];$GLOBALS['schema']['pricing']='ZERO';
+$GLOBALS['remote']=['ready'=>true,'event_sheet_complete'=>true,'read_only'=>true,'event_schema'=>$GLOBALS['schema'],'operational_profile'=>MI_Field_Schema::resolved_operational_profile(42),'url_foglio'=>'https://docs.google.com/spreadsheets/d/synthetic/edit'];
+check(MI_Sheet_Open::step(42)['ready'],'Empty sheet not prepared');
+$GLOBALS['sessions']=[];$calls=MI_Workspace_Client::$calls;
+check(MI_Sheet_Open::step(42)['ready']&&MI_Workspace_Client::$calls===$calls,'Empty unchanged sheet lost durable receipt');
+$GLOBALS['missing']='1';MI_Sheet_Open::step(42);
+check(MI_Workspace_Client::$calls===$calls+1,'Known missing sheet reused receipt');unset($GLOBALS['missing']);
+$GLOBALS['post_meta'][42]['_mi_sheet_ready']['url']='https://example.invalid/sheet';$calls=MI_Workspace_Client::$calls;
+MI_Sheet_Open::step(42);check(MI_Workspace_Client::$calls===$calls+1,'Unsafe persisted URL reused');
+echo "PASS: apertura evento vuoto senza scadenza temporale, foglio mancante e URL non valido.\n";

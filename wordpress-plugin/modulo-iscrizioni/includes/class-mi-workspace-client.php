@@ -18,12 +18,13 @@ final class MI_Workspace_Client {
 	}
 
 	public static function request( $action, array $payload, $attempt = 0 ) {
-		// Serializza le scritture lente provenienti da WordPress, senza attendere
-		// nel browser un altro processo. Il chiamante conserva il lavoro in coda.
+		// La replica torna subito alla coda; la pubblicazione interattiva concede
+		// tre secondi a una replica già in chiusura, evitando falsi "occupato".
 		if ( ! in_array( strtoupper( $action ), array( 'APPEND_REGISTRATION', 'PREPARA_PRODUZIONI_EVENTO' ), true ) ) return self::request_unlocked( $action, $payload, $attempt );
 		global $wpdb;
 		$lock = 'mi_workspace_' . substr( hash( 'sha256', $wpdb->prefix ), 0, 40 );
-		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $lock ) ) ) return new WP_Error( 'mi_workspace_busy', 'Sincronizzazione Google in corso; aggiornamento mantenuto in attesa.' );
+		$wait = 'PREPARA_PRODUZIONI_EVENTO' === strtoupper( $action ) ? 3 : 0;
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $lock, $wait ) ) ) return new WP_Error( 'mi_workspace_busy', 'Sincronizzazione Google in corso; aggiornamento mantenuto in attesa.' );
 		try { return self::request_unlocked( $action, $payload, $attempt ); }
 		finally { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); }
 	}
@@ -62,6 +63,7 @@ final class MI_Workspace_Client {
 		// La replica gira nella coda: la formattazione Google può superare un minuto.
 		$timeout = 'PREPARA_PRODUZIONI_EVENTO' === $action ? 240 : ( 'APPEND_REGISTRATION' === $action ? 120 : ( 'ELIMINA_DATI_EVENTO' === $action ? 110 : ( 'LEGGI_MODIFICHE_FOGLIO' === $action ? 45 : ( 'INVIA_EMAIL_PROVA' === $action ? 30 : 15 ) ) ) );
 		if ( in_array( $action, array( 'PREPARA_APERTURA_FOGLIO', 'CONFERMA_MODIFICHE_FOGLIO' ), true ) ) $timeout = 180;
+		if ( in_array( $action, array( 'VERIFICA_FOGLI_EVENTO', 'ORGANIZZA_FOGLI_EVENTO' ), true ) ) $timeout = 60;
 		// These deliveries carry revisions and Google tombstones reject late writes.
 		// Email/deletion retain their stronger exclusion until their side effect completes.
 		if ( class_exists( 'MI_Event_Deletion' ) && in_array( $action, array( 'APPEND_REGISTRATION', 'PREPARA_APERTURA_FOGLIO' ), true ) ) MI_Event_Deletion::release( absint( $payload['event_id'] ?? 0 ) );

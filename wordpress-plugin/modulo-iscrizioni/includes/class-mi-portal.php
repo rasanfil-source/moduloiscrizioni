@@ -19,6 +19,7 @@ final class MI_Portal {
 		add_action( 'send_headers', array( __CLASS__, 'secure_cancellation_headers' ) );
 		add_action( 'mi_pulisci_bozze_cestinate', array( __CLASS__, 'purge_trashed_drafts' ) );
 		add_action( 'mi_pulisci_bozze_cestinate', array( __CLASS__, 'archive_completed_event_sheets' ), 20 );
+		add_action( 'mi_organizza_fogli_evento', array( __CLASS__, 'archive_completed_event_sheets' ) );
 		add_action( 'mi_sync_workspace_event', array( __CLASS__, 'sincronizza_evento_in_coda' ) );
 	}
 
@@ -38,34 +39,51 @@ final class MI_Portal {
 
 	/** Allinea i fogli alla stessa distinzione tra eventi correnti e passati mostrata nel portale. */
 	public static function archive_completed_event_sheets() {
-		$events = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => 200, 'fields' => 'ids', 'meta_key' => '_mi_operational_sheet_id', 'no_found_rows' => true ) );
-		if ( $events ) {
-			$verifica = MI_Workspace_Client::request( 'VERIFICA_FOGLI_EVENTO', array( 'id_eventi' => array_map( 'strval', $events ) ) );
-			if ( ! is_wp_error( $verifica ) && ! empty( $verifica['stati'] ) && is_array( $verifica['stati'] ) ) {
-				foreach ( $verifica['stati'] as $stato ) {
-					$id = absint( $stato['id_evento'] ?? 0 );
-					if ( ! $id || ! in_array( $id, $events, true ) ) continue;
-					if ( empty( $stato['esiste'] ) ) update_post_meta( $id, '_mi_sheet_missing', '1' );
-					else delete_post_meta( $id, '_mi_sheet_missing' );
-				}
-			}
+		// Tre eventi per esecuzione: le chiamate Drive proseguono anche dopo un
+		// timeout HTTP. Il cursore evita che gli eventi oltre i primi 200 siano ignorati.
+		$events = array_map( 'intval', get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => -1, 'fields' => 'ids', 'orderby' => 'ID', 'order' => 'ASC', 'meta_key' => '_mi_operational_sheet_id', 'no_found_rows' => true ) ) );
+		$cursor = (int) get_option( 'mi_sheet_organization_cursor', 0 );
+		$remaining = array_values( array_filter( $events, static function ( $id ) use ( $cursor ) { return $id > $cursor; } ) );
+		$batch = array_slice( $remaining, 0, 3 );
+		if ( ! $batch ) { delete_option( 'mi_sheet_organization_cursor' ); return; }
+		$verifica = MI_Workspace_Client::request( 'VERIFICA_FOGLI_EVENTO', array( 'id_eventi' => array_map( 'strval', $batch ) ) );
+		if ( ! is_wp_error( $verifica ) ) foreach ( (array) ( $verifica['stati'] ?? array() ) as $stato ) {
+			$id = absint( $stato['id_evento'] ?? 0 );
+			if ( ! in_array( $id, $batch, true ) ) continue;
+			if ( empty( $stato['esiste'] ) ) update_post_meta( $id, '_mi_sheet_missing', '1' );
+			else delete_post_meta( $id, '_mi_sheet_missing' );
 		}
-		$correnti = array();
-		$passati = array();
-		foreach ( $events as $event_id ) {
+		$correnti = $passati = $versions = array();
+		foreach ( $batch as $event_id ) {
 			$annullato = (bool) get_post_meta( $event_id, '_mi_event_cancelled_at', true );
 			$archiviato = (bool) get_post_meta( $event_id, '_mi_event_archived_at', true );
 			$chiusura = (string) get_post_meta( $event_id, '_mi_registration_closes_at', true );
 			$inizio = (string) get_post_meta( $event_id, '_mi_event_starts_at', true );
 			$passato = $archiviato || ( ! $annullato && self::is_past_event( $inizio ?: $chiusura ) );
+			// Anche la sostituzione del file deve invalidare lo stato già confermato.
+			$version = get_post_meta( $event_id, '_mi_operational_sheet_id', true ) . '|' . ( $passato ? 'past' : 'current' );
+			if ( $version === get_post_meta( $event_id, '_mi_sheet_organization', true ) ) continue;
+			$versions[ $event_id ] = $version;
 			if ( $passato ) $passati[] = (string) $event_id;
 			else $correnti[] = (string) $event_id;
 		}
-		$result = MI_Workspace_Client::request( 'ORGANIZZA_FOGLI_EVENTO', array( 'eventi_correnti' => $correnti, 'eventi_passati' => $passati ) );
-		if ( ! is_wp_error( $result ) ) {
-			foreach ( $passati as $event_id ) update_post_meta( (int) $event_id, '_mi_sheet_archived_at', current_time( 'mysql', true ) );
-			foreach ( $correnti as $event_id ) delete_post_meta( (int) $event_id, '_mi_sheet_archived_at' );
+		if ( $versions ) {
+			$result = MI_Workspace_Client::request( 'ORGANIZZA_FOGLI_EVENTO', array( 'eventi_correnti' => $correnti, 'eventi_passati' => $passati ) );
+			// L'ok della busta non garantisce il successo di ogni singolo spostamento.
+			if ( ! is_wp_error( $result ) ) foreach ( (array) ( $result['risultati'] ?? array() ) as $item ) {
+				$id = absint( $item['id_evento'] ?? 0 );
+				if ( empty( $item['ok'] ) || ! isset( $versions[ $id ] ) ) continue;
+				update_post_meta( $id, '_mi_sheet_organization', $versions[ $id ] );
+				if ( in_array( (string) $id, $passati, true ) ) update_post_meta( $id, '_mi_sheet_archived_at', current_time( 'mysql', true ) );
+				else delete_post_meta( $id, '_mi_sheet_archived_at' );
+			}
 		}
+		// Gli errori non sono certificati: saranno ritentati nel ciclo giornaliero
+		// successivo, senza affamare gli altri eventi con un retry infinito.
+		if ( count( $remaining ) > count( $batch ) ) {
+			update_option( 'mi_sheet_organization_cursor', max( $batch ), false );
+			if ( ! wp_next_scheduled( 'mi_organizza_fogli_evento' ) ) wp_schedule_single_event( time() + 60, 'mi_organizza_fogli_evento' );
+		} else delete_option( 'mi_sheet_organization_cursor' );
 	}
 
 	public static function secure_cancellation_headers() {
@@ -408,6 +426,9 @@ final class MI_Portal {
 		$url_saldo = $ha_saldo ? add_query_arg( array( 'mi_status' => 'balance', 'evento' => $event_id ), home_url( '/' ) ) : '';
 		$profilo_operativo = MI_Field_Schema::resolved_operational_profile( $event_id );
 		$result = null;
+		// Google serializza la preparazione con la cancellazione tramite tombstone.
+		// Non bloccare le iscrizioni mentre aspettiamo la risposta remota.
+		if ( class_exists( 'MI_Event_Deletion' ) ) MI_Event_Deletion::release( $event_id );
 		// Un tentativo precedente può essere scaduto su WordPress mentre Apps Script
 		// terminava correttamente. Prima di ricreare, recupera il foglio idempotente.
 		if ( 'BOZZA' === $stato ) {
@@ -443,6 +464,7 @@ final class MI_Portal {
 		) );
 		if ( is_wp_error( $result ) ) return $result;
 		$sheet_id = sanitize_text_field( (string) ( $result['id_foglio'] ?? '' ) );
+		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( $event_id ); if ( is_wp_error( $lease ) ) return $lease; }
 		$sheet_url = esc_url_raw( (string) ( $result['url_foglio'] ?? '' ) );
 		if ( ! preg_match( '/^[A-Za-z0-9_-]{20,}$/', $sheet_id ) || 0 !== strpos( $sheet_url, 'https://docs.google.com/spreadsheets/' ) ) return new WP_Error( 'mi_foglio_non_valido', 'Workspace non ha restituito un collegamento al foglio valido.' );
 		update_post_meta( $event_id, '_mi_operational_sheet_id', $sheet_id );
@@ -454,6 +476,8 @@ final class MI_Portal {
 		delete_post_meta( $event_id, '_mi_sheet_missing' );
 		if ( $gestore ) update_post_meta( $event_id, '_mi_manager_user_id', $gestore->ID );
 		else delete_post_meta( $event_id, '_mi_manager_user_id' );
+		// Certifica la proiezione anche a zero iscrizioni, prima del primo Apri.
+		MI_Sheet_Open::enqueue( $event_id );
 		return $result;
 	}
 

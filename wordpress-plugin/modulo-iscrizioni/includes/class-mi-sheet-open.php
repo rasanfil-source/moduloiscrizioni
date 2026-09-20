@@ -48,6 +48,21 @@ final class MI_Sheet_Open {
 		} finally { self::$working = false; }
 	}
 	public static function url( $event_id ) { return add_query_arg( 'mi_open_sheet', absint( $event_id ), home_url( '/' ) ); }
+	/** La scadenza del tempo non rende obsoleta una proiezione in sola lettura.
+	 * La ricevuta vive con l'evento; impronta, coda e permessi restano verificati
+	 * a ogni apertura. I fogli modificabili richiedono ancora il confronto Google.
+	 */
+	private static function receipt( $event_id ) {
+		$receipt = get_post_meta( $event_id, '_mi_sheet_ready', true );
+		return is_array( $receipt ) ? $receipt : get_transient( 'mi_sheet_ready_' . $event_id );
+	}
+	private static function reusable( $event_id, $current, $receipt ) {
+		if ( ! is_array( $receipt ) || empty( $receipt['read_only'] ) || 'ZERO' !== $current['schema']['pricing'] ) return false;
+		if ( get_post_meta( $event_id, '_mi_sheet_missing', true ) === '1' ) return false;
+		foreach ( $current['rows'] as $row ) if ( 'SYNCED' !== $row['workspace_status'] ) return false;
+		return hash_equals( $current['fingerprint'], (string) ( $receipt['fingerprint'] ?? '' ) )
+			&& (bool) preg_match( '~^https://docs\.google\.com/spreadsheets/d/[A-Za-z0-9_-]+(?:/|$)~D', (string) ( $receipt['url'] ?? '' ) );
+	}
 	private static function snapshot( $event_id ) {
 		global $wpdb;
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,workspace_revision,workspace_status FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d ORDER BY id", $event_id ), ARRAY_A );
@@ -70,10 +85,9 @@ final class MI_Sheet_Open {
 		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( $event_id ); if ( is_wp_error( $lease ) ) return $lease; }
 		try {
 			$current = self::snapshot( $event_id );
-			$receipt = get_transient( 'mi_sheet_ready_' . $event_id );
-			$pending = array_filter( $current['rows'], static function ( $r ) { return 'SYNCED' !== $r['workspace_status']; } );
+			$receipt = self::receipt( $event_id );
 			// Editable sheets still need Google's check for uncommitted operator edits.
-			if ( '' === $token && ! $pending && 'ZERO' === $current['schema']['pricing'] && is_array( $receipt ) && ! empty( $receipt['read_only'] ) && hash_equals( $current['fingerprint'], $receipt['fingerprint'] ) ) return array( 'ready' => true, 'url' => $receipt['url'] );
+			if ( '' === $token && self::reusable( $event_id, $current, $receipt ) ) return array( 'ready' => true, 'url' => $receipt['url'] );
 			$owner = $background ? 'background' : get_current_user_id();
 			if ( '' === $token ) {
 				$token = bin2hex( random_bytes( 16 ) );
@@ -113,7 +127,7 @@ final class MI_Sheet_Open {
 			$after = self::snapshot( $event_id );
 			if ( ! hash_equals( $current['fingerprint'], $after['fingerprint'] ) ) throw new RuntimeException( 'I dati sono cambiati durante l’apertura. Riprova.' );
 			delete_transient( $key );
-			set_transient( 'mi_sheet_ready_' . $event_id, array( 'fingerprint' => $current['fingerprint'], 'url' => $result['url_foglio'], 'read_only' => ! empty( $result['read_only'] ) ), 300 );
+			update_post_meta( $event_id, '_mi_sheet_ready', array( 'fingerprint' => $current['fingerprint'], 'url' => $result['url_foglio'], 'read_only' => ! empty( $result['read_only'] ) ) );
 			return array( 'ready' => true, 'url' => $result['url_foglio'] );
 		} catch ( Throwable $error ) { if ( isset( $key ) ) delete_transient( $key ); return new WP_Error( 'mi_sheet_open', $error->getMessage() ); }
 	}
@@ -130,13 +144,12 @@ final class MI_Sheet_Open {
 		$event = absint( $_GET['mi_open_sheet'] );
 		if ( ! MI_Portal_Management::allowed() || ! MI_Access::can_access_event( $event ) ) wp_die( 'Evento non accessibile.', '', array( 'response' => 403 ) );
 		// Only use an existing receipt here: the fallback page owns slow remote work.
-		if ( get_transient( 'mi_sheet_ready_' . $event ) ) {
+		if ( self::receipt( $event ) ) {
 			try {
 				if ( class_exists( 'MI_Event_Deletion' ) && is_wp_error( MI_Event_Deletion::enter( $event ) ) ) throw new RuntimeException( 'Evento occupato.' );
 				$current = self::snapshot( $event );
-				$receipt = get_transient( 'mi_sheet_ready_' . $event );
-				$pending = array_filter( $current['rows'], static function ( $r ) { return 'SYNCED' !== $r['workspace_status']; } );
-				if ( ! $pending && 'ZERO' === $current['schema']['pricing'] && ! empty( $receipt['read_only'] ) && hash_equals( $current['fingerprint'], $receipt['fingerprint'] ) && preg_match( '~^https://docs\\.google\\.com/spreadsheets/d/[A-Za-z0-9_-]+(?:/|$)~D', $receipt['url'] ) ) { nocache_headers(); wp_redirect( $receipt['url'] ); exit; }
+				$receipt = self::receipt( $event );
+				if ( self::reusable( $event, $current, $receipt ) ) { nocache_headers(); wp_redirect( $receipt['url'] ); exit; }
 			} catch ( Throwable $error ) { /* Use the normal verified opening path. */ }
 		}
 		nocache_headers(); header( 'Content-Type: text/html; charset=UTF-8' );

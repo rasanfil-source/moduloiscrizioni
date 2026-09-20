@@ -395,6 +395,7 @@ final class MI_Spedizione_Email {
 			if ( in_array( $riga['template_type'], array( 'EVENT_DELETED_NOTICE', 'EVENT_DELETED_SECRETARIAT' ), true ) ) {
 				if ( ! $event_id || 'done' !== ( MI_Event_Deletion::job( $event_id )['stage'] ?? '' ) ) continue;
 			} elseif ( ! $event_id || is_wp_error( MI_Event_Deletion::enter( $event_id ) ) ) continue;
+			try {
 			$id = absint( $riga['id'] );
 			$invio_prova = 'TEST_PENDING' === $riga['status'];
 			$stato_invio = $invio_prova ? 'TEST_SENDING' : 'SENDING';
@@ -441,6 +442,9 @@ final class MI_Spedizione_Email {
 				}
 				$wpdb->update( $table, array( 'status' => $tentativi >= 5 ? ( $invio_prova ? 'TEST_FAILED' : 'FAILED' ) : ( $invio_prova ? 'TEST_PENDING' : 'PENDING' ), 'last_error' => is_wp_error( $esito ) ? sanitize_text_field( $esito->get_error_message() ) : 'Workspace non ha confermato l’accettazione.', 'processing_started_at' => null ), array( 'id' => $id ), array( '%s', '%s', '%s' ), array( '%d' ) );
 			}
+			// Manteniamo l'esclusione durante l'invio corrente per coordinarlo con
+			// la cancellazione; gli eventi già elaborati non restano bloccati.
+			} finally { MI_Event_Deletion::release( $event_id ); }
 		}
 		if ( (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status IN ('PENDING','TEST_PENDING') AND attempts < 5" ) > 0 ) {
 			self::pianifica_spedizione();

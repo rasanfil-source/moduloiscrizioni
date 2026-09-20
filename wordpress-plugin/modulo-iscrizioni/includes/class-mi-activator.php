@@ -16,6 +16,7 @@ final class MI_Activator {
 		wp_clear_scheduled_hook( 'mi_spedisci_email_in_coda' );
 		wp_clear_scheduled_hook( 'mi_expire_registrations' );
 		wp_clear_scheduled_hook( 'mi_pulisci_bozze_cestinate' );
+		wp_clear_scheduled_hook( 'mi_organizza_fogli_evento' );
 	}
 
 	public static function maybe_upgrade() {
@@ -40,8 +41,9 @@ final class MI_Activator {
 		if ( ! wp_next_scheduled( 'mi_sync_workspace_pending' ) ) {
 			wp_schedule_event( time() + 1, 'mi_five_minutes', 'mi_sync_workspace_pending' );
 		}
+		if ( wp_next_scheduled( 'mi_expire_registrations' ) && 'mi_five_minutes' !== wp_get_schedule( 'mi_expire_registrations' ) ) wp_clear_scheduled_hook( 'mi_expire_registrations' );
 		if ( ! wp_next_scheduled( 'mi_expire_registrations' ) ) {
-			wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', 'mi_expire_registrations' );
+			wp_schedule_event( time() + 300, 'mi_five_minutes', 'mi_expire_registrations' );
 		}
 		if ( ! wp_next_scheduled( 'mi_pulisci_bozze_cestinate' ) ) {
 			wp_schedule_event( time() + DAY_IN_SECONDS, 'daily', 'mi_pulisci_bozze_cestinate' );
@@ -139,7 +141,8 @@ final class MI_Activator {
 			KEY workspace_queue (workspace_status,workspace_attempts,id),
 			KEY waitlist_queue (event_id,status,capacity_released_at,created_at),
 			KEY waitlist_offer_expiry (status,waitlist_offer_expires_at),
-			KEY payment_deadline (status,payment_deadline_at)
+			KEY payment_deadline (status,payment_deadline_at),
+			KEY pending_expiry (status,expires_at)
 		) ENGINE=InnoDB {$charset};" );
 
 		dbDelta( "CREATE TABLE {$items} (
@@ -214,7 +217,8 @@ final class MI_Activator {
 			detail_json longtext NULL,
 			created_at datetime NOT NULL,
 			PRIMARY KEY (id),
-			KEY registration_id (registration_id)
+			KEY registration_id (registration_id),
+			KEY reg_type (registration_id,event_type)
 		) ENGINE=InnoDB {$charset};" );
 
 		dbDelta( "CREATE TABLE {$outbox} (

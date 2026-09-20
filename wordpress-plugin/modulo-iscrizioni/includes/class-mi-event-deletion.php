@@ -37,7 +37,7 @@ final class MI_Event_Deletion {
 		if ( ! $id ) return new WP_Error( 'mi_event_missing', 'Evento non disponibile.' );
 		if ( ! isset( self::$leases[ $id ] ) ) {
 			$name = 'mi_event_' . md5( $wpdb->prefix . ':' . $id );
-			if ( '1' !== (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $name ) ) ) return new WP_Error( 'mi_event_busy', 'È in corso un’altra operazione sull’evento. Riprova tra poco.' );
+			if ( '1' !== (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $name ) ) ) return new WP_Error( 'mi_event_busy', 'È in corso un’altra operazione sull’evento. Riprova tra poco.', array( 'status' => 409 ) );
 			self::$leases[ $id ] = $name;
 			register_shutdown_function( static function () use ( $id ) { self::release( $id ); } );
 		}

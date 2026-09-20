@@ -16,7 +16,8 @@ test('la coda evento accorpa le modifiche e non conferma una versione superata',
 test('le scritture Google sono serializzate e i retry non riacquisiscono il lock', async () => {
   const client = await source('class-mi-workspace-client.php');
   const service = await source('class-mi-registration-service.php');
-  assert.match(client, /GET_LOCK\(%s, 0\)/);
+  assert.match(client, /GET_LOCK\(%s, %d\)/);
+  assert.match(client, /'PREPARA_PRODUZIONI_EVENTO' === strtoupper\( \$action \) \? 3 : 0/);
   assert.match(client, /finally.*RELEASE_LOCK/s);
   assert.match(client, /self::request_unlocked\( \$action, \$payload, 1 \)/);
   assert.match(service, /if \( get_transient\( \$retry_key \) \) return 'PENDING'/);

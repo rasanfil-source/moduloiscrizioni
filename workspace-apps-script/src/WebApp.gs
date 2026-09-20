@@ -103,7 +103,7 @@ function verificaBusta_(envelope) {
   if (!confrontaInTempoCostante_(expected, signature)) return { ok: false, error: 'INVALID_SIGNATURE' };
   // Only authenticated requests can pause background projections. A short lease
   // gives the interactive opener a turn after the current writer finishes.
-  if (envelope.action === 'PREPARA_APERTURA_FOGLIO' && envelope.payload.background !== true) PropertiesService.getScriptProperties().setProperty('MI_INTERACTIVE_OPEN_UNTIL', String(Date.now()+90000));
+  if (envelope.action === 'PREPARA_APERTURA_FOGLIO' && (envelope.payload || {}).background !== true) PropertiesService.getScriptProperties().setProperty('MI_INTERACTIVE_OPEN_UNTIL', String(Date.now()+90000));
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return {ok:false,error:'WORKSPACE_BUSY'};
   try {
@@ -277,9 +277,14 @@ function registraIscrizioneCentrale_(payload) {
       ];
     });
     const participantSheet = ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS);
-    eliminaRigheContigue_(participantSheet, convertiRigheInOggetti_(participantSheet).filter(row => String(row.codice_ordine) === orderCode));
-    assicuraRighe_(participantSheet, participantSheet.getLastRow() + participantRows.length);
-    participantSheet.getRange(participantSheet.getLastRow() + 1, 1, participantRows.length, participantRows[0].length).setValues(participantRows);
+    const oldRows=convertiRigheInOggetti_(participantSheet).filter(row=>String(row.codice_ordine)===orderCode).sort((a,b)=>a._row-b._row);
+    const contiguous=oldRows.length===participantRows.length && oldRows.every((row,i)=>row._row===oldRows[0]._row+i);
+    if (contiguous) participantSheet.getRange(oldRows[0]._row,1,participantRows.length,participantRows[0].length).setValues(participantRows);
+    else {
+      eliminaRigheContigue_(participantSheet,oldRows);
+      assicuraRighe_(participantSheet,participantSheet.getLastRow()+participantRows.length);
+      participantSheet.getRange(participantSheet.getLastRow()+1,1,participantRows.length,participantRows[0].length).setValues(participantRows);
+    }
     const outbox = ottieniSchedaObbligatoria_(MI_SHEETS.EMAIL_OUTBOX);
     const message = convertiRigheInOggetti_(outbox).find(function (row) { return String(row.codice_ordine) === orderCode && String(row.tipo_modello) === 'REGISTRATION_CONFIRMATION'; });
     const snapshotBuyer = snapshotData && snapshotData.buyer ? snapshotData.buyer : buyer;
@@ -353,6 +358,7 @@ function sincronizzaPagamenti_(orderCode, payments) {
   if (!Array.isArray(payments) || payments.length === 0) return;
   const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS);
   const existing = convertiRigheInOggetti_(sheet);
+  const byOrigin = new Map(existing.map(row=>[String(row.id_inserimento_origine),row]));
   const kindMap = { PAYMENT: 'INCASSO', REFUND: 'RIMBORSO', INCASSO: 'INCASSO', RIMBORSO: 'RIMBORSO', STORNO: 'STORNO' };
   const sourceMap = { BANK_TRANSFER: 'BONIFICO', CARD: 'CARTA', CASH: 'CONTANTE', BONIFICO: 'BONIFICO', CARTA: 'CARTA', CONTANTE: 'CONTANTE' };
   const installmentMap = { DEPOSIT: 'CAPARRA', BALANCE: 'SALDO', FULL: 'INTERO', OTHER: 'NON_ASSEGNATO', CAPARRA: 'CAPARRA', SALDO: 'SALDO', INTERO: 'INTERO', NON_ASSEGNATO: 'NON_ASSEGNATO' };
@@ -386,12 +392,12 @@ function sincronizzaPagamenti_(orderCode, payments) {
     }
     const reference = normalizzaTesto_(payment.external_reference, 120);
     const origin = stableId ? 'MYSQL|' + orderCode + '|' + stableId : 'WP|' + orderCode + '|' + kind + '|' + installment + '|' + effective + '|' + amount + '|' + source + '|' + reference;
-    const duplicate = existing.find(function (row) { return String(row.id_inserimento_origine) === origin; });
+    const duplicate = byOrigin.get(origin);
     if (duplicate) {
 	  if (stableId && (String(duplicate.tipo_movimento) !== kind || Number(duplicate.importo_centesimi) !== amount || String(duplicate.fonte_pagamento) !== source || new Date(duplicate.data_effettiva).getTime() !== effectiveDate.getTime() || String(duplicate.attribuzioni_partecipanti_json || '') !== allocationsJson)) throw new Error('PAYMENT_ID_CONFLICT');
 	  return;
 	}
 	sheet.appendRow([creaIdentificativoOpaco_('pay'), neutralizzaFormula_(orderCode, 64), kind, installment, effectiveDate, amount, 'EUR', source, neutralizzaFormula_(reference, 120), neutralizzaFormula_(payment.operator_label, 100), 'WORDPRESS', origin, new Date(), neutralizzaFormula_(payment.administrative_note, 500), allocationsJson]);
-	existing.push({ id_inserimento_origine: origin, tipo_movimento: kind, importo_centesimi: amount, fonte_pagamento: source, data_effettiva: effectiveDate, attribuzioni_partecipanti_json: allocationsJson });
+	byOrigin.set(origin, { id_inserimento_origine: origin, tipo_movimento: kind, importo_centesimi: amount, fonte_pagamento: source, data_effettiva: effectiveDate, attribuzioni_partecipanti_json: allocationsJson });
   });
 }

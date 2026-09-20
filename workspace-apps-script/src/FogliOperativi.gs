@@ -150,7 +150,6 @@ function verificaFoglioEventoDaWordPress_(payload) {
 	try {
 		const file = DriveApp.getFileById(String(collegamento.id_foglio));
 		if (file.isTrashed()) return { ok: true, esiste: false, id_evento: idEvento };
-		SpreadsheetApp.openById(String(collegamento.id_foglio));
 		if (PropertiesService.getScriptProperties().getProperty('MI_SHEET_PREPARING_' + idEvento) === String(collegamento.id_foglio)) return { ok: true, esiste: false, id_evento: idEvento, preparazione_in_corso: true };
 		return { ok: true, esiste: true, id_evento: idEvento, id_foglio: String(collegamento.id_foglio), url_foglio: String(collegamento.url_foglio || file.getUrl()) };
 	} catch (errore) {

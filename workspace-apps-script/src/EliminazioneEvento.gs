@@ -38,7 +38,15 @@ function eliminaDatiEventoDaWordPress_(payload) {
     const registrations = ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS);
     const codes = new Set((Array.isArray(payload.order_codes)?payload.order_codes:[]).map(String));
     convertiRigheInOggetti_(registrations).filter(r=>String(r.id_evento)===id).forEach(r=>codes.add(String(r.codice_ordine)));
-    const children = [MI_SHEETS.PARTICIPANTS,MI_SHEETS.PAYMENTS,MI_SHEETS.EMAIL_OUTBOX,MI_SHEETS.SECRETARY_OPERATIONS,MI_SHEETS.OPERATIONAL_STATE,MI_SHEETS.OPERATIONAL_LIST];
+    // Generated reports have headers on row 2, so they cannot be filtered as tables.
+    // A legacy report without ownership is disposable: clear it conservatively.
+    const reportOwner=props.getProperty('MI_OPERATIONAL_LIST_EVENT');
+    if (!reportOwner || reportOwner===id) {
+      const report=ottieniFoglioDiLavoroAssociato_().getSheetByName(MI_SHEETS.OPERATIONAL_LIST);
+      if(report)report.clearContents();
+      props.deleteProperty('MI_OPERATIONAL_LIST_EVENT');
+    }
+    const children = [MI_SHEETS.PARTICIPANTS,MI_SHEETS.PAYMENTS,MI_SHEETS.EMAIL_OUTBOX,MI_SHEETS.SECRETARY_OPERATIONS,MI_SHEETS.OPERATIONAL_STATE];
     const direct = [MI_SHEETS.OPERATIONAL_VIEWS,MI_SHEETS.ACCOMMODATIONS,MI_SHEETS.REPLICA_REVISIONS,MI_SHEETS.REPORT_TEMPLATES,MI_SHEETS.EVENT_WORKSPACES,MI_SHEETS.EVENTS];
     const book = ottieniFoglioDiLavoroAssociato_();
     const deadline = Date.now()+7000;

@@ -462,7 +462,15 @@ final class MI_Registration_Service {
 				}
 				$participant_management[] = array( 'name' => trim( $participant['first_name'] . ' ' . $participant['last_name'] ), 'url' => MI_Portal::participant_cancel_url( (int) $wpdb->insert_id, $cancel_token ) );
 			}
-			if ( class_exists( 'MI_Management_Service' ) ) MI_Management_Service::auto_assign_rooms_locked( $registration_id );
+			if ( class_exists( 'MI_Management_Service' ) ) {
+				// Le opzioni sono già validate: senza alloggi selezionati non serve
+				// rileggere prenotazione, partecipanti e inventario sotto transazione.
+				$room_types = MI_Management_Service::room_types(); $needs_rooms = false;
+				foreach ( $participants as $person ) foreach ( $person['options'] as $option ) {
+					if ( isset( $room_types[ $option['code'] ?? '' ] ) && (int) ( $option['quantity'] ?? 0 ) > 0 ) { $needs_rooms = true; break 2; }
+				}
+				if ( $needs_rooms ) MI_Management_Service::auto_assign_rooms_locked( $registration_id );
+			}
 			$counter_updated = $wpdb->query( $wpdb->prepare( "UPDATE {$counters_table} SET {$counter_field} = {$counter_field} + %d, updated_at = %s WHERE event_id = %d", $selection['quantity'], $now, $event_id ) );
 			if ( 1 !== $counter_updated ) {
 				throw new RuntimeException( 'Contatore non aggiornato.' );
