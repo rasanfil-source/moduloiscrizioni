@@ -19,7 +19,7 @@ function aggiungiGruppo(form) {
   if (!slug) throw new Error('Il nome del gruppo non produce un identificativo valido.');
   const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.GROUPS);
   const existing = convertiRigheInOggetti_(sheet);
-  if (existing.some(function (group) { return group.slug === slug || group.nome.toLowerCase() === nome.toLowerCase(); })) throw new Error('Il gruppo esiste già.');
+  if (existing.some(function (group) { return String(group.slug) === slug || String(group.nome).toLowerCase() === nome.toLowerCase(); })) throw new Error('Il gruppo esiste già.');
   const logoUrl = normalizzaUrlImmagineGruppo_(form.logo_url);
   const imageUrl = normalizzaUrlImmagineGruppo_(form.immagine_url);
   const wordpress = inviaComandoWordPress_('CREATE_GROUP', { name: nome, slug: slug, logo_url: logoUrl, image_url: imageUrl });

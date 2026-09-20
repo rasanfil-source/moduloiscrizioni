@@ -203,7 +203,16 @@ final class MI_REST_Controller {
 	private static function workspace_service_options( array $services, array $accommodations ) {
 		$labels = array( 'PULLMAN' => 'Pullman', 'PERNOTTAMENTO' => 'Pernottamento', 'COLAZIONE' => 'Colazione', 'PRANZO' => 'Pranzo', 'CENA' => 'Cena', 'ALTRO' => 'Altro servizio', 'SINGOLA' => 'Camera singola', 'DOPPIA_SEPARATI' => 'Camera doppia con letti separati', 'DOPPIA_MATRIMONIALE' => 'Camera doppia matrimoniale', 'TRIPLA' => 'Camera tripla', 'MULTIPLA' => 'Camera multipla' );
 		$result = array();
-		foreach ( array_unique( array_merge( $services, $accommodations ) ) as $code ) if ( isset( $labels[ $code ] ) ) $result[] = array( 'code' => strtolower( str_replace( '_', '-', $code ) ), 'name' => $labels[ $code ], 'scope' => 'TICKET', 'price_cents' => 0, 'max_quantity' => 1 );
+		foreach ( array_unique( array_merge( $services, $accommodations ) ) as $code ) {
+			if ( ! isset( $labels[ $code ] ) ) continue;
+			// I codici sono identità di dominio condivise con camere e saldo pubblico.
+			$room = in_array( $code, array( 'SINGOLA', 'DOPPIA_SEPARATI', 'DOPPIA_MATRIMONIALE', 'TRIPLA', 'MULTIPLA' ), true );
+			$category = $room ? 'alloggio' : ( 'PULLMAN' === $code ? 'pullman' : 'servizio' );
+			$key = strtolower( str_replace( '_', '-', $code ) );
+			if ( $room ) $key = 'alloggio-' . $key;
+			if ( 'PULLMAN' === $code ) $key = 'pullman-standard';
+			$result[] = array( 'code' => $key, 'category' => $category, 'name' => $labels[ $code ], 'scope' => 'TICKET', 'price_cents' => 0, 'max_quantity' => 1 );
+		}
 		return $result;
 	}
 

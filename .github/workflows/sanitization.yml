@@ -27,6 +27,7 @@ jobs:
           php wordpress-plugin/tests/attendance-report.php
           php wordpress-plugin/tests/group-attendance.php
           php wordpress-plugin/tests/sheet-organization.php
+          php wordpress-plugin/tests/audit-regressions.php
           php wordpress-plugin/tests/event-wizard.php
           php wordpress-plugin/tests/management-list.php
 

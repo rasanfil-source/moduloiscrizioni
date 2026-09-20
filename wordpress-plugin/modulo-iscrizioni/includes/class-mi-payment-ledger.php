@@ -41,7 +41,7 @@ final class MI_Payment_Ledger {
 			$id = (int) $registration[$id_key];
 			$authoritative = $stored_by_id[$id] ?? array_replace( $registration, array( 'id' => $id ) );
 			$position = self::position( $authoritative, $paid_by_id[$id] ?? 0 );
-			$individual = MI_Payment_People::calculate( $authoritative, $people_by_id[$id] ?? array(), $items_by_id[$id] ?? array(), $payments_by_id[$id] ?? array() );
+			$individual = MI_Payment_People::calculate_for_display( $authoritative, $people_by_id[$id] ?? array(), $items_by_id[$id] ?? array(), $payments_by_id[$id] ?? array() );
 			$summary = MI_Payment_People::summary( $individual );
 			$position['individual'] = $individual;
 			$position['individual_known'] = $summary['known'];

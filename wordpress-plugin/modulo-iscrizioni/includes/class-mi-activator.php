@@ -11,12 +11,15 @@ final class MI_Activator {
 	}
 
 	public static function deactivate() {
-		wp_clear_scheduled_hook( 'mi_sync_workspace_pending' );
-		wp_clear_scheduled_hook( 'mi_sync_workspace_registration' );
-		wp_clear_scheduled_hook( 'mi_spedisci_email_in_coda' );
-		wp_clear_scheduled_hook( 'mi_expire_registrations' );
-		wp_clear_scheduled_hook( 'mi_pulisci_bozze_cestinate' );
-		wp_clear_scheduled_hook( 'mi_organizza_fogli_evento' );
+		wp_unschedule_hook( 'mi_sync_workspace_pending' );
+		wp_unschedule_hook( 'mi_sync_workspace_registration' );
+		wp_unschedule_hook( 'mi_spedisci_email_in_coda' );
+		wp_unschedule_hook( 'mi_expire_registrations' );
+		wp_unschedule_hook( 'mi_pulisci_bozze_cestinate' );
+		wp_unschedule_hook( 'mi_organizza_fogli_evento' );
+		// Rimuove anche le occorrenze che hanno l'ID evento negli argomenti.
+		wp_unschedule_hook( 'mi_refresh_event_sheet' );
+		wp_unschedule_hook( 'mi_sync_workspace_event' );
 	}
 
 	public static function maybe_upgrade() {

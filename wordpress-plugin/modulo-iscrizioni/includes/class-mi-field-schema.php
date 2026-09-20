@@ -263,8 +263,8 @@ final class MI_Field_Schema {
 				if ( ! preg_match( '/^\+[1-9][0-9().\s-]{6,30}$/', $value ) ) return new WP_Error( 'mi_participant_phone_invalid', 'Controlla i cellulari dei partecipanti.', array( 'status' => 400 ) );
 				$answers[ $key ] = $value;
 			} elseif ( 'date' === $field['type'] ) {
-				$date = DateTimeImmutable::createFromFormat( '!Y-m-d', $value );
-				$today = new DateTimeImmutable( 'today' );
+				$date = DateTimeImmutable::createFromFormat( '!Y-m-d', $value, wp_timezone() );
+				$today = new DateTimeImmutable( 'today', wp_timezone() );
 				$oldest = $today->modify( '-120 years' );
 				$future_rule = 'future' === ( $field['date_rule'] ?? '' );
 				$invalid_date = ! $date || $date->format( 'Y-m-d' ) !== $value || ( $future_rule ? $date < $today || $date > $today->modify( '+20 years' ) : $date > $today || $date < $oldest );
@@ -279,7 +279,7 @@ final class MI_Field_Schema {
 				$answers[ $key ] = $value;
 			} else {
 				$value = sanitize_textarea_field( $value );
-				if ( strlen( $value ) > (int) ( $field['max_length'] ?? 300 ) ) {
+				if ( mb_strlen( $value, 'UTF-8' ) > (int) ( $field['max_length'] ?? 300 ) ) {
 					return new WP_Error( 'mi_participant_text_invalid', 'Uno dei dati dei partecipanti è troppo lungo.', array( 'status' => 400 ) );
 				}
 				$answers[ $key ] = $value;

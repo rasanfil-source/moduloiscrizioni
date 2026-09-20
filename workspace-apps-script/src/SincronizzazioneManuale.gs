@@ -1,6 +1,6 @@
 /** Editable fields are data, never payment totals or booking identifiers. */
 function campoModificabileFoglio_(key) {
-  return /^[a-z][a-z0-9_]{0,79}$/.test(key) && !String(key).startsWith('option_') && !['_ordine','_numero','event','order_code','participant_number','status','options','total','paid','paid_cash','paid_transfer','paid_card','balance','special_requests','attendance','constructor','prototype'].includes(key);
+  return /^[a-z][a-z0-9_-]{0,79}$/.test(key) && !String(key).startsWith('option_') && !['_ordine','_numero','event','order_code','participant_number','status','options','total','paid','paid_cash','paid_transfer','paid_card','balance','special_requests','attendance','constructor','prototype'].includes(key);
 }
 function aggiungiColonneServizi_(columns, options) {
   (Array.isArray(options)?options:[]).forEach(option=>{

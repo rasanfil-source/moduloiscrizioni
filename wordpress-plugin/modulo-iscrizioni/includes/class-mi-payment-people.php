@@ -166,6 +166,16 @@ final class MI_Payment_People {
 		} unset( $row );
 		return array( 'ready' => '' === $issue, 'quotes_known' => $quotes_known, 'payments_known' => $payments_known && ( ! $unassigned || count( $rows ) === 1 ), 'requires_refund_allocation' => $has_allocated_payments, 'message' => $issue, 'deposit_plan' => $deposit_plan, 'people' => array_values( $rows ) );
 	}
+	/** Solo lettura gestionale: isola una prenotazione incoerente senza inventare
+	 * quote personali. Le operazioni di scrittura continuano a usare calculate,
+	 * che rifiuta i dati incoerenti prima di registrare movimenti.
+	 */
+	public static function calculate_for_display( array $registration, array $people, array $items, array $payments ) {
+		try { return self::calculate( $registration, $people, $items, $payments ); }
+		catch ( InvalidArgumentException $error ) {
+			return array( 'ready' => false, 'quotes_known' => false, 'payments_known' => false, 'requires_refund_allocation' => true, 'message' => $error->getMessage(), 'deposit_plan' => 'DEPOSIT_BALANCE' === ( $registration['economic_mode'] ?? '' ), 'people' => array() );
+		}
+	}
 	public static function plan( array $position, array $ids, $installment, $amount ) {
 		if ( ! $position['ready'] ) throw new InvalidArgumentException( $position['message'] );
 		if ( ! $ids || count( $ids ) !== count( array_unique( $ids ) ) ) throw new InvalidArgumentException( 'Seleziona le persone per cui registrare il pagamento.' );

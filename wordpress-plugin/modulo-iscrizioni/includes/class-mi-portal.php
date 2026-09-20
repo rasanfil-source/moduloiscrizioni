@@ -198,6 +198,13 @@ final class MI_Portal {
 		$activity_id = absint( $_POST['activity_id'] ?? 0 );
 		$current_activity_id = $existing_event ? absint( get_post_meta( $existing_event_id, '_mi_activity_id', true ) ) : 0;
 		$keeps_assigned_activity = $existing_event && $activity_id === $current_activity_id;
+		if ( $existing_event && ! $keeps_assigned_activity ) {
+			// Cambiare gruppo cambia anche l'ambito di accesso: con iscritti serve
+			// la migrazione esplicita, come nell'editor amministrativo.
+			global $wpdb;
+			$has_registrations = $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d LIMIT 1", $existing_event_id ) );
+			if ( $wpdb->last_error || $has_registrations ) return self::redirect_result( 'Il gruppo di un evento con iscrizioni si cambia tramite la procedura di migrazione.', true, $existing_event_id );
+		}
 		if ( ! $activity_id || MI_Event_Post_Type::GROUP_TYPE !== get_post_type( $activity_id ) || ( ! $keeps_assigned_activity && ! MI_Access::can_access_activity( $activity_id ) ) ) wp_die( 'Gruppo non accessibile.', 403 );
 		$description = self::limit_text_lines( sanitize_textarea_field( wp_unslash( $_POST['description'] ?? '' ) ), 6, 1200 );
 		$public_slug = MI_Shortcode::validate_public_slug( wp_unslash( $_POST['public_slug'] ?? '' ), $existing_event_id );

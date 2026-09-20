@@ -187,7 +187,7 @@ final class MI_Management_Service {
 				}
 				$sum = (int) ( $paid[$order['id']] ?? 0 );
 				$position = MI_Payment_Ledger::position( $order, $sum );
-				$individual_position = MI_Payment_People::calculate( $order, $all_participants, $items_by_registration[(int) $order['id']] ?? array(), $payments_by_registration[(int) $order['id']] ?? array() );
+				$individual_position = MI_Payment_People::calculate_for_display( $order, $all_participants, $items_by_registration[(int) $order['id']] ?? array(), $payments_by_registration[(int) $order['id']] ?? array() );
 				$individual_summary = MI_Payment_People::summary( $individual_position );
 				$individual_economics = array_column( $individual_position['people'], null, 'id' );
 				$deposit = array_intersect_key( $position, array_flip( array( 'deposit_plan', 'deposit_due', 'deposit_missing', 'deposit_covered', 'balance' ) ) );

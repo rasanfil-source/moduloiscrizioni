@@ -257,9 +257,9 @@ final class MI_Admin {
 		$summary = array( 'PAYMENT' => (int) ( $summary_row['payments'] ?? 0 ), 'REFUND' => (int) ( $summary_row['refunds'] ?? 0 ), 'BANK_TRANSFER' => (int) ( $summary_row['bank_transfers'] ?? 0 ), 'CARD' => (int) ( $summary_row['cards'] ?? 0 ), 'CASH' => (int) ( $summary_row['cash'] ?? 0 ) );
 		echo '<p><strong>Movimenti:</strong> ' . esc_html( $total_rows ) . ' totali nel filtro · ' . esc_html( count( $rows ) ) . ' in questa pagina</p>';
 		echo '<p><strong>Riepilogo filtro:</strong> versamenti ' . esc_html( self::formatta_importo( $summary['PAYMENT'] ) ) . ' · rimborsi ' . esc_html( self::formatta_importo( $summary['REFUND'] ) ) . ' · bonifici ' . esc_html( self::formatta_importo_firmato( $summary['BANK_TRANSFER'] ) ) . ' · carte ' . esc_html( self::formatta_importo_firmato( $summary['CARD'] ) ) . ' · contanti ' . esc_html( self::formatta_importo_firmato( $summary['CASH'] ) ) . '</p>';
-		$scope = MI_Access::activity_ids();
+		$scope = MI_Access::event_ids();
 		$event_args = array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' );
-		if ( 'ALL' !== $scope ) $event_args['meta_query'] = array( array( 'key' => '_mi_activity_id', 'value' => $scope ?: array( 0 ), 'compare' => 'IN', 'type' => 'NUMERIC' ) );
+		if ( 'ALL' !== $scope ) $event_args['post__in'] = $scope ?: array( 0 );
 		$events = get_posts( $event_args );
 		?><div class="wrap"><h1>Pagamenti registrati</h1><p>I movimenti vengono inseriti manualmente. Lo stato dell’iscrizione si aggiorna automaticamente quando la quota richiesta viene raggiunta o non risulta più raggiunta. <a class="button button-secondary" href="<?php echo esc_url( $export_url ); ?>">Esporta CSV</a></p><form method="get" class="mi-admin-filters"><input type="hidden" name="post_type" value="<?php echo esc_attr( MI_Event_Post_Type::EVENT_TYPE ); ?>"><input type="hidden" name="page" value="mi-payments"><label>Evento <select name="payment_event_id"><option value="0">Tutti</option><?php foreach ( $events as $event ) : ?><option value="<?php echo esc_attr( $event->ID ); ?>" <?php selected( $filter_event, $event->ID ); ?>><?php echo esc_html( $event->post_title ); ?></option><?php endforeach; ?></select></label> <label>Fonte <select name="payment_source"><option value="">Tutte</option><option value="BANK_TRANSFER" <?php selected( $filter_source, 'BANK_TRANSFER' ); ?>>Bonifico</option><option value="CARD" <?php selected( $filter_source, 'CARD' ); ?>>Carta</option><option value="CASH" <?php selected( $filter_source, 'CASH' ); ?>>Contante</option></select></label> <label>Movimento <select name="transaction_kind"><option value="">Tutti</option><option value="PAYMENT" <?php selected( $filter_transaction, 'PAYMENT' ); ?>>Versamenti</option><option value="REFUND" <?php selected( $filter_transaction, 'REFUND' ); ?>>Rimborsi</option></select></label> <button class="button">Filtra</button></form><table class="widefat striped"><thead><tr><th>Data</th><th>Ordine</th><th>Evento</th><th>Movimento</th><th>Rata</th><th>Importo</th><th>Fonte</th><th>Riferimento</th><th>Operatore</th></tr></thead><tbody><?php if ( ! $rows ) : ?><tr><td colspan="9">Nessun movimento registrato.</td></tr><?php endif; foreach ( $rows as $row ) : ?><tr><td><?php echo esc_html( self::formatta_data_locale( $row['effective_at'] ) ); ?></td><td><code><?php echo esc_html( $row['order_code'] ); ?></code></td><td><?php echo esc_html( get_the_title( (int) $row['event_id'] ) ); ?></td><td><?php echo esc_html( 'REFUND' === $row['transaction_kind'] ? 'Rimborso' : 'Versamento' ); ?></td><td><?php echo esc_html( $row['installment_kind'] ); ?></td><td><?php echo esc_html( self::formatta_importo( $row['amount_cents'] ) ); ?></td><td><?php echo esc_html( $labels[ $row['payment_source'] ] ?? $row['payment_source'] ); ?></td><td><?php echo esc_html( $row['external_reference'] ?: '—' ); ?></td><td><?php echo esc_html( $row['operator_label'] ?: '—' ); ?></td></tr><?php endforeach; ?></tbody></table><?php self::render_pagination( $page, $per_page, $total_rows ); ?></div><?php
 	}
@@ -309,8 +309,8 @@ final class MI_Admin {
 		$page = max( 1, isset( $_GET['paged'] ) ? absint( $_GET['paged'] ) : 1 );
 		$per_page = 50;
 		$offset = ( $page - 1 ) * $per_page;
-		$scope = MI_Access::activity_ids();
-		$allowed_events = 'ALL' === $scope ? array() : get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids', 'meta_query' => array( array( 'key' => '_mi_activity_id', 'value' => $scope ?: array( 0 ), 'compare' => 'IN', 'type' => 'NUMERIC' ) ) ) );
+		$scope = MI_Access::event_ids();
+		$allowed_events = 'ALL' === $scope ? array() : $scope;
 		if ( $event_id && ! MI_Access::can_access_event( $event_id ) ) {
 			wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) );
 		}
@@ -546,8 +546,8 @@ final class MI_Admin {
 		if ( $event_id && ! MI_Access::can_access_event( $event_id ) ) {
 			wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) );
 		}
-		$scope = MI_Access::activity_ids();
-		$allowed_events = 'ALL' === $scope ? array() : get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids', 'meta_query' => array( array( 'key' => '_mi_activity_id', 'value' => $scope ?: array( 0 ), 'compare' => 'IN', 'type' => 'NUMERIC' ) ) ) );
+		$scope = MI_Access::event_ids();
+		$allowed_events = 'ALL' === $scope ? array() : $scope;
 		$conditions = array();
 		$parameters = array();
 		if ( $event_id ) {
@@ -661,7 +661,7 @@ final class MI_Admin {
 
 	private static function safe_csv_value( $value ) {
 		$value = (string) $value;
-		return preg_match( '/^[=+\-@]/', $value ) ? "'" . $value : $value;
+		return preg_match( '/^[=+\-@\t\r\n]/', $value ) ? "'" . $value : $value;
 	}
 
 	private static function formatta_importo( $cents ) {
@@ -710,14 +710,14 @@ final class MI_Admin {
 	}
 
 	private static function payment_where( $event_id, $source, $transaction, $from, $to ) {
-		$scope = MI_Access::activity_ids();
+		$scope = MI_Access::event_ids();
 		$conditions = array();
 		$parameters = array();
 		if ( $event_id ) {
 			if ( ! MI_Access::can_access_event( $event_id ) ) return array( 'WHERE 1 = 0', array() );
 			$conditions[] = 'r.event_id = %d'; $parameters[] = $event_id;
 		} elseif ( 'ALL' !== $scope ) {
-			$allowed = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids', 'meta_query' => array( array( 'key' => '_mi_activity_id', 'value' => $scope ?: array( 0 ), 'compare' => 'IN', 'type' => 'NUMERIC' ) ) ) );
+			$allowed = $scope;
 			$conditions[] = 'r.event_id IN (' . implode( ',', array_map( 'absint', $allowed ?: array( 0 ) ) ) . ')';
 		}
 		if ( $source ) { $conditions[] = 'p.payment_source = %s'; $parameters[] = $source; }
@@ -763,11 +763,11 @@ final class MI_Admin {
 		$detail_id = isset( $_GET['email_id'] ) ? absint( $_GET['email_id'] ) : 0;
 		// Event notices have registration_id=0; resolve their scope from the stored snapshot.
 		$event_expression = "COALESCE(r.event_id, CASE WHEN JSON_VALID(o.payload_json) THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(o.payload_json, '$.event_id')) AS UNSIGNED) ELSE 0 END)";
-		$scope = MI_Access::activity_ids();
+		$scope = MI_Access::event_ids();
 		if ( 'ALL' === $scope ) {
 			$where = '';
 		} else {
-			$allowed_events = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => -1, 'fields' => 'ids', 'meta_query' => array( array( 'key' => '_mi_activity_id', 'value' => $scope ?: array( 0 ), 'compare' => 'IN', 'type' => 'NUMERIC' ) ) ) );
+			$allowed_events = $scope;
 			$where = 'WHERE ' . $event_expression . ' IN (' . implode( ',', array_map( 'absint', $allowed_events ?: array( 0 ) ) ) . ')';
 		}
 		$rows = $wpdb->get_results( "SELECT o.id, o.registration_id, o.recipient, o.template_type, o.status, o.attempts, o.last_error, o.sent_at, o.created_at FROM {$table} o LEFT JOIN {$registrations} r ON r.id = o.registration_id {$where} ORDER BY o.id DESC LIMIT 100", ARRAY_A );

@@ -1084,7 +1084,7 @@ test('la replica Workspace è accodata dopo il commit senza bloccare la risposta
   assert.match(service, /wp_next_scheduled/);
   assert.match(service, /sincronizza_iscrizione_workspace/);
   assert.match(plugin, /mi_sync_workspace_registration/);
-  assert.match(activator, /wp_clear_scheduled_hook\(\s*'mi_sync_workspace_registration'/);
+  assert.match(activator, /wp_unschedule_hook\(\s*'mi_sync_workspace_registration'/);
 });
 
 test('il pannello espone e riaccoda in sicurezza una replica Workspace', async () => {
@@ -1112,7 +1112,7 @@ test('il pannello riepiloga e filtra le repliche nel perimetro accessibile', asy
   assert.match(admin, /Sincronizzate:/);
   assert.match(admin, /In attesa:/);
   assert.match(admin, /scope_conditions/);
-  assert.match(admin, /MI_Access::activity_ids/);
+  assert.match(admin, /MI_Access::event_ids/);
 });
 
 test('il registro pagamenti filtra in SQL, pagina la UI ed esporta a blocchi', async () => {
@@ -2301,7 +2301,7 @@ test('il portale allinea Ricordami e affida la pulizia al servizio coordinato', 
   assert.doesNotMatch(portal, /30 \* DAY_IN_SECONDS/);
   assert.match(await read('includes/class-mi-event-deletion.php'), /pre_delete_post/);
   assert.match(activator, /wp_schedule_event\( time\(\) \+ DAY_IN_SECONDS, 'daily', 'mi_pulisci_bozze_cestinate' \)/);
-  assert.match(activator, /wp_clear_scheduled_hook\( 'mi_pulisci_bozze_cestinate' \)/);
+  assert.match(activator, /wp_unschedule_hook\( 'mi_pulisci_bozze_cestinate' \)/);
 });
 
 test('il controllo saldo può essere limitato all evento del pulsante', async () => {

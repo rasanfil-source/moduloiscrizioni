@@ -493,6 +493,8 @@ final class MI_Registration_Service {
 			if ( 'WAITLISTED' !== $status && in_array( $economic_summary['mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) && (int) $economic_summary['total_cents'] > 0 ) {
 				$email_snapshot['status_url'] = MI_Portal::status_url( $registration_id, $order_code, $buyer['email'] );
 			}
+			// L'email può essere facoltativa: nessun invio partecipante da pianificare.
+			$email_status = '';
 			if ( $buyer['email'] ) {
 				$email_status = MI_Spedizione_Email::stato_nuova_email( $email_snapshot );
 				$payload_json = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $order_code, 'status' => $status, 'quantity' => $selection['quantity'], 'total_cents' => $economic_summary['total_cents'], 'economic_summary' => $economic_summary, 'email_preview' => $email_snapshot ) );
@@ -750,7 +752,8 @@ final class MI_Registration_Service {
 		$started = microtime( true );
 		foreach ( $ids as $registration_id ) {
 			if ( microtime( true ) - $started > 20 ) break;
-			self::sync_workspace_safely( (int) $registration_id );
+			try { self::sync_workspace_safely( (int) $registration_id ); }
+			finally { if ( class_exists( 'MI_Event_Deletion' ) ) MI_Event_Deletion::release( MI_Event_Deletion::registration_event( $registration_id ) ); }
 		}
 	}
 
@@ -770,7 +773,8 @@ final class MI_Registration_Service {
 			)
 		);
 		foreach ( $ids as $registration_id ) {
-			self::transition_registration_status( (int) $registration_id, 'EXPIRED', 'SYSTEM_CRON' );
+			try { self::transition_registration_status( (int) $registration_id, 'EXPIRED', 'SYSTEM_CRON' ); }
+			finally { if ( class_exists( 'MI_Event_Deletion' ) ) MI_Event_Deletion::release( MI_Event_Deletion::registration_event( $registration_id ) ); }
 		}
 	}
 

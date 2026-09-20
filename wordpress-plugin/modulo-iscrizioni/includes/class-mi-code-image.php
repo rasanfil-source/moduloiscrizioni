@@ -122,7 +122,7 @@ final class MI_Code_Image {
 
 	private static function barcode_svg( $payload ) {
 		$patterns = array( '0'=>'nnnwwnwnn','1'=>'wnnwnnnnw','2'=>'nnwwnnnnw','3'=>'wnwwnnnnn','4'=>'nnnwwnnnw','5'=>'wnnwwnnnn','6'=>'nnwwwnnnn','7'=>'nnnwnnwnw','8'=>'wnnwnnwnn','9'=>'nnwwnnwnn','A'=>'wnnnnwnnw','B'=>'nnwnnwnnw','C'=>'wnwnnwnnn','D'=>'nnnnwwnnw','E'=>'wnnnwwnnn','F'=>'nnwnwwnnn','G'=>'nnnnnwwnw','H'=>'wnnnnwwnn','I'=>'nnwnnwwnn','J'=>'nnnnwwwnn','K'=>'wnnnnnnww','L'=>'nnwnnnnww','M'=>'wnwnnnnwn','N'=>'nnnnwnnww','O'=>'wnnnwnnwn','P'=>'nnwnwnnwn','Q'=>'nnnnnnwww','R'=>'wnnnnnwwn','S'=>'nnwnnnwwn','T'=>'nnnnwnwwn','U'=>'wwnnnnnnw','V'=>'nwwnnnnnw','W'=>'wwwnnnnnn','X'=>'nwnnwnnnw','Y'=>'wwnnwnnnn','Z'=>'nwwnwnnnn','-'=>'nwnnnnwnw','.'=>'wwnnnnwnn',' '=>'nwwnnnwnn','*'=>'nwnnwnwnn' );
-		$text = strtoupper( preg_replace( '/[^0-9A-Z. -]/', '', $payload ) ); $encoded = '*' . $text . '*'; $x = 10; $bars = '';
+		$text = preg_replace( '/[^0-9A-Z. -]/', '', strtoupper( $payload ) ); $encoded = '*' . $text . '*'; $x = 10; $bars = '';
 		foreach ( str_split( $encoded ) as $character ) {
 			$pattern = $patterns[ $character ] ?? $patterns['-'];
 			foreach ( str_split( $pattern ) as $index => $width ) { $units = 'w' === $width ? 3 : 1; if ( 0 === $index % 2 ) $bars .= '<rect x="' . $x . '" y="5" width="' . $units . '" height="60"/>'; $x += $units; }
