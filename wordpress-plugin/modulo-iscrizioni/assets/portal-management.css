@@ -243,6 +243,8 @@
   .mi-management [data-list] .mi-list-empty { padding:20px; border:1px dashed var(--line,#d7dde6); border-radius:12px; background:var(--bg,#f5f7fa); color:var(--ink,#172033); line-height:1.5; }
   .mi-management :is(details[data-room-section],[data-attendance-panel],[data-participant-reports]) { margin-top:24px; border:1px solid var(--line,#d7dde6); border-radius:var(--radius-card,14px); background:#fff; }
   .mi-management [data-participant-reports] { padding:20px; }
+  .mi-management [data-participant-reports] [data-export-settings]>summary { background:var(--bg,#f5f7fa); border-radius:7px; }
+  .mi-management [data-participant-reports] [data-export-settings][open]>summary { border-radius:7px 7px 0 0; }
   .mi-management :is(details[data-room-section],[data-attendance-panel])>summary { box-sizing:border-box; min-height:56px; padding:16px 20px; border-radius:var(--radius-card,14px); background:var(--bg,#f5f7fa); color:var(--navy,#17224a); font-size:16px; font-weight:600; line-height:1.5; }
   .mi-management :is(details[data-room-section],[data-attendance-panel])[open]>summary { border-bottom:1px solid var(--line,#d7dde6); border-radius:var(--radius-card,14px) 14px 0 0; }
   .mi-management details[data-room-section]>.mi-room-planner { padding:20px; }

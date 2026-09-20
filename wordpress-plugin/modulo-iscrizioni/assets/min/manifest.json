@@ -16,8 +16,8 @@
   },
   "portal-management.css": {
     "file": "min/portal-management.css",
-    "source": "10ea17686d8f8a6e1beef3352ea2f8f049d497373f3103df9472b11403bfcbca",
-    "hash": "deb69ebc24267f4dca7e6ea9f7fa84e5b82b82b1453ec91811189ad44abfe4f5"
+    "source": "b7cbb9526e75b513b3e69dca2289121ab70a95e477844dea59336d6168b1eb11",
+    "hash": "1b988d8589f394c372a1ec07dbc197d8e198744ec33c4b9e38f3b153cf9805ad"
   },
   "portal-management.js": {
     "file": "min/portal-management.js",
