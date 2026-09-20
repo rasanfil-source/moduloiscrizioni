@@ -23,10 +23,10 @@ final class MI_Portal_Management {
 			wp_send_json_success( $result );
 		}
 		if ( 'annual_report' === $operation ) {
-			$report_event = absint( $_POST['event_id'] ?? 0 );
-			$report_group = absint( get_post_meta( $report_event, '_mi_activity_id', true ) );
-			if ( ! $report_event || ! MI_Access::can_access_event( $report_event ) || ! $report_group || $report_group !== absint( $_POST['group_id'] ?? 0 ) || '1' !== get_post_meta( $report_group, '_mi_annual_attendance_report', true ) ) wp_send_json_error( array( 'message' => 'Rapporto annuale non attivo per il gruppo di questo evento.' ), 403 );
-			$result = MI_Attendance_Report::read( absint( $_POST['group_id'] ?? 0 ), absint( $_POST['year'] ?? 0 ), absint( $_POST['minimum'] ?? 1 ), sanitize_text_field( wp_unslash( $_POST['from_month'] ?? '' ) ), sanitize_text_field( wp_unslash( $_POST['to_month'] ?? '' ) ) );
+			$report_group = absint( $_POST['group_id'] ?? 0 );
+			if ( ! $report_group || ! MI_Access::can_access_activity( $report_group ) || '1' !== get_post_meta( $report_group, '_mi_annual_attendance_report', true ) ) wp_send_json_error( array( 'message' => 'Rapporto presenze non attivo o gruppo non accessibile.' ), 403 );
+			try { list( $from, $to ) = MI_Attendance_Report::group_period( $report_group ); } catch ( InvalidArgumentException $e ) { wp_send_json_error( array( 'message' => $e->getMessage() ), 400 ); }
+			$result = MI_Attendance_Report::read( $report_group, (int) substr( $from, 0, 4 ), absint( $_POST['minimum'] ?? 1 ), $from, $to );
 			if ( is_wp_error( $result ) ) wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
 			wp_send_json_success( $result );
 		}
@@ -45,8 +45,6 @@ final class MI_Portal_Management {
 				else {
 					$result = MI_Management_List::compact( $result );
 					$result['attendance_availability'] = MI_Management_Service::attendance_availability( $event_id );
-					$group_id = absint( get_post_meta( $event_id, '_mi_activity_id', true ) );
-					$result['annual_report_group'] = $group_id && '1' === get_post_meta( $group_id, '_mi_annual_attendance_report', true ) && MI_Access::can_access_activity( $group_id ) ? array( 'id' => $group_id, 'name' => get_the_title( $group_id ) ) : null;
 				}
 			}
 		} elseif ( in_array( $operation, array( 'accommodation_preview', 'change_accommodation' ), true ) ) {
@@ -126,9 +124,6 @@ final class MI_Portal_Management {
 		?>
 		<section class="mi-management<?php echo $compact ? ' mi-management--compact' : ''; ?>" data-mi-management data-endpoint="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'mi_portal_management' ) ); ?>" data-event="<?php echo esc_attr( $event_id ); ?>" data-order="<?php echo esc_attr( $order ); ?>">
 		<?php if ( ! $compact ) : ?><h2>Gestione iscrizioni</h2><?php endif; ?>
-		<details data-annual-report hidden><summary>Presenze nel periodo per gruppo</summary><p>Conta gli eventi con presenza effettiva registrata, riconoscendo la persona dal cellulare personale fornito. Il numero condiviso del referente non identifica i singoli iscritti di una prenotazione multipla.</p>
-		<label>Gruppo<select data-annual-group><option value="">Scegli un gruppo</option><?php foreach ( get_posts( array( 'post_type' => MI_Event_Post_Type::ACTIVITY_TYPE, 'post_status' => array( 'publish', 'private', 'draft' ), 'numberposts' => -1 ) ) as $group ) if ( MI_Access::can_access_activity( $group->ID ) ) : ?><option value="<?php echo esc_attr( $group->ID ); ?>"><?php echo esc_html( $group->post_title ); ?></option><?php endif; ?></select></label>
-		<label>Dal mese<input data-annual-from type="month" min="2000-01" max="2200-12" required value="<?php echo esc_attr( wp_date( 'Y' ) . '-01' ); ?>"></label><label>Al mese (incluso)<input data-annual-to type="month" min="2000-01" max="2200-12" required value="<?php echo esc_attr( wp_date( 'Y' ) . '-12' ); ?>"></label><label>Numero minimo di eventi frequentati<input data-annual-minimum type="number" min="1" max="1000" value="2"></label><button type="button" data-load-annual>Genera rapporto</button><p data-annual-status role="status"></p><div data-annual-results></div></details>
 		<div class="mi-management-event-selectors"<?php echo $compact ? ' hidden' : ''; ?>><label><select data-period-select aria-label="Eventi attivi o passati"><option value="current" <?php selected( $period, 'current' ); ?>>Eventi attivi</option><option value="past" <?php selected( $period, 'past' ); ?>>Eventi passati</option></select></label>
 		<label>Evento<select data-event-select aria-label="Evento"><option value="">Tutti gli eventi</option><?php foreach ( $events as $event ) : ?><option data-period="<?php echo esc_attr( $periods[$event->ID] ); ?>" value="<?php echo esc_attr( $event->ID ); ?>" <?php selected( $event_id, $event->ID ); ?>><?php echo esc_html( $event->post_title ); ?></option><?php endforeach; ?></select></label></div>
 		<div data-event-actions data-sheet-auto="<?php echo empty( $_GET['mi_sheet_sync'] ) ? '0' : '1'; ?>" hidden><div class="mi-booking-detail__actions mi-event-toolbar"><button type="button" data-refresh aria-label="Aggiorna riepilogo"><span class="mi-refresh-icon" aria-hidden="true">↻</span><span class="mi-refresh-label">Aggiorna riepilogo</span></button><button type="button" data-print>Stampa riepilogo iscritti</button><a class="mi-sheet-button" data-open-sheet hidden target="_blank" rel="noopener"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true" focusable="false"><path d="M6 2h8l5 5v15H6zM14 2v6h5"/><path d="M9 11h7v8H9zM9 15h7M12.5 11v8"/></svg><span>Apri</span><span aria-hidden="true">↗</span></a></div>

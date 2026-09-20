@@ -246,6 +246,7 @@ final class MI_Event_Post_Type {
 
 	public static function render_activity_box( $post ) {
 		wp_nonce_field( 'mi_save_activity', 'mi_activity_nonce' );
+		MI_Attendance_Report::period_fields( $post->ID );
 		echo '<p><label><input type="checkbox" name="mi_annual_attendance_report" value="1" ' . checked( get_post_meta( $post->ID, '_mi_annual_attendance_report', true ), '1', false ) . '> Serve avere un Rapporto annuale delle presenze del gruppo?</label></p>';
 		$primary_color = sanitize_hex_color( get_post_meta( $post->ID, '_mi_primary_color', true ) ) ?: ( sanitize_hex_color( get_post_meta( $post->ID, '_mi_accent_color', true ) ) ?: '#151b38' );
 		$secondary_color = sanitize_hex_color( get_post_meta( $post->ID, '_mi_secondary_color', true ) ) ?: '#337ab7';
@@ -262,6 +263,10 @@ final class MI_Event_Post_Type {
 	public static function save_activity( $post_id, $post ) {
 		if ( ! isset( $_POST['mi_activity_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['mi_activity_nonce'] ) ), 'mi_save_activity' ) ) return;
 		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) || ! current_user_can( 'manage_options' ) ) return;
+		try { $period = MI_Attendance_Report::period( wp_date( 'Y' ), sanitize_text_field( wp_unslash( $_POST['mi_attendance_from_month'] ?? '' ) ), sanitize_text_field( wp_unslash( $_POST['mi_attendance_to_month'] ?? '' ) ) ); }
+		catch ( InvalidArgumentException $e ) { wp_die( esc_html( $e->getMessage() ) ); }
+		update_post_meta( $post_id, '_mi_attendance_from_month', $period[0] );
+		update_post_meta( $post_id, '_mi_attendance_to_month', $period[1] );
 		update_post_meta( $post_id, '_mi_annual_attendance_report', isset( $_POST['mi_annual_attendance_report'] ) && '1' === $_POST['mi_annual_attendance_report'] ? '1' : '0' );
 		$primary_color = isset( $_POST['mi_primary_color'] ) ? sanitize_hex_color( wp_unslash( $_POST['mi_primary_color'] ) ) : '';
 		$secondary_color = isset( $_POST['mi_secondary_color'] ) ? sanitize_hex_color( wp_unslash( $_POST['mi_secondary_color'] ) ) : '';

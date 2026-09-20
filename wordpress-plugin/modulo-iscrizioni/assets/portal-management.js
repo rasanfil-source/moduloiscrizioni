@@ -62,6 +62,21 @@
       }
     } finally { confirmingForms.delete(form); }
   }, true);
+  function initGroupAttendance(root) {
+    if(root.dataset.ready)return;root.dataset.ready='1';
+    async function request(operation,data){
+      const response=await fetch(root.dataset.endpoint,{method:'POST',credentials:'same-origin',cache:'no-store',body:new URLSearchParams({action:'mi_portal_management',nonce:root.dataset.nonce,operation,...data})});
+      const json=await response.json();if(!response.ok||!json.success)throw new Error(json.data?.message||'Operazione non riuscita.');return json.data;
+    }
+    const annualButton=root.querySelector('[data-load-annual]');
+    if(annualButton)annualButton.onclick=async()=>{
+      const annualStatus=root.querySelector('[data-annual-status]'),host=root.querySelector('[data-annual-results]');
+      const group=root.dataset.group,minimum=root.querySelector('[data-annual-minimum]');
+      if(!group||!minimum.checkValidity()){annualStatus.textContent='Indica un numero minimo valido.';return;}
+      annualButton.disabled=true;annualStatus.textContent='Caricamento delle presenze registrate…';
+      try{const result=await request('annual_report',{group_id:group,minimum:minimum.value});host.innerHTML='<table><thead><tr><th>Persona (nomi nelle iscrizioni collegate)</th><th>Eventi frequentati</th><th>Eventi</th><th>Iscrizioni di riferimento</th></tr></thead><tbody>'+result.items.map(person=>'<tr><td>'+esc(person.names.join(' / '))+'</td><td>'+person.count+'</td><td>'+person.events.map(esc).join('<br>')+'</td><td>'+person.records.map(record=>esc(record.code)+' · '+esc(record.name)+' (#'+record.id+')').join('<br>')+'</td></tr>').join('')+'</tbody></table>';annualStatus.textContent=result.items.length+' persone con almeno '+result.minimum+' eventi dal mese '+result.from_month+' al mese '+result.to_month+'. '+result.unrecorded+' iscrizioni individuali senza presenza rilevata. Le presenze sono riunite in base al cellulare personale.';const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent='Esporta rapporto Excel';exportButton.onclick=()=>downloadExcel('presenze-'+result.from_month+'-'+result.to_month+'-gruppo-'+group+'.xlsx',[['Persona','Eventi frequentati','Eventi','Riferimenti'],...result.items.map(person=>[person.names.join(' / '),person.count,person.events.join(' · '),person.records.map(record=>record.code+' #'+record.id).join(' · ')])]);host.append(exportButton);}catch(error){host.replaceChildren();annualStatus.textContent='Rapporto non disponibile. '+error.message;}finally{annualButton.disabled=false;}
+    };
+  }
   function init(root) {
     if(root.dataset.ready)return;root.dataset.ready='1';
     const content=root.querySelector('[data-management-content]'),status=root.querySelector('[data-management-status]'),select=root.querySelector('[data-event-select]');
@@ -69,9 +84,9 @@
     const periodSelect=root.querySelector('[data-period-select]'),eventOptions=[...select.options].map(option=>option.cloneNode(true));
     let period=periodSelect?.value||'current';
     let printList=null,listResize=null,currentPerson=null,returnEvent=event,allQuery='',allClosed=false;
-    const annualPanel=root.querySelector('[data-annual-report]'),eventActions=root.querySelector('[data-event-actions]');
+    const eventActions=root.querySelector('[data-event-actions]');
     const printButton=root.querySelector('[data-print]');
-    const parkPanels=()=>{if(annualPanel){annualPanel.hidden=true;root.append(annualPanel);}if(eventActions){if(printButton)eventActions.append(printButton);eventActions.hidden=false;root.insertBefore(eventActions,content);}};
+    const parkPanels=()=>{if(eventActions){if(printButton)eventActions.append(printButton);eventActions.hidden=false;root.insertBefore(eventActions,content);}};
     let listContext={query:'',filter:'all',state:'',orderService:'',requests:'',deadline:'',room:'',service:'',sort:'name',view:'people',shown:30},listEvent=event;
     const filterEvents=()=>{if(!periodSelect)return;select.replaceChildren(...eventOptions.filter(option=>!option.value||option.dataset.period===period).map(option=>option.cloneNode(true)));select.value=event;};
     filterEvents();
@@ -119,14 +134,6 @@
     });
     const paymentDraft=()=>!!content.querySelector('[data-payment-draft="1"]');
     root.addEventListener('mi:before-booking-navigation',e=>{if(dirty||pending||busy||paymentDraft()){e.preventDefault();say('Salva le modifiche oppure scarta la bozza prima di uscire dalla scheda.');}});
-    const annualButton=root.querySelector('[data-load-annual]');
-    if(annualButton)annualButton.onclick=async()=>{
-      const annualStatus=root.querySelector('[data-annual-status]'),host=root.querySelector('[data-annual-results]');
-      const group=root.querySelector('[data-annual-group]').value,from=root.querySelector('[data-annual-from]'),to=root.querySelector('[data-annual-to]'),minimum=root.querySelector('[data-annual-minimum]');
-      if(!group||!from.checkValidity()||!to.checkValidity()||from.value>to.value||!minimum.checkValidity()){annualStatus.textContent='Scegli gruppo, mesi in ordine cronologico e numero minimo valido.';return;}
-      annualButton.disabled=true;annualStatus.textContent='Caricamento delle presenze registrate…';
-      try{const result=await request('annual_report',{group_id:group,from_month:from.value,to_month:to.value,minimum:minimum.value});host.innerHTML='<table><thead><tr><th>Persona (nomi nelle iscrizioni collegate)</th><th>Eventi frequentati</th><th>Eventi</th><th>Iscrizioni di riferimento</th></tr></thead><tbody>'+result.items.map(person=>'<tr><td>'+esc(person.names.join(' / '))+'</td><td>'+person.count+'</td><td>'+person.events.map(esc).join('<br>')+'</td><td>'+person.records.map(record=>esc(record.code)+' · '+esc(record.name)+' (#'+record.id+')').join('<br>')+'</td></tr>').join('')+'</tbody></table>';annualStatus.textContent=result.items.length+' persone con almeno '+result.minimum+' eventi dal mese '+result.from_month+' al mese '+result.to_month+'. '+result.unrecorded+' iscrizioni individuali senza presenza rilevata. Le presenze sono riunite in base al cellulare personale.';const exportButton=document.createElement('button');exportButton.type='button';exportButton.textContent='Esporta rapporto Excel';exportButton.onclick=()=>downloadExcel('presenze-'+result.from_month+'-'+result.to_month+'-gruppo-'+group+'.xlsx',[['Persona','Eventi frequentati','Eventi','Riferimenti'],...result.items.map(person=>[person.names.join(' / '),person.count,person.events.join(' · '),person.records.map(record=>record.code+' #'+record.id).join(' · ')])]);host.append(exportButton);}catch(error){host.replaceChildren();annualStatus.textContent='Rapporto non disponibile. '+error.message;}finally{annualButton.disabled=false;}
-    };
     const resolveDraft=()=>new Promise(resolve=>{const dialog=document.createElement('dialog');dialog.className='mi-management-confirm';dialog.innerHTML='<form method="dialog" novalidate><h2>Modifiche non salvate</h2><p>Vuoi salvare le modifiche prima di proseguire?</p><button value="stay" autofocus>Continua a modificare</button> <button value="discard">Annulla modifiche</button> <button value="save">Salva</button></form>';dialog.addEventListener('close',()=>{const choice=dialog.returnValue||'stay';dialog.remove();resolve(choice);});document.body.append(dialog);dialog.showModal();});
     const trackEdit=e=>{
       if(e.target.closest('[data-mi-payments]'))return;
@@ -368,12 +375,6 @@
         content.querySelector('[data-list]').insertAdjacentHTML('afterend','<section data-participant-reports><header class="mi-report-heading"><h3>Rapporti partecipanti</h3></header><details data-export-settings><summary>Scegli i dati del rapporto</summary><div class="mi-report-columns">'+columns.map(([key,label])=>'<label><input type="checkbox" data-export-column="'+esc(key)+'" '+(!hasSavedReportColumns||savedReportColumns.includes(key)?'checked':'')+'> '+esc(questionLabels.has(key)?questionLabels.get(key)+' — '+label:label)+'</label>').join('')+'</div></details><div class="mi-booking-detail__actions" data-report-actions><button data-export>Esporta Excel</button></div></section>');
         content.querySelectorAll('[data-export-column]').forEach(input=>input.addEventListener('change',()=>{try{localStorage.setItem('mi-report-columns:'+event,JSON.stringify([...content.querySelectorAll('[data-export-column]:checked')].map(item=>item.dataset.exportColumn)));}catch(error){/* La scelta resta valida per la sessione corrente. */}}));
         if(printButton){printButton.textContent='Stampa';content.querySelector('[data-report-actions]').prepend(printButton);}
-        if(annualPanel){
-          annualPanel.hidden=!data.annual_report_group;annualPanel.open=false;root.append(annualPanel);
-          const groupSelect=annualPanel.querySelector('[data-annual-group]');groupSelect.replaceChildren();groupSelect.disabled=true;
-          annualPanel.querySelector('[data-annual-results]').replaceChildren();annualPanel.querySelector('[data-annual-status]').textContent='';
-          if(data.annual_report_group){const option=document.createElement('option');option.value=data.annual_report_group.id;option.textContent=data.annual_report_group.name;groupSelect.append(option);}
-        }
         if(!features.rooms&&listContext.sort==='room')listContext.sort='name';
         const searchBar=document.createElement('div');searchBar.className='mi-management-search';searchBar.append(search.closest('label'),content.querySelector('[data-clear-query]'));content.querySelector('[data-list]').before(searchBar);
         const participantHeading=document.createElement('h3');participantHeading.dataset.participantHeading='';participantHeading.textContent='Elenco partecipanti';
@@ -651,6 +652,6 @@ const message=assignmentText+(preview.before_total!==null?'Quota personale: '+mo
     select.onchange=async()=>{const next=select.value;if(!await canLeave()){select.value=event;return;}event=next;updateLocation();summary();};root.querySelector('[data-refresh]').onclick=()=>order?detail(order):summary();root.querySelector('[data-print]').onclick=()=>{if(printList){printList();return;}root.querySelectorAll('.mi-print-value').forEach(el=>el.remove());root.querySelectorAll('form input,form select,form textarea').forEach(el=>{const span=document.createElement('span');span.className='mi-print-value';span.textContent=el.tagName==='SELECT'?(el.selectedOptions[0]?.textContent||''):el.value;el.after(span);});window.print();};
     if(eventActions?.dataset.sheetAuto==='1'&&event)syncSheet();else if(order&&event)detail(order);else summary();
   }
-  const scan=()=>document.querySelectorAll('[data-mi-management]').forEach(init);
+  const scan=()=>{document.querySelectorAll('[data-mi-management]').forEach(init);document.querySelectorAll('[data-group-attendance]').forEach(initGroupAttendance);};
   document.addEventListener('DOMContentLoaded',()=>{scan();new MutationObserver(scan).observe(document.body,{childList:true,subtree:true});});
 })();

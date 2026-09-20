@@ -29,7 +29,9 @@ test('il rapporto annuale si configura nel portale dei gruppi e si mostra soltan
   assert.match(portal, /name="mi_annual_attendance_report" value="1"> Attiva il rapporto annuale/);
   assert.match(portal, /update_post_meta\( \$group_id, '_mi_annual_attendance_report', \$annual_attendance_report \)/);
   assert.match(management, /'1' !== get_post_meta\( \$report_group, '_mi_annual_attendance_report', true \)/);
-  assert.match(management, /\$result\['annual_report_group'\]/);
+  assert.match(portal, /MI_Attendance_Report::render_group/);
+  assert.doesNotMatch(management, /data-annual-report|data-annual-from/);
+  assert.match(management, /MI_Attendance_Report::group_period\( \$report_group \)/);
 });
 
 test('il modello operativo dell evento è scelto in WordPress e consegnato a Workspace', async () => {
@@ -2066,7 +2068,7 @@ test('le presenze si registrano in blocco soltanto per i gruppi con rapporto ann
   const script = await read('assets/portal-management.js');
   const portal = await read('includes/class-mi-portal-management.php');
   const service = await read('includes/class-mi-management-service.php');
-  assert.match(script, /if\(data\.annual_report_group\)/);
+  assert.match(script, /data-group-attendance/);
   assert.match(script, /Seleziona tutti/);
   assert.match(script, /Deseleziona tutti/);
   assert.match(script, /attendance_bulk/);
