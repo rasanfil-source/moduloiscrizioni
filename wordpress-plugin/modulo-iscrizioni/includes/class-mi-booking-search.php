@@ -16,7 +16,7 @@ final class MI_Booking_Search {
 		$clauses = array();
 		foreach ( self::words( $query ) as $word ) {
 			$like = '%' . $wpdb->esc_like( $word ) . '%';
-			$clauses[] = $wpdb->prepare( "(CONCAT_WS(' ',r.order_code,r.buyer_first_name,r.buyer_last_name,r.buyer_email,r.buyer_phone) LIKE %s OR EXISTS (SELECT 1 FROM {$wpdb->prefix}mi_participants person WHERE person.registration_id=r.id AND CONCAT_WS(' ',person.first_name,person.last_name) LIKE %s))", $like, $like );
+			$clauses[] = $wpdb->prepare( "(CONCAT_WS(' ',r.order_code,r.buyer_first_name,r.buyer_last_name,r.buyer_email,r.buyer_phone) LIKE %s OR EXISTS (SELECT 1 FROM {$wpdb->prefix}mi_participants person WHERE person.registration_id=r.id AND CONCAT_WS(' ',person.first_name,person.last_name,IF(JSON_VALID(person.extra_json),JSON_UNQUOTE(JSON_EXTRACT(person.extra_json,'$.email')),''),IF(JSON_VALID(person.extra_json),JSON_UNQUOTE(JSON_EXTRACT(person.extra_json,'$.participant_email')),''),IF(JSON_VALID(person.extra_json),JSON_UNQUOTE(JSON_EXTRACT(person.extra_json,'$.phone')),''),IF(JSON_VALID(person.extra_json),JSON_UNQUOTE(JSON_EXTRACT(person.extra_json,'$.participant_phone')),''),IF(JSON_VALID(person.extra_json),JSON_UNQUOTE(JSON_EXTRACT(person.extra_json,'$.mobile')),'')) LIKE %s))", $like, $like );
 		}
 		return $clauses ? '(' . implode( ' AND ', $clauses ) . ')' : '1=1';
 	}

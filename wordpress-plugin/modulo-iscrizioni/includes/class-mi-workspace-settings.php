@@ -40,8 +40,8 @@ final class MI_Workspace_Settings {
 			<?php if ( 'salvato' === $notice ) : ?><div class="notice notice-success"><p>Configurazione salvata.</p></div><?php endif; ?>
 			<?php if ( 'ping_ok' === $notice ) : ?><div class="notice notice-success"><p>Collegamento firmato verificato. Workspace è in modalità ANTEPRIMA.</p></div><?php endif; ?>
 			<?php if ( 'ping_errore' === $notice ) : ?><div class="notice notice-error"><p>Collegamento non riuscito. Codice diagnostico: <code><?php echo esc_html( $error_code ?: 'non_disponibile' ); ?></code>.</p></div><?php endif; ?>
-			<?php if ( 'schema_ok' === $notice ) : ?><div class="notice notice-success"><p>Schema Workspace 1.13.0 verificato: gruppi, eventi, report, prenotazioni, sistemazioni e colonne economiche sono disponibili.</p></div><?php endif; ?>
-			<?php if ( 'schema_errore' === $notice ) : ?><div class="notice notice-error"><p>Schema Workspace non allineato. Aggiorna il deployment e la struttura del foglio.</p></div><?php endif; ?>
+			<?php if ( 'schema_ok' === $notice ) : ?><div class="notice notice-success"><p>Deployment Apps Script autonomo verificato: proiezione diretta disponibile senza accesso a DB_MODULI.</p></div><?php endif; ?>
+			<?php if ( 'schema_errore' === $notice ) : ?><div class="notice notice-error"><p>Il deployment non conferma il progetto autonomo e il prelievo firmato delle proiezioni. Verifica la nuova Web App prima di scollegare DB_MODULI.</p></div><?php endif; ?>
 			<p>Il segreto salvato non viene mai mostrato. Inseriscilo nuovamente soltanto per sostituirlo.</p>
 			<p><strong>URL per la procedura guidata Sheets:</strong><br><code><?php echo esc_html( rest_url( MI_REST_Controller::NAMESPACE . '/workspace/commands' ) ); ?></code></p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
@@ -63,7 +63,7 @@ final class MI_Workspace_Settings {
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 				<input type="hidden" name="action" value="mi_test_workspace_schema">
 				<?php wp_nonce_field( 'mi_test_workspace_schema' ); ?>
-				<?php submit_button( 'Verifica schema Workspace', 'secondary' ); ?>
+				<?php submit_button( 'Verifica proiezione diretta', 'secondary' ); ?>
 			</form>
 			<?php endif; ?>
 		</div>
@@ -103,16 +103,13 @@ final class MI_Workspace_Settings {
 	public static function test_schema() {
 		self::authorize( 'mi_test_workspace_schema' );
 		$result = MI_Workspace_Client::stato_schema();
-		$required = array( 'modalita_economica', 'primo_versamento_centesimi', 'saldo_centesimi', 'fonti_pagamento_json', 'id_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'opzioni_ordine_json', 'id_consenso_marketing' );
-		$headers = is_wp_error( $result ) ? array() : (array) ( $result['registration_headers'] ?? array() );
-		$participant_headers = is_wp_error( $result ) ? array() : (array) ( $result['participant_headers'] ?? array() );
-		$accommodation_headers = is_wp_error( $result ) ? array() : (array) ( $result['accommodation_headers'] ?? array() );
-		$group_headers = is_wp_error( $result ) ? array() : (array) ( $result['group_headers'] ?? array() );
-		$report_headers = is_wp_error( $result ) ? array() : (array) ( $result['report_template_headers'] ?? array() );
-		$event_headers = is_wp_error( $result ) ? array() : (array) ( $result['event_headers'] ?? array() );
-		$valid = ! is_wp_error( $result ) && '1.13.0' === ( $result['schema_version'] ?? '' ) && ! array_diff( $required, $headers ) && ! array_diff( array( 'totale_centesimi', 'versato_centesimi', 'saldo_centesimi', 'caparra_centesimi', 'caparra_residua_centesimi' ), $participant_headers ) && ! array_diff( array( 'id_evento', 'codice', 'nome', 'capienza', 'attiva' ), $accommodation_headers ) && ! array_diff( array( 'id_gruppo', 'nome', 'slug', 'stato', 'logo_url', 'immagine_url' ), $group_headers ) && ! array_diff( array( 'id_modello', 'nome', 'tipo', 'colonne_json', 'filtri_json' ), $report_headers ) && ! array_diff( array( 'id_evento', 'id_gruppo', 'titolo' ), $event_headers );
+		$valid = self::supports_direct_projection( $result );
 		wp_safe_redirect( self::page_url( $valid ? 'schema_ok' : 'schema_errore' ) );
 		exit;
+	}
+
+	private static function supports_direct_projection( $result ) {
+		return ! is_wp_error( $result ) && is_array( $result ) && ! empty( $result['direct_projection'] ) && ! empty( $result['standalone'] ) && ! empty( $result['projection_pull'] ) && isset( $result['central_workbook'] ) && false === $result['central_workbook'];
 	}
 
 	private static function authorize( $action ) {

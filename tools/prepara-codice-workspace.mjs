@@ -14,9 +14,10 @@ const destinazione = new URL(`dist/Codice-Workspace-${versione}.gs`, radice);
 await writeFile(destinazione, codice, 'utf8');
 console.log(`Sorgente Workspace verificato e generato: ${destinazione.pathname}`);
 
-// Entrambi i nomi di distribuzione contengono lo stesso backend completo.
-const codiceProgetto = codice;
+// Il progetto autonomo conserva gli helper condivisi, ma non può aprire il
+// workbook centrale né mostrare il suo menu, anche se viene avviato a mano.
+const codiceProgetto = `const MI_STANDALONE_MODE = true;\n` + codice;
 new vm.Script(codiceProgetto);
 const destinazioneProgetto = new URL(`dist/Codice-Workspace-Progetto-${versione}.gs`, radice);
 await writeFile(destinazioneProgetto, codiceProgetto, 'utf8');
-console.log(`Sorgente Codice.gs per il progetto MODULI verificato e generato: ${destinazioneProgetto.pathname}`);
+console.log(`Sorgente Codice.gs per il progetto autonomo verificato e generato: ${destinazioneProgetto.pathname}`);

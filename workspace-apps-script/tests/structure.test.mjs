@@ -61,8 +61,8 @@ test('il web endpoint fallisce chiuso e richiede HMAC e anti replay', () => {
 	assert.match(sources['WebApp.gs'], /MI_USED_NONCES/);
 	assert.match(sources['WebApp.gs'], /120000/);
   assert.match(sources['WebApp.gs'], /envelope\.action === 'PING'/);
-  assert.match(sources['WebApp.gs'], /group_headers/);
-  assert.match(sources['WebApp.gs'], /report_template_headers/);
+  assert.match(sources['WebApp.gs'], /direct_projection: progettoAutonomo_\(\)/);
+  assert.match(sources['WebApp.gs'], /USE_STANDALONE_PROJECT/);
   assert.doesNotMatch(combined, /API_KEY\s*=\s*['"]\s*['"]/);
 });
 
@@ -74,11 +74,11 @@ test('il sorgente non incorpora destinazioni o coordinate operative', () => {
 });
 
 
-test('il retry WordPress verifica prima una replica già completata', () => {
-  assert.match(sources['WebApp.gs'], /STATO_REPLICA_ISCRIZIONE/);
-  assert.match(sources['WebApp.gs'], /function statoReplicaIscrizione_/);
-  assert.match(sources['WebApp.gs'], /central_complete/);
-  assert.match(sources['WebApp.gs'], /event_sheet_complete/);
+test('il retry diretto recupera il foglio già creato senza una replica centrale', () => {
+  assert.match(sources['WebApp.gs'], /PROIETTA_EVENTO/);
+  assert.match(sources['ProiezioneDiretta.gs'], /MI_DIRECT_SHEET_/);
+  assert.match(sources['ProiezioneDiretta.gs'], /properties\.getProperty\(registryKey\)/);
+  assert.match(sources['ProiezioneDiretta.gs'], /event_sheet_complete/);
 });
 
 test('le funzioni Apps Script applicative hanno nomi italiani', () => {
@@ -174,13 +174,11 @@ test('la preparazione abilita il link in lettura e accetta il gestore assente', 
 });
 
 test('WordPress può preparare il foglio dell evento senza duplicarlo', () => {
-	assert.match(sources['WebApp.gs'], /PREPARA_PRODUZIONI_EVENTO/);
-	assert.match(sources['FogliOperativi.gs'], /function preparaProduzioniEventoDaWordPress_/);
-	assert.match(sources['FogliOperativi.gs'], /String\(riga\.id_evento\) === idEvento/);
-	assert.match(sources['FogliOperativi.gs'], /apriFoglioOperativoConLock_\(\{ id_evento: idEvento, titolo: titolo, profilo_operativo: profiloOperativo \}\)/);
-	assert.match(sources['FogliOperativi.gs'], /generaVistaOperativaIniziale_/);
-	assert.match(sources['FogliOperativi.gs'], /mode: 'PREVIEW'/);
-	assert.match(sources['FogliOperativi.gs'], /Evento ' \+ idEvento \+ ' - '/);
+	assert.match(sources['WebApp.gs'], /PROIETTA_EVENTO/);
+	assert.match(sources['ProiezioneDiretta.gs'], /function proiettaEventoDaWordPress_/);
+	assert.match(sources['ProiezioneDiretta.gs'], /projection\.event\.id_evento/);
+	assert.match(sources['ProiezioneDiretta.gs'], /properties\.setProperty\(registryKey,book\.getId\(\)\)/);
+	assert.match(sources['ProiezioneDiretta.gs'], /'Evento '\+eventId\+' - '/);
 	assert.match(sources['FogliOperativi.gs'], /function spostaFoglioAccantoAlDatabase_/);
 	assert.match(sources['FogliOperativi.gs'], /function ottieniCartelleEventi_/);
 	assert.match(sources['FogliOperativi.gs'], /DriveApp\.getRootFolder\(\)/);
@@ -219,7 +217,10 @@ test('la console non richiede mai foto o scansioni dei documenti', () => {
 	assert.doesNotMatch(segreteriaHtml, /type\s*=\s*["']file["']/i);
 	assert.doesNotMatch(segreteriaHtml, /foto(?:grafia)?\s+(?:del|di)\s+document|scansione\s+(?:del|di)\s+document/i);
 	assert.doesNotMatch(combined, /DriveApp\.createFile/);
-	assert.doesNotMatch(Object.entries(sources).filter(([name]) => name !== 'Email.gs').map(([, text]) => text).join('\n'), /Utilities\.newBlob/);
+	// Email creates inline assets; the direct projection creates only an in-memory
+	// blob to decompress signed JSON. Neither path may acquire document files.
+	assert.doesNotMatch(Object.entries(sources).filter(([name]) => !['Email.gs', 'ProiezioneDiretta.gs'].includes(name)).map(([, text]) => text).join('\n'), /Utilities\.newBlob/);
+	assert.doesNotMatch(sources['ProiezioneDiretta.gs'], /DriveApp\.(?:createFile|getFiles|getFilesByName)/);
 });
 
 test('la data di rilascio del documento è disponibile nelle viste operative', () => {

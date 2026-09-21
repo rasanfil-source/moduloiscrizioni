@@ -13,13 +13,18 @@ test('la coda evento accorpa le modifiche e non conferma una versione superata',
   assert.match(portal, /_mi_workspace_event_attempts', true \) \) >= 3/);
 });
 
-test('le scritture Google sono serializzate e i retry non riacquisiscono il lock', async () => {
+test('le scritture Google sono serializzate e i retry persistenti non riacquisiscono il lock', async () => {
   const client = await source('class-mi-workspace-client.php');
   const service = await source('class-mi-registration-service.php');
   assert.match(client, /GET_LOCK\(%s, %d\)/);
-  assert.match(client, /'PREPARA_PRODUZIONI_EVENTO' === strtoupper\( \$action \) \? 3 : 0/);
+  assert.match(client, /'PROIETTA_EVENTO' !== strtoupper\( \$action \)/);
+  assert.match(client, /\$wait = 3/);
   assert.match(client, /finally.*RELEASE_LOCK/s);
   assert.match(client, /self::request_unlocked\( \$action, \$payload, 1 \)/);
-  assert.match(service, /if \( get_transient\( \$retry_key \) \) return 'PENDING'/);
-  assert.match(service, /time\(\) \+ \$delay, 'mi_sync_workspace_registration'/);
+  assert.match(service, /workspace_next_attempt_at = %s/);
+  assert.match(service, /workspace_next_attempt_at IS NULL OR workspace_next_attempt_at <= %s/);
+  assert.match(service, /wp_unschedule_event\( \$scheduled, 'mi_sync_workspace_registration'/);
+  assert.match(service, /schedule_workspace_registration\( \$registration_id, time\(\) \)/);
+  assert.doesNotMatch(service, /mi_workspace_retry_/);
+  assert.match(service, /schedule_workspace_registration\( \$registration_id, time\(\) \+ \$delay \)/);
 });

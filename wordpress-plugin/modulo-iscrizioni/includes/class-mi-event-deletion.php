@@ -157,9 +157,7 @@ final class MI_Event_Deletion {
 		if ( ! $job || 'done' === $job['stage'] ) return $job;
 		try {
 			if ( 'google' === $job['stage'] ) {
-				$codes = $wpdb->get_col( $wpdb->prepare( "SELECT order_code FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d", $id ) );
-				if ( $wpdb->last_error ) throw new RuntimeException( 'Codici iscrizione non disponibili.' );
-				$result = MI_Workspace_Client::request( 'ELIMINA_DATI_EVENTO', array( 'id_evento' => (string) $id, 'request_id' => $job['request'], 'mode' => $job['mode'], 'id_foglio' => $job['sheet_id'], 'order_codes' => $codes ) );
+				$result = MI_Workspace_Client::request( 'ELIMINA_DATI_EVENTO', array( 'id_evento' => (string) $id, 'request_id' => $job['request'], 'mode' => $job['mode'], 'id_foglio' => $job['sheet_id'], 'direct_projection' => true ) );
 				if ( is_wp_error( $result ) ) throw new RuntimeException( 'Pulizia Google non completata: ' . $result->get_error_message() );
 				if ( empty( $result['complete'] ) ) { $job['error'] = ''; self::save_job( $id, $job ); return $job; }
 				$job['sheet_url'] = (string) ( $result['sheet_url'] ?? $job['sheet_url'] );

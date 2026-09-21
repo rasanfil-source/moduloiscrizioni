@@ -46,7 +46,8 @@ final class MI_Portal {
 		$remaining = array_values( array_filter( $events, static function ( $id ) use ( $cursor ) { return $id > $cursor; } ) );
 		$batch = array_slice( $remaining, 0, 3 );
 		if ( ! $batch ) { delete_option( 'mi_sheet_organization_cursor' ); return; }
-		$verifica = MI_Workspace_Client::request( 'VERIFICA_FOGLI_EVENTO', array( 'id_eventi' => array_map( 'strval', $batch ) ) );
+		$fogli = array_map( static function ( $id ) { return array( 'id_evento' => (string) $id, 'id_foglio' => (string) get_post_meta( $id, '_mi_operational_sheet_id', true ) ); }, $batch );
+		$verifica = MI_Workspace_Client::request( 'VERIFICA_FOGLI_EVENTO', array( 'fogli' => $fogli, 'direct_projection' => true ) );
 		if ( ! is_wp_error( $verifica ) ) foreach ( (array) ( $verifica['stati'] ?? array() ) as $stato ) {
 			$id = absint( $stato['id_evento'] ?? 0 );
 			if ( ! in_array( $id, $batch, true ) ) continue;
@@ -68,7 +69,8 @@ final class MI_Portal {
 			else $correnti[] = (string) $event_id;
 		}
 		if ( $versions ) {
-			$result = MI_Workspace_Client::request( 'ORGANIZZA_FOGLI_EVENTO', array( 'eventi_correnti' => $correnti, 'eventi_passati' => $passati ) );
+			$map_sheet = static function ( $id ) { return array( 'id_evento' => (string) $id, 'id_foglio' => (string) get_post_meta( (int) $id, '_mi_operational_sheet_id', true ) ); };
+			$result = MI_Workspace_Client::request( 'ORGANIZZA_FOGLI_EVENTO', array( 'fogli_correnti' => array_map( $map_sheet, $correnti ), 'fogli_passati' => array_map( $map_sheet, $passati ), 'direct_projection' => true ) );
 			// L'ok della busta non garantisce il successo di ogni singolo spostamento.
 			if ( ! is_wp_error( $result ) ) foreach ( (array) ( $result['risultati'] ?? array() ) as $item ) {
 				$id = absint( $item['id_evento'] ?? 0 );
@@ -96,12 +98,12 @@ final class MI_Portal {
 		if ( ! is_singular() && empty( $_GET['mi_portal'] ) && empty( $_GET['mi_status'] ) && empty( $_GET['mi_waitlist_offer'] ) ) return;
 		$post = get_post();
 		if ( empty( $_GET['mi_portal'] ) && empty( $_GET['mi_status'] ) && empty( $_GET['mi_waitlist_offer'] ) && ( ! $post || ! has_shortcode( $post->post_content, self::SHORTCODE ) ) ) return;
-		wp_enqueue_style( 'mi-portal', MI_PLUGIN_URL . 'assets/portal.css', array(), MI_VERSION . '.' . filemtime( MI_PLUGIN_DIR . 'assets/portal.css' ) );
+		wp_enqueue_style( 'mi-portal', MI_PLUGIN_URL . 'assets/portal.css', array(), MI_VERSION );
 		wp_enqueue_script( 'mi-portal', MI_PLUGIN_URL . 'assets/portal.js', array(), MI_VERSION, true );
-		wp_enqueue_script( 'mi-portal-management', MI_PLUGIN_URL . 'assets/portal-management.js', array(), MI_VERSION . '.' . filemtime( MI_PLUGIN_DIR . 'assets/portal-management.js' ), true );
-		wp_enqueue_style( 'mi-portal-management', MI_PLUGIN_URL . 'assets/portal-management.css', array( 'mi-portal' ), MI_VERSION . '.' . filemtime( MI_PLUGIN_DIR . 'assets/portal-management.css' ) );
+		wp_enqueue_script( 'mi-portal-management', MI_PLUGIN_URL . 'assets/portal-management.js', array(), MI_VERSION, true );
+		wp_enqueue_style( 'mi-portal-management', MI_PLUGIN_URL . 'assets/portal-management.css', array( 'mi-portal' ), MI_VERSION );
 		if ( MI_Portal_Payments::allowed() ) {
-			wp_enqueue_style( 'mi-portal-payments', MI_PLUGIN_URL . 'assets/portal-payments.css', array( 'mi-portal' ), MI_VERSION . '.' . filemtime( MI_PLUGIN_DIR . 'assets/portal-payments.css' ) );
+			wp_enqueue_style( 'mi-portal-payments', MI_PLUGIN_URL . 'assets/portal-payments.css', array( 'mi-portal' ), MI_VERSION );
 			wp_enqueue_script( 'mi-portal-payments', MI_PLUGIN_URL . 'assets/portal-payments.js', array(), MI_VERSION, true );
 		}
 	}
@@ -116,10 +118,9 @@ final class MI_Portal {
 			if ( ! $post || ! has_shortcode( $post->post_content, self::SHORTCODE ) ) return;
 		}
 		$icon = 'assets/segreteria-eventi.png';
-		$version = substr( hash_file( 'sha256', MI_PLUGIN_DIR . $icon ), 0, 16 );
-		$asset_url = MI_PLUGIN_URL . $icon . '?ver=' . $version;
+		$asset_url = MI_PLUGIN_URL . $icon . '?ver=' . rawurlencode( MI_VERSION );
 		$ico = 'assets/segreteria-eventi.ico';
-		$ico_url = MI_PLUGIN_URL . $ico . '?ver=' . substr( hash_file( 'sha256', MI_PLUGIN_DIR . $ico ), 0, 16 );
+		$ico_url = MI_PLUGIN_URL . $ico . '?ver=' . rawurlencode( MI_VERSION );
 		echo '<link rel="shortcut icon" type="image/x-icon" href="' . esc_url( $ico_url ) . '">';
 		echo '<link rel="icon" type="image/png" href="' . esc_url( $asset_url ) . '">';
 		echo '<link rel="apple-touch-icon" href="' . esc_url( $asset_url ) . '">';
@@ -378,13 +379,15 @@ final class MI_Portal {
 		$event_id = absint( $_POST['event_id'] ?? 0 );
 		check_admin_referer( 'mi_portal_repair_event_sheet_' . $event_id, 'mi_portal_nonce' );
 		if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Evento non accessibile.', 403 );
-		$verifica = MI_Workspace_Client::request( 'VERIFICA_FOGLIO_EVENTO', array( 'id_evento' => (string) $event_id ) );
+		$verifica = MI_Workspace_Client::request( 'VERIFICA_FOGLIO_EVENTO', array( 'id_evento' => (string) $event_id, 'id_foglio' => (string) get_post_meta( $event_id, '_mi_operational_sheet_id', true ), 'direct_projection' => true ) );
 		if ( is_wp_error( $verifica ) ) return self::redirect_result( 'Non è stato possibile verificare il foglio: ' . $verifica->get_error_message(), true, $event_id, true );
 		if ( ! empty( $verifica['esiste'] ) ) return self::redirect_result( 'Il foglio Google è disponibile e correttamente collegato.', false, $event_id, true );
 		update_post_meta( $event_id, '_mi_sheet_missing', '1' );
+		delete_post_meta( $event_id, '_mi_operational_sheet_id' );
+		delete_post_meta( $event_id, '_mi_operational_sheet_url' );
 		$ricreato = self::prepara_produzioni_workspace( $event_id, 'publish' === get_post_status( $event_id ) ? 'PUBBLICATO' : 'BOZZA' );
 		if ( is_wp_error( $ricreato ) ) return self::redirect_result( 'Il foglio non è disponibile e non è stato possibile ricrearlo: ' . $ricreato->get_error_message(), true, $event_id, true );
-		return self::redirect_result( 'Il foglio mancante è stato ricreato dai dati conservati in DB_MODULI.', false, $event_id, true );
+		return self::redirect_result( 'Il foglio mancante è stato ricreato dai dati autorevoli conservati in MySQL.', false, $event_id, true );
 	}
 
 	/** Crea o riallinea il foglio operativo e conserva tutti i collegamenti restituiti. */
@@ -431,49 +434,17 @@ final class MI_Portal {
 		$url_iscrizione = MI_Shortcode::url_iscrizione( $event_id );
 		$ha_saldo = 'DEPOSIT_BALANCE' === get_post_meta( $event_id, '_mi_economic_mode', true );
 		$url_saldo = $ha_saldo ? add_query_arg( array( 'mi_status' => 'balance', 'evento' => $event_id ), home_url( '/' ) ) : '';
-		$profilo_operativo = MI_Field_Schema::resolved_operational_profile( $event_id );
-		$result = null;
 		// Google serializza la preparazione con la cancellazione tramite tombstone.
 		// Non bloccare le iscrizioni mentre aspettiamo la risposta remota.
 		if ( class_exists( 'MI_Event_Deletion' ) ) MI_Event_Deletion::release( $event_id );
-		// Un tentativo precedente può essere scaduto su WordPress mentre Apps Script
-		// terminava correttamente. Prima di ricreare, recupera il foglio idempotente.
-		if ( 'BOZZA' === $stato ) {
-			$verifica = MI_Workspace_Client::request( 'VERIFICA_FOGLIO_EVENTO', array( 'id_evento' => (string) $event_id ) );
-			if ( ! is_wp_error( $verifica ) && ! empty( $verifica['esiste'] ) ) {
-				$result = array(
-					'ok'         => true,
-					'id_evento'  => (string) $event_id,
-					'id_foglio'  => (string) ( $verifica['id_foglio'] ?? '' ),
-					'url_foglio' => (string) ( $verifica['url_foglio'] ?? '' ),
-					'creato'     => false,
-					'recuperato' => true,
-				);
-			}
-		}
-		if ( ! is_array( $result ) ) $result = MI_Workspace_Client::request( 'PREPARA_PRODUZIONI_EVENTO', array(
-			'id_evento' => (string) $event_id,
-			'id_gruppo' => (string) absint( get_post_meta( $event_id, '_mi_activity_id', true ) ),
-			'titolo' => $event->post_title,
-			'stato' => in_array( $stato, array( 'BOZZA', 'PUBBLICATO', 'PRIVATO' ), true ) ? $stato : 'BOZZA',
-			'capienza' => max( 1, absint( get_post_meta( $event_id, '_mi_capacity', true ) ) ),
-			'apertura_iscrizioni' => (string) get_post_meta( $event_id, '_mi_registration_opens_at', true ),
-			'chiusura_iscrizioni' => (string) get_post_meta( $event_id, '_mi_registration_closes_at', true ),
-			'modalita_prezzo' => (string) get_post_meta( $event_id, '_mi_pricing_mode', true ),
-			'evento_gratuito' => 'ZERO' === strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ),
-			'profilo_operativo' => $profilo_operativo,
-			'event_schema' => MI_Field_Schema::workspace_event_schema( $event_id ),
-			'domande_partecipanti' => MI_Field_Schema::sanitize_custom_fields( get_post_meta( $event_id, '_mi_custom_participant_fields', true ) ),
-			'servizi' => array_values( (array) get_post_meta( $event_id, '_mi_options', true ) ),
-			'url_iscrizione' => $url_iscrizione,
-			'url_saldo' => $url_saldo,
-			'email_gestore' => $gestore ? $gestore->user_email : '',
-		) );
+		try { $request = MI_Event_Projection::request_payload( $event_id ); }
+		catch ( Throwable $error ) { return new WP_Error( 'mi_proiezione_evento', $error->getMessage() ); }
+		$result = MI_Workspace_Client::request( 'PROIETTA_EVENTO', $request['payload'] );
 		if ( is_wp_error( $result ) ) return $result;
 		$sheet_id = sanitize_text_field( (string) ( $result['id_foglio'] ?? '' ) );
 		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( $event_id ); if ( is_wp_error( $lease ) ) return $lease; }
 		$sheet_url = esc_url_raw( (string) ( $result['url_foglio'] ?? '' ) );
-		if ( ! preg_match( '/^[A-Za-z0-9_-]{20,}$/', $sheet_id ) || 0 !== strpos( $sheet_url, 'https://docs.google.com/spreadsheets/' ) ) return new WP_Error( 'mi_foglio_non_valido', 'Workspace non ha restituito un collegamento al foglio valido.' );
+		if ( ! preg_match( '~^https://docs\.google\.com/spreadsheets/d/([A-Za-z0-9_-]{20,})(?:/|$)~D', $sheet_url, $sheet_match ) || ! hash_equals( $sheet_id, $sheet_match[1] ) ) return new WP_Error( 'mi_foglio_non_valido', 'Workspace non ha restituito un collegamento al foglio valido.' );
 		update_post_meta( $event_id, '_mi_operational_sheet_id', $sheet_id );
 		update_post_meta( $event_id, '_mi_operational_sheet_url', $sheet_url );
 		update_post_meta( $event_id, '_mi_registration_url', esc_url_raw( $url_iscrizione ) );
@@ -836,7 +807,7 @@ final class MI_Portal {
 			exit;
 		}
 		// Ricarica anche le correzioni distribuite con lo stesso numero di versione.
-		$asset_version = rawurlencode( MI_VERSION . '.' . filemtime( MI_PLUGIN_DIR . 'assets/portal-management.js' ) );
+		$asset_version = rawurlencode( MI_VERSION );
 		$page_title = ! empty( $_GET['mi_status'] ) ? 'Stato della prenotazione' : ( ! empty( $_GET['mi_waitlist_offer'] ) ? 'Posto disponibile' : 'Segreteria eventi' );
 		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><title><?php echo esc_html( get_bloginfo( 'name' ) . ' — ' . $page_title ); ?></title><?php self::portal_icon_links(); ?><link rel="stylesheet" href="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal.css?ver=' . $asset_version ) ); ?>"></head><body class="mi-portal-standalone"><?php echo self::render(); ?><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal.js?ver=' . $asset_version ) ); ?>"></script><?php if ( MI_Portal_Payments::allowed() ) : ?><link rel="stylesheet" href="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-payments.css?ver=' . $asset_version ) ); ?>"><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-payments.js?ver=' . $asset_version ) ); ?>"></script><?php endif; ?><link rel="stylesheet" href="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-management.css?ver=' . $asset_version ) ); ?>"><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-management.js?ver=' . $asset_version ) ); ?>"></script></body></html><?php
 		exit;

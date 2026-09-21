@@ -157,95 +157,39 @@ function generaVistaOperativaIniziale_(idEvento, titolo, profiloRichiesto) {
 /** Controlla che il documento registrato esista davvero e sia accessibile. */
 function verificaFoglioEventoDaWordPress_(payload) {
 	const idEvento = normalizzaTesto_((payload || {}).id_evento, 40);
+	if ((payload||{}).direct_projection !== true) return {ok:false,error:'USE_DIRECT_PROJECTION'};
 	if (!/^\d+$/.test(idEvento)) return { ok: false, error: 'EVENTO_NON_VALIDO' };
-	const registro = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES));
-	const collegamento = registro.find(function (riga) { return String(riga.id_evento) === idEvento; });
-	if (!collegamento || !collegamento.id_foglio) return { ok: true, esiste: false, id_evento: idEvento };
 	try {
-		const file = DriveApp.getFileById(String(collegamento.id_foglio));
-		if (file.isTrashed()) return { ok: true, esiste: false, id_evento: idEvento };
-		if (PropertiesService.getScriptProperties().getProperty('MI_SHEET_PREPARING_' + idEvento) === String(collegamento.id_foglio)) return { ok: true, esiste: false, id_evento: idEvento, preparazione_in_corso: true };
-		abilitaLetturaFoglioEventoConLink_(collegamento.id_foglio);
-		return { ok: true, esiste: true, id_evento: idEvento, id_foglio: String(collegamento.id_foglio), url_foglio: String(collegamento.url_foglio || file.getUrl()) };
-	} catch (errore) {
-		return { ok: false, error: 'SHEET_UNAVAILABLE', id_evento: idEvento };
+		const opened=apriFoglioEventoFirmato_({event_id:idEvento,sheet_id:String((payload||{}).id_foglio||'')},false);
+		abilitaLetturaFoglioEventoConLink_(opened.book.getId());
+		return {ok:true,esiste:true,id_evento:idEvento,id_foglio:opened.book.getId(),url_foglio:opened.book.getUrl()};
+	} catch(error) {
+		const detail=String(error&&error.message?error.message:error);
+		if (/EVENT_SHEET_MISSING|file not found|does not exist/i.test(detail)) return {ok:true,esiste:false,id_evento:idEvento};
+		return {ok:false,error:'SHEET_UNAVAILABLE',id_evento:idEvento};
 	}
 }
 
 /** Verifica in una sola richiesta i documenti di più eventi. */
 function verificaFogliEventoDaWordPress_(payload) {
-	const ids = (Array.isArray((payload || {}).id_eventi) ? payload.id_eventi : []).slice(0, 100).map(function (id) { return normalizzaTesto_(id, 40); }).filter(function (id) { return /^\d+$/.test(id); });
-	const visti = {};
-	const stati = [];
-	ids.forEach(function (idEvento) {
-		if (visti[idEvento]) return;
-		visti[idEvento] = true;
-		const stato = verificaFoglioEventoDaWordPress_({ id_evento: idEvento });
-		if (!stato.ok) return; // An inaccessible file is not evidence of deletion.
-		stati.push({ id_evento: idEvento, esiste: !!stato.esiste, id_foglio: String(stato.id_foglio || ''), url_foglio: String(stato.url_foglio || '') });
-	});
-	return { ok: true, stati: stati };
-}
-
-/** Sposta in «EVENTI/EVENTI PASSATI» il foglio di un evento passato, senza cancellarlo. */
-function archiviaFoglioEventoDaWordPress_(payload) {
-	const idEvento = normalizzaTesto_((payload || {}).id_evento, 40);
-	if (!/^\d+$/.test(idEvento)) return { ok: false, error: 'EVENTO_NON_VALIDO' };
-	const collegamento = trovaCollegamentoFoglioOperativo_(idEvento);
-	const file = DriveApp.getFileById(String(collegamento.id_foglio));
-	if (file.isTrashed()) return { ok: false, error: 'FOGLIO_NON_DISPONIBILE' };
-	const archivio = ottieniCartelleEventi_().passati;
-	file.moveTo(archivio);
-	aggiungiControllo_('FOGLIO_OPERATIVO', 'ARCHIVE', idEvento, 'SUCCESS', 'WORDPRESS', 'MOVED_TO_COMPLETED', 'WORDPRESS_PROXY');
-	return { ok: true, id_evento: idEvento, id_foglio: String(collegamento.id_foglio), cartella: 'EVENTI/EVENTI PASSATI' };
+	if ((payload||{}).direct_projection !== true || !Array.isArray((payload||{}).fogli)) return {ok:false,error:'USE_DIRECT_PROJECTION'};
+	const stati=[];
+	payload.fogli.slice(0,100).forEach(item=>{const id=normalizzaTesto_((item||{}).id_evento,40);if(!/^\d+$/.test(id))return;const stato=verificaFoglioEventoDaWordPress_({id_evento:id,id_foglio:String((item||{}).id_foglio||''),direct_projection:true});if(stato.ok)stati.push({id_evento:id,esiste:!!stato.esiste,id_foglio:String(stato.id_foglio||''),url_foglio:String(stato.url_foglio||'')});});
+	return {ok:true,stati:stati};
 }
 
 /** Riallinea in blocco i fogli esistenti alla stessa distinzione mostrata nel portale. */
 function organizzaFogliEventoDaWordPress_(payload) {
 	payload = payload || {};
-	const correnti = normalizzaIdentificativiEvento_(payload.eventi_correnti);
-	const passati = normalizzaIdentificativiEvento_(payload.eventi_passati);
-	const cartelle = ottieniCartelleEventi_();
-	const risultati = [];
-	const sposta = function (idEvento, cartella, destinazione) {
-		try {
-			const collegamento = trovaCollegamentoFoglioOperativo_(idEvento);
-			const file = DriveApp.getFileById(String(collegamento.id_foglio));
-			if (file.isTrashed()) throw new Error('FOGLIO_NON_DISPONIBILE');
-			file.moveTo(cartella);
-			risultati.push({ id_evento: idEvento, ok: true, cartella: destinazione });
-		} catch (errore) {
-			risultati.push({ id_evento: idEvento, ok: false, errore: normalizzaTesto_(errore && errore.message ? errore.message : errore, 200) });
-		}
-	};
-	correnti.forEach(function (idEvento) { sposta(idEvento, cartelle.eventi, 'EVENTI'); });
-	passati.forEach(function (idEvento) { sposta(idEvento, cartelle.passati, 'EVENTI/EVENTI PASSATI'); });
-	return { ok: true, risultati: risultati };
+	if (payload.direct_projection !== true || (!Array.isArray(payload.fogli_correnti) && !Array.isArray(payload.fogli_passati))) return {ok:false,error:'USE_DIRECT_PROJECTION'};
+	const cartelle=ottieniCartelleEventi_(), risultati=[];
+	const move=(items,folder,destination)=>(Array.isArray(items)?items:[]).slice(0,200).forEach(item=>{const id=normalizzaTesto_((item||{}).id_evento,40),sheetId=String((item||{}).id_foglio||'');try{if(!/^\d+$/.test(id)||!seriaIdFoglioDiretto_(sheetId))throw new Error('FOGLIO_NON_DISPONIBILE');const opened=apriFoglioEventoFirmato_({event_id:id,sheet_id:sheetId},false);DriveApp.getFileById(opened.book.getId()).moveTo(folder);risultati.push({id_evento:id,ok:true,cartella:destination});}catch(error){risultati.push({id_evento:id,ok:false,errore:normalizzaTesto_(error&&error.message?error.message:error,200)});}});
+	move(payload.fogli_correnti,cartelle.eventi,'EVENTI');
+	move(payload.fogli_passati,cartelle.passati,'EVENTI/EVENTI PASSATI');
+	return {ok:true,risultati:risultati};
 }
 
-function normalizzaIdentificativiEvento_(valori) {
-	const visti = {};
-	return (Array.isArray(valori) ? valori : []).slice(0, 200).map(function (valore) { return normalizzaTesto_(valore, 40); }).filter(function (valore) {
-		if (!/^\d+$/.test(valore) || visti[valore]) return false;
-		visti[valore] = true;
-		return true;
-	});
-}
-
-/** Cestina il foglio collegato e rimuove l'associazione di una bozza eliminata. */
-function eliminaFoglioEventoDaWordPress_(payload) {
-	const idEvento = normalizzaTesto_((payload || {}).id_evento, 40);
-	if (!/^\d+$/.test(idEvento)) return { ok: false, error: 'EVENTO_NON_VALIDO' };
-	const registro = ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES);
-	const collegamento = convertiRigheInOggetti_(registro).find(function (riga) { return String(riga.id_evento) === idEvento; });
-	if (!collegamento) return { ok: true, id_evento: idEvento, eliminato: false };
-	if (collegamento.id_foglio) {
-		DriveApp.getFileById(String(collegamento.id_foglio)).setTrashed(true);
-	}
-	registro.deleteRow(collegamento._row);
-	aggiungiControllo_('FOGLIO_OPERATIVO', 'DELETE', idEvento, 'SUCCESS', 'WORDPRESS', 'MOVED_TO_TRASH', 'WORDPRESS_PROXY');
-	return { ok: true, id_evento: idEvento, eliminato: true };
-}
+function seriaIdFoglioDiretto_(value) { return /^[A-Za-z0-9_-]{20,}$/.test(String(value||'')); }
 
 /** Crea o riusa la struttura EVENTI nella radice di Google Drive. */
 function ottieniCartelleEventi_() {

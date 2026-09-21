@@ -153,7 +153,7 @@ final class MI_Payment_Ledger {
 			$payment['created_at'] = current_time( 'mysql', true );
 			if ( false === $wpdb->insert( $wpdb->prefix . 'mi_payments', $payment ) ) throw new RuntimeException( 'Movimento non salvato.' );
 			$payment_id = (int) $wpdb->insert_id; $paid += $incoming ? $amount : -$amount;
-			$status = $r['status']; $changes = array( 'workspace_status' => 'PENDING', 'workspace_attempts' => 0, 'workspace_last_error' => 'payment_changed', 'workspace_revision' => (int) $r['workspace_revision'] + 1 );
+			$status = $r['status']; $changes = array( 'workspace_status' => 'PENDING', 'workspace_attempts' => 0, 'workspace_next_attempt_at' => null, 'workspace_last_error' => 'payment_changed', 'workspace_revision' => (int) $r['workspace_revision'] + 1 );
 			if ( in_array( $status, array( 'PENDING_PAYMENT', 'CONFIRMED' ), true ) ) {
 				$covered = $paid >= (int) $r['initial_due_cents'];
 				$updated_history = $history; $updated_history[] = $payment;

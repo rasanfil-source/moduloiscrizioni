@@ -1,37 +1,34 @@
 function doGet(event) {
-  return creaRispostaJson_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, mode: 'PREVIEW' });
+  return creaRispostaJson_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, standalone: progettoAutonomo_(), mode: 'PREVIEW' });
 }
+
+function progettoAutonomo_() { return typeof MI_STANDALONE_MODE !== 'undefined' && MI_STANDALONE_MODE === true; }
 
 function doPost(event) {
   try {
     if (!event || !event.postData || !event.postData.contents) return creaRispostaJson_({ ok: false, error: 'EMPTY_PAYLOAD' });
     const envelope = JSON.parse(event.postData.contents);
     const verified = verificaBusta_(envelope);
-    if (!verified.ok) return creaRispostaJson_(verified.error === 'WORKSPACE_BUSY' && envelope.action === 'PREPARA_APERTURA_FOGLIO' ? {ok:true,ready:false,busy:true,retry_after:3} : { ok: false, error: verified.error });
-    if (envelope.action === 'ELIMINA_DATI_EVENTO') return creaRispostaJson_(eliminaDatiEventoDaWordPress_(envelope.payload));
+    if (!verified.ok) return creaRispostaJson_(verified.error === 'WORKSPACE_BUSY' && envelope.action === 'PROIETTA_EVENTO' ? {ok:true,ready:false,busy:true,retry_after:3} : { ok: false, error: verified.error });
+    if (envelope.action === 'STATO_SCHEMA') return creaRispostaJson_({ ok: true, schema_version: MI_SCHEMA_VERSION, direct_projection: progettoAutonomo_(), standalone: progettoAutonomo_(), central_workbook: !progettoAutonomo_(), projection_pull: progettoAutonomo_(), mode: 'PREVIEW' });
+    if (['PROIETTA_EVENTO','ELIMINA_DATI_EVENTO','VERIFICA_FOGLIO_EVENTO','VERIFICA_FOGLI_EVENTO','ORGANIZZA_FOGLI_EVENTO','LEGGI_MODIFICHE_FOGLIO','CONFERMA_MODIFICHE_FOGLIO'].includes(envelope.action) && !progettoAutonomo_()) return creaRispostaJson_({ok:false,error:'USE_STANDALONE_PROJECT'});
+    if (envelope.action === 'ELIMINA_DATI_EVENTO') return creaRispostaJson_(envelope.payload.direct_projection === true ? eliminaDatiEventoDaWordPress_(envelope.payload) : {ok:false,error:'USE_DIRECT_PROJECTION'});
     if (envelope.action === 'PING') return creaRispostaJson_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, mode: 'PREVIEW' });
-	if (envelope.action === 'STATO_SCHEMA') return creaRispostaJson_({ ok: true, schema_version: MI_SCHEMA_VERSION, registration_headers: MI_HEADERS[MI_SHEETS.REGISTRATIONS], participant_headers: MI_HEADERS[MI_SHEETS.PARTICIPANTS], accommodation_headers: MI_HEADERS[MI_SHEETS.ACCOMMODATIONS], group_headers: MI_HEADERS[MI_SHEETS.GROUPS], report_template_headers: MI_HEADERS[MI_SHEETS.REPORT_TEMPLATES], event_headers: MI_HEADERS[MI_SHEETS.EVENTS], mode: 'PREVIEW' });
-	if (envelope.action === 'STATO_REPLICA_ISCRIZIONE') return creaRispostaJson_(statoReplicaIscrizione_(envelope.payload));
-	if (envelope.action === 'PREPARA_PRODUZIONI_EVENTO') return creaRispostaJson_(preparaProduzioniEventoDaWordPress_(envelope.payload));
-	if (envelope.action === 'VERIFICA_FOGLIO_EVENTO') return creaRispostaJson_(verificaFoglioEventoDaWordPress_(envelope.payload));
-	if (envelope.action === 'VERIFICA_FOGLI_EVENTO') return creaRispostaJson_(verificaFogliEventoDaWordPress_(envelope.payload));
-	if (envelope.action === 'ARCHIVIA_FOGLIO_EVENTO') return creaRispostaJson_(archiviaFoglioEventoDaWordPress_(envelope.payload));
-	if (envelope.action === 'ORGANIZZA_FOGLI_EVENTO') return creaRispostaJson_(organizzaFogliEventoDaWordPress_(envelope.payload));
-	if (envelope.action === 'ELIMINA_FOGLIO_EVENTO') return creaRispostaJson_(eliminaFoglioEventoDaWordPress_(envelope.payload));
+	if (envelope.action === 'VERIFICA_FOGLIO_EVENTO') return creaRispostaJson_(envelope.payload.direct_projection === true ? verificaFoglioEventoDaWordPress_(envelope.payload) : {ok:false,error:'USE_DIRECT_PROJECTION'});
+	if (envelope.action === 'VERIFICA_FOGLI_EVENTO') return creaRispostaJson_(envelope.payload.direct_projection === true ? verificaFogliEventoDaWordPress_(envelope.payload) : {ok:false,error:'USE_DIRECT_PROJECTION'});
+	if (envelope.action === 'ORGANIZZA_FOGLI_EVENTO') return creaRispostaJson_(envelope.payload.direct_projection === true ? organizzaFogliEventoDaWordPress_(envelope.payload) : {ok:false,error:'USE_DIRECT_PROJECTION'});
 	if (envelope.action === 'INVIA_EMAIL_PROVA') return creaRispostaJson_(inviaEmailProvaDaWordPress_(envelope.payload));
 	if (envelope.action === 'INVIA_EMAIL_CONFERMA') return creaRispostaJson_(inviaEmailConfermaDaWordPress_(envelope.payload));
 	if (envelope.action === 'STATO_CANALE_EMAIL') return creaRispostaJson_(statoCanaleEmail_());
+    if (envelope.action === 'PROIETTA_EVENTO') return creaRispostaJson_(proiettaEventoDaWordPress_(envelope.payload));
     if (envelope.action === 'REGISTRA_PAGAMENTO_PORTALE') return creaRispostaJson_({ok:false,error:'USE_MYSQL_PAYMENT_LEDGER'});
-    if (envelope.action === 'LEGGI_MODIFICHE_FOGLIO') return creaRispostaJson_(leggiModificheEventoMysql_(envelope.payload));
-    if (envelope.action === 'CONFERMA_MODIFICHE_FOGLIO') return creaRispostaJson_(confermaModificheFoglio_(envelope.payload));
-    if (envelope.action === 'PREPARA_APERTURA_FOGLIO') return creaRispostaJson_(preparaAperturaFoglio_(envelope.payload));
+    if (envelope.action === 'LEGGI_MODIFICHE_FOGLIO') return creaRispostaJson_(envelope.payload.direct_projection === true ? leggiModificheEventoMysql_(envelope.payload) : {ok:false,error:'USE_DIRECT_PROJECTION'});
+    if (envelope.action === 'CONFERMA_MODIFICHE_FOGLIO') return creaRispostaJson_(envelope.payload.direct_projection === true ? confermaModificheFoglio_(envelope.payload) : {ok:false,error:'USE_DIRECT_PROJECTION'});
     if (envelope.action === 'SCHEDA_GESTIONE_PORTALE') return creaRispostaJson_({ok:false,error:'USE_MYSQL_MANAGEMENT'});
     if (envelope.action === 'AGGIORNA_GESTIONE_PORTALE') return creaRispostaJson_({ok:false,error:'USE_MYSQL_MANAGEMENT'});
-    if (envelope.action !== 'APPEND_REGISTRATION') return creaRispostaJson_({ ok: false, error: 'ACTION_NOT_ALLOWED' });
-    return creaRispostaJson_(aggiungiIscrizione_(envelope.payload));
+    return creaRispostaJson_({ ok: false, error: 'ACTION_NOT_ALLOWED' });
   } catch (error) {
 		console.error('WEBAPP_REQUEST_FAILED', error && error.stack ? error.stack : String(error));
-		try { aggiungiControllo_('WEBAPP_REQUEST', 'REQUEST', 'UNAVAILABLE', 'ERROR', 'WORDPRESS', 'UNHANDLED_ERROR', 'WORDPRESS_PROXY'); } catch (auditError) {}
     return creaRispostaJson_({ ok: false, error: 'REQUEST_FAILED', diagnostic: normalizzaTesto_(error && error.message ? error.message : String(error), 300) });
   }
 }
@@ -103,7 +100,7 @@ function verificaBusta_(envelope) {
   if (!confrontaInTempoCostante_(expected, signature)) return { ok: false, error: 'INVALID_SIGNATURE' };
   // Only authenticated requests can pause background projections. A short lease
   // gives the interactive opener a turn after the current writer finishes.
-  if (envelope.action === 'PREPARA_APERTURA_FOGLIO' && (envelope.payload || {}).background !== true) PropertiesService.getScriptProperties().setProperty('MI_INTERACTIVE_OPEN_UNTIL', String(Date.now()+90000));
+  if (envelope.action === 'PROIETTA_EVENTO' && (envelope.payload || {}).background !== true) PropertiesService.getScriptProperties().setProperty('MI_INTERACTIVE_OPEN_UNTIL', String(Date.now()+90000));
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return {ok:false,error:'WORKSPACE_BUSY'};
   try {

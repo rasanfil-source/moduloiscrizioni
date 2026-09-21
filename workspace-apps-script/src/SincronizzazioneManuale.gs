@@ -114,12 +114,11 @@ function allineaBaseConVista_(sheet, vista) {
 
 function leggiModificheEventoMysql_(payload) {
   const eventId=String(payload.event_id||'');
+  if (payload.direct_projection!==true) throw new Error('USE_DIRECT_PROJECTION');
   if (!/^[1-9][0-9]*$/.test(eventId)) throw new Error('Evento non valido.');
   const lock=LockService.getScriptLock();lock.waitLock(30000);
   try {
-    const record=convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES)).find(r=>String(r.id_evento)===eventId);
-    if (!record || !record.id_foglio) throw new Error('Foglio evento non disponibile.');
-    const sheet=SpreadsheetApp.openById(String(record.id_foglio)).getSheetByName('Dati operativi');
+	const sheet=apriFoglioEventoFirmato_(payload,false).sheet;
     if (!sheet) throw new Error('Scheda Dati operativi non disponibile.');
     const result=modificheCorrentiFoglio_(sheet);
     if (!result.initialized) throw new Error('Aggiorna il foglio evento prima di sincronizzarlo.');
@@ -132,12 +131,11 @@ function leggiModificheEventoMysql_(payload) {
  */
 function confermaModificheFoglio_(payload) {
   const eventId=String(payload.event_id||''), receipts=payload.confirmations;
+  if (payload.direct_projection!==true) throw new Error('USE_DIRECT_PROJECTION');
   if (!/^[1-9][0-9]*$/.test(eventId) || !Array.isArray(receipts) || receipts.length>500) throw new Error('INVALID_SHEET_RECEIPT');
-  const lock=LockService.getScriptLock(); lock.waitLock(30000);
-  try {
-    const record=convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENT_WORKSPACES)).find(r=>String(r.id_evento)===eventId);
-    if (!record || !record.id_foglio) throw new Error('EVENT_SHEET_MISSING');
-    const sheet=SpreadsheetApp.openById(String(record.id_foglio)).getSheetByName('Dati operativi');
+	const lock=LockService.getScriptLock(); lock.waitLock(30000);
+	try {
+		const sheet=apriFoglioEventoFirmato_(payload,false).sheet;
     if (!sheet) throw new Error('EVENT_SHEET_MISSING');
     let updated=0;
     const protection=sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET).find(p=>p.getDescription()==='MI_PROIEZIONE');

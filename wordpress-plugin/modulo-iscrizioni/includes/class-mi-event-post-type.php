@@ -202,7 +202,7 @@ final class MI_Event_Post_Type {
 			<div class="mi-field-config__item" data-mi-field="<?php echo esc_attr( $field_key ); ?>">
 				<label><input type="checkbox" name="mi_participant_fields[]" value="<?php echo esc_attr( $field_key ); ?>" <?php checked( in_array( $field_key, $field_configuration['enabled'], true ) ); ?> data-mi-field-enabled> <strong><?php echo esc_html( $field['label'] ); ?></strong></label>
 				<label class="mi-field-config__required"><input type="checkbox" name="mi_participant_required[]" value="<?php echo esc_attr( $field_key ); ?>" <?php checked( in_array( $field_key, $field_configuration['required'], true ) ); ?> data-mi-field-required> Obbligatorio</label>
-				<small><?php echo esc_html( $field['help'] ); ?></small>
+				<small><?php echo esc_html( $field['help'] ?? '' ); ?></small>
 			</div>
 		<?php endforeach; ?>
 		</div>
@@ -486,7 +486,7 @@ final class MI_Event_Post_Type {
 			return;
 		}
 		if ( self::GROUP_TYPE === $screen->post_type ) wp_enqueue_media();
-		wp_enqueue_style( 'mi-admin', MI_PLUGIN_URL . 'assets/admin.css', array(), MI_VERSION . '.' . filemtime( MI_PLUGIN_DIR . 'assets/admin.css' ) );
-		wp_enqueue_script( 'mi-admin', MI_PLUGIN_URL . 'assets/admin.js', array(), MI_VERSION . '.' . filemtime( MI_PLUGIN_DIR . 'assets/admin.js' ), true );
+		wp_enqueue_style( 'mi-admin', MI_PLUGIN_URL . 'assets/admin.css', array(), MI_VERSION );
+		wp_enqueue_script( 'mi-admin', MI_PLUGIN_URL . 'assets/admin.js', array(), MI_VERSION, true );
 	}
 }

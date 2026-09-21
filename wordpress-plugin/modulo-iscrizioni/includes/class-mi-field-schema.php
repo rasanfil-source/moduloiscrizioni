@@ -32,6 +32,7 @@ final class MI_Field_Schema {
 				'type'         => 'tel',
 				'max_length'   => 32,
 				'autocomplete' => 'tel',
+				'help'         => '',
 			),
 			'birth_date' => array(
 				'key'          => 'birth_date',

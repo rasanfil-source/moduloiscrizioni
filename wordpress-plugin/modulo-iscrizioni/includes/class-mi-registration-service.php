@@ -590,6 +590,12 @@ final class MI_Registration_Service {
 		if ( ! $force && 'SYNCED' === $registration['workspace_status'] ) {
 			return 'SYNCED';
 		}
+		// In direct-projection mode one coalesced event snapshot replaces every
+		// per-registration write to the retired DB_MODULI replica.
+		if ( class_exists( 'MI_Event_Projection' ) && class_exists( 'MI_Sheet_Open' ) ) {
+			MI_Sheet_Open::enqueue( (int) $registration['event_id'] );
+			return 'PENDING';
+		}
 		// Ripetere il payload completo: una vecchia ricevuta non prova la replica dei movimenti nuovi.
 		$items = $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code, ticket_type_name, quantity, unit_price_cents, options_json FROM {$items_table} WHERE registration_id = %d ORDER BY id", $registration_id ), ARRAY_A );
 		if ( $wpdb->last_error ) return 'PENDING';
@@ -735,11 +741,13 @@ final class MI_Registration_Service {
 				if ( is_array( $error_data ) && ! empty( $error_data['remote_code'] ) ) $error_code .= '_' . sanitize_key( $error_data['remote_code'] );
 				if ( ! empty( $error_data['diagnostic'] ) ) $error_code = substr( sanitize_text_field( $error_data['diagnostic'] ), 0, 80 );
 			}
-			$wpdb->query( $wpdb->prepare( "UPDATE {$registrations_table} SET workspace_status = 'PENDING', workspace_attempts = workspace_attempts + 1, workspace_last_error = %s WHERE id = %d AND workspace_revision = %d", sanitize_text_field( $error_code ), $registration_id, $registration['workspace_revision'] ) );
+			$delay = min( 3600, 30 * ( 2 ** min( (int) $registration['workspace_attempts'], 7 ) ) );
+			$next_attempt = gmdate( 'Y-m-d H:i:s', time() + $delay );
+			$wpdb->query( $wpdb->prepare( "UPDATE {$registrations_table} SET workspace_status = 'PENDING', workspace_attempts = workspace_attempts + 1, workspace_next_attempt_at = %s, workspace_last_error = %s WHERE id = %d AND workspace_revision = %d", $next_attempt, sanitize_text_field( $error_code ), $registration_id, $registration['workspace_revision'] ) );
 			return 'PENDING';
 		}
 		if ( class_exists( 'MI_Event_Deletion' ) && is_wp_error( MI_Event_Deletion::enter( (int) $registration['event_id'] ) ) ) return 'PENDING';
-		$marked = $wpdb->query( $wpdb->prepare( "UPDATE {$registrations_table} SET workspace_status = 'SYNCED', workspace_attempts = workspace_attempts + 1, workspace_last_error = NULL, workspace_synced_at = %s WHERE id = %d AND workspace_revision = %d", current_time( 'mysql', true ), $registration_id, $registration['workspace_revision'] ) );
+		$marked = $wpdb->query( $wpdb->prepare( "UPDATE {$registrations_table} SET workspace_status = 'SYNCED', workspace_attempts = workspace_attempts + 1, workspace_next_attempt_at = NULL, workspace_last_error = NULL, workspace_synced_at = %s WHERE id = %d AND workspace_revision = %d", current_time( 'mysql', true ), $registration_id, $registration['workspace_revision'] ) );
 		if ( 1 !== $marked ) return 'PENDING';
 		if ( class_exists( 'MI_Sheet_Open' ) ) MI_Sheet_Open::enqueue( (int) $registration['event_id'] );
 		return 'SYNCED';
@@ -748,7 +756,14 @@ final class MI_Registration_Service {
 	public static function sync_pending_workspace() {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mi_registrations';
-		$ids = $wpdb->get_col( "SELECT id FROM {$table} WHERE workspace_status = 'PENDING' ORDER BY workspace_attempts,id LIMIT 10" );
+		$now = current_time( 'mysql', true );
+		if ( class_exists( 'MI_Event_Projection' ) && class_exists( 'MI_Sheet_Open' ) ) {
+			// One event refresh supersedes all per-registration retries.
+			$events = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT event_id FROM {$table} WHERE workspace_status = 'PENDING' AND (workspace_next_attempt_at IS NULL OR workspace_next_attempt_at <= %s) ORDER BY event_id LIMIT 10", $now ) );
+			foreach ( $events as $event_id ) MI_Sheet_Open::enqueue( (int) $event_id );
+			return;
+		}
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$table} WHERE workspace_status = 'PENDING' AND (workspace_next_attempt_at IS NULL OR workspace_next_attempt_at <= %s) ORDER BY workspace_attempts,id LIMIT 10", $now ) );
 		$started = microtime( true );
 		foreach ( $ids as $registration_id ) {
 			if ( microtime( true ) - $started > 20 ) break;
@@ -1242,10 +1257,13 @@ final class MI_Registration_Service {
 			return 'SYNCED';
 		}
 		$registration_id = absint( $registration_id );
-		$args = array( $registration_id );
-		if ( $registration_id && ! wp_next_scheduled( 'mi_sync_workspace_registration', $args ) ) {
-			wp_schedule_single_event( time(), 'mi_sync_workspace_registration', $args );
+		if ( class_exists( 'MI_Event_Projection' ) && class_exists( 'MI_Sheet_Open' ) ) {
+			global $wpdb;
+			MI_Sheet_Open::enqueue( (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$wpdb->prefix}mi_registrations WHERE id=%d", $registration_id ) ) );
+			return 'PENDING';
 		}
+		$args = array( $registration_id );
+		if ( $registration_id ) self::schedule_workspace_registration( $registration_id, time() );
 		if ( class_exists( 'MI_Sheet_Open' ) ) {
 			global $wpdb;
 			MI_Sheet_Open::enqueue( (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$wpdb->prefix}mi_registrations WHERE id=%d", $registration_id ) ) );
@@ -1253,9 +1271,21 @@ final class MI_Registration_Service {
 		return 'PENDING';
 	}
 
+	/** Mantiene un solo job per iscrizione, ma anticipa un vecchio backoff quando i dati cambiano. */
+	private static function schedule_workspace_registration( $registration_id, $when ) {
+		$args = array( absint( $registration_id ) );
+		$when = max( time(), (int) $when );
+		$scheduled = wp_next_scheduled( 'mi_sync_workspace_registration', $args );
+		if ( $scheduled && $scheduled <= $when + 1 ) return;
+		if ( $scheduled ) wp_unschedule_event( $scheduled, 'mi_sync_workspace_registration', $args );
+		wp_schedule_single_event( $when, 'mi_sync_workspace_registration', $args );
+	}
+
 	private static function sync_workspace_safely( $registration_id ) {
-		$retry_key = 'mi_workspace_retry_' . absint( $registration_id );
-		if ( get_transient( $retry_key ) ) return 'PENDING';
+		if ( class_exists( 'MI_Event_Projection' ) && class_exists( 'MI_Sheet_Open' ) ) {
+			// Existing cron entries from older releases are consumed once, without re-queuing.
+			return self::sync_workspace( $registration_id );
+		}
 		static $started = null;
 		if ( null === $started ) $started = microtime( true );
 		// Un cron può contenere molte richieste arretrate: non concatenare chiamate
@@ -1271,12 +1301,10 @@ final class MI_Registration_Service {
 		}
 		if ( 'PENDING' === $result ) {
 			global $wpdb;
-			$attempts = absint( $wpdb->get_var( $wpdb->prepare( "SELECT workspace_attempts FROM {$wpdb->prefix}mi_registrations WHERE id = %d", $registration_id ) ) );
-			$delay = min( 3600, 30 * ( 2 ** min( $attempts, 7 ) ) );
-			set_transient( $retry_key, 1, $delay );
-			$args = array( absint( $registration_id ) );
-			if ( ! wp_next_scheduled( 'mi_sync_workspace_registration', $args ) ) wp_schedule_single_event( time() + $delay, 'mi_sync_workspace_registration', $args );
-		} else delete_transient( $retry_key );
+			$next_attempt = $wpdb->get_var( $wpdb->prepare( "SELECT workspace_next_attempt_at FROM {$wpdb->prefix}mi_registrations WHERE id = %d", $registration_id ) );
+			$delay = $next_attempt ? max( 1, strtotime( $next_attempt . ' UTC' ) - time() ) : 30;
+			self::schedule_workspace_registration( $registration_id, time() + $delay );
+		}
 		return $result;
 	}
 
@@ -1460,7 +1488,7 @@ final class MI_Registration_Service {
 	/** Call inside the transaction that changes the registration or its participants. */
 	public static function mark_workspace_changed_locked( $registration_id ) {
 		global $wpdb;
-		$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}mi_registrations SET workspace_revision=workspace_revision+1,workspace_status='PENDING',workspace_attempts=0 WHERE id=%d", $registration_id ) );
+		$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}mi_registrations SET workspace_revision=workspace_revision+1,workspace_status='PENDING',workspace_attempts=0,workspace_next_attempt_at=NULL WHERE id=%d", $registration_id ) );
 		if ( 1 !== $changed ) throw new RuntimeException( 'Revisione della prenotazione non aggiornata.' );
 	}
 

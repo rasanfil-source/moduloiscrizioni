@@ -71,3 +71,11 @@ foreach(['name','buyer','code','room'] as $sort)foreach(['asc','desc'] as $direc
  check_list($result['rows']===$expected,'Changed ordering '.$sort.' '.$direction);
  check_list($result['fingerprint']===hash('sha256',wp_json_encode($expected)),'Temporary sort keys leaked into fingerprint');
 }
+foreach(['name','buyer','code','room'] as $sort)foreach(['asc','desc'] as $direction){
+ $context=['sort'=>$sort,'direction'=>$direction,'includeClosed'=>true];
+ $prefix=[];
+ foreach(array_chunk(array_reverse($sorting['people']),13) as $chunk)$prefix=MI_Management_List::sorted_prefix($prefix,$chunk,$context,25);
+ $expected=MI_Management_List::page($sorting,$context,15,10)['rows'];
+ check_list(array_column(array_slice($prefix,15,10),'id')===array_column($expected,'id'),'Cross-chunk advanced order '.$sort.' '.$direction);
+ check_list(count($prefix)===25,'Advanced selector retained more than the page prefix');
+}

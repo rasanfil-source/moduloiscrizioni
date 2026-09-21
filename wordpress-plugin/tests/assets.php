@@ -11,6 +11,9 @@ foreach ( glob( MI_PLUGIN_DIR . 'assets/*.*' ) as $file ) {
 }
 verify_asset( MI_Assets::filter_url( 'https://other.test/main.js' ) === 'https://other.test/main.js' );
 verify_asset( MI_Assets::url( 'missing.js' ) === MI_PLUGIN_URL . 'assets/missing.js' );
+verify_asset( false === strpos( file_get_contents( MI_PLUGIN_DIR . 'includes/class-mi-assets.php' ), 'hash_file(' ) );
+verify_asset( false === strpos( file_get_contents( MI_PLUGIN_DIR . 'includes/class-mi-portal.php' ), 'hash_file(' ) );
+verify_asset( false === strpos( file_get_contents( MI_PLUGIN_DIR . 'includes/class-mi-portal.php' ), 'filemtime(' ) );
 define( 'SCRIPT_DEBUG', true );
 verify_asset( MI_Assets::url( 'core.js' ) === MI_PLUGIN_URL . 'assets/core.js' );
 echo "Asset URLs, cache keys, missing-file fallback and debug mode OK\n";

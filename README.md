@@ -12,15 +12,15 @@ La parrocchia è l'ente base. Ogni gruppo può avere logo, immagine, colori e co
 
 ## Stato
 
-Il codice locale contiene la versione **3.26.146**. La versione installata sul sito richiede una verifica separata. Il [manuale del segretario](docs/manuale-segretario/Manuale_del_segretario.docx) descrive criteri e procedure operative. Le modifiche dell’ultimo rilascio sono descritte nelle [valutazione audit e correzioni](docs/rilascio-3.26.146.md).
+Il plugin **3.26.150** e la Web App autonoma Workspace 3.26.149 sono installati. Il micro-rilascio plugin ha eliminato l’avviso PHP osservato nell’editor evento. Il 21 settembre 2026 il deployment della Web App è stato aggiornato alla **versione 3** per correggere la decompressione gzip delle proiezioni evento; il successivo collaudo funzionale da WordPress è stato completato con sole identità fittizie. Il [manuale del segretario](docs/manuale-segretario/Manuale_del_segretario.docx) descrive criteri e procedure operative. Le note sono nei rilasci [3.26.149](docs/rilascio-3.26.149.md) e [3.26.150](docs/rilascio-3.26.150.md). La checklist e il punto esatto di ripresa sono nel [piano di dismissione](docs/piano-dismissione-db-moduli.md).
 
-Una bozza è una creazione interrotta: selezionandola da **Gestisci eventi** si riapre dal primo passaggio incompleto, già popolato con i dati salvati. Se la configurazione è completa, si apre direttamente **Attiva l’evento**, con gli indirizzi pronti per i pulsanti **Iscriviti** e, quando previsto, **Saldo**, oltre allo shortcode per WordPress e Divi. Workspace crea in modo idempotente un foglio operativo dedicato nella stessa cartella Drive di `DB_MODULI`, con nome `Evento ID - Titolo`, e ne restituisce il collegamento. La preparazione non pubblica l’evento e non invia email.
+Una bozza è una creazione interrotta: selezionandola da **Gestisci eventi** si riapre dal primo passaggio incompleto, già popolato con i dati salvati. Se la configurazione è completa, si apre direttamente **Attiva l’evento**, con gli indirizzi pronti per i pulsanti **Iscriviti** e, quando previsto, **Saldo**, oltre allo shortcode per WordPress e Divi. Il nuovo percorso prepara in modo idempotente un foglio operativo dedicato nella cartella Drive `EVENTI`, con nome `Evento ID - Titolo`, e ne restituisce il collegamento. La preparazione non pubblica l’evento e non invia email.
 
-MySQL WordPress è il registro autorevole per iscrizioni, pagamenti, camere e dati operativi. Google riceve la replica; nel foglio evento le celle azzurre si correggono e si confermano tramite Sincronizza nel portale. Il referente può consultare conferma e saldo senza vedere note interne o altri dati personali. Email, QR e barcode sono generati localmente; la modalità email iniziale resta `ANTEPRIMA` e `OPERATIVO` richiede una prova sintetica accettata dal sistema di posta.
+MySQL WordPress è il registro autorevole per iscrizioni, pagamenti, camere e dati operativi. Il nuovo percorso genera i fogli evento direttamente da MySQL; nel foglio evento le celle azzurre si correggono e si confermano tramite Sincronizza nel portale. Il referente può consultare conferma e saldo senza vedere note interne o altri dati personali. Email, QR e barcode sono generati localmente; la modalità email iniziale resta `ANTEPRIMA` e `OPERATIVO` richiede una prova sintetica accettata dal sistema di posta.
 
-Il sistema non richiede fotografie o scansioni dei documenti. Se indispensabili per l'iniziativa, raccoglie soltanto dati testuali strutturati. La replica conserva i dati operativi in MySQL, necessari alla gestione centrale.
+Il sistema non richiede fotografie o scansioni dei documenti. Se indispensabili per l'iniziativa, raccoglie soltanto dati testuali strutturati. La Web App autonoma non usa `DB_MODULI`; il workbook e il progetto storico non vanno però eliminati né disattivati prima del periodo di confronto, dei backup e del cutover dei trigger descritti nel piano.
 
-Il codice non memorizza IBAN, numeri completi di carta, link operativi, ID del foglio, URL di distribuzione, segreti o destinatari reali. L’aggiornamento del repository non equivale a un deploy: prima dell’uso occorre aggiornare il plugin, eseguire `configuraCartellaDiLavoro()` sul progetto Apps Script aggiornato e collaudare in ambiente autorizzato con sole identità fittizie.
+Il codice non memorizza IBAN, numeri completi di carta, link operativi, ID del foglio, URL di distribuzione, segreti o destinatari reali. L’aggiornamento del repository non equivale a un deploy: il percorso diretto richiede un progetto Apps Script autonomo, la configurazione privata dei segreti e un collaudo in ambiente autorizzato con sole identità fittizie. Non eseguire `configuraCartellaDiLavoro()` come requisito del nuovo percorso: inizializza il vecchio workbook centrale.
 
 - [Progetto funzionale e tecnico](PROGETTO.md)
 - [Manuale del segretario](docs/manuale-segretario/Manuale_del_segretario.docx)
@@ -41,6 +41,15 @@ Gli esempi usano esclusivamente identità fittizie, domini `example.invalid` e c
 ```powershell
 pwsh.exe -NoLogo -NoProfile -File .\tools\check-sanitization.ps1
 ```
+
+Per eseguire in locale suite Node, asset, sanitizzazione, lint e test PHP:
+
+```powershell
+pwsh.exe -NoLogo -NoProfile -File .\tools\verify.ps1
+```
+
+La verifica completa richiede Node.js 22 o successivo e PHP 8.3 con `mbstring`. L’opzione `-SkipPhp` produce soltanto una verifica parziale e lo segnala esplicitamente.
+Se PHP non è nel `PATH`, passare il suo eseguibile a `-PhpPath`: il verificatore carica `mbstring` dalla cartella `ext` adiacente quando necessario.
 
 I fogli Excel ricevuti come riferimento restano fuori dal repository: se ne ricavano soltanto strutture e casi d'uso generalizzati.
 

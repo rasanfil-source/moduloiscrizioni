@@ -69,6 +69,7 @@ let miFoglioMemo_=null;
 let miSchedeMemo_=Object.create(null);
 function invalidaCacheSchede_(){miFoglioMemo_=null;miSchedeMemo_=Object.create(null);}
 function ottieniFoglioDiLavoroAssociato_() {
+  if (typeof MI_STANDALONE_MODE !== 'undefined' && MI_STANDALONE_MODE === true) throw new Error('CENTRAL_WORKBOOK_RETIRED');
   if(miFoglioMemo_)return miFoglioMemo_;
   const properties = typeof PropertiesService !== 'undefined' ? PropertiesService.getScriptProperties() : null;
   const configuredId = properties ? String(properties.getProperty('MI_SPREADSHEET_ID') || '').trim() : '';

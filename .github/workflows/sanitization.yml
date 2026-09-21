@@ -15,8 +15,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring
+          coverage: none
       - name: Verify Workspace and WordPress behavior
         run: node --test workspace-apps-script/tests/*.test.mjs wordpress-plugin/tests/*.test.mjs
+      - name: Verify generated assets
+        run: |
+          npm ci --prefix tools/asset-build
+          node tools/asset-build/build.cjs --check
+          node tools/asset-build/verify.cjs
       - name: Verify public balance workflow and actual payments
         run: |
           php wordpress-plugin/tests/public-balance.php

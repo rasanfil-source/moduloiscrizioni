@@ -67,9 +67,15 @@ final class MI_Management_List {
 			}
 			$rows[] = $row;
 		}
+		$rows = self::sort_rows( $rows, $context );
+		$offset = max( 0, (int) $offset ); $limit = max( 1, min( 200, (int) $limit ) );
+		return array( 'rows' => array_slice( $rows, $offset, $limit ), 'total' => count( $rows ), 'offset' => $offset, 'limit' => $limit, 'fingerprint' => hash( 'sha256', wp_json_encode( $rows ) ) );
+	}
+
+	/** One comparator for complete lists and bounded, cross-chunk page selection. */
+	private static function sort_rows( array $rows, array $context ) {
 		$sort = in_array( $context['sort'] ?? '', array( 'name', 'buyer', 'code', 'room' ), true ) ? $context['sort'] : 'name';
 		$direction = 'desc' === ( $context['direction'] ?? '' ) ? -1 : 1;
-		// Decorate only during sorting: keep returned rows and fingerprints unchanged.
 		$rows = array_map( static function ( $row ) use ( $sort ) { return array( 'row' => $row, 'sort_key' => remove_accents( $row[$sort] ?? '' ) ); }, $rows );
 		usort( $rows, static function ( $left, $right ) use ( $direction ) {
 			$a = $left['row']; $b = $right['row'];
@@ -78,9 +84,12 @@ final class MI_Management_List {
 			$result = strnatcasecmp( $left['sort_key'], $right['sort_key'] );
 			return $direction * ( $result ?: ( strcmp( $a['code'], $b['code'] ) ?: ( ( $a['id'] ?? 0 ) <=> ( $b['id'] ?? 0 ) ) ) );
 		} );
-		$rows = array_column( $rows, 'row' );
-		$offset = max( 0, (int) $offset ); $limit = max( 1, min( 200, (int) $limit ) );
-		return array( 'rows' => array_slice( $rows, $offset, $limit ), 'total' => count( $rows ), 'offset' => $offset, 'limit' => $limit, 'fingerprint' => hash( 'sha256', wp_json_encode( $rows ) ) );
+		return array_column( $rows, 'row' );
+	}
+
+	/** Retain only the first offset+limit matches, regardless of SQL chunk order. */
+	public static function sorted_prefix( array $retained, array $incoming, array $context, $keep ) {
+		return array_slice( self::sort_rows( array_merge( $retained, $incoming ), $context ), 0, max( 0, (int) $keep ) );
 	}
 
 	/** Keep only the names and assignments needed by the inventory and service counters. */

@@ -38,16 +38,17 @@ test('il modello operativo dell evento è scelto in WordPress e consegnato a Wor
   const schema = await read('includes/class-mi-field-schema.php');
   const eventType = await read('includes/class-mi-event-post-type.php');
   const portal = await read('includes/class-mi-portal.php');
+  const projection = await read('includes/class-mi-event-projection.php');
   const registration = await read('includes/class-mi-registration-service.php');
   const portalJs = await read('assets/portal.js');
   for (const profile of ['AUTOMATICO', 'MINIMO', 'QUOTA_UNICA', 'SERVIZI_MULTIPLI', 'VIAGGIO_COMPLESSO']) assert.match(schema, new RegExp(profile));
   assert.match(eventType, /_mi_operational_profile/);
   assert.match(portal, /_mi_operational_profile/);
-  assert.match(registration, /operational_profile/);
+  assert.match(projection, /resolved_operational_profile/);
   assert.doesNotMatch(portalJs, /name="operational_profile"|Vista iniziale della segreteria/);
   assert.match(portal, /\$_POST\['operational_profile'\] \?\? 'AUTOMATICO'/);
-  assert.match(portal, /'modalita_prezzo'\s*=>\s*\(string\) get_post_meta\( \$event_id, '_mi_pricing_mode'/);
-  assert.match(portal, /'evento_gratuito'\s*=>\s*'ZERO' === strtoupper/);
+  assert.match(projection, /'modalita_prezzo' => \$schema\['pricing'\]/);
+  assert.match(projection, /workspace_event_schema/);
 });
 
 test('Workspace prevede modelli report standard senza sovrascrivere dati', async () => {
@@ -129,7 +130,6 @@ test('la pubblicazione notifica la parrocchia e il recapito del gruppo', async (
   const portal = await read('includes/class-mi-portal.php');
   const email = await read('includes/class-mi-spedizione-email.php');
   assert.match(portal, /function risolvi_gestore_evento/);
-  assert.match(portal, /'email_gestore' => \$gestore \? \$gestore->user_email : ''/);
   assert.doesNotMatch(portal, /risolvi_gestore_evento\( \$event_id, true \)/);
   assert.match(portal, /mi_email_segreteria_eventi/);
   assert.match(portal, /get_option\( 'admin_email', '' \)/);
@@ -178,18 +178,20 @@ test('il client Workspace riconosce un esito applicativo positivo anche dopo il 
 	assert.ok(controlloHttp > esitoPositivo);
 });
 
-test('i fogli evento vengono verificati, ricreati, archiviati e ripuliti senza perdere DB_MODULI', async () => {
+test('i fogli evento vengono verificati, ricreati, organizzati e ripuliti nella proiezione diretta', async () => {
 	const portal = await read('includes/class-mi-portal.php');
 	const webApp = await readFile(new URL('../../workspace-apps-script/src/WebApp.gs', import.meta.url), 'utf8');
 	const fogli = await readFile(new URL('../../workspace-apps-script/src/FogliOperativi.gs', import.meta.url), 'utf8');
+	const eliminazione = await readFile(new URL('../../workspace-apps-script/src/EliminazioneEvento.gs', import.meta.url), 'utf8');
 	assert.match(portal, /VERIFICA_FOGLIO_EVENTO/);
 	assert.match(portal, /VERIFICA_FOGLI_EVENTO/);
 	assert.match(await read('includes/class-mi-event-deletion.php'), /ELIMINA_DATI_EVENTO/);
 	assert.match(portal, /Verifica o ricrea il foglio Google/);
 	assert.match(webApp, /VERIFICA_FOGLIO_EVENTO/);
 	assert.match(webApp, /VERIFICA_FOGLI_EVENTO/);
-	assert.match(webApp, /ARCHIVIA_FOGLIO_EVENTO/);
-	assert.match(webApp, /ELIMINA_FOGLIO_EVENTO/);
+	assert.doesNotMatch(webApp, /ARCHIVIA_FOGLIO_EVENTO/);
+	assert.doesNotMatch(webApp, /ELIMINA_FOGLIO_EVENTO/);
+	assert.match(webApp, /USE_DIRECT_PROJECTION/);
 	assert.match(fogli, /fileEsistente\.isTrashed\(\)/);
 	assert.match(fogli, /function verificaFogliEventoDaWordPress_/);
 	assert.match(fogli, /EVENTI\/EVENTI PASSATI/);
@@ -200,7 +202,8 @@ test('i fogli evento vengono verificati, ricreati, archiviati e ripuliti senza p
 	assert.match(webApp, /ORGANIZZA_FOGLI_EVENTO/);
 	assert.match(portal, /ORGANIZZA_FOGLI_EVENTO/);
 	assert.match(portal, /\$archiviato \|\| \( ! \$annullato && self::is_past_event\( \$inizio \?: \$chiusura \) \)/);
-	assert.match(fogli, /setTrashed\(true\)/);
+	assert.match(eliminazione, /setTrashed\(true\)/);
+	assert.doesNotMatch(eliminazione, /ottieniSchedaObbligatoria_|MI_SHEETS/);
 	assert.match(fogli, /registro\.getRange\(esistente\._row/);
 });
 
@@ -220,11 +223,14 @@ test('le iscrizioni vengono replicate con idempotenza senza perdere il salvatagg
   assert.match(service, /workspace_status/);
   assert.match(service, /'COMMIT'[\s\S]+sync_workspace/);
   assert.match(service, /sync_pending_workspace/);
+  assert.match(service, /workspace_next_attempt_at IS NULL OR workspace_next_attempt_at <= %s/);
   assert.match(service, /ORDER BY workspace_attempts,id LIMIT 10/);
+  assert.doesNotMatch(service, /mi_workspace_retry_/);
   assert.match(service, /\$payments_table\s*=\s*\$wpdb->prefix\s*\.\s*'mi_payments'/);
 	assert.match(service, /administrative_note, participant_allocations_json, origin_channel FROM \{\$payments_table\}/);
   assert.match(activator, /workspace_status varchar\(24\)/);
-  assert.match(activator, /workspace_attempts/);
+  assert.match(activator, /workspace_next_attempt_at datetime NULL/);
+  assert.match(activator, /workspace_queue \(workspace_status,workspace_next_attempt_at,workspace_attempts,id\)/);
   assert.match(activator, /wp_schedule_event/);
 });
 
@@ -946,9 +952,12 @@ test('i metadati tecnici dei consensi non compaiono nel pannello evento', async 
 
 test('email e cellulare dei partecipanti sono campi configurabili e validati', async () => {
 	const schema = await read('includes/class-mi-field-schema.php');
+	const eventType = await read('includes/class-mi-event-post-type.php');
 	const script = await read('assets/public.js');
 	assert.match(schema, /'email'\s*=>[\s\S]*'label'\s*=>\s*'Email'/);
 	assert.match(schema, /'phone'\s*=>[\s\S]*'label'\s*=>\s*'Cellulare'/);
+	assert.match(schema, /'phone'\s*=>[\s\S]*'help'\s*=>\s*''/);
+	assert.match(eventType, /\$field\['help'\] \?\? ''/);
 	assert.doesNotMatch(schema, /Email del partecipante|Cellulare del partecipante/);
 	assert.match(schema, /mi_participant_email_invalid/);
 	assert.match(schema, /mi_participant_phone_invalid/);
@@ -1319,20 +1328,14 @@ test('la replica Workspace include il riepilogo economico storico', async () => 
   assert.match(service, /payment_methods/);
 });
 
-test('il pannello verifica lo schema Workspace senza creare iscrizioni', async () => {
+test('il pannello verifica la proiezione diretta senza creare iscrizioni', async () => {
   const settings = await read('includes/class-mi-workspace-settings.php');
   const client = await read('includes/class-mi-workspace-client.php');
-  assert.match(settings, /Verifica schema Workspace/);
-  assert.match(settings, /schema_version/);
-	const config = await readFile(new URL('../../workspace-apps-script/src/Config.gs', import.meta.url), 'utf8');
-	const schemaVersion = config.match(/MI_SCHEMA_VERSION = '([^']+)'/)[1];
-	assert.ok(settings.includes("'" + schemaVersion + "' ==="), 'WordPress checks the deployed Workspace schema');
-	assert.match(settings, /participant_headers/);
-  assert.match(settings, /group_headers/);
-  assert.match(settings, /report_template_headers/);
+  assert.match(settings, /Verifica proiezione diretta/);
+  assert.match(settings, /direct_projection/);
+  assert.match(settings, /central_workbook/);
+  assert.match(settings, /projection_pull/);
   assert.match(client, /STATO_SCHEMA/);
-	assert.doesNotMatch(settings, /1\.6\.0/);
-	assert.match(settings, /accommodation_headers/);
 });
 
 test('l’elenco e la scheda prenotazione usano una presentazione operativa e responsive', async () => {
@@ -1569,7 +1572,7 @@ test('selezionare una bozza riprende il percorso guidato e conduce ad Attiva l�
   assert.match(portal, /name="event_id"/);
   assert.match(portal, /wp_update_post\( array\( 'ID' => \$existing_event_id/);
   assert.match(portal, /Riprendi la creazione/);
-  assert.match(portal, /PREPARA_PRODUZIONI_EVENTO/);
+  assert.match(portal, /PROIETTA_EVENTO/);
   assert.match(portal, /_mi_operational_sheet_id/);
 	assert.doesNotMatch(portal, /\[modulo_iscrizioni event=/);
 	assert.match(portal, /pulsante Saldo/);
@@ -1711,12 +1714,15 @@ test('presentazione e operatori usano testi sintetici e informazioni concrete', 
 test('la pubblicazione inizializza rapidamente il foglio e recupera un 404 transitorio', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const client = await read('includes/class-mi-workspace-client.php');
+  const projection = await read('includes/class-mi-event-projection.php');
+  const direct = await readFile(new URL('../../workspace-apps-script/src/ProiezioneDiretta.gs', import.meta.url), 'utf8');
   const fogli = await readFile(new URL('../../workspace-apps-script/src/FogliOperativi.gs', import.meta.url), 'utf8');
   const segreteria = await readFile(new URL('../../workspace-apps-script/src/Segreteria.gs', import.meta.url), 'utf8');
-  assert.match(portal, /'profilo_operativo'/);
-  assert.match(client, /404 === \$http_status[\s\S]*PREPARA_PRODUZIONI_EVENTO[\s\S]*self::request_unlocked\( \$action, \$payload, 1 \)/);
-  assert.match(client, /PREPARA_PRODUZIONI_EVENTO' === \$action \? 240/);
-  assert.match(portal, /VERIFICA_FOGLIO_EVENTO[\s\S]*'recuperato'\s*=>\s*true[\s\S]*PREPARA_PRODUZIONI_EVENTO/);
+  assert.match(projection, /'profilo_operativo'/);
+  assert.match(client, /PROIETTA_EVENTO/);
+  assert.match(client, /'PROIETTA_EVENTO' !== strtoupper\( \$action \)/);
+  assert.match(direct, /MI_DIRECT_SHEET_/);
+  assert.match(direct, /properties\.getProperty\(registryKey\)/);
   assert.match(fogli, /generaVistaOperativaIniziale_/);
   assert.match(fogli, /campiElencoOperativo_\(false\)/);
   assert.match(segreteria, /if \(includiDinamici === false\) return fields/);
@@ -2213,8 +2219,8 @@ test('il wizard distingue salvataggio, anteprima e pubblicazione', async () => {
 	assert.doesNotMatch(portal, /Codice e indicazioni per WordPress e Divi/);
   assert.match(portal, /_mi_registration_url/);
   assert.match(portal, /_mi_balance_url/);
-  assert.match(portal, /'url_iscrizione' => \$url_iscrizione/);
-  assert.match(portal, /'url_saldo' => \$url_saldo/);
+  assert.match(portal, /update_post_meta\( \$event_id, '_mi_registration_url', esc_url_raw\( \$url_iscrizione \) \)/);
+  assert.match(portal, /update_post_meta\( \$event_id, '_mi_balance_url', esc_url_raw\( \$url_saldo \) \)/);
   assert.match(shortcode, /function url_iscrizione/);
   assert.match(shortcode, /function mostra_pagina_iscrizione_pubblica/);
 	assert.match(portal, /publish_event_portal/);

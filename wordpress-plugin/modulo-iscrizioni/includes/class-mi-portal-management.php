@@ -38,10 +38,12 @@ final class MI_Portal_Management {
 			wp_send_json_success( $result );
 		}
 		if ( in_array( $operation, array( 'summary', 'list_page' ), true ) ) {
-			$result = MI_Management_Service::summary( $event_id );
-			if ( ! is_wp_error( $result ) ) $result['rooms_version'] = hash( 'sha256', wp_json_encode( $result['rooms'] ) );
+			$context = json_decode( wp_unslash( $_POST['context'] ?? '{}' ), true );
+			$result = 'list_page' === $operation ? MI_Management_Service::page( $event_id, $context, absint( $_POST['offset'] ?? 0 ), absint( $_POST['limit'] ?? 30 ) ) : null;
+			if ( null === $result ) $result = MI_Management_Service::summary( $event_id );
+			if ( ! is_wp_error( $result ) && isset( $result['rooms'] ) ) $result['rooms_version'] = hash( 'sha256', wp_json_encode( $result['rooms'] ) );
 			if ( ! is_wp_error( $result ) ) {
-				if ( 'list_page' === $operation ) $result = MI_Management_List::page( $result, json_decode( wp_unslash( $_POST['context'] ?? '{}' ), true ), absint( $_POST['offset'] ?? 0 ), absint( $_POST['limit'] ?? 30 ) );
+				if ( 'list_page' === $operation && ! isset( $result['rows'] ) ) $result = MI_Management_List::page( $result, $context, absint( $_POST['offset'] ?? 0 ), absint( $_POST['limit'] ?? 30 ) );
 				else {
 					$result = MI_Management_List::compact( $result );
 					$result['attendance_availability'] = MI_Management_Service::attendance_availability( $event_id );
@@ -57,13 +59,13 @@ final class MI_Portal_Management {
 			try { $result = MI_Attendance_Report::target( $event_id, sanitize_text_field( wp_unslash( $_POST['target_order'] ?? '' ) ), absint( $_POST['target_number'] ?? 0 ) ); }
 			catch ( Throwable $error ) { wp_send_json_error( array( 'message' => $error->getMessage() ), 400 ); }
 		} elseif ( 'sheet_changes' === $operation ) {
-			$result = MI_Workspace_Client::request( 'LEGGI_MODIFICHE_FOGLIO', array( 'event_id' => (string) $event_id ) );
+			$result = MI_Workspace_Client::request( 'LEGGI_MODIFICHE_FOGLIO', array( 'event_id' => (string) $event_id, 'sheet_id' => (string) get_post_meta( $event_id, '_mi_operational_sheet_id', true ), 'direct_projection' => true ) );
 		} elseif ( in_array( $operation, array( 'sheet_save', 'room_swap', 'room_assign' ), true ) ) {
 			$changes = json_decode( wp_unslash( $_POST['data'] ?? 'null' ), true );
 			$request_id = 'wp_' . get_current_user_id() . '_' . sanitize_text_field( wp_unslash( $_POST['request_id'] ?? '' ) );
 			$result = MI_Management_Service::save_sheet( $event_id, $changes, $request_id, 'room_assign' === $operation ? 'ROOM_ASSIGN' : ( 'room_swap' === $operation ? 'ROOM_SWAP' : 'SHEET_SYNC' ) );
 			if ( ! is_wp_error( $result ) && ! empty( $result['saved'] ) && ! empty( $result['confirmations'] ) ) {
-				$ack = MI_Workspace_Client::request( 'CONFERMA_MODIFICHE_FOGLIO', array( 'event_id' => (string) $event_id, 'confirmations' => $result['confirmations'] ) );
+				$ack = MI_Workspace_Client::request( 'CONFERMA_MODIFICHE_FOGLIO', array( 'event_id' => (string) $event_id, 'sheet_id' => (string) get_post_meta( $event_id, '_mi_operational_sheet_id', true ), 'direct_projection' => true, 'confirmations' => $result['confirmations'] ) );
 				if ( is_wp_error( $ack ) ) { $result['ack_pending'] = true; $result['message'] .= ' Dati salvati; conferma nel foglio non completata. Riprova la stessa sincronizzazione.'; }
 			}
 		} else {

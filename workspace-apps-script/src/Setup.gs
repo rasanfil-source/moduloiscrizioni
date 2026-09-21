@@ -1,4 +1,5 @@
 function onOpen() {
+  if (typeof MI_STANDALONE_MODE !== 'undefined' && MI_STANDALONE_MODE === true) return;
   SpreadsheetApp.getUi().createMenu('Modulo iscrizioni')
     .addItem('Apri gestione web', 'apriGestioneWeb')
     .addItem('Inizializza/aggiorna struttura', 'configuraCartellaDiLavoro')
@@ -13,7 +14,6 @@ function onOpen() {
     .addItem('Attiva sincronizzazione automatica eventi', 'attivaSincronizzazioneFogliEventi')
     .addSeparator()
     .addItem('Configura destinatario email di test', 'configuraDestinatarioTestEmail')
-    .addItem('Invia coda al solo destinatario di test', 'inviaCodaEmailDiTest')
     .addToUi();
 }
 

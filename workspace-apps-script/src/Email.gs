@@ -7,6 +7,20 @@ function statoCanaleEmail_() {
   return { ok: !!authorized, error: authorized ? '' : 'EMAIL_SENDER_NOT_AUTHORIZED', channel: 'GOOGLE_WORKSPACE', sender: sender };
 }
 
+/** Keep a bounded replay guard; MySQL remains the authoritative outbox. */
+function pulisciRicevuteEmail_ (props) {
+  const now=Date.now(), last=Number(props.getProperty('MI_EMAIL_LEDGER_CLEANED_AT')||0);
+  if (now-last<86400000) return;
+  const all=props.getProperties();
+  Object.keys(all).forEach(key=>{
+    if (!/^MI_EMAIL_DELIVERY_[a-f0-9]{64}$/.test(key)) return;
+    const value=String(all[key]||''), parts=value.split('|');
+    // SENDING is never discarded automatically: its delivery is uncertain.
+    if (parts[0]==='ACCEPTED'&&Number(parts[1])>0&&now-Number(parts[1])>90*86400000) props.deleteProperty(key);
+  });
+  props.setProperty('MI_EMAIL_LEDGER_CLEANED_AT',String(now));
+}
+
 /** Signed WordPress outbox. Persist intent before sending: uncertain deliveries require review. */
 function inviaEmailConfermaDaWordPress_(payload) {
   const p = payload || {};
@@ -22,16 +36,12 @@ function inviaEmailConfermaDaWordPress_(payload) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return { ok: false, error: 'EMAIL_BUSY' };
   try {
-    const book = ottieniFoglioDiLavoroAssociato_();
-    let sheet = book.getSheetByName('Registro invii email');
-    if (!sheet) { sheet = book.insertSheet('Registro invii email'); sheet.appendRow(['delivery_key', 'stato', 'data_utc']); }
-    const rows = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues() : [];
-    const previous = rows.find(row => row[0] === p.delivery_key);
-    if (previous) return previous[1] === 'ACCEPTED' ? { ok: true, channel: 'GOOGLE_WORKSPACE', replayed: true } : { ok: false, error: 'EMAIL_DELIVERY_UNCERTAIN' };
+    pulisciRicevuteEmail_(props);
+    const key='MI_EMAIL_DELIVERY_'+p.delivery_key;
+    const previous=String(props.getProperty(key)||'');
+    if (previous) return previous.startsWith('ACCEPTED|') ? { ok: true, channel: 'GOOGLE_WORKSPACE', replayed: true } : { ok: false, error: 'EMAIL_DELIVERY_UNCERTAIN' };
     if (MailApp.getRemainingDailyQuota() < 1) return { ok: false, error: 'EMAIL_QUOTA_EXCEEDED' };
-    sheet.appendRow([p.delivery_key, 'SENDING', new Date().toISOString()]);
-    const row = sheet.getLastRow();
-    SpreadsheetApp.flush();
+    props.setProperty(key,'SENDING|'+Date.now());
     const options = { to: recipient, subject: String(p.oggetto), body: String(p.testo), htmlBody: String(p.html), name: 'Parrocchia Sant’Eugenio', replyTo: recipient };
     if (p.mode === 'OPERATIVO') options.replyTo = replyTo;
     if (p.codice_svg) options.inlineImages = { 'mi-registration-code': Utilities.newBlob(String(p.codice_svg), 'image/svg+xml', 'codice-iscrizione.svg') };
@@ -41,8 +51,7 @@ function inviaEmailConfermaDaWordPress_(payload) {
     // dell'errore (localizzato e non un codice di consegna affidabile).
     try { MailApp.sendEmail(options); }
     catch (error) { console.error('EMAIL_SEND_FAILED', String(error)); return { ok: false, error: 'EMAIL_DELIVERY_UNCERTAIN' }; }
-    sheet.getRange(row, 2).setValue('ACCEPTED');
-    SpreadsheetApp.flush();
+    props.setProperty(key,'ACCEPTED|'+Date.now());
     return { ok: true, channel: 'GOOGLE_WORKSPACE', sender: sender.sender };
   } finally { lock.releaseLock(); }
 }
@@ -59,7 +68,6 @@ function inviaEmailProvaDaWordPress_(payload) {
   const html = String(payload.html || '').slice(0, 60000);
   if (!oggetto || !testo || !html) return { ok: false, error: 'INVALID_EMAIL_PAYLOAD' };
   MailApp.sendEmail({ to: destinatarioConfigurato, subject: oggetto, body: testo, htmlBody: html, name: 'Modulo Iscrizioni' });
-  aggiungiControllo_('SEND_TEST_EMAIL', 'EMAIL', 'PROVA_WORDPRESS', 'SUCCESS', 'WORDPRESS', 'SIGNED_TEST_RECIPIENT', 'WORDPRESS_PROXY');
   return { ok: true, channel: 'GOOGLE_WORKSPACE' };
 }
 

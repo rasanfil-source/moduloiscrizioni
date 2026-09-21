@@ -20,10 +20,10 @@ final class MI_Workspace_Client {
 	public static function request( $action, array $payload, $attempt = 0 ) {
 		// La replica torna subito alla coda; la pubblicazione interattiva concede
 		// tre secondi a una replica già in chiusura, evitando falsi "occupato".
-		if ( ! in_array( strtoupper( $action ), array( 'APPEND_REGISTRATION', 'PREPARA_PRODUZIONI_EVENTO' ), true ) ) return self::request_unlocked( $action, $payload, $attempt );
+		if ( 'PROIETTA_EVENTO' !== strtoupper( $action ) ) return self::request_unlocked( $action, $payload, $attempt );
 		global $wpdb;
 		$lock = 'mi_workspace_' . substr( hash( 'sha256', $wpdb->prefix ), 0, 40 );
-		$wait = 'PREPARA_PRODUZIONI_EVENTO' === strtoupper( $action ) ? 3 : 0;
+		$wait = 3;
 		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $lock, $wait ) ) ) return new WP_Error( 'mi_workspace_busy', 'Sincronizzazione Google in corso; aggiornamento mantenuto in attesa.' );
 		try { return self::request_unlocked( $action, $payload, $attempt ); }
 		finally { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); }
@@ -61,12 +61,12 @@ final class MI_Workspace_Client {
 		// economiche. Le esecuzioni reali possono superare i tre minuti; interrompere
 		// a 30 secondi produce un falso "non raggiungibile" mentre Google continua.
 		// La replica gira nella coda: la formattazione Google può superare un minuto.
-		$timeout = 'PREPARA_PRODUZIONI_EVENTO' === $action ? 240 : ( 'APPEND_REGISTRATION' === $action ? 120 : ( 'ELIMINA_DATI_EVENTO' === $action ? 110 : ( 'LEGGI_MODIFICHE_FOGLIO' === $action ? 45 : ( 'INVIA_EMAIL_PROVA' === $action ? 30 : 15 ) ) ) );
-		if ( in_array( $action, array( 'PREPARA_APERTURA_FOGLIO', 'CONFERMA_MODIFICHE_FOGLIO' ), true ) ) $timeout = 180;
+		$timeout = 'PROIETTA_EVENTO' === $action ? 240 : ( 'ELIMINA_DATI_EVENTO' === $action ? 110 : ( 'LEGGI_MODIFICHE_FOGLIO' === $action ? 45 : ( 'INVIA_EMAIL_PROVA' === $action ? 30 : 15 ) ) );
+		if ( 'CONFERMA_MODIFICHE_FOGLIO' === $action ) $timeout = 180;
 		if ( in_array( $action, array( 'VERIFICA_FOGLI_EVENTO', 'ORGANIZZA_FOGLI_EVENTO' ), true ) ) $timeout = 60;
 		// These deliveries carry revisions and Google tombstones reject late writes.
 		// Email/deletion retain their stronger exclusion until their side effect completes.
-		if ( class_exists( 'MI_Event_Deletion' ) && in_array( $action, array( 'APPEND_REGISTRATION', 'PREPARA_APERTURA_FOGLIO' ), true ) ) MI_Event_Deletion::release( absint( $payload['event_id'] ?? 0 ) );
+		if ( class_exists( 'MI_Event_Deletion' ) && 'PROIETTA_EVENTO' === $action ) MI_Event_Deletion::release( absint( $payload['event_id'] ?? 0 ) );
 		$response = wp_remote_post(
 			self::webapp_url(),
 			array(
@@ -104,7 +104,7 @@ final class MI_Workspace_Client {
 		// Un collegamento temporaneo di ContentService può eccezionalmente scadere
 		// con 404. La preparazione è idempotente: un solo nuovo tentativo, con una
 		// busta e un nonce nuovi, recupera il risultato senza duplicare il foglio.
-		if ( 404 === $http_status && 'PREPARA_PRODUZIONI_EVENTO' === $action && 0 === (int) $attempt ) {
+		if ( 404 === $http_status && 'PROIETTA_EVENTO' === $action && 0 === (int) $attempt ) {
 			return self::request_unlocked( $action, $payload, 1 );
 		}
 		if ( 200 !== $http_status ) {
@@ -122,6 +122,7 @@ final class MI_Workspace_Client {
 				'INVALID_DELETION' => 'i parametri della cancellazione non sono validi',
 				'SHARED_EVENT_SHEET' => 'il foglio risulta collegato anche a un altro evento',
 				'ACTION_NOT_ALLOWED' => 'la distribuzione Apps Script non riconosce ancora questa operazione',
+				'USE_STANDALONE_PROJECT' => 'la Web App è ancora collegata al progetto vincolato a DB_MODULI; collega il progetto Apps Script autonomo',
 				'INVALID_SIGNATURE'  => 'la firma condivisa non coincide',
 				'INVALID_PAYLOAD_HASH' => 'il contenuto ricevuto non coincide con quello firmato',
 				'STALE_REQUEST'      => 'la richiesta è arrivata fuori tempo',

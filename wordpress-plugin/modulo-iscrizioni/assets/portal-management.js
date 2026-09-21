@@ -113,7 +113,9 @@
     const sheetButton=root.querySelector('[data-open-sheet]');
     if(sheetButton)sheetButton.addEventListener('click',async e=>{
       e.preventDefault();
-      if(!await canLeave()||busy)return;
+      const sheetWindow=window.open('about:blank','_blank','noopener');
+      if(!sheetWindow){say('Apertura non completata. Consenti le finestre popup per aprire il foglio.');return;}
+      if(!await canLeave()||busy){try{sheetWindow.close();}catch(closeError){}return;}
       const openingEvent=event;busy=true;sheetButton.setAttribute('aria-disabled','true');
       say('Aggiornamento del foglio in corso…');
       try {
@@ -123,13 +125,13 @@
           if(result.ready){
             const url=new URL(result.url);
             if(url.origin!=='https://docs.google.com'||!url.pathname.startsWith('/spreadsheets/d/'))throw new Error('Collegamento al foglio non valido.');
-            busy=false;location.assign(url.href);return;
+            busy=false;sheetWindow.location.href=url.href;return;
           }
           if(!result.token)throw new Error('Aggiornamento incompleto. Riprova.');
           token=result.token;
           if(result.retry_after){say(result.message||'Aggiornamento Google in corso…');await new Promise(resolve=>setTimeout(resolve,Math.min(5,Math.max(1,Number(result.retry_after)))*1000));}
         }
-      }catch(error){say('Apertura non completata. '+(error.name==='AbortError'?'Aggiornamento non completato in tempo. Riprova con Apri.':error.message));}
+      }catch(error){try{sheetWindow.close();}catch(closeError){}say('Apertura non completata. '+(error.name==='AbortError'?'Aggiornamento non completato in tempo. Riprova con Apri.':error.message));}
       finally{busy=false;sheetButton.removeAttribute('aria-disabled');}
     });
     const paymentDraft=()=>!!content.querySelector('[data-payment-draft="1"]');

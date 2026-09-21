@@ -2,6 +2,7 @@
 defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/class-mi-option-rules.php';
 require_once __DIR__ . '/class-mi-payment-people.php';
+require_once __DIR__ . '/class-mi-booking-search.php';
 
 /** Operational records in MySQL. Google receives a projection of these records. */
 final class MI_Management_Service {
@@ -142,24 +143,144 @@ final class MI_Management_Service {
 			return $booking;
 		} catch ( Throwable $error ) { return new WP_Error( 'mi_management_read', $error->getMessage() ); }
 	}
-	public static function summary( $event_id ) {
+
+	/**
+	 * Percorso paginato per l'elenco ordinario. I filtri che dipendono da
+	 * calcoli economici o JSON complessi restano temporaneamente nel percorso
+	 * completo; apertura, ricerca anagrafica e ordinamento comune leggono invece
+	 * soltanto le prenotazioni necessarie alla pagina richiesta.
+	 */
+	public static function page( $event_id, $context, $offset = 0, $limit = 30 ) {
+		global $wpdb;
+		$context = is_array( $context ) ? $context : array();
+		$unsupported = array( 'filter', 'deposit', 'requests', 'deadline', 'room', 'service', 'orderService' );
+		$advanced = false;
+		foreach ( $unsupported as $key ) {
+			$value = $context[$key] ?? '';
+			if ( '' !== $value && 'all' !== $value ) $advanced = true;
+		}
+		$individual = 'orders' !== ( $context['view'] ?? 'people' );
+		$offset = max( 0, (int) $offset );
+		$limit = max( 1, min( 200, (int) $limit ) );
+		$where = array( $wpdb->prepare( 'r.event_id=%d', $event_id ) );
+		if ( empty( $context['includeClosed'] ) ) {
+			$where[] = "r.status NOT IN ('CANCELLED','EXPIRED')";
+			if ( $individual ) $where[] = "p.status<>'CANCELLED'";
+		}
+		$state = strtoupper( sanitize_key( (string) ( $context['state'] ?? '' ) ) );
+		if ( in_array( $state, array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'WAITLIST_OFFERED', 'CANCELLED', 'EXPIRED' ), true ) ) {
+			$where[] = $individual && 'CANCELLED' === $state ? "(p.status='CANCELLED' OR r.status='CANCELLED')" : $wpdb->prepare( 'r.status=%s', $state );
+			if ( $individual && 'CANCELLED' !== $state ) $where[] = "p.status<>'CANCELLED'";
+		}
+		$words = MI_Booking_Search::words( $context['query'] ?? '' );
+		if ( $words ) $advanced = true;
+		// The selector normalizes accents and checks participant aliases. A SQL
+		// LIKE predicate is not a proven superset across database collations;
+		// scan bounded chunks for exact names, aliases and counts.
+		$where_sql = implode( ' AND ', $where );
+		$direction = 'desc' === ( $context['direction'] ?? '' ) ? 'DESC' : 'ASC';
+		$sort = $context['sort'] ?? 'name';
+		if ( $individual ) {
+			$order = array(
+				'name' => "p.last_name {$direction},p.first_name {$direction}",
+				'buyer' => "r.buyer_last_name {$direction},r.buyer_first_name {$direction}",
+				'code' => "r.order_code {$direction}",
+				'room' => "p.room_code {$direction},p.last_name {$direction},p.first_name {$direction}",
+			)[ $sort ] ?? "p.last_name {$direction},p.first_name {$direction}";
+			$from = "{$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id";
+			if ( $advanced ) return self::scan_filtered_page( $event_id, $context, $offset, $limit, true, $from, $where_sql );
+			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$from} WHERE {$where_sql}" );
+			$selected = $wpdb->get_results( "SELECT p.id,r.id registration_id FROM {$from} WHERE {$where_sql} ORDER BY (r.status IN ('CANCELLED','EXPIRED') OR p.status='CANCELLED'),{$order},r.order_code,p.id LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
+		} else {
+			$order = array(
+				'name' => "r.buyer_last_name {$direction},r.buyer_first_name {$direction}",
+				'buyer' => "r.buyer_last_name {$direction},r.buyer_first_name {$direction}",
+				'code' => "r.order_code {$direction}",
+				'room' => "r.order_code {$direction}",
+			)[ $sort ] ?? "r.buyer_last_name {$direction},r.buyer_first_name {$direction}";
+			$from = "{$wpdb->prefix}mi_registrations r";
+			if ( $advanced ) return self::scan_filtered_page( $event_id, $context, $offset, $limit, false, $from, $where_sql );
+			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$from} WHERE {$where_sql}" );
+			$selected = $wpdb->get_results( "SELECT r.id registration_id,r.order_code FROM {$from} WHERE {$where_sql} ORDER BY (r.status IN ('CANCELLED','EXPIRED')),{$order},r.id LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
+		}
+		self::check_database();
+		$registration_ids = array_values( array_unique( array_map( 'intval', array_column( $selected, 'registration_id' ) ) ) );
+		$summary = self::summary( $event_id, $registration_ids );
+		if ( is_wp_error( $summary ) ) return $summary;
+		if ( $individual ) {
+			$by_id = array_column( $summary['people'], null, 'id' );
+			$summary['people'] = array_values( array_filter( array_map( static function ( $row ) use ( $by_id ) { return $by_id[(int) $row['id']] ?? null; }, $selected ) ) );
+		} else {
+			$by_code = array_column( $summary['items'], null, 'code' );
+			$summary['items'] = array_values( array_filter( array_map( static function ( $row ) use ( $by_code ) { return $by_code[$row['order_code']] ?? null; }, $selected ) ) );
+		}
+		$page = MI_Management_List::page( $summary, $context, 0, $limit );
+		$state_revision = $wpdb->get_var( $wpdb->prepare( "SELECT revision FROM {$wpdb->prefix}mi_management_state WHERE event_id=%d", $event_id ) );
+		$version = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) total,COALESCE(MAX(id),0) max_id,COALESCE(SUM(workspace_revision),0) revisions FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d", $event_id ), ARRAY_A );
+		self::check_database();
+		$page['total'] = $total;
+		$page['offset'] = $offset;
+		$fingerprint_context = $context;
+		unset( $fingerprint_context['shown'] );
+		$page['fingerprint'] = hash( 'sha256', wp_json_encode( array( $version, (string) $state_revision, $total, $fingerprint_context ) ) );
+		return $page;
+	}
+
+	/** Exact advanced filtering in bounded SQL chunks: never materialize the event at once. */
+	private static function scan_filtered_page( $event_id, array $context, $offset, $limit, $individual, $from, $where_sql ) {
+		global $wpdb;
+		$cursor = 0; $matched = 0; $rows = array(); $chunk_size = 200;
+		do {
+			$selected = $individual
+				? $wpdb->get_results( "SELECT p.id,r.id registration_id FROM {$from} WHERE {$where_sql} AND p.id>{$cursor} ORDER BY p.id LIMIT {$chunk_size}", ARRAY_A )
+				: $wpdb->get_results( "SELECT r.id registration_id,r.order_code FROM {$from} WHERE {$where_sql} AND r.id>{$cursor} ORDER BY r.id LIMIT {$chunk_size}", ARRAY_A );
+			self::check_database();
+			if ( ! $selected ) break;
+			$registration_ids = array_values( array_unique( array_map( 'intval', array_column( $selected, 'registration_id' ) ) ) );
+			$summary = self::summary( $event_id, $registration_ids );
+			if ( is_wp_error( $summary ) ) return $summary;
+			if ( $individual ) {
+				$wanted = array_fill_keys( array_map( 'intval', array_column( $selected, 'id' ) ), true );
+				$summary['people'] = array_values( array_filter( $summary['people'], static function ( $person ) use ( $wanted ) { return isset( $wanted[(int) $person['id']] ); } ) );
+			} else {
+				$wanted = array_fill_keys( array_column( $selected, 'order_code' ), true );
+				$summary['items'] = array_values( array_filter( $summary['items'], static function ( $item ) use ( $wanted ) { return isset( $wanted[$item['code']] ); } ) );
+			}
+			$filtered = MI_Management_List::page( $summary, $context, 0, 200 );
+			$matched += (int) $filtered['total'];
+			$rows = MI_Management_List::sorted_prefix( $rows, $filtered['rows'], $context, $offset + $limit );
+			$cursor = (int) ( $individual ? end( $selected )['id'] : end( $selected )['registration_id'] );
+		} while ( count( $selected ) === $chunk_size );
+		$state_revision = $wpdb->get_var( $wpdb->prepare( "SELECT revision FROM {$wpdb->prefix}mi_management_state WHERE event_id=%d", $event_id ) );
+		$version = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) total,COALESCE(MAX(id),0) max_id,COALESCE(SUM(workspace_revision),0) revisions FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d", $event_id ), ARRAY_A );
+		self::check_database();
+		$fingerprint_context = $context; unset( $fingerprint_context['shown'] );
+		return array( 'rows' => array_slice( $rows, $offset, $limit ), 'total' => $matched, 'offset' => $offset, 'limit' => $limit, 'fingerprint' => hash( 'sha256', wp_json_encode( array( $version, (string) $state_revision, $matched, $fingerprint_context ) ) ) );
+	}
+	public static function summary( $event_id, $registration_ids = null ) {
 		global $wpdb;
 		if ( ! MI_Portal_Management::allowed() || ! MI_Access::can_access_event( $event_id ) ) return new WP_Error( 'mi_management_scope', 'Evento non accessibile.' );
 		try {
-			$orders = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d ORDER BY id", $event_id ), ARRAY_A );
+			$scope = '';
+			if ( is_array( $registration_ids ) ) {
+				$registration_ids = array_values( array_filter( array_unique( array_map( 'absint', $registration_ids ) ) ) );
+				if ( ! $registration_ids ) return array( 'ok' => true, 'features' => array(), 'room_types' => array(), 'option_definitions' => array(), 'items' => array(), 'people' => array(), 'field_labels' => array(), 'rooms' => array(), 'updated_at' => gmdate( 'c' ), 'registration_url' => MI_Shortcode::url_iscrizione( $event_id ) );
+				$scope = ' AND r.id IN (' . implode( ',', $registration_ids ) . ')';
+			}
+			$orders = $wpdb->get_results( $wpdb->prepare( "SELECT r.* FROM {$wpdb->prefix}mi_registrations r WHERE r.event_id=%d{$scope} ORDER BY r.id", $event_id ), ARRAY_A );
 			self::check_database();
-			$people = $wpdb->get_results( $wpdb->prepare( "SELECT p.id,p.registration_id,p.ticket_type_code,p.first_name,p.last_name,p.extra_json,p.options_json,p.room_code,p.status,p.deposit_due_cents FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d ORDER BY p.id", $event_id ), ARRAY_A );
+			$people = $wpdb->get_results( $wpdb->prepare( "SELECT p.id,p.registration_id,p.ticket_type_code,p.first_name,p.last_name,p.extra_json,p.options_json,p.room_code,p.status,p.deposit_due_cents FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d{$scope} ORDER BY p.id", $event_id ), ARRAY_A );
 			self::check_database();
-			$payments = $wpdb->get_results( $wpdb->prepare( "SELECT p.* FROM {$wpdb->prefix}mi_payments p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d ORDER BY p.registration_id,p.id", $event_id ), ARRAY_A );
+			$payments = $wpdb->get_results( $wpdb->prepare( "SELECT p.* FROM {$wpdb->prefix}mi_payments p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d{$scope} ORDER BY p.registration_id,p.id", $event_id ), ARRAY_A );
 			self::check_database();
-			$registration_items = $wpdb->get_results( $wpdb->prepare( "SELECT i.* FROM {$wpdb->prefix}mi_registration_items i JOIN {$wpdb->prefix}mi_registrations r ON r.id=i.registration_id WHERE r.event_id=%d ORDER BY i.registration_id,i.id", $event_id ), ARRAY_A );
+			$registration_items = $wpdb->get_results( $wpdb->prepare( "SELECT i.* FROM {$wpdb->prefix}mi_registration_items i JOIN {$wpdb->prefix}mi_registrations r ON r.id=i.registration_id WHERE r.event_id=%d{$scope} ORDER BY i.registration_id,i.id", $event_id ), ARRAY_A );
 			self::check_database();
 			$paid = array(); $payments_by_registration = array(); $items_by_registration = array();
 			foreach ( $payments as $payment ) { $rid = (int) $payment['registration_id']; $payments_by_registration[$rid][] = $payment; $paid[$rid] = ( $paid[$rid] ?? 0 ) + ( 'REFUND' === $payment['transaction_kind'] ? -1 : 1 ) * (int) $payment['amount_cents']; }
 			foreach ( $registration_items as $item ) $items_by_registration[(int) $item['registration_id']][] = $item;
-			$review_rows = $wpdb->get_results( $wpdb->prepare( "SELECT a.* FROM {$wpdb->prefix}mi_registration_events a JOIN {$wpdb->prefix}mi_registrations r ON r.id=a.registration_id WHERE r.event_id=%d AND a.event_type='MANAGEMENT_request_review' AND a.id=(SELECT MAX(b.id) FROM {$wpdb->prefix}mi_registration_events b WHERE b.registration_id=a.registration_id AND b.event_type='MANAGEMENT_request_review')", $event_id ), ARRAY_A );
+			$review_rows = $wpdb->get_results( $wpdb->prepare( "SELECT a.* FROM {$wpdb->prefix}mi_registration_events a JOIN {$wpdb->prefix}mi_registrations r ON r.id=a.registration_id WHERE r.event_id=%d{$scope} AND a.event_type='MANAGEMENT_request_review' AND a.id=(SELECT MAX(b.id) FROM {$wpdb->prefix}mi_registration_events b WHERE b.registration_id=a.registration_id AND b.event_type='MANAGEMENT_request_review')", $event_id ), ARRAY_A );
 			self::check_database(); $reviews = array_column( $review_rows, null, 'registration_id' );
-            $attendance_rows = $wpdb->get_results( $wpdb->prepare( "SELECT a.detail_json,a.actor_label,a.created_at FROM {$wpdb->prefix}mi_registration_events a JOIN {$wpdb->prefix}mi_registrations r ON r.id=a.registration_id WHERE r.event_id=%d AND a.event_type='MANAGEMENT_attendance' ORDER BY a.id", $event_id ), ARRAY_A );
+			$attendance_rows = $wpdb->get_results( $wpdb->prepare( "SELECT a.detail_json,a.actor_label,a.created_at FROM {$wpdb->prefix}mi_registration_events a JOIN {$wpdb->prefix}mi_registrations r ON r.id=a.registration_id WHERE r.event_id=%d{$scope} AND a.event_type='MANAGEMENT_attendance' ORDER BY a.id", $event_id ), ARRAY_A );
             self::check_database(); $attendance = self::attendance_map( $attendance_rows );
 			$grouped = array();
 			foreach ( $people as $person ) $grouped[$person['registration_id']][] = $person;
@@ -427,7 +548,7 @@ final class MI_Management_Service {
 				if ( ! hash_equals( hash( 'sha256', wp_json_encode( $rooms ) ), (string) $version ) ) throw new InvalidArgumentException( 'Le camere sono cambiate. Aggiorna il riepilogo prima di salvare.' );
 				self::save_room( array( 'event_id' => $event_id, 'accommodations' => $rooms ), $operation, $data );
 				if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}mi_management_state SET revision=revision+1 WHERE event_id=%d", $event_id ) ) ) throw new RuntimeException();
-				if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}mi_registrations SET workspace_revision=workspace_revision+1,workspace_status='PENDING',workspace_attempts=0 WHERE event_id=%d", $event_id ) ) ) throw new RuntimeException();
+				if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}mi_registrations SET workspace_revision=workspace_revision+1,workspace_status='PENDING',workspace_attempts=0,workspace_next_attempt_at=NULL WHERE event_id=%d", $event_id ) ) ) throw new RuntimeException();
 				if ( false === $wpdb->insert( $wpdb->prefix . 'mi_management_requests', array( 'request_id' => $request_id, 'event_id' => $event_id, 'registration_id' => 0, 'request_hash' => $hash, 'actor_id' => get_current_user_id(), 'created_at' => current_time( 'mysql', true ) ) ) ) throw new RuntimeException();
 			}
 			if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException();
@@ -663,7 +784,7 @@ final class MI_Management_Service {
 			else self::save_room( $booking, $operation, $data );
 			if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}mi_management_state SET revision=revision+1 WHERE event_id=%d", $event_id ) ) ) throw new RuntimeException( 'Versione evento non aggiornata.' );
 			if ( in_array( $operation, array( 'participant', 'adjust_due', 'change_options', 'attendance' ), true ) ) MI_Registration_Service::mark_workspace_changed_locked( $id );
-			else if ( ! in_array( $operation, array( 'request_review', 'attendance', 'identity_link' ), true ) && false === $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}mi_registrations SET workspace_revision=workspace_revision+1,workspace_status='PENDING',workspace_attempts=0 WHERE event_id=%d", $event_id ) ) ) throw new RuntimeException( 'Allineamento non accodato.' );
+			else if ( ! in_array( $operation, array( 'request_review', 'attendance', 'identity_link' ), true ) && false === $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}mi_registrations SET workspace_revision=workspace_revision+1,workspace_status='PENDING',workspace_attempts=0,workspace_next_attempt_at=NULL WHERE event_id=%d", $event_id ) ) ) throw new RuntimeException( 'Allineamento non accodato.' );
 			if ( false === $wpdb->insert( $wpdb->prefix . 'mi_management_requests', array( 'request_id' => $request_id, 'event_id' => $event_id, 'registration_id' => $id, 'request_hash' => $hash, 'actor_id' => get_current_user_id(), 'created_at' => current_time( 'mysql', true ) ) ) ) throw new RuntimeException( 'Richiesta non registrata.' );
 			$audit = array( 'request_id' => $request_id );
 			if ( 'request_review' === $operation ) $audit += array( 'reviewed' => $data['reviewed'], 'text_hash' => hash( 'sha256', (string) $locked['special_requests'] ) );

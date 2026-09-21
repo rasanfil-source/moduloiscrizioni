@@ -48,6 +48,7 @@ final class MI_REST_Controller {
 		if ( is_wp_error( $verified ) ) return $verified;
 		$action = strtoupper( sanitize_key( (string) ( $envelope['action'] ?? '' ) ) );
 		$payload = (array) ( $envelope['payload'] ?? array() );
+		if ( 'GET_EVENT_PROJECTION' === $action ) return self::event_projection_for_workspace( $payload );
 		if ( 'CREATE_EVENT_DRAFT' === $action ) return self::create_event_draft_from_workspace( $payload );
 		if ( 'CREATE_GROUP' === $action ) return self::create_group_from_workspace( $payload );
 		if ( 'GET_MANUAL_REGISTRATION_SCHEMA' === $action ) return self::manual_registration_schema( $payload );
@@ -55,6 +56,26 @@ final class MI_REST_Controller {
 		if ( 'GET_EMAIL_MODE' === $action ) return array( 'ok' => true, 'mode' => MI_Spedizione_Email::modalita() );
 		if ( 'QUEUE_OPERATIONAL_EMAILS' === $action ) return MI_Spedizione_Email::accoda_comunicazione_operativa( $payload );
 		return new WP_Error( 'mi_workspace_action_not_allowed', 'Azione Workspace non consentita.', array( 'status' => 403 ) );
+	}
+
+	private static function event_projection_for_workspace( array $payload ) {
+		$event_id = absint( $payload['event_id'] ?? 0 );
+		$expected_hash = strtolower( (string) ( $payload['projection_hash'] ?? '' ) );
+		$expected_fingerprint = strtolower( (string) ( $payload['fingerprint'] ?? '' ) );
+		if ( ! $event_id || ! preg_match( '/^[a-f0-9]{64}$/D', $expected_hash ) || ! preg_match( '/^[a-f0-9]{64}$/D', $expected_fingerprint ) ) return new WP_Error( 'mi_projection_invalid', 'Richiesta di proiezione non valida.', array( 'status' => 400 ) );
+		if ( class_exists( 'MI_Event_Deletion' ) ) {
+			$lease = MI_Event_Deletion::enter( $event_id );
+			if ( is_wp_error( $lease ) ) { MI_Event_Deletion::release( $event_id ); return new WP_Error( 'mi_projection_deleted', 'Evento non disponibile.', array( 'status' => 409 ) ); }
+		}
+		try {
+			$snapshot = MI_Event_Projection::snapshot( $event_id );
+			if ( ! hash_equals( $expected_fingerprint, $snapshot['fingerprint'] ) ) return new WP_Error( 'mi_projection_changed', 'La proiezione è cambiata; ripetere la richiesta.', array( 'status' => 409 ) );
+			$transfer = MI_Event_Projection::encoded_snapshot( $snapshot );
+			if ( ! hash_equals( $expected_hash, $transfer['projection_hash'] ) ) return new WP_Error( 'mi_projection_changed', 'La proiezione è cambiata; ripetere la richiesta.', array( 'status' => 409 ) );
+			return array( 'ok' => true, 'projection_gzip' => $transfer['projection_gzip'], 'projection_hash' => $transfer['projection_hash'] );
+		} catch ( Throwable $error ) {
+			return new WP_Error( 'mi_projection_unavailable', 'Proiezione non disponibile.', array( 'status' => 503 ) );
+		} finally { if ( class_exists( 'MI_Event_Deletion' ) ) MI_Event_Deletion::release( $event_id ); }
 	}
 
 	private static function manual_registration_schema( array $payload ) {
