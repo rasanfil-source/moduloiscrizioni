@@ -56,3 +56,13 @@ foreach([['2026-07','2025-09'],['2026-00','2026-12'],['2026-01',''],['1999-12','
  try{MI_Attendance_Report::period(2026,...$range);throw new LogicException('Periodo invalido accettato');}catch(InvalidArgumentException $expected){}
 }
 echo "Presenze: ciclo settembre-giugno, estremi inclusivi, deduplica e periodi invalidi verificati.\n";
+
+// Descending links form a long chain before any attendance lookup compresses it.
+$chain_people=[];$chain_audit=[];
+for($id=800;$id>=1;$id--){
+ $chain_people[]=['id'=>$id,'registration_id'=>$id,'event_id'=>$id%2?10:11,'order_code'=>'CHAIN'.$id,'first_name'=>'Test','last_name'=>'Persona'];
+ $chain_audit[]=['registration_id'=>$id,'event_type'=>'MANAGEMENT_attendance','detail_json'=>json_encode(['participant_id'=>$id,'attendance'=>'PRESENT'])];
+ if($id>1)$chain_audit[]=['registration_id'=>$id,'event_type'=>'MANAGEMENT_identity_link','detail_json'=>json_encode(['participant_id'=>$id,'target_id'=>$id-1])];
+}
+$chain=MI_Attendance_Report::aggregate($chain_people,$chain_audit,$events,2026,2);
+check_report(count($chain['items'])===1 && $chain['items'][0]['identity']===1 && $chain['items'][0]['count']===2 && count($chain['items'][0]['records'])===800,'Long identity chain changed grouping or attendance count');

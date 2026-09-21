@@ -1565,7 +1565,6 @@ final class MI_Portal {
 		$allowed_statuses = array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'WAITLIST_OFFERED', 'CANCELLED', 'EXPIRED' );
 		if ( in_array( $status, $allowed_statuses, true ) ) $conditions[] = $wpdb->prepare( 'r.status=%s', $status );
 		if ( '' !== $query ) {
-			$like = '%' . $wpdb->esc_like( $query ) . '%';
 			$conditions[] = MI_Booking_Search::sql( $query );
 		}
 		$where = implode( ' AND ', $conditions );

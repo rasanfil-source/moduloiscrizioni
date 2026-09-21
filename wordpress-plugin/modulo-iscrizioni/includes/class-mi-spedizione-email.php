@@ -471,9 +471,16 @@ final class MI_Spedizione_Email {
 		$reply_to = ! empty( $identita['indirizzo_risposte'] ) && is_email( $identita['indirizzo_risposte'] ) ? sanitize_email( $identita['indirizzo_risposte'] ) : MI_Modello_Email::EMAIL_SEGRETERIA;
 		$intestazioni[] = 'Reply-To: ' . $reply_to;
 		$codice_html = '';
+		self::$codice_incorporato = '';
 		if ( isset( $istantanea['identificativo'] ) && is_array( $istantanea['identificativo'] ) && in_array( $istantanea['identificativo']['modalita'] ?? 'NONE', array( 'QR', 'BARCODE' ), true ) ) {
 				$code_payload = 'QR' === $istantanea['identificativo']['modalita'] ? ( $istantanea['identificativo']['payload_qr'] ?? '' ) : ( $istantanea['identificativo']['codice'] ?? '' );
-				self::$codice_incorporato = MI_Code_Image::svg( $istantanea['identificativo']['modalita'], $code_payload );
+				try {
+					self::$codice_incorporato = MI_Code_Image::svg( $istantanea['identificativo']['modalita'], $code_payload );
+				} catch ( LengthException $error ) {
+					// Fail before contacting Google; the outbox records an actionable error,
+					// without logging the payload or sending a truncated identifier.
+					return new WP_Error( 'mi_email_qr_too_long', 'Email non inviata: il contenuto del QR supera 106 byte. Correggi l’identificativo prima di riprovare.' );
+				}
 				$codice_html = '<p><img src="cid:mi-registration-code" alt="Codice grafico dell’iscrizione" style="display:block;max-width:280px;height:auto;border:0;"></p>';
 		}
 		$corpo = MI_Modello_Email::componi_html( $istantanea, $codice_html );

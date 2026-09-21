@@ -1417,7 +1417,8 @@ test('la scheda iscrizioni riprende la vista operativa con ricerca e filtri sicu
   const css = await read('assets/portal.css');
   assert.match(portal, /name="mi_portal_query"/);
   assert.match(portal, /name="mi_portal_status"/);
-  assert.match(portal, /\$wpdb->esc_like\( \$query \)/);
+  assert.match(portal, /MI_Booking_Search::sql\( \$query \)/);
+  assert.match(await read('includes/class-mi-booking-search.php'), /\$wpdb->esc_like\( \$word \)/);
   assert.match(portal, /\$allowed_statuses/);
   assert.match(portal, /LIMIT 31 OFFSET/);
   assert.match(portal, /mi_portal_page/);

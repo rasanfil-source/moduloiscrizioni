@@ -50,7 +50,8 @@ final class MI_Attendance_Report {
 			if ( 'MANAGEMENT_attendance' === $row['event_type'] ) $attendance[$id] = $detail['attendance'] ?? 'UNRECORDED';
 			if ( 'MANAGEMENT_identity_link' === $row['event_type'] ) $links[$id] = (int) ( $detail['target_id'] ?? 0 );
 		}
-		$root = static function ( $id ) use ( &$parents ) { while ( $parents[$id] !== $id ) $id = $parents[$id]; return $id; };
+		// Path halving shortens repeated lookups without changing the chosen identity.
+		$root = static function ( $id ) use ( &$parents ) { while ( $parents[$id] !== $id ) { $parents[$id] = $parents[$parents[$id]]; $id = $parents[$id]; } return $id; };
 		$mobiles = array(); $by_mobile = array();
 		foreach ( $people as $person ) {
 			$id = (int) $person['id']; $mobile = self::mobile( $person ); $mobiles[$id] = $mobile;

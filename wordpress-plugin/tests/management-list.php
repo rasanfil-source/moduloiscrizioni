@@ -55,3 +55,19 @@ foreach(array('none'=>1,'partial'=>2,'covered'=>3,'settled'=>4) as $filter=>$id)
 }
 check_list(MI_Management_List::page($payment_summary,array('deposit'=>'unpaid'))['total']===3,'Single payment includes partial payments');
 echo "Paginazione, ricerca globale, filtri combinati, coerenza esportazioni e riepilogo compatto verificati.\n";
+
+// Compare every sort mode to the previous comparator, including ties and accents.
+$sorting=$summary;
+foreach($sorting['people'] as $i=>&$row){$row['name']=$i%2?'René 10':'Rene 2';$row['buyer']='Èva '.($i%3);$row['room']='Camera '.($i%4);$row['code']='T'.($i%5);$row['status']=$i%7?'CONFIRMED':'CANCELLED';}unset($row);
+foreach(['name','buyer','code','room'] as $sort)foreach(['asc','desc'] as $direction){
+ $result=MI_Management_List::page($sorting,['sort'=>$sort,'direction'=>$direction],0,200);
+ $expected=$result['rows'];
+ usort($expected,static function($a,$b)use($sort,$direction){
+  $closed=(int)in_array($a['status'],['CANCELLED','EXPIRED'],true)<=>(int)in_array($b['status'],['CANCELLED','EXPIRED'],true);
+  if($closed)return $closed;
+  $value=strnatcasecmp(remove_accents($a[$sort]??''),remove_accents($b[$sort]??''));
+  return ($direction==='desc'?-1:1)*($value?:(strcmp($a['code'],$b['code'])?:(($a['id']??0)<=>($b['id']??0))));
+ });
+ check_list($result['rows']===$expected,'Changed ordering '.$sort.' '.$direction);
+ check_list($result['fingerprint']===hash('sha256',wp_json_encode($expected)),'Temporary sort keys leaked into fingerprint');
+}

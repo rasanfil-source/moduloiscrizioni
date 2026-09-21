@@ -69,12 +69,16 @@ final class MI_Management_List {
 		}
 		$sort = in_array( $context['sort'] ?? '', array( 'name', 'buyer', 'code', 'room' ), true ) ? $context['sort'] : 'name';
 		$direction = 'desc' === ( $context['direction'] ?? '' ) ? -1 : 1;
-		usort( $rows, static function ( $a, $b ) use ( $sort, $direction ) {
+		// Decorate only during sorting: keep returned rows and fingerprints unchanged.
+		$rows = array_map( static function ( $row ) use ( $sort ) { return array( 'row' => $row, 'sort_key' => remove_accents( $row[$sort] ?? '' ) ); }, $rows );
+		usort( $rows, static function ( $left, $right ) use ( $direction ) {
+			$a = $left['row']; $b = $right['row'];
 			$closed = (int) in_array( $a['status'], array( 'CANCELLED', 'EXPIRED' ), true ) <=> (int) in_array( $b['status'], array( 'CANCELLED', 'EXPIRED' ), true );
 			if ( $closed ) return $closed;
-			$result = strnatcasecmp( remove_accents( $a[$sort] ?? '' ), remove_accents( $b[$sort] ?? '' ) );
+			$result = strnatcasecmp( $left['sort_key'], $right['sort_key'] );
 			return $direction * ( $result ?: ( strcmp( $a['code'], $b['code'] ) ?: ( ( $a['id'] ?? 0 ) <=> ( $b['id'] ?? 0 ) ) ) );
 		} );
+		$rows = array_column( $rows, 'row' );
 		$offset = max( 0, (int) $offset ); $limit = max( 1, min( 200, (int) $limit ) );
 		return array( 'rows' => array_slice( $rows, $offset, $limit ), 'total' => count( $rows ), 'offset' => $offset, 'limit' => $limit, 'fingerprint' => hash( 'sha256', wp_json_encode( $rows ) ) );
 	}
