@@ -1,4 +1,16 @@
-# Modello corrente — 3.25.1
+# Modello del sistema
+
+## Aggiornamento locale — 22 settembre 2026
+
+Le sezioni di distribuzione più sotto descrivono uno stato storico. Lo stato dei pacchetti è nel README; le nuove correzioni locali sono nel [rapporto della campagna](docs/campagna-stabilizzazione-2026-09-22.md).
+
+Le transazioni di iscrizione, annullamento e risposta alla lista d'attesa verificano avvio e commit. Un errore di lettura dei contatori o dei partecipanti interrompe la mutazione. Dopo l'attesa del lock evento, una nuova iscrizione ricontrolla la chiave idempotente prima di valutare chiusura e disponibilità.
+
+L'annullamento completo salva nello stesso commit stato, disponibilità, audit e notifiche richieste. Le notifiche vengono solo accodate sotto transazione: l'invio rimane successivo. Un errore di pianificazione del cron dopo il commit non annulla il risultato; il recupero periodico usa outbox e revisioni persistenti. La preparazione delle comunicazioni verifica il commit prima di memorizzare la ricevuta temporanea, e la chiave univoca dell'outbox protegge il retry anche senza cache.
+
+Il catalogo servizi del riepilogo mantiene ordine e precedenza delle definizioni, accumulando le voci senza ricopiare l'array a ogni persona. Nessuna nuova cache o modifica dello schema DB.
+
+## Descrizione storica — 3.25.1
 
 Il progetto è in sviluppo e usa dati fittizi. Non esiste uno storico operativo da migrare.
 

@@ -21,8 +21,8 @@
   },
   "portal-management.js": {
     "file": "min/portal-management.js",
-    "source": "1b249ca82709520531b504e73cb578f84bfad3ef8035f0bc7579d2c4fdc668e4",
-    "hash": "6a0461905104e5649c3b817da754a575ade84b8a141b2ae7fb3e73afe4ba0298"
+    "source": "2a0ad05881f8208ae7f4fd08b3751935c26a4697a05d127715735780e96c5d02",
+    "hash": "bae9586916d25b1684a89240cf51ac9acd8ceda6a7bb46849700c782affa2e1b"
   },
   "portal-payments.css": {
     "file": "min/portal-payments.css",
@@ -41,8 +41,8 @@
   },
   "portal.js": {
     "file": "min/portal.js",
-    "source": "179b779cad2e713d922ec4e50d990221010a1080d71f00a69f6da1ddfd7d95a7",
-    "hash": "efcc9041410ac743274c6bdb18c6d7d0f339dad325d4de9cbbee8c1367090a55"
+    "source": "106c9a269e14be05fc6876a4c0cc92557a7510d007a118e90cce9e9c9fe5c637",
+    "hash": "1bd6cd0383ef78b564625d63d1b274a7aa123079319be49fe20742d5c848631d"
   },
   "public-balance.css": {
     "file": "min/public-balance.css",

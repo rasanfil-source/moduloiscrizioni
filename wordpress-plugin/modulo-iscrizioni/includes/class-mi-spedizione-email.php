@@ -230,8 +230,8 @@ final class MI_Spedizione_Email {
 			catch ( Throwable $error ) { return new WP_Error( 'mi_email_balance', 'Saldi non disponibili. Comunicazione non preparata.' ); }
 			$now = current_time( 'mysql', true );
 			$count = 0;
-			$wpdb->query( 'START TRANSACTION' );
 			try {
+				if ( false === $wpdb->query( 'START TRANSACTION' ) ) throw new RuntimeException( 'Transazione non disponibile.' );
 				foreach ( $registrations as $registration ) {
 					if ( in_array( $registration['status'], array( 'WAITLISTED', 'WAITLIST_OFFERED' ), true ) && 'EVENT_CANCELLATION' !== $template_type ) continue;
 					$position = $positions[$registration['id']];
@@ -253,13 +253,14 @@ final class MI_Spedizione_Email {
 					if ( false === $inserted ) throw new RuntimeException( 'Coda email non salvata.' );
 					if ( $inserted ) $count++;
 				}
-				$wpdb->query( 'COMMIT' );
-				set_transient( $idempotency_key, 1, DAY_IN_SECONDS );
+				if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma non ricevuta.' );
 			} catch ( Throwable $error ) {
 				$wpdb->query( 'ROLLBACK' );
 				return new WP_Error( 'mi_operational_email_storage', 'Non è stato possibile preparare la comunicazione.', array( 'status' => 500 ) );
 			}
-			if ( 'ANTEPRIMA' !== $effective_mode && $count ) self::pianifica_spedizione();
+			// The UNIQUE origin_key in the committed outbox protects retries even if cache/cron fail.
+			try { set_transient( $idempotency_key, 1, DAY_IN_SECONDS ); } catch ( Throwable $error ) {}
+			try { if ( 'ANTEPRIMA' !== $effective_mode && $count ) self::pianifica_spedizione(); } catch ( Throwable $error ) {}
 			return array( 'ok' => true, 'count' => $count, 'mode' => $effective_mode, 'message' => 'Comunicazione preparata nella coda WordPress.' );
 		} finally {
 			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );

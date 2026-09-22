@@ -28,7 +28,7 @@ final class MI_Portal_Payments {
 		$where .= " AND NOT EXISTS (SELECT 1 FROM {$wpdb->prefix}postmeta free_event WHERE free_event.post_id=r.event_id AND free_event.meta_key='_mi_pricing_mode' AND free_event.meta_value='ZERO')";
 		$offset = ( max( 1, (int) $page ) - 1 ) * 30;
 		$match = MI_Booking_Search::sql( $query );
-		$rows = $wpdb->get_results( "SELECT id,event_id,order_code,buyer_first_name,buyer_last_name FROM {$wpdb->prefix}mi_registrations r WHERE {$where} AND {$match} ORDER BY buyer_last_name,buyer_first_name,id LIMIT 31 OFFSET {$offset}", ARRAY_A );
+		$rows = $wpdb->get_results( "SELECT r.id,r.event_id,r.order_code,r.buyer_first_name,r.buyer_last_name,event_post.post_title AS event_title FROM {$wpdb->prefix}mi_registrations r LEFT JOIN {$wpdb->posts} event_post ON event_post.ID=r.event_id WHERE {$where} AND {$match} ORDER BY r.buyer_last_name,r.buyer_first_name,r.id LIMIT 31 OFFSET {$offset}", ARRAY_A );
 		if ( $wpdb->last_error ) return new WP_Error( 'mi_payment_search', 'Ricerca non disponibile. Riprova.' );
 		$has_more = count( $rows ) > 30; $rows = array_slice( $rows, 0, 30 );
 		$names = array(); $matches = array();
@@ -43,7 +43,7 @@ final class MI_Portal_Payments {
 		}
 		$results = array_map( static function ( $row ) use ( $names, $matches ) {
 			$found = $matches[$row['id']] ?? array();
-			return array( 'id' => (int) $row['id'], 'nome' => $found ? implode( ', ', array_column( $found, 'name' ) ) : implode( ', ', $names[$row['id']] ?? array( trim( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ) ) ), 'matched_participant_ids' => array_column( $found, 'id' ), 'codice' => $row['order_code'], 'evento' => html_entity_decode( get_the_title( (int) $row['event_id'] ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ), 'partecipanti' => $names[$row['id']] ?? array() );
+			return array( 'id' => (int) $row['id'], 'nome' => $found ? implode( ', ', array_column( $found, 'name' ) ) : implode( ', ', $names[$row['id']] ?? array( trim( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ) ) ), 'matched_participant_ids' => array_column( $found, 'id' ), 'codice' => $row['order_code'], 'evento' => html_entity_decode( (string) $row['event_title'], ENT_QUOTES | ENT_HTML5, 'UTF-8' ), 'partecipanti' => $names[$row['id']] ?? array() );
 		}, $rows ?: array() );
 		return array( 'prenotazioni' => $results, 'has_more' => $has_more );
 	}

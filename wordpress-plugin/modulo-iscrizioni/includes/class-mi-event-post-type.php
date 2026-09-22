@@ -154,7 +154,7 @@ final class MI_Event_Post_Type {
 			</select></p>
 			<p><label for="mi_capacity"><strong>Posti disponibili</strong></label><br><input id="mi_capacity" name="mi_capacity" type="number" min="1" max="10000" value="<?php echo esc_attr( $capacity ); ?>" required></p>
 			<h3 class="mi-admin-section-title">Date e lista d’attesa</h3>
-			<p><label for="mi_registration_opens_at"><strong>Apertura iscrizioni</strong></label><br><input id="mi_registration_opens_at" name="mi_registration_opens_at" type="datetime-local" value="<?php echo esc_attr( $opens_at ); ?>" required></p>
+			<p><label for="mi_registration_opens_at"><strong>Apertura iscrizioni</strong></label><br><input id="mi_registration_opens_at" name="mi_registration_opens_at" type="datetime-local" value="<?php echo esc_attr( $opens_at ); ?>"><br><small>Facoltativa: se vuota, le iscrizioni aprono subito alla pubblicazione.</small></p>
 			<p><label for="mi_registration_closes_at"><strong>Chiusura iscrizioni</strong></label><br><input id="mi_registration_closes_at" name="mi_registration_closes_at" type="datetime-local" value="<?php echo esc_attr( $closes_at ); ?>" required></p>
 			<p><label for="mi_event_starts_at"><strong>Data e ora dell’evento</strong></label><br><input id="mi_event_starts_at" name="mi_event_starts_at" type="datetime-local" value="<?php echo esc_attr( $event_starts_at ); ?>"></p>
 			<p><label for="mi_event_location"><strong>Luogo dell’evento</strong></label><br><input id="mi_event_location" name="mi_event_location" type="text" maxlength="180" value="<?php echo esc_attr( $event_location ); ?>" placeholder="Es. Piazza San Pietro, Roma"></p>
@@ -326,7 +326,7 @@ final class MI_Event_Post_Type {
 		foreach ( array( 'opens_at', 'closes_at' ) as $field ) {
 			$key = 'mi_registration_' . $field;
 			$value = isset( $_POST[ $key ] ) ? sanitize_text_field( wp_unslash( $_POST[ $key ] ) ) : '';
-			if ( preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $value ) ) {
+			if ( ( 'opens_at' === $field && isset( $_POST[ $key ] ) && '' === $value ) || preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $value ) ) {
 				update_post_meta( $post_id, '_mi_registration_' . $field, $value );
 			}
 		}

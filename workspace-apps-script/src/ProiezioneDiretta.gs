@@ -76,15 +76,26 @@ function apriFoglioEventoFirmato_(payload, create, title) {
 
 function aggiornaPagamentiDaProiezione_(book, projection, readOnly) {
   const schema=decodificaOggetto_(projection.event.schema_vista_json), payments=projection.payments;
+  const props=PropertiesService.getScriptProperties(),management=book.getSheetByName('Gestione evento');
+  const managementKey='MI_DIRECT_MANAGEMENT_'+book.getId(),managementVersion=String(props.getProperty('MI_WORDPRESS_COMMAND_URL')||'');
+  if(readOnly){if(management&&!management.isSheetHidden())management.hideSheet();}
+  else {
+    if(management&&management.isSheetHidden())management.showSheet();
+    if(!management||props.getProperty(managementKey)!==managementVersion){preparaAccessoGestioneEvento_(book,String(projection.event.id_evento));props.setProperty(managementKey,managementVersion);}
+  }
   let sheet=book.getSheetByName('Pagamenti');
   if(schema.pricing==='ZERO'&&!payments.length){if(sheet&&book.getSheets().some(s=>s.getName()!=='Pagamenti'&&!s.isSheetHidden()))sheet.hideSheet();return;}
-  sheet=sheet||book.insertSheet('Pagamenti');sheet.showSheet();sheet.clear();
+  const created=!sheet;
+  sheet=sheet||book.insertSheet('Pagamenti');if(sheet.isSheetHidden())sheet.showSheet();
   const headers=['Movimento','Prenotazione','Data','Tipo','Importo (€)','Metodo','Riferimento','Operatore','Nota'];
   const rows=payments.map(row=>[row.id_pagamento,row.codice_ordine,row.data_effettiva,row.tipo_movimento,(Number(row.importo_centesimi)||0)/100,row.fonte_pagamento,row.riferimento_esterno,row.etichetta_operatore,row.nota_amministrativa].map(value=>typeof value==='string'?neutralizzaFormula_(value,5000):value));
-  if(sheet.getMaxRows()<rows.length+1)sheet.insertRowsAfter(sheet.getMaxRows(),rows.length+1-sheet.getMaxRows());
-  if(sheet.getMaxColumns()<headers.length)sheet.insertColumnsAfter(sheet.getMaxColumns(),headers.length-sheet.getMaxColumns());
-  sheet.getRange(1,1,1,headers.length).setValues([headers]).setFontWeight('bold');if(rows.length){sheet.getRange(2,1,rows.length,headers.length).setValues(rows);sheet.getRange(2,5,rows.length,1).setNumberFormat('#,##0.00');}sheet.setFrozenRows(1);proteggiProiezione_(sheet);
-  const management=book.getSheetByName('Gestione evento');if(!readOnly){if(management)management.showSheet();preparaAccessoGestioneEvento_(book,String(projection.event.id_evento));}else if(management)management.hideSheet();
+  estendiGrigliaProiezione_(sheet,rows.length+1,headers.length);
+  const oldCount=Math.max(0,sheet.getLastRow()-1),old=oldCount?sheet.getRange(2,1,oldCount,headers.length).getValues():[];
+  if(!righeProiezioneUguali_(sheet.getRange(1,1,1,headers.length).getValues()[0],headers))sheet.getRange(1,1,1,headers.length).setValues([headers]).setFontWeight('bold');
+  const blocks=blocchiRigheProiezione_(old,rows,2);
+  blocks.forEach(block=>{sheet.getRange(block.row,1,block.values.length,headers.length).setNumberFormat('@').setValues(block.values);sheet.getRange(block.row,5,block.values.length,1).setNumberFormat('#,##0.00');});
+  if(oldCount>rows.length)sheet.getRange(rows.length+2,1,oldCount-rows.length,headers.length).clearContent();
+  if(created){sheet.setFrozenRows(1);proteggiProiezione_(sheet);}
 }
 
 function proiettaEventoDaWordPress_(payload) {
@@ -92,7 +103,9 @@ function proiettaEventoDaWordPress_(payload) {
   const lock=LockService.getScriptLock();if((payload||{}).background===true){if(!lock.tryLock(100))return {ok:true,ready:false,busy:true,retry_after:3};}else if(!lock.tryLock(1000))return {ok:true,ready:false,busy:true,retry_after:3};
   try{
     if(typeof eventoInEliminazione_==='function'&&eventoInEliminazione_(eventId))throw new Error('EVENT_DELETED');
+    verificaGenerazioneProiezione_(eventId,payload);
     const opened=apriFoglioEventoFirmato_(payload,true,projection.event.titolo), view=generaVistaDaProiezioneDiretta_(projection), properties=PropertiesService.getScriptProperties(), key='MI_DIRECT_VIEW_'+opened.book.getId(), fingerprint=String(payload.fingerprint||'');
+    if(typeof riprendiScritturaProiezione_==='function')riprendiScritturaProiezione_(opened.sheet);
     abilitaLetturaFoglioEventoConLink_(opened.book.getId());
     const pending=modificheCorrentiFoglio_(opened.sheet);
     let result={aggiunte:0,manuali:pending.changes.length,conflitti:pending.errors.length};
@@ -103,4 +116,17 @@ function proiettaEventoDaWordPress_(payload) {
     const complete=!result.manuali&&!result.conflitti;
     return {ok:true,ready:complete,event_sheet_complete:complete,read_only:view.sola_lettura===true,id_foglio:opened.book.getId(),url_foglio:complete?opened.book.getUrl():undefined,creato:opened.created,projection_hash:String(payload.projection_hash||''),fingerprint:fingerprint,event_schema:decodificaOggetto_(projection.event.schema_vista_json),operational_profile:String(projection.event.profilo_operativo||''),esito:result};
   }finally{lock.releaseLock();}
+}
+
+/** Record the high-water mark before writing: a failed new delivery must never
+ * allow an older one to roll the sheet back. Same-generation retries can repair it.
+ */
+function verificaGenerazioneProiezione_(eventId,payload) {
+  const props=PropertiesService.getScriptProperties(),key='MI_DIRECT_GENERATION_'+eventId;
+  const stored=JSON.parse(props.getProperty(key)||'null'),generation=String(payload.projection_generation||'');
+  if(!generation){if(stored)throw new Error('PROJECTION_GENERATION_REQUIRED');return;}
+  if(!/^[1-9][0-9]{0,15}$/.test(generation)||!Number.isSafeInteger(Number(generation)))throw new Error('INVALID_PROJECTION_GENERATION');
+  const hash=String(payload.projection_hash||'');
+  if(stored&&(Number(generation)<Number(stored.generation)||(generation===stored.generation&&hash!==stored.hash)))throw new Error('STALE_EVENT_PROJECTION');
+  if(!stored||generation!==stored.generation)props.setProperty(key,JSON.stringify({generation:generation,hash:hash}));
 }

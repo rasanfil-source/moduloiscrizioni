@@ -39,9 +39,14 @@ jobs:
           php wordpress-plugin/tests/group-attendance.php
           php wordpress-plugin/tests/sheet-organization.php
           php wordpress-plugin/tests/audit-regressions.php
+          php wordpress-plugin/tests/audit-dates-access-cache.php
           php wordpress-plugin/tests/event-wizard.php
           php wordpress-plugin/tests/management-list.php
+          php wordpress-plugin/tests/management-page-sql.php
+          php wordpress-plugin/tests/payment-counts.php
           php wordpress-plugin/tests/code-image.php
+          php wordpress-plugin/tests/registration-failures.php
+          php wordpress-plugin/tests/email-transaction-failures.php
 
   economic-innodb:
     runs-on: ubuntu-latest
@@ -76,6 +81,7 @@ jobs:
           php wordpress-plugin/tests/accommodation-change-innodb.php
           php wordpress-plugin/tests/percentage-deposit-unit.php
           php wordpress-plugin/tests/sheet-receipts-innodb.php
+          php wordpress-plugin/tests/room-postcommit-innodb.php
 
   sanitization:
     runs-on: ubuntu-latest

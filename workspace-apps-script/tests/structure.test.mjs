@@ -240,7 +240,8 @@ test('la modalità email GAS è fail-closed e sostituisce sempre il destinatario
 test('la replica è riconciliante e viene confermata solo quando completa', () => {
   assert.match(sources['WebApp.gs'], /IDEMPOTENCY_CONFLICT/);
   assert.match(sources['WebApp.gs'], /eliminaRigheContigue_\(participantSheet/);
-  assert.match(sources['WebApp.gs'], /participantCount === participants\.length/);
+  assert.match(sources['WebApp.gs'], /participantsComplete = savedParticipantCodes\.length === participants\.length/);
+  assert.match(sources['WebApp.gs'], /getRange\(registrationRow, 1, 1, registrationValues\.length\)\.getValues/);
   assert.match(sources['WebApp.gs'], /complete:\s*complete/);
   assert.match(sources['WebApp.gs'], /existing && existing\.data_creazione/);
 });

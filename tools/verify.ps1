@@ -44,8 +44,9 @@ try {
     $phpTests = @(
         'public-balance.php', 'public-balance-model.php', 'operational-profile.php', 'workspace-deployment-preflight.php',
         'option-rules.php', 'sheet-open.php', 'event-projection-transfer.php', 'rest-projection.php', 'workspace-schema.php', 'attendance-report.php',
-        'group-attendance.php', 'sheet-organization.php', 'audit-regressions.php',
-        'event-wizard.php', 'management-list.php', 'management-page-sql.php', 'code-image.php', 'assets.php'
+		'group-attendance.php', 'sheet-organization.php', 'audit-regressions.php', 'audit-dates-access-cache.php',
+		'event-wizard.php', 'management-list.php', 'management-page-sql.php', 'payment-counts.php', 'code-image.php', 'assets.php',
+        'registration-failures.php', 'email-transaction-failures.php'
     )
     foreach ($test in $phpTests) {
         & $phpExecutable @phpArguments (Join-Path 'wordpress-plugin/tests' $test) | Out-Host

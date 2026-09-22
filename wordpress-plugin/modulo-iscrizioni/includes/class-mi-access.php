@@ -47,8 +47,8 @@ final class MI_Access {
 	}
 
 	public static function can_access_event( $event_id, $user_id = 0 ) {
+		if ( self::is_global_manager( $user_id ) ) return true;
 		$user = $user_id ? get_user_by( 'id', $user_id ) : wp_get_current_user();
-		if ( $user && user_can( $user, 'mi_manage_all_events' ) ) return true;
 		if ( $user && in_array( 'mi_assigned_event_manager', (array) $user->roles, true ) ) {
 			$scope = get_user_meta( $user->ID, '_mi_event_scope', true );
 			return in_array( absint( $event_id ), array_map( 'absint', is_array( $scope ) ? $scope : array() ), true );
@@ -59,7 +59,7 @@ final class MI_Access {
 	public static function event_ids( $user_id = 0 ) {
 		$user_id = $user_id ?: get_current_user_id();
 		$user = get_user_by( 'id', $user_id );
-		if ( $user && ( user_can( $user, 'manage_options' ) || user_can( $user, 'mi_manage_all_events' ) ) ) return 'ALL';
+		if ( self::is_global_manager( $user_id ) ) return 'ALL';
 		if ( $user && in_array( 'mi_assigned_event_manager', (array) $user->roles, true ) ) {
 			$scope = get_user_meta( $user_id, '_mi_event_scope', true );
 			return array_values( array_unique( array_filter( array_map( 'absint', is_array( $scope ) ? $scope : array() ) ) ) );

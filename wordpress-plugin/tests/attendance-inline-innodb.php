@@ -16,6 +16,16 @@ $last=json_decode($wpdb->get_var("SELECT detail_json FROM wp_mi_registration_eve
 check($last['participant_id']===1&&$last['attendance']==='PRESENT','saved individual');
 check(!is_wp_error(MI_Management_Service::save_attendance_bulk(42,[['id'=>1,'attendance'=>'ABSENT']])),'undo attendance');
 check(is_wp_error(MI_Management_Service::save_attendance_bulk(43,[['id'=>1,'attendance'=>'PRESENT']])),'other event blocked');
+class AttendanceTransactionFault extends DatabaseAdapter {
+ function __construct($existing){$this->db=$existing->db;}
+ function query($sql){if($sql==='START TRANSACTION'){$this->last_error='Injected begin failure';return false;}return parent::query($sql);}
+}
+$attendanceDatabase=$wpdb;
+$auditBefore=(int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_registration_events');
+$wpdb=new AttendanceTransactionFault($attendanceDatabase);
+check(is_wp_error(MI_Management_Service::save_attendance_bulk(42,[['id'=>1,'attendance'=>'PRESENT']])),'failed transaction start rejected');
+check((int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_registration_events')===$auditBefore,'failed transaction start writes no attendance');
+$wpdb=$attendanceDatabase;
 $GLOBALS['test_event_meta']['_mi_annual_attendance_report']='0';
 check(!MI_Management_Service::attendance_availability(42)['available'],'disabled group');
 check(is_wp_error(MI_Management_Service::save_attendance_bulk(42,[['id'=>1,'attendance'=>'PRESENT']])),'disabled blocked');

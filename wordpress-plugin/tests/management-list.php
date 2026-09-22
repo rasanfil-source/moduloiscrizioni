@@ -1,7 +1,7 @@
 <?php
 // The browser harness invokes this same production selector via stdin.
 define( 'ABSPATH', __DIR__ );
-function wp_json_encode( $value ) { return json_encode( $value ); }
+function wp_json_encode( $value ) { $json = json_encode( $value ); $GLOBALS['last_encoded_bytes'] = strlen( $json ); return $json; }
 function remove_accents( $value ) { return strtr( $value, array( 'à'=>'a', 'è'=>'e', 'é'=>'e', 'ì'=>'i', 'ò'=>'o', 'ù'=>'u' ) ); }
 require __DIR__ . '/../modulo-iscrizioni/includes/class-mi-management-list.php';
 if ( in_array( '--json', $argv, true ) ) {
@@ -55,6 +55,15 @@ foreach(array('none'=>1,'partial'=>2,'covered'=>3,'settled'=>4) as $filter=>$id)
 }
 check_list(MI_Management_List::page($payment_summary,array('deposit'=>'unpaid'))['total']===3,'Single payment includes partial payments');
 echo "Paginazione, ricerca globale, filtri combinati, coerenza esportazioni e riepilogo compatto verificati.\n";
+
+$full = MI_Management_List::page( $summary, array() ); $full_bytes = $GLOBALS['last_encoded_bytes'];
+$versioned = MI_Management_List::page( $summary, array(), 0, 30, 'canonical-v1' );
+check_list( $GLOBALS['last_encoded_bytes'] < $full_bytes / 5, 'Versioned fingerprint still serializes full rows' );
+check_list( $full['rows'] === $versioned['rows'] && $full['total'] === $versioned['total'], 'Versioning changed selection' );
+check_list( $versioned['fingerprint'] === MI_Management_List::page( $summary, array( 'shown' => 60 ), 30, 30, 'canonical-v1' )['fingerprint'], 'Fingerprint depends on pagination' );
+check_list( $versioned['fingerprint'] !== MI_Management_List::page( $summary, array(), 0, 30, 'canonical-v2' )['fingerprint'], 'Canonical changes not detected' );
+$different = $summary; $different['people'][0]['id'] = 999;
+check_list( $versioned['fingerprint'] !== MI_Management_List::page( $different, array(), 0, 30, 'canonical-v1' )['fingerprint'], 'Different equal-count membership not detected' );
 
 // Compare every sort mode to the previous comparator, including ties and accents.
 $sorting=$summary;

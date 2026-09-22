@@ -7,7 +7,7 @@ function wp_date($format){return date($format);}
 class MI_Portal_Management {static function allowed(){return true;}}
 require __DIR__.'/../modulo-iscrizioni/includes/class-mi-management-service.php';
 require __DIR__.'/../modulo-iscrizioni/includes/class-mi-payment-ledger.php';
-require __DIR__.'/../modulo-iscrizioni/includes/class-mi-booking-search.php';
+require_once __DIR__.'/../modulo-iscrizioni/includes/class-mi-booking-search.php';
 $source=file_get_contents(__DIR__.'/../modulo-iscrizioni/includes/class-mi-registration-service.php');
 $source=str_replace("require_once __DIR__ . '/class-mi-option-rules.php';", '', $source);
 $source=preg_replace("/^require_once __DIR__ \\. '\\/class-mi-payment-people\\.php';\\R/m",'', $source);

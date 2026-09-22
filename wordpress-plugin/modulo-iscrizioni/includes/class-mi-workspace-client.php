@@ -22,7 +22,9 @@ final class MI_Workspace_Client {
 		// tre secondi a una replica già in chiusura, evitando falsi "occupato".
 		if ( 'PROIETTA_EVENTO' !== strtoupper( $action ) ) return self::request_unlocked( $action, $payload, $attempt );
 		global $wpdb;
-		$lock = 'mi_workspace_' . substr( hash( 'sha256', $wpdb->prefix ), 0, 40 );
+		$event_id = absint( $payload['event_id'] ?? 0 );
+		$lock_scope = $wpdb->prefix . '|' . ( $event_id ? 'event:' . $event_id : 'global' );
+		$lock = 'mi_workspace_' . substr( hash( 'sha256', $lock_scope ), 0, 40 );
 		$wait = 3;
 		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $lock, $wait ) ) ) return new WP_Error( 'mi_workspace_busy', 'Sincronizzazione Google in corso; aggiornamento mantenuto in attesa.' );
 		try { return self::request_unlocked( $action, $payload, $attempt ); }

@@ -152,6 +152,17 @@ final class MI_Management_Service {
 	 */
 	public static function page( $event_id, $context, $offset = 0, $limit = 30 ) {
 		global $wpdb;
+		if ( ! MI_Portal_Management::allowed() || ! MI_Access::can_access_event( $event_id ) ) return new WP_Error( 'mi_management_scope', 'Evento non accessibile.' );
+		if ( class_exists( 'MI_Event_Read_Cache' ) ) {
+			try {
+				$state = MI_Event_Read_Cache::state( $event_id );
+				$model = MI_Event_Read_Cache::get( $event_id, $state['token'] );
+				if ( is_array( $model ) ) {
+					$page = MI_Management_List::page( $model, $context, $offset, $limit, $state['token'] );
+					return $page;
+				}
+			} catch ( Throwable $error ) { return new WP_Error( 'mi_management_read', $error->getMessage() ); }
+		}
 		$context = is_array( $context ) ? $context : array();
 		$unsupported = array( 'filter', 'deposit', 'requests', 'deadline', 'room', 'service', 'orderService' );
 		$advanced = false;
@@ -230,6 +241,7 @@ final class MI_Management_Service {
 	private static function scan_filtered_page( $event_id, array $context, $offset, $limit, $individual, $from, $where_sql ) {
 		global $wpdb;
 		$cursor = 0; $matched = 0; $rows = array(); $chunk_size = 200;
+		$rooms = null;
 		do {
 			$selected = $individual
 				? $wpdb->get_results( "SELECT p.id,r.id registration_id FROM {$from} WHERE {$where_sql} AND p.id>{$cursor} ORDER BY p.id LIMIT {$chunk_size}", ARRAY_A )
@@ -237,7 +249,8 @@ final class MI_Management_Service {
 			self::check_database();
 			if ( ! $selected ) break;
 			$registration_ids = array_values( array_unique( array_map( 'intval', array_column( $selected, 'registration_id' ) ) ) );
-			$summary = self::summary( $event_id, $registration_ids );
+			if ( null === $rooms ) $rooms = self::rooms( $event_id );
+			$summary = self::summary( $event_id, $registration_ids, $rooms );
 			if ( is_wp_error( $summary ) ) return $summary;
 			if ( $individual ) {
 				$wanted = array_fill_keys( array_map( 'intval', array_column( $selected, 'id' ) ), true );
@@ -257,10 +270,16 @@ final class MI_Management_Service {
 		$fingerprint_context = $context; unset( $fingerprint_context['shown'] );
 		return array( 'rows' => array_slice( $rows, $offset, $limit ), 'total' => $matched, 'offset' => $offset, 'limit' => $limit, 'fingerprint' => hash( 'sha256', wp_json_encode( array( $version, (string) $state_revision, $matched, $fingerprint_context ) ) ) );
 	}
-	public static function summary( $event_id, $registration_ids = null ) {
+	public static function summary( $event_id, $registration_ids = null, $event_rooms = null ) {
 		global $wpdb;
 		if ( ! MI_Portal_Management::allowed() || ! MI_Access::can_access_event( $event_id ) ) return new WP_Error( 'mi_management_scope', 'Evento non accessibile.' );
 		try {
+			$cache_state = null;
+			if ( null === $registration_ids && class_exists( 'MI_Event_Read_Cache' ) ) {
+				$cache_state = MI_Event_Read_Cache::state( $event_id );
+				$cached = MI_Event_Read_Cache::get( $event_id, $cache_state['token'] );
+				if ( is_array( $cached ) ) return $cached;
+			}
 			$scope = '';
 			if ( is_array( $registration_ids ) ) {
 				$registration_ids = array_values( array_filter( array_unique( array_map( 'absint', $registration_ids ) ) ) );
@@ -284,7 +303,8 @@ final class MI_Management_Service {
             self::check_database(); $attendance = self::attendance_map( $attendance_rows );
 			$grouped = array();
 			foreach ( $people as $person ) $grouped[$person['registration_id']][] = $person;
-			$has_rooms = count( self::rooms( $event_id ) ) > 0;
+			$event_rooms = null === $event_rooms ? self::rooms( $event_id ) : $event_rooms;
+			$has_rooms = count( $event_rooms ) > 0;
 			$requested_rooms = array();
 			foreach ( $people as $person ) foreach ( self::decode( $person['options_json'] ?? '' ) as $option ) if ( isset( self::room_types()[$option['code'] ?? ''] ) && (int) ( $option['quantity'] ?? 0 ) > 0 ) $requested_rooms[(int) $person['id']] = true;
 			$needs_room = static function ( $person ) use ( $requested_rooms, $has_rooms ) { return $requested_rooms ? isset( $requested_rooms[(int) $person['id']] ) : $has_rooms; };
@@ -334,17 +354,36 @@ final class MI_Management_Service {
 			$features = array( 'rooms' => $has_rooms, 'room_inventory' => 'ON_DEMAND' !== get_post_meta( $event_id, '_mi_accommodation_management', true ), 'payments' => in_array( $mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ), 'deposit' => 'DEPOSIT_BALANCE' === $mode );
 			foreach ( $orders as $order ) {
 				$snapshot = self::decode( $order['snapshot_json'] );
-				$options = array_merge( $options, (array) ( $snapshot['event']['options'] ?? array() ) );
+				foreach ( (array) ( $snapshot['event']['options'] ?? array() ) as $option ) $options[] = $option;
 				$features['payments'] = $features['payments'] || in_array( $order['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 				$features['deposit'] = $features['deposit'] || 'DEPOSIT_BALANCE' === ( $order['economic_mode'] ?? '' );
 			}
 			foreach ( $options as $option ) if ( is_array( $option ) && 0 === strpos( (string) ( $option['code'] ?? '' ), 'alloggio-' ) ) $features['rooms'] = true;
 			if ( $requested_rooms ) $features['rooms'] = true;
 			$room_types = array(); $known_types = self::room_types();
-			foreach ( $individuals as $person ) $options = array_merge( $options, $person['options'] );
+			foreach ( $individuals as $person ) foreach ( $person['options'] as $option ) $options[] = $option;
 			foreach ( $options as $option ) if ( isset( $known_types[$option['code'] ?? ''] ) ) $room_types[$option['code']] = $known_types[$option['code']];
-			return array( 'ok' => true, 'features' => $features, 'room_types' => $room_types, 'option_definitions' => array_values( array_filter( $options, 'is_array' ) ), 'items' => $items, 'people' => $individuals, 'field_labels' => $field_labels, 'rooms' => self::rooms( $event_id ), 'updated_at' => gmdate( 'c' ), 'registration_url' => MI_Shortcode::url_iscrizione( $event_id ) );
+			$unique_options = array();
+			foreach ( $options as $option ) if ( is_array( $option ) ) $unique_options[$option['code'] ?? $option['name'] ?? wp_json_encode( $option )] = $option;
+			$result = array( 'ok' => true, 'features' => $features, 'room_types' => $room_types, 'option_definitions' => array_values( $unique_options ), 'items' => $items, 'people' => $individuals, 'field_labels' => $field_labels, 'rooms' => $event_rooms, 'updated_at' => gmdate( 'c' ), 'registration_url' => MI_Shortcode::url_iscrizione( $event_id ) );
+			$result['payment_counts'] = self::payment_counts( $individuals );
+			if ( $cache_state ) {
+				if ( MI_Event_Read_Cache::state( $event_id )['token'] !== $cache_state['token'] ) return new WP_Error( 'mi_management_changed', 'I dati sono cambiati durante la lettura. Riprova.' );
+				MI_Event_Read_Cache::put( $event_id, $cache_state['token'], $result );
+			}
+			return $result;
 		} catch ( Throwable $error ) { return new WP_Error( 'mi_management_read', $error->getMessage() ); }
+	}
+	/** Count known active individual positions; never infer people from order status. */
+	public static function payment_counts( array $people ) {
+		$result = array( 'settled' => 0, 'deposit_covered' => 0, 'unknown' => 0 );
+		foreach ( $people as $person ) {
+			if ( ! in_array( $person['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ) continue;
+			if ( empty( $person['economics_known'] ) ) { $result['unknown']++; continue; }
+			if ( (int) $person['balance'] <= 0 ) $result['settled']++;
+			if ( ! empty( $person['deposit_covered'] ) ) $result['deposit_covered']++;
+		}
+		return $result;
 	}
 	/** Usa il contatto personale quando il modulo lo prevede; altrimenti conserva il recapito del referente. */
 	private static function participant_contact( $fields, $definitions, $kind, $fallback ) {
@@ -552,13 +591,13 @@ final class MI_Management_Service {
 				if ( false === $wpdb->insert( $wpdb->prefix . 'mi_management_requests', array( 'request_id' => $request_id, 'event_id' => $event_id, 'registration_id' => 0, 'request_hash' => $hash, 'actor_id' => get_current_user_id(), 'created_at' => current_time( 'mysql', true ) ) ) ) throw new RuntimeException();
 			}
 			if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException();
-			if ( class_exists( 'MI_Sheet_Open' ) ) MI_Sheet_Open::enqueue( $event_id );
-			return array( 'saved' => true, 'replayed' => (bool) $previous, 'message' => 'Inventario camere salvato. Le prenotazioni sono in attesa di replica sul foglio.' );
 		} catch ( Throwable $error ) {
 			$wpdb->query( 'ROLLBACK' );
 			if ( $error instanceof InvalidArgumentException ) return array( 'saved' => false, 'rejected' => true, 'message' => $error->getMessage() );
 			return new WP_Error( 'mi_room_save', 'Salvataggio non confermato. Riprova la stessa richiesta.' );
 		}
+		try { if ( class_exists( 'MI_Sheet_Open' ) ) MI_Sheet_Open::enqueue( $event_id ); } catch ( Throwable $error ) { /* Persistent revisions retain the change. */ }
+		return array( 'saved' => true, 'replayed' => (bool) $previous, 'message' => 'Inventario camere salvato. Le prenotazioni sono in attesa di replica sul foglio.' );
 	}
 
 	public static function attendance_availability( $event_id ) {
@@ -588,8 +627,8 @@ final class MI_Management_Service {
 		$rows = $wpdb->get_results( "SELECT p.id,p.registration_id FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE p.id IN ({$ids}) AND p.status='ACTIVE' AND r.event_id=" . absint( $event_id ) . " AND r.status IN ('CONFIRMED','PENDING_PAYMENT')", ARRAY_A );
 		self::check_database();
 		if ( count( $rows ) !== count( $normalized ) ) return new WP_Error( 'mi_attendance_bulk', 'Una o più persone non sono più disponibili. Aggiorna l’elenco.' );
-		$wpdb->query( 'START TRANSACTION' );
 		try {
+			if ( false === $wpdb->query( 'START TRANSACTION' ) ) throw new RuntimeException( 'Registro non disponibile.' );
 			$rows = $wpdb->get_results( "SELECT p.id,p.registration_id FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE p.id IN ({$ids}) AND p.status='ACTIVE' AND r.event_id=" . absint( $event_id ) . " AND r.status IN ('CONFIRMED','PENDING_PAYMENT') ORDER BY r.id,p.id FOR UPDATE", ARRAY_A );
 			self::check_database();
 			if ( count( $rows ) !== count( $normalized ) ) throw new RuntimeException( 'Partecipanti cambiati. Aggiorna l’elenco.' );

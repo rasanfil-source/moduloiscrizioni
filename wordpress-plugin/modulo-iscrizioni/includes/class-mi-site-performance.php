@@ -8,6 +8,8 @@ defined( 'ABSPATH' ) || exit;
  * carrello, pagamento, account o contenuti WooCommerce incorporati.
  */
 final class MI_Site_Performance {
+	private const WOOCOMMERCE_STYLE_HANDLES = array( 'woocommerce-general', 'woocommerce-layout', 'woocommerce-smallscreen', 'wc-blocks-style', 'wc-blocks-packages-style', 'wc-blocks-vendors-style', 'wc-stripe-express-checkout', 'woocommerce_stripe_payment_request', 'wcpay-express-checkout', 'wcpay-blocks-checkout-style' );
+	private const WOOCOMMERCE_SCRIPT_HANDLES = array( 'sourcebuster-js', 'wc-order-attribution', 'wc-stripe-express-checkout', 'woocommerce_stripe_payment_request', 'wc-stripe-upe-classic', 'wcpay-express-checkout', 'wcpay-frontend-tracks' );
 	public static function boot() {
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'dequeue_unused_woocommerce_assets' ), 200 );
 		// Alcuni stili dei blocchi WooCommerce vengono accodati tardi.
@@ -40,11 +42,11 @@ final class MI_Site_Performance {
 	}
 
 	private static function woocommerce_style_handles() {
-		return array( 'woocommerce-general', 'woocommerce-layout', 'woocommerce-smallscreen', 'wc-blocks-style', 'wc-blocks-packages-style', 'wc-blocks-vendors-style', 'wc-stripe-express-checkout', 'woocommerce_stripe_payment_request', 'wcpay-express-checkout', 'wcpay-blocks-checkout-style' );
+		return self::WOOCOMMERCE_STYLE_HANDLES;
 	}
 
 	private static function woocommerce_script_handles() {
-		return array( 'sourcebuster-js', 'wc-order-attribution', 'wc-stripe-express-checkout', 'woocommerce_stripe_payment_request', 'wc-stripe-upe-classic', 'wcpay-express-checkout', 'wcpay-frontend-tracks' );
+		return self::WOOCOMMERCE_SCRIPT_HANDLES;
 	}
 
 	private static function needs_woocommerce_frontend() {

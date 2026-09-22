@@ -113,7 +113,7 @@
     const sheetButton=root.querySelector('[data-open-sheet]');
     if(sheetButton)sheetButton.addEventListener('click',async e=>{
       e.preventDefault();
-      const sheetWindow=window.open('about:blank','_blank','noopener');
+      const sheetWindow=window.open('', '_blank');
       if(!sheetWindow){say('Apertura non completata. Consenti le finestre popup per aprire il foglio.');return;}
       if(!await canLeave()||busy){try{sheetWindow.close();}catch(closeError){}return;}
       const openingEvent=event;busy=true;sheetButton.setAttribute('aria-disabled','true');
@@ -189,8 +189,9 @@
         const summaryCard=(label,value,detail='',attention=false)=>'<article class="mi-summary-card'+(attention?' mi-summary-card--attention':'')+'"><span>'+label+'</span><strong>'+value+'</strong>'+(detail?'<small>'+detail+'</small>':'')+'</article>';
         const waitlistRows=(people('WAITLISTED')>0?summaryRow('Persone in lista d’attesa',people('WAITLISTED')):'')+(people('WAITLIST_OFFERED')>0?summaryRow('Persone con posto proposto',people('WAITLIST_OFFERED')):'');
         const registeredPeople=people('CONFIRMED')+people('PENDING_PAYMENT');
-        const settledPeople=data.items.filter(x=>['CONFIRMED','PENDING_PAYMENT'].includes(x.status)&&x.balance<=0).reduce((n,x)=>n+x.participants,0);
-        const paidPeopleRows=summaryRow('Persone iscritte',registeredPeople)+(features.deposit&&people('CONFIRMED')>0?summaryRow('Caparra versata',people('CONFIRMED')):'')+(settledPeople>0?summaryRow(features.deposit?'Saldo versato':'Persone con pagamento completato',settledPeople):'');
+        const paymentCounts=data.payment_counts||{};
+        const settledPeople=Number(paymentCounts.settled||0),depositCovered=Number(paymentCounts.deposit_covered||0);
+        const paidPeopleRows=summaryRow('Persone iscritte',registeredPeople)+(features.deposit&&depositCovered>0?summaryRow('Caparra versata',depositCovered):'')+(settledPeople>0?summaryRow(features.deposit?'Saldo versato':'Persone con pagamento completato',settledPeople):'');
         const peopleRows=(features.payments?paidPeopleRows:summaryRow('Persone confermate',people('CONFIRMED')))+waitlistRows;
         const economicRows=features.payments?summaryGroup('Importi',summaryRow('Da incassare',money(receivable),receivable>0)+'<tr data-net-paid><th scope="row">Versato netto<small>Esclusi rimborsi effettuati</small></th><td>'+money(netPaid)+'</td></tr>'):'';
         const qualityRows=(sum('missing')>0?summaryRow('Partecipanti con dati mancanti',sum('missing'),true):'')+(features.rooms?summaryRow('Partecipanti senza camera',sum('unassigned'),sum('unassigned')>0):'');

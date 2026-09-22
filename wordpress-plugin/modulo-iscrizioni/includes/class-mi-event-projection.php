@@ -3,6 +3,22 @@ defined( 'ABSPATH' ) || exit;
 
 /** Builds the complete, rebuildable event-sheet projection from canonical MySQL data. */
 final class MI_Event_Projection {
+	private static function check_database() {
+		global $wpdb;
+		if ( $wpdb->last_error ) throw new RuntimeException( 'Impossibile costruire la proiezione dell’evento.' );
+	}
+
+	/** Called while the event lease serializes canonical reads and all event writes. */
+	private static function generation( $event_id, $fingerprint ) {
+		$previous = get_post_meta( $event_id, '_mi_projection_version', true );
+		if ( is_array( $previous ) && ( $previous['fingerprint'] ?? '' ) === $fingerprint ) return (string) $previous['generation'];
+		$generation = (int) ( is_array( $previous ) ? ( $previous['generation'] ?? 0 ) : 0 ) + 1;
+		if ( $generation < 1 || $generation > 9007199254740991 ) throw new RuntimeException( 'Generazione della proiezione non valida.' );
+		$next = array( 'generation' => (string) $generation, 'fingerprint' => $fingerprint );
+		update_post_meta( $event_id, '_mi_projection_version', $next );
+		if ( get_post_meta( $event_id, '_mi_projection_version', true ) !== $next ) throw new RuntimeException( 'Versione della proiezione non registrata.' );
+		return (string) $generation;
+	}
 	private static function decode_list( $value ) {
 		$decoded = json_decode( (string) $value, true );
 		return is_array( $decoded ) ? $decoded : array();
@@ -23,14 +39,25 @@ final class MI_Event_Projection {
 	public static function snapshot( $event_id ) {
 		global $wpdb;
 		$event_id = absint( $event_id );
+		if ( class_exists( 'MI_Event_Deletion' ) ) {
+			$lease = MI_Event_Deletion::enter( $event_id );
+			if ( is_wp_error( $lease ) ) throw new RuntimeException( $lease->get_error_message() );
+		}
+		wp_cache_delete( $event_id, 'post_meta' );
 		$event = get_post( $event_id );
 		if ( ! $event || MI_Event_Post_Type::EVENT_TYPE !== $event->post_type ) throw new InvalidArgumentException( 'Evento non valido.' );
 		$registrations = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d ORDER BY id", $event_id ), ARRAY_A );
+		self::check_database();
 		$people = $wpdb->get_results( $wpdb->prepare( "SELECT p.* FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d ORDER BY p.registration_id,p.id", $event_id ), ARRAY_A );
+		self::check_database();
 		$items = $wpdb->get_results( $wpdb->prepare( "SELECT i.* FROM {$wpdb->prefix}mi_registration_items i JOIN {$wpdb->prefix}mi_registrations r ON r.id=i.registration_id WHERE r.event_id=%d ORDER BY i.registration_id,i.id", $event_id ), ARRAY_A );
+		self::check_database();
 		$payments = $wpdb->get_results( $wpdb->prepare( "SELECT p.* FROM {$wpdb->prefix}mi_payments p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d ORDER BY p.registration_id,p.effective_at,p.id", $event_id ), ARRAY_A );
+		self::check_database();
 		$attendance_rows = $wpdb->get_results( $wpdb->prepare( "SELECT e.detail_json FROM {$wpdb->prefix}mi_registration_events e JOIN {$wpdb->prefix}mi_registrations r ON r.id=e.registration_id WHERE r.event_id=%d AND e.event_type='MANAGEMENT_attendance' ORDER BY e.id", $event_id ), ARRAY_A );
+		self::check_database();
 		$rooms = $wpdb->get_results( $wpdb->prepare( "SELECT code,name,capacity FROM {$wpdb->prefix}mi_rooms WHERE event_id=%d ORDER BY code", $event_id ), ARRAY_A );
+		self::check_database();
 		$event_revision = $wpdb->get_var( $wpdb->prepare( "SELECT revision FROM {$wpdb->prefix}mi_management_state WHERE event_id=%d", $event_id ) );
 		if ( $wpdb->last_error ) throw new RuntimeException( 'Impossibile costruire la proiezione dell’evento.' );
 
@@ -103,7 +130,7 @@ final class MI_Event_Projection {
 		);
 		$fingerprint = hash( 'sha256', MI_Workspace_Client::stable_json( array( $projection, $versions, (string) $event_revision ) ) );
 		$rows = array_map( static function ( $row ) { return array( 'id' => (int) $row['id'], 'order_code' => $row['order_code'], 'workspace_revision' => (string) $row['workspace_revision'], 'workspace_status' => $row['workspace_status'] ); }, $registrations );
-		return array( 'projection' => $projection, 'versions' => $versions, 'rows' => $rows, 'revision' => (string) ( $event_revision ?? '0' ), 'schema' => $schema, 'profile' => $projection['event']['profilo_operativo'], 'rooms' => $rooms, 'fingerprint' => $fingerprint );
+		return array( 'projection' => $projection, 'versions' => $versions, 'rows' => $rows, 'revision' => (string) ( $event_revision ?? '0' ), 'schema' => $schema, 'profile' => $projection['event']['profilo_operativo'], 'rooms' => $rooms, 'fingerprint' => $fingerprint, 'generation' => self::generation( $event_id, $fingerprint ) );
 	}
 
 	public static function request_payload( $event_id, $background = false, $snapshot = null ) {
@@ -113,6 +140,7 @@ final class MI_Event_Projection {
 			'event_id' => (string) absint( $event_id ), 'sheet_id' => (string) get_post_meta( $event_id, '_mi_operational_sheet_id', true ),
 			'projection_hash' => $transfer['projection_hash'], 'fingerprint' => $snapshot['fingerprint'],
 			'workspace_event_revision' => $snapshot['revision'], 'background' => (bool) $background,
+			'projection_generation' => (string) ( $snapshot['generation'] ?? '' ),
 		);
 		if ( strlen( $transfer['projection_gzip'] ) > 1800000 ) $payload['projection_pull'] = true;
 		else $payload['projection_gzip'] = $transfer['projection_gzip'];

@@ -27,7 +27,7 @@ rooms=[{code:'DS1',name:'Camera doppia con accesso facilitato',capacity:2,occupi
    if(op==='summary'&&fail)return route.fulfill({json:{success:false,data:{message:'Servizio non disponibile. Riprova.'}}});
    if(op==='attendance_bulk')return route.fulfill({json:{success:true,data:{saved:true,message:'Presenze salvate'}}});
    const response=await route.fetch(),json=await response.json();
-   if(op==='summary')Object.assign(json.data,{room_types:{'alloggio-doppia-separati':{name:'Doppia con letti separati',prefix:'DS',capacity:2}},annual_report_group:{id:5,name:'Gruppo prova'}});
+   if(op==='summary')Object.assign(json.data,{room_types:{'alloggio-doppia-separati':{name:'Doppia con letti separati',prefix:'DS',capacity:2}},annual_report_group:{id:5,name:'Gruppo prova'},attendance_availability:{enabled:true,available:true,starts_at:1,server_now:2}});
    await route.fulfill({response,json});
   });
   await page.goto('http://127.0.0.1:'+server.address().port);await page.locator('[data-more]').waitFor();

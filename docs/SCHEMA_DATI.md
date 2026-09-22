@@ -2,6 +2,8 @@
 
 ## Registro fisico corrente — 3.25.1
 
+Aggiornamento locale del 22 settembre 2026: nessuna nuova tabella o indice. L'annullamento completo accoda le notifiche nella transazione della mutazione autorevole; la ricevuta temporanea delle comunicazioni viene salvata soltanto dopo commit confermato. Dettagli e test nel [rapporto della campagna](campagna-stabilizzazione-2026-09-22.md). La versione nel titolo di questa sezione identifica la descrizione storica dello schema, non il rilascio installato.
+
 MySQL WordPress è autorevole. `mi_registrations`, `mi_participants` e `mi_payments` conservano iscrizioni, persone e movimenti; `mi_rooms`, `mi_management_state` e `mi_management_requests` gestiscono camere, revisioni e idempotenza operativa. `mi_booking_codes` assegna una sigla univoca per evento (indice UNIQUE su prefix) e un progressivo aggiornato nella transazione di iscrizione. Il codice visibile non sostituisce l'identificativo numerico interno.
 
 Google riceve repliche con revisioni e identificativi stabili. `_MI_BASE` conserva i valori di confronto del foglio operativo; le modifiche locali vengono confermate nel servizio MySQL prima dell'aggiornamento della base. Gli importi e le identità delle righe non sono modificabili nelle celle operative.

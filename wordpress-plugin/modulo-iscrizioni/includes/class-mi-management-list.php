@@ -4,7 +4,7 @@ require_once __DIR__ . '/class-mi-booking-search.php';
 
 /** Shared selection for displayed pages, CSV and printing. No writes or Sheet calls. */
 final class MI_Management_List {
-	public static function page( $summary, $context, $offset = 0, $limit = 30 ) {
+	public static function page( $summary, $context, $offset = 0, $limit = 30, $source_version = null ) {
 		$context = is_array( $context ) ? $context : array();
 		$query = mb_strtolower( trim( (string) ( $context['query'] ?? '' ) ), 'UTF-8' );
 		$filter = $context['filter'] ?? 'all';
@@ -69,7 +69,11 @@ final class MI_Management_List {
 		}
 		$rows = self::sort_rows( $rows, $context );
 		$offset = max( 0, (int) $offset ); $limit = max( 1, min( 200, (int) $limit ) );
-		return array( 'rows' => array_slice( $rows, $offset, $limit ), 'total' => count( $rows ), 'offset' => $offset, 'limit' => $limit, 'fingerprint' => hash( 'sha256', wp_json_encode( $rows ) ) );
+		$fingerprint_context = $context; unset( $fingerprint_context['shown'] );
+		// The canonical token covers row contents. IDs retain detection of timed
+		// deadline-filter changes even when the number of matches stays the same.
+		$fingerprint = null === $source_version ? $rows : array( $source_version, $fingerprint_context, array_column( $rows, 'id' ), array_column( $rows, 'code' ) );
+		return array( 'rows' => array_slice( $rows, $offset, $limit ), 'total' => count( $rows ), 'offset' => $offset, 'limit' => $limit, 'fingerprint' => hash( 'sha256', wp_json_encode( $fingerprint ) ) );
 	}
 
 	/** One comparator for complete lists and bounded, cross-chunk page selection. */

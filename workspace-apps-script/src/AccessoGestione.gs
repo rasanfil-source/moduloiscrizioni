@@ -47,6 +47,7 @@ function preparaAccessoGestioneEvento_(foglio, idEvento) {
 }
 /** Pending edits keep the current view intact until the operator synchronizes them. */
 function scriviProiezioneEvento_(scheda, vista) {
+  riprendiScritturaProiezione_(scheda);
   const precedenteProtezione = scheda.getProtections(SpreadsheetApp.ProtectionType.SHEET).find(p=>p.getDescription()==='MI_PROIEZIONE');
   const intervalliPrecedenti = precedenteProtezione ? precedenteProtezione.getUnprotectedRanges() : [];
   proteggiProiezione_(scheda);
@@ -58,32 +59,12 @@ function scriviProiezioneEvento_(scheda, vista) {
     proteggiProiezione_(scheda, intervalliPrecedenti);
     return {aggiunte:0,manuali:pending.changes.length,conflitti:pending.errors.length};
   }
-  scheda.createDeveloperMetadataFinder().withKey('MI_CAMPO').find().forEach(function (m) { m.remove(); });
-  scheda.clear();
-  scheda.getRange(1,1,scheda.getMaxRows(),scheda.getMaxColumns()).clearDataValidations();
-  scheda.getRange(1,1,scheda.getMaxRows(),scheda.getMaxColumns()).breakApart();
-  scheda.showColumns(1,scheda.getMaxColumns());
-  const colonne = [{key:'_numero',label:'Partecipante'}].concat(vista.colonne, [{key:'_ordine',label:'Prenotazione'}]);
-  if (scheda.getMaxColumns() < colonne.length) scheda.insertColumnsAfter(scheda.getMaxColumns(), colonne.length - scheda.getMaxColumns());
-  const rows = vista.righe.map(function (r) { return [r.numero_partecipante].concat(vista.colonne.map(function (c) { const v=r.valori[c.key]; return typeof v==='number' && Number.isFinite(v) ? v : neutralizzaFormula_(v, 5000); }), [r.codice_ordine]); });
-  if (scheda.getMaxRows() < rows.length + 1) scheda.insertRowsAfter(scheda.getMaxRows(), rows.length + 1 - scheda.getMaxRows());
-  scheda.getRange(1,1,1,colonne.length).setValues([colonne.map(function (c) {return c.label;})]).setFontWeight('bold');
-  colonne.forEach(function (c,i) { identificaColonnaEvento_(scheda,i+1,c.key); });
-  if (rows.length) scheda.getRange(2,1,rows.length,colonne.length).setNumberFormat('@').setValues(rows);
-  scheda.setFrozenRows(1);
-  const modificabili = [];
-  colonne.forEach(function(c,i) {
-    if (!vista.sola_lettura && campoModificabileFoglio_(c.key) && rows.length) {
-      const range = scheda.getRange(2,i+1,rows.length,1);
-      range.setNumberFormat('@').setBackground('#eef5fc');
-      modificabili.push(range);
-    }
-  });
-  salvaBaseFoglio_(scheda);
-  proteggiProiezione_(scheda, modificabili);
-  return { aggiunte:rows.length, manuali:0, conflitti:0 };
+  const result=scriviVistaIncrementale_(scheda,vista);
+  if(!result.scritto)proteggiProiezione_(scheda,intervalliPrecedenti);
+  return result;
   } catch(error) {
-    proteggiProiezione_(scheda, intervalliPrecedenti);
+    // Do not reopen cells while a journal still needs to finish writing them.
+    if(!PropertiesService.getScriptProperties().getProperty('MI_WRITE_'+scheda.getParent().getId()))proteggiProiezione_(scheda, intervalliPrecedenti);
     throw error;
   }
 }

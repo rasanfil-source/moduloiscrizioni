@@ -1557,7 +1557,7 @@ test('il wizard crea una bozza completa e mostra collegamenti espliciti', async 
   assert.match(portal, /name="starts_at"[\s\S]*placeholder="gg\/mm\/aaaa hh:mm"/);
   assert.match(portal, /La data di inizio non può essere precedente a oggi/);
   assert.match(portal, /start_date->format\( 'Y-m-d' \) < current_time\( 'Y-m-d' \)/);
-  assert.match(portal, /\$close_date < \$open_date/);
+  assert.match(portal, /\$close_date <= \$open_date/);
   assert.match(portal, /\$close_date > \$start_date/);
   assert.match(script, /data-mi-opens/);
   assert.match(script, /validateFourDigitYear/);

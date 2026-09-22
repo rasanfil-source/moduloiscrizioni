@@ -244,8 +244,8 @@ function registraIscrizioneCentrale_(payload) {
       payload.paid_cents == null ? '' : Math.max(0, Math.round(Number(payload.paid_cents) || 0)),
       '' // Cleared before writes; revision alone must not certify a partial replica.
     ];
-    if (existing) registrations.getRange(existing._row, 1, 1, registrationValues.length).setValues([registrationValues]);
-    else registrations.appendRow(registrationValues);
+    const registrationRow = existing ? existing._row : registrations.getLastRow() + 1;
+    registrations.getRange(registrationRow, 1, 1, registrationValues.length).setValues([registrationValues]);
 
     const correzioni = payload.canonical_source === 'MYSQL' ? {} : indiceStatoOperativo_();
     if (payload.canonical_source === 'MYSQL') {
@@ -276,11 +276,16 @@ function registraIscrizioneCentrale_(payload) {
     const participantSheet = ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS);
     const oldRows=convertiRigheInOggetti_(participantSheet).filter(row=>String(row.codice_ordine)===orderCode).sort((a,b)=>a._row-b._row);
     const contiguous=oldRows.length===participantRows.length && oldRows.every((row,i)=>row._row===oldRows[0]._row+i);
-    if (contiguous) participantSheet.getRange(oldRows[0]._row,1,participantRows.length,participantRows[0].length).setValues(participantRows);
+    let participantStartRow;
+    if (contiguous) {
+      participantStartRow = oldRows[0]._row;
+      participantSheet.getRange(participantStartRow,1,participantRows.length,participantRows[0].length).setValues(participantRows);
+    }
     else {
       eliminaRigheContigue_(participantSheet,oldRows);
       assicuraRighe_(participantSheet,participantSheet.getLastRow()+participantRows.length);
-      participantSheet.getRange(participantSheet.getLastRow()+1,1,participantRows.length,participantRows[0].length).setValues(participantRows);
+      participantStartRow = participantSheet.getLastRow()+1;
+      participantSheet.getRange(participantStartRow,1,participantRows.length,participantRows[0].length).setValues(participantRows);
     }
     const outbox = ottieniSchedaObbligatoria_(MI_SHEETS.EMAIL_OUTBOX);
     const message = convertiRigheInOggetti_(outbox).find(function (row) { return String(row.codice_ordine) === orderCode && String(row.tipo_modello) === 'REGISTRATION_CONFIRMATION'; });
@@ -292,15 +297,20 @@ function registraIscrizioneCentrale_(payload) {
     // stato dell'istantanea per non generare una nuova conferma.
     const originalStatus = ['CONFIRMED', 'PENDING_PAYMENT'].indexOf(currentStatus) >= 0 ? currentStatus : normalizzaValoreElenco_(snapshotData && snapshotData.status, ['PENDING_PAYMENT', 'CONFIRMED', 'WAITLISTED']) || currentStatus || 'CONFIRMED';
     const messageValues = [message ? message.id_messaggio : creaIdentificativoOpaco_('msg'), neutralizzaFormula_(orderCode, 64), neutralizzaFormula_(originalRecipient, 254), 'REGISTRATION_CONFIRMATION', JSON.stringify({ order_code: orderCode, status: originalStatus }), message ? message.stato : 'PREVIEW', message && message.data_creazione ? message.data_creazione : new Date()];
-    if (message) outbox.getRange(message._row, 1, 1, messageValues.length).setValues([messageValues]); else outbox.appendRow(messageValues);
+    const outboxRow = message ? message._row : outbox.getLastRow() + 1;
+    outbox.getRange(outboxRow, 1, 1, messageValues.length).setValues([messageValues]);
     sincronizzaPagamenti_(orderCode, payload.payments);
-    const registrationComplete = convertiRigheInOggetti_(registrations).some(function (row) { return String(row.codice_ordine) === orderCode && String(row.chiave_idempotenza) === idempotencyKey && String(row.hash_revisione_evento) === revisionHash && String(row.snapshot_json) === snapshotJson; });
-    const participantCount = convertiRigheInOggetti_(participantSheet).filter(function (row) { return String(row.codice_ordine) === orderCode; }).length;
-    const outboxComplete = convertiRigheInOggetti_(outbox).some(function (row) { return String(row.codice_ordine) === orderCode && String(row.tipo_modello) === 'REGISTRATION_CONFIRMATION' && String(row.destinatario) === originalRecipient; });
-    const complete = registrationComplete && participantCount === participants.length && outboxComplete;
+    // Verifica soltanto le righe appena scritte: rileggere ogni volta l'intera
+    // storia di tre fogli rendeva il costo di una replica crescente nel tempo.
+    const savedRegistration = registrations.getRange(registrationRow, 1, 1, registrationValues.length).getValues()[0];
+    const registrationComplete = String(savedRegistration[0]) === orderCode && String(savedRegistration[10]) === idempotencyKey && String(savedRegistration[17]) === revisionHash && String(savedRegistration[18]) === snapshotJson;
+    const savedParticipantCodes = participantSheet.getRange(participantStartRow, 1, participants.length, 1).getValues();
+    const participantsComplete = savedParticipantCodes.length === participants.length && savedParticipantCodes.every(function (row) { return String(row[0]) === orderCode; });
+    const savedMessage = outbox.getRange(outboxRow, 1, 1, messageValues.length).getValues()[0];
+    const outboxComplete = String(savedMessage[1]) === orderCode && String(savedMessage[2]) === originalRecipient && String(savedMessage[3]) === 'REGISTRATION_CONFIRMATION';
+    const complete = registrationComplete && participantsComplete && outboxComplete;
     if (complete) {
-      const saved = convertiRigheInOggetti_(registrations).find(row=>String(row.codice_ordine)===orderCode);
-      registrations.getRange(saved._row,registrationValues.length,1,1).setValues([[workspaceRevision]]);
+      registrations.getRange(registrationRow,registrationValues.length,1,1).setValues([[workspaceRevision]]);
     }
     aggiungiControllo_('APPEND_REGISTRATION', 'REGISTRATION', orderCode, 'SUCCESS', 'WORDPRESS', 'REGISTRATION_RECORDED', 'WORDPRESS_PROXY');
     return { ok: complete, complete: complete, workspace_revision: String(payload.workspace_revision === undefined ? '' : payload.workspace_revision), replayed: Boolean(existing), order_code: orderCode, error: complete ? undefined : 'INCOMPLETE_REPLICA' };
@@ -382,7 +392,8 @@ function sincronizzaPagamenti_(orderCode, payments) {
 	if (allocations.length && allocated !== amount) throw new Error('INVALID_PAYMENT_ALLOCATIONS');
 	const allocationsJson = allocations.length ? JSON.stringify(allocations) : '';
     const effective = normalizzaTesto_(payment.effective_at, 40);
-    const effectiveDate = effective ? new Date(stableId && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(effective) ? effective.replace(' ', 'T') + 'Z' : effective) : new Date();
+    // WordPress sends SQL datetimes in UTC, including legacy rows without an ID.
+    const effectiveDate = effective ? new Date(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/.test(effective) ? effective.replace(' ', 'T') + 'Z' : effective) : new Date();
     if (isNaN(effectiveDate.getTime())) {
       aggiungiControllo_('SYNC_PAYMENT', 'PAYMENT', orderCode, 'REJECTED', 'WORDPRESS', 'INVALID_EFFECTIVE_AT', 'WORDPRESS_PROXY');
       throw new Error('INVALID_EFFECTIVE_AT');

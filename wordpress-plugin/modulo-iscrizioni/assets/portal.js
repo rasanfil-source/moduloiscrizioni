@@ -428,7 +428,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const opening = parseItalianDate(opensAt?.value || '');
       const closing = parseItalianDate(closesAt?.value || '');
       const start = parseItalianDate(startsAt?.value || '');
-      if (opening && closing && closing < opening) closesAt.setCustomValidity('La chiusura non può precedere l’apertura delle iscrizioni.');
+      if (opening && closing && closing <= opening) closesAt.setCustomValidity('La chiusura deve essere successiva all’apertura delle iscrizioni.');
       if (closing && start && start < closing) startsAt.setCustomValidity('L’inizio dell’evento non può precedere la chiusura delle iscrizioni.');
     };
 	validateWizardRelations = updateDateLimits;
