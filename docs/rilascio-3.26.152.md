@@ -22,4 +22,6 @@ Conservare ZIP precedente e versione GAS precedente. Dopo la prima proiezione ve
 
 Pacchetti generati e verificati il 22 settembre 2026. GAS aggiornato nello stesso deployment alla **versione 7**, il 22 settembre alle 12:54 (ora visualizzata da Google), con sorgente 3.26.152 confrontato integralmente con il bundle locale dopo il salvataggio. URL, esecutore e accessi conservati; proprietà e trigger non modificati. La versione precedente per il rollback è la 6. Il nome storico del progetto, che termina in 3.26.149, non rappresenta la versione attiva.
 
-Installazione WordPress affidata all'utente. Resta da eseguire il collaudo del collegamento dal portale dopo il caricamento dello ZIP.
+Installazione WordPress completata dall'utente e versione 3.26.152 riscontrata negli asset serviti dal sito. Verifica autenticata successiva: collegamento firmato riuscito e capacità del deployment autonomo confermate (proiezione diretta, prelievo firmato, nessun accesso al workbook centrale). Il primo ping ha restituito `mi_workspace_unreachable`; il controllo delle capacità e il secondo ping sono riusciti. La causa del primo errore non è stata determinata.
+
+Questi controlli verificano connessione e capacità dichiarate, non una nuova sincronizzazione completa di un evento. Nessuna iscrizione, pagamento o email di prova è stata generata durante questa verifica.
