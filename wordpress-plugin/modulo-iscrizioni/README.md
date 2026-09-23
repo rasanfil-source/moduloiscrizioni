@@ -1,3 +1,7 @@
+# Aggiornamento 3.26.159
+
+Nell’elenco partecipanti, quando **Stato** non è necessario, le colonne successive si spostano subito a sinistra. Larghezze e allineamenti sono ora associati a Contatti, Dati mancanti e Gestisci tramite classi proprie, quindi restano corretti anche quando compaiono condizionatamente Stato, Presente o Stanza. Apps Script invariato rispetto al deployment 12.
+
 # Aggiornamento 3.26.114
 
 Email istituzionali: aggiunti 12 px tra l'intestazione «Segreteria parrocchiale · Portale eventi» e il logo. Apps Script invariato rispetto alla 3.26.113.
