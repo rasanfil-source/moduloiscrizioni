@@ -6,7 +6,9 @@ const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
  const manifest={};let before=0,after=0,gzipBefore=0,gzipAfter=0;
  const check=process.argv.includes('--check');
  for(const name of fs.readdirSync(root).filter(n=>/\.(js|css)$/.test(n)).sort()){
-  const input=fs.readFileSync(path.join(root,name));
+  // Git conserva gli asset testuali con LF: l'hash deve essere identico anche
+  // quando il checkout Windows presenta CRLF.
+  const input=Buffer.from(fs.readFileSync(path.join(root,name),'utf8').replace(/\r\n/g,'\n'));
   // No bundling, property mangling, module conversion or external symbol renaming.
   const result=await esbuild.transform(input.toString(),{loader:name.endsWith('.js')?'js':'css',minifyWhitespace:true,minifySyntax:false,minifyIdentifiers:false,legalComments:'inline',target:'es2020',charset:'utf8'});
   const output=Buffer.from(result.code),out='min/'+name;
