@@ -492,11 +492,13 @@
             const selected=(person.options||[]).find(option=>Number(option.quantity||0)>0&&data.room_types?.[option.code]);
             return selected?data.room_types[selected.code].prefix+'-':'';
           };
-          content.querySelector('[data-list]').innerHTML='<table><thead><tr>'+(individual?'<th class="mi-progressive-number">N.</th>'+(features.rooms?'<th>Stanza</th>':'')+'<th>Partecipante</th><th>Stato</th><th>Contatti</th><th>Dati mancanti</th>':'<th>Prenotazione</th><th>Persone nella prenotazione</th><th>Stato</th><th>Versato</th><th>Residuo</th>')+'<th></th></tr></thead><tbody>'+list.map((x,index)=>'<tr>'+(individual?'<td class="mi-progressive-number">'+(index+1)+'</td>'+(features.rooms?'<td class="mi-participant-room-code">'+esc(x.room||requestedRoomCode(x)||'—')+'</td>':'')+'<td>'+esc(x.name)+'</td><td><span class="mi-status-pill mi-status-pill--'+stateClass(x)+'">'+esc(stateLabel(x))+'</span></td><td>'+emailContact(x.email)+'<br>'+esc(x.phone)+'</td><td>'+(x.missing.length?'Mancano: '+esc(x.missing.join(', ')):'')+'</td>':'<td>'+esc(x.code)+'</td><td>'+esc(x.name)+(data.people||[]).filter(p=>p.code===x.code).map(p=>'<div>'+esc(p.name)+(p.status==='CANCELLED'?' (annullato)':'')+'</div>').join('')+'</td><td><span class="mi-status-pill mi-status-pill--'+stateClass(x)+'">'+esc(stateLabel(x))+'</span></td><td>'+money(x.paid)+'</td><td>'+money(x.balance)+(x.deposit_plan?'<small>'+esc(depositText(x))+'</small>':'')+'</td>')+'<td><button data-open="'+esc(x.code)+'" '+(individual?'data-person-focus="'+x.number+'"':'')+'>Gestisci</button></td></tr>').join('')+'</tbody></table><p>'+list.length+' di '+total+' '+(individual?'persone':'prenotazioni')+'</p>'+(total>list.length?'<button data-more>Mostra altre 30</button>':'')+(all.length===0?'<p>Nessun risultato. Modifica la ricerca o i filtri.</p>':'');
+          const showParticipantStatus=individual&&list.some(person=>stateLabel(person)!=='Partecipante');
+          content.querySelector('[data-list]').innerHTML='<table><thead><tr>'+(individual?'<th class="mi-progressive-number">N.</th>'+(features.rooms?'<th>Stanza</th>':'')+'<th>Partecipante</th>'+(showParticipantStatus?'<th>Stato</th>':'')+'<th>Contatti</th><th>Dati mancanti</th>':'<th>Prenotazione</th><th>Persone nella prenotazione</th><th>Stato</th><th>Versato</th><th>Residuo</th>')+'<th></th></tr></thead><tbody>'+list.map((x,index)=>'<tr>'+(individual?'<td class="mi-progressive-number">'+(index+1)+'</td>'+(features.rooms?'<td class="mi-participant-room-code">'+esc(x.room||requestedRoomCode(x)||'—')+'</td>':'')+'<td>'+esc(x.name)+'</td>'+(showParticipantStatus?'<td><span class="mi-status-pill mi-status-pill--'+stateClass(x)+'">'+esc(stateLabel(x))+'</span></td>':'')+'<td>'+emailContact(x.email)+'<br>'+esc(x.phone)+'</td><td>'+(x.missing.length?'Mancano: '+esc(x.missing.join(', ')):'')+'</td>':'<td>'+esc(x.code)+'</td><td>'+esc(x.name)+(data.people||[]).filter(p=>p.code===x.code).map(p=>'<div>'+esc(p.name)+(p.status==='CANCELLED'?' (annullato)':'')+'</div>').join('')+'</td><td><span class="mi-status-pill mi-status-pill--'+stateClass(x)+'">'+esc(stateLabel(x))+'</span></td><td>'+money(x.paid)+'</td><td>'+money(x.balance)+(x.deposit_plan?'<small>'+esc(depositText(x))+'</small>':'')+'</td>')+'<td><button data-open="'+esc(x.code)+'" '+(individual?'data-person-focus="'+x.number+'"':'')+'>Gestisci</button></td></tr>').join('')+'</tbody></table><p>'+list.length+' di '+total+' '+(individual?'persone':'prenotazioni')+'</p>'+(total>list.length?'<button data-more>Mostra altre 30</button>':'')+(all.length===0?'<p>Nessun risultato. Modifica la ricerca o i filtri.</p>':'');
+          const participantStatusIndex=features.rooms?3:2,participantContactsIndex=participantStatusIndex+(showParticipantStatus?1:0),participantMissingIndex=participantContactsIndex+1;
           const showMissing=individual&&list.some(p=>(p.missing||[]).length);
           if(individual){
             content.querySelectorAll('[data-list] tbody tr').forEach((row,index)=>row.classList.toggle('mi-closed-registration',!open(list[index])));
-            const missingIndex=features.rooms?5:4;content.querySelector('[data-list] th:nth-child('+(missingIndex+1)+')').hidden=!showMissing;
+            const missingIndex=participantMissingIndex;content.querySelector('[data-list] th:nth-child('+(missingIndex+1)+')').hidden=!showMissing;
             content.querySelectorAll('[data-list] tbody tr').forEach((row,index)=>{
               const person=list[index],missing=[...(person.missing||[])];
               if(missing.length){const attention=document.createElement('small');attention.className='mi-row-attention';attention.textContent=missing.join(' · ');row.querySelector('[data-open]').after(attention);}
@@ -506,15 +508,15 @@
           if(individual){
             content.querySelector('[data-list] table').classList.add('mi-participant-table');
             content.querySelectorAll('[data-list] tbody tr').forEach((row,index)=>{
-              row.cells[features.rooms?4:3].innerHTML='<div class="mi-participant-contacts">'+phoneContact(list[index].phone)+emailContact(list[index].email)+'</div>';
+              row.cells[participantContactsIndex].innerHTML='<div class="mi-participant-contacts">'+phoneContact(list[index].phone)+emailContact(list[index].email)+'</div>';
             });
           }
           if(individual && data.attendance_availability?.available){
             const table=content.querySelector('[data-list] table');
-            const statusIndex=features.rooms?3:2,headerRow=table.tHead.rows[0],statusHeading=headerRow.cells[statusIndex];
-            const heading=document.createElement('th');heading.scope='col';heading.textContent='Presente';headerRow.insertBefore(heading,statusHeading);headerRow.append(statusHeading);
+            const statusIndex=participantStatusIndex,headerRow=table.tHead.rows[0],statusHeading=showParticipantStatus?headerRow.cells[statusIndex]:null,statusAnchor=headerRow.cells[statusIndex];
+            const heading=document.createElement('th');heading.scope='col';heading.textContent='Presente';headerRow.insertBefore(heading,statusAnchor);if(statusHeading)headerRow.append(statusHeading);
             [...table.tBodies[0].rows].forEach((row,index)=>{
-              const person=list[index],statusCell=row.cells[statusIndex],cell=row.insertCell(statusIndex);cell.className='mi-attendance-cell';row.append(statusCell);
+              const person=list[index],statusCell=showParticipantStatus?row.cells[statusIndex]:null,cell=row.insertCell(statusIndex);cell.className='mi-attendance-cell';if(statusCell)row.append(statusCell);
               if(!['CONFIRMED','PENDING_PAYMENT'].includes(person.status))return;
               const input=document.createElement('input');input.type='checkbox';input.dataset.attendanceToggle=person.id;input.setAttribute('aria-label','Presente: '+person.name);
               input.checked=(person.attendance?.state||person.attendance)==='PRESENT';cell.append(input);

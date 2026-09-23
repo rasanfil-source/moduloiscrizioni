@@ -2100,6 +2100,7 @@ test('camere, stampa e filtri seguono la nuova gerarchia operativa', async () =>
   assert.match(script, /const requestedRoomCode=person=>/);
   assert.match(script, /data\.room_types\?\.\[option\.code\]/);
   assert.match(script, /x\.room\|\|requestedRoomCode\(x\)\|\|'—'/);
+  assert.match(script, /const showParticipantStatus=individual&&list\.some\(person=>stateLabel\(person\)!=='Partecipante'\)/);
   assert.doesNotMatch(script, /missing\.push\('Camera da assegnare'\)/);
   assert.match(css, /\.mi-participant-table button\[data-open\]\{min-height:28px;padding:2px 9px/);
   assert.match(css, /\.mi-participant-table tbody td\{[^}]*vertical-align:middle/);
