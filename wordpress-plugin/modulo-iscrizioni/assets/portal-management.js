@@ -124,6 +124,13 @@
       return json.data;}finally{clearTimeout(timeout);}
     }
     const sheetButton=root.querySelector('[data-open-sheet]');
+    const sheetSyncButton=root.querySelector('[data-sheet-sync]');
+    if(sheetSyncButton)sheetSyncButton.addEventListener('click',syncSheet);
+    async function updateSheetSyncVisibility(ticket,eventId){
+      if(!sheetSyncButton||!sheetButton||sheetButton.hidden){if(sheetSyncButton)sheetSyncButton.hidden=true;return;}
+      try{const result=await request('sheet_changes');if(ticket!==generation||String(event)!==String(eventId))return;sheetSyncButton.hidden=!((result.changes||[]).length||(result.errors||[]).length);}
+      catch(error){if(ticket===generation&&String(event)===String(eventId))sheetSyncButton.hidden=true;}
+    }
     if(sheetButton)sheetButton.addEventListener('click',async e=>{
       e.preventDefault();
       const sheetWindow=window.open('', '_blank');
@@ -190,7 +197,7 @@
       content.querySelector('[data-all-closed]').onchange=e=>{allClosed=e.target.checked;load();};more.onclick=()=>load(false);await load();
     }
     async function summary(){
-      if(!await canLeave())return;const ticket=++generation;order='';booking=null;printList=null;parkPanels();content.replaceChildren();const sheetLink=root.querySelector('[data-open-sheet]');if(sheetLink){sheetLink.hidden=true;sheetLink.removeAttribute('href');}if(!event){await allPeople();return;}say('Caricamento riepilogo…');
+      if(!await canLeave())return;const ticket=++generation;order='';booking=null;printList=null;parkPanels();content.replaceChildren();const sheetLink=root.querySelector('[data-open-sheet]'),sheetSync=root.querySelector('[data-sheet-sync]');if(sheetLink){sheetLink.hidden=true;sheetLink.removeAttribute('href');}if(sheetSync)sheetSync.hidden=true;if(!event){await allPeople();return;}say('Caricamento riepilogo…');
       if(printButton){printButton.hidden=false;printButton.textContent='Stampa riepilogo iscritti';}returnEvent=event;currentPerson=null;
       try{const data=await request('summary');if(ticket!==generation)return;
         const attendanceWindow=data.attendance_availability;
@@ -562,7 +569,7 @@
           const value=(row,key,index)=>key==='ordinal'?index+1:key==='name'?row.name:key.startsWith('field:')?(row.fields?.[key.slice(6)]??''):key==='attendance'?({PRESENT:'Presente',ABSENT:'Assente',UNRECORDED:'Non rilevata'}[row.attendance?.state||row.attendance]||'Non rilevata'):key==='status'?stateLabel(row):key==='offer_expires_at'?deadlineLabel(row[key]):['paid','balance'].includes(key)?money(row[key]):Array.isArray(row[key])?row[key].join(', '):row[key];
           const filters=[listContext.query?'Ricerca: '+listContext.query:'',...['[data-deposit-filter]','[data-request-filter]','[data-deadline-filter]','[data-service-filter]'].map(selector=>{const input=content.querySelector(selector);return input.value?input.selectedOptions[0].textContent:'';}),listContext.filter!=='all'?criticalFilter.selectedOptions[0].textContent:'',listContext.orderService?orderServices.get(listContext.orderService)?.name:''].filter(Boolean);
           printHost.innerHTML='<h2>'+esc(select.selectedOptions[0]?.textContent||'Evento')+'</h2><p>'+rows.length+' '+(individual?'persone':'prenotazioni')+' · '+esc(filters.join(' · ')||'Tutti i risultati')+'</p><table><thead><tr>'+selected.map(([key,label])=>'<th>'+esc(reportLabel(key,label))+'</th>').join('')+'</tr></thead><tbody>'+rows.map((row,index)=>'<tr>'+selected.map(([key])=>'<td>'+esc(value(row,key,index))+'</td>').join('')+'</tr>').join('')+'</tbody></table>';root.append(printHost);root.classList.add('mi-printing-list');window.addEventListener('afterprint',cleanup,{once:true});window.print();
-        }catch(error){cleanup();say('Stampa non completata. '+error.message);}};say('Aggiornato: '+new Date(data.updated_at).toLocaleString('it-IT'));
+        }catch(error){cleanup();say('Stampa non completata. '+error.message);}};say('Aggiornato: '+new Date(data.updated_at).toLocaleString('it-IT'));updateSheetSyncVisibility(ticket,event);
       }catch(e){if(ticket===generation)say('Riepilogo non disponibile. '+e.message);}
     }
     async function syncSheet(){

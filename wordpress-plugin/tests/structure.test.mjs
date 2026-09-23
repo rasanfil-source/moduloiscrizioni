@@ -2541,3 +2541,12 @@ test('il riepilogo servizi indica dove effettuare le variazioni', async () => {
   assert.match(script, /<strong>Gestisci → Varia servizi e sistemazione<\/strong>/);
   assert.match(script, /<strong>Gestione camere → Cambia tipo di abitazione<\/strong>/);
 });
+
+test('Sincronizza resta disponibile nel riepilogo anche per i fogli in sola lettura', async () => {
+  const portal = await read('includes/class-mi-portal-management.php');
+  const script = await read('assets/portal-management.js');
+  assert.match(portal, /data-sheet-sync hidden>Sincronizza<\/button>/);
+  assert.match(script, /sheetSyncButton\.addEventListener\('click',syncSheet\)/);
+  assert.match(script, /request\('sheet_changes'\)[\s\S]*sheetSyncButton\.hidden=!\(\(result\.changes\|\|\[\]\)\.length\|\|\(result\.errors\|\|\[\]\)\.length\)/);
+  assert.match(script, /updateSheetSyncVisibility\(ticket,event\)/);
+});

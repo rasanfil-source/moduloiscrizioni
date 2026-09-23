@@ -116,6 +116,7 @@ function proiettaEventoDaWordPress_(payload) {
     let receipt;try{receipt=JSON.parse(properties.getProperty(key)||'null');}catch(error){receipt=null;}
     if(typeof riprendiScritturaProiezione_==='function')riprendiScritturaProiezione_(opened.sheet);
     abilitaLetturaFoglioEventoConLink_(opened.book.getId());
+    if((!receipt||receipt.layout_version!==2)&&typeof riparaProgressivoSuIdentitaLegacy_==='function')riparaProgressivoSuIdentitaLegacy_(opened.sheet);
     const pending=modificheCorrentiFoglio_(opened.sheet);
     let result={aggiunte:0,manuali:pending.changes.length,conflitti:pending.errors.length};
     const changed=!receipt||receipt.fingerprint!==fingerprint||receipt.layout_version!==2||typeof receipt.read_only!=='boolean'||pending.changes.length||pending.errors.length;

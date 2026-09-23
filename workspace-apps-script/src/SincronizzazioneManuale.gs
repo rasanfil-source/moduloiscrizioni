@@ -46,6 +46,40 @@ function leggiBaseFoglio_(foglio) {
   });
   return base;
 }
+
+/** Recupera il caso circoscritto in cui il progressivo 1..N e' stato scritto
+ * nella prima colonna del vecchio tracciato, che conteneva l'identificatore
+ * interno del partecipante. La riparazione e' ammessa soltanto se ordine,
+ * posizione e tutti gli altri valori coincidono con la base protetta. */
+function riparaProgressivoSuIdentitaLegacy_(sheet) {
+  const columns=mappaColonneEvento_(sheet);
+  if (columns.participant_number || columns._numero!==1 || !columns._ordine) return false;
+  const baseSheet=sheet.getParent().getSheetByName('_MI_BASE');
+  const count=Math.max(0,sheet.getLastRow()-1);
+  if (!baseSheet || count<1 || baseSheet.getLastRow()-1!==count) return false;
+  const current=sheet.getRange(2,1,count,sheet.getLastColumn()).getDisplayValues();
+  const baseRows=baseSheet.getRange(2,1,count,3).getValues();
+  const keys=Object.keys(columns).filter(key=>!['_ordine','_numero'].includes(key));
+  const identities=new Set();
+  for (let index=0;index<count;index+=1) {
+    const row=current[index], baseRow=baseRows[index], number=Number(baseRow[1]);
+    if (String(row[0]).trim()!==String(index+1) || String(row[columns._ordine-1])!==String(baseRow[0]) || !Number.isInteger(number) || number<1) return false;
+    const identity=JSON.stringify([String(baseRow[0]),number]);
+    if (identities.has(identity)) return false;
+    identities.add(identity);
+    let values;try{values=JSON.parse(String(baseRow[2]));}catch(error){return false;}
+    if (!values || typeof values!=='object' || Array.isArray(values)) return false;
+    if (keys.some(key=>!Object.prototype.hasOwnProperty.call(values,key) || String(row[columns[key]-1])!==String(values[key]??''))) return false;
+  }
+  const protection=sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET).find(item=>item.getDescription()==='MI_PROIEZIONE');
+  const editable=protection?protection.getUnprotectedRanges():[];
+  proteggiProiezione_(sheet);SpreadsheetApp.flush();
+  try {
+    sheet.getRange(2,columns._numero,count,1).setValues(baseRows.map(row=>[Number(row[1])]));
+    SpreadsheetApp.flush();
+  } finally { proteggiProiezione_(sheet,editable); }
+  return true;
+}
 function modificheCorrentiFoglio_(sheet) {
   const base = leggiBaseFoglio_(sheet.getParent());
   if (!base) return {changes:[],errors:[],initialized:false};
