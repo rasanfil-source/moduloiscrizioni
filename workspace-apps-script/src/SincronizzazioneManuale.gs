@@ -159,6 +159,10 @@ function leggiModificheEventoMysql_(payload) {
   try {
 	const sheet=apriFoglioEventoFirmato_(payload,false).sheet;
     if (!sheet) throw new Error('Scheda Dati operativi non disponibile.');
+    // Il controllo leggero del portale deve anche terminare una proiezione
+    // interrotta dopo la preparazione del giornale. In caso contrario una
+    // ricevuta WordPress ancora valida può riaprire una griglia parziale.
+    if (typeof riprendiScritturaProiezione_==='function') riprendiScritturaProiezione_(sheet);
     const result=modificheCorrentiFoglio_(sheet);
     if (!result.initialized) throw new Error('Aggiorna il foglio evento prima di sincronizzarlo.');
     return {ok:true,changes:result.changes,errors:result.errors};

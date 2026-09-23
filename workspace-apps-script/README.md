@@ -6,6 +6,7 @@ MySQL WordPress è il registro autorevole. I fogli evento sono proiezioni con ce
 
 - `configuraCartellaDiLavoro()`, il menu del workbook e `sincronizzaFogliEventi()` sono percorsi storici del progetto vincolato a `DB_MODULI`. Non sono parte della nuova installazione autonoma.
 - Il nuovo percorso `PROIETTA_EVENTO` materializza la vista firmata nel foglio evento; i retry sono accorpati per evento da WordPress.
+- Anche il controllo `LEGGI_MODIFICHE_FOGLIO` completa prima un eventuale giornale di scrittura rimasto aperto: una proiezione interrotta non viene quindi letta come foglio valido o privo di modifiche.
 - Oltre 1,8 MB compressi, la Web App preleva l'istantanea da WordPress con il comando HMAC `GET_EVENT_PROJECTION`: configurare `MI_WORDPRESS_COMMAND_URL` nel progetto autonomo e distribuire entrambe le estremità prima di usare eventi grandi.
 - attivaCronWordPress() crea una sola volta l'avvio del cron WordPress ogni cinque minuti, separato dalla proiezione. Serve sull'hosting corrente, dove WP-Cron tramite visite è disabilitato.
 - Pagamenti, correzioni e camere si salvano in MySQL. La replica firmata conserva identificativi e revisioni; il portale verifica permesso e ambito evento.

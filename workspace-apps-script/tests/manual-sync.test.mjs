@@ -36,15 +36,16 @@ test('una replica conferma soltanto celle coincidenti e conserva una modifica su
  }finally{c.modificheCorrentiFoglio_=original;}
 });
 
-test('la lettura diretta senza ID WordPress usa il registro privato, mai DB_MODULI',()=>{
- const sheet={};let opened=0;
+test('la lettura diretta riprende il giornale e usa il registro privato, mai DB_MODULI',()=>{
+ const sheet={};let opened=0,resumed=0;
  const context=vm.createContext({
   LockService:{getScriptLock:()=>({waitLock:()=>{},releaseLock:()=>{}})},
   ottieniSchedaObbligatoria_:()=>{throw Error('DB_MODULI accessed');},
   apriFoglioEventoFirmato_:()=>{opened++;return {sheet};},
+  riprendiScritturaProiezione_:target=>{assert.equal(target,sheet);resumed++;},
   modificheCorrentiFoglio_:()=>({initialized:true,changes:[],errors:[]}),
  });
  vm.runInContext(c.leggiModificheEventoMysql_.toString(),context);
  const result=context.leggiModificheEventoMysql_({event_id:'42',sheet_id:'',direct_projection:true});
- assert.equal(result.ok,true);assert.equal(opened,1);
+ assert.equal(result.ok,true);assert.equal(opened,1);assert.equal(resumed,1);
 });
