@@ -1,6 +1,6 @@
 Manuale del segretario per il portale Segreteria eventi
 Guida ai criteri di gestione e alle operazioni quotidiane
-Edizione del 18 settembre 2026 • Versione di riferimento 3.26.129
+Edizione del 23 settembre 2026 • Versione di riferimento 3.26.158
 
 Questo manuale accompagna chi prende in carico la segreteria: spiega come preparare un evento, gestire le iscrizioni, registrare i movimenti economici, comunicare con gli iscritti e chiudere il lavoro. Il criterio fondamentale è mantenere coerenti persone, posti e contabilità, verificando sempre l’esito delle operazioni.
 
@@ -187,11 +187,12 @@ Se il foglio risulta non disponibile, utilizza il comando di ricreazione propost
 
 ## Confermare modifiche fatte sul foglio
 1. Modifica soltanto le celle operative consentite, indicate in azzurro.
-2. Torna nel portale e avvia Sincronizza per l’evento.
-3. Leggi il confronto prima e dopo. Verifica persona, campo e valore proposto.
-4. Conferma le modifiche corrette e risolvi gli eventuali conflitti confrontando i dati aggiornati.
-5. Controlla il risultato nel portale e poi l’allineamento del foglio.
-Gli identificativi delle righe e gli importi non sono campi da correggere nelle celle operative. Se la stessa informazione è stata modificata anche da un collega nel portale, non sovrascrivere senza il confronto.
+2. Torna nel portale e aggiorna il riepilogo dell’evento. Il sistema controlla il foglio in background.
+3. Se esistono modifiche o conflitti, accanto ad Apri compare Sincronizza. Se il foglio è già allineato, il comando resta nascosto.
+4. Avvia Sincronizza e leggi il confronto prima e dopo. Verifica persona, campo e valore proposto.
+5. Conferma le modifiche corrette e risolvi gli eventuali conflitti confrontando i dati aggiornati.
+6. Controlla il risultato nel portale e poi l’allineamento del foglio.
+La regola vale anche per i fogli normalmente aperti in sola lettura: Sincronizza compare soltanto quando il controllo rileva qualcosa da confermare. La colonna N. contiene il progressivo visibile e non viene inviata al portale. Gli identificativi tecnici delle righe, gli importi e le colonne protette non sono campi da correggere. Se la stessa informazione è stata modificata anche da un collega nel portale, non sovrascrivere senza il confronto.
 
 ## Stampare ed esportare elenchi
 Seleziona l’evento e imposta i filtri desiderati. Controlla che non siano rimasti filtri da una ricerca precedente. Stampa ed esportazione comprendono tutti i risultati filtrati, anche oltre le righe già visibili.
@@ -222,4 +223,4 @@ Verifica salvataggi, movimenti, richieste aperte, proposte in scadenza e comunic
 Al successore consegna l’elenco degli eventi e dei responsabili, scadenze, accordi sulle quote, rimborsi da completare, richieste particolari aperte e anomalie note. Fai predisporre il suo account e i permessi; indica dove trovare collegamenti e documenti autorizzati senza copiare credenziali nel verbale.
 
 ## Riferimenti per aggiornare il manuale
-Versione di riferimento 3.26.129. Le procedure riprendono il codice del portale. Riesaminare il manuale quando cambiano funzioni, ruoli o regole organizzative.
+Versione di riferimento 3.26.158. Le procedure riprendono il codice del portale. Riesaminare il manuale quando cambiano funzioni, ruoli o regole organizzative.
