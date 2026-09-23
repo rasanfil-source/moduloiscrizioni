@@ -54,7 +54,7 @@ final class MI_Portal_Management {
 		} elseif ( in_array( $operation, array( 'event_room_save', 'event_room_delete' ), true ) ) {
 			$result = MI_Management_Service::save_event_room( $event_id, 'event_room_save' === $operation ? 'room_save' : 'room_delete', json_decode( wp_unslash( $_POST['data'] ?? 'null' ), true ), sanitize_text_field( wp_unslash( $_POST['version'] ?? '' ) ), 'wp_' . get_current_user_id() . '_' . sanitize_text_field( wp_unslash( $_POST['request_id'] ?? '' ) ) );
 		} elseif ( 'attendance_bulk' === $operation ) {
-			$result = MI_Management_Service::save_attendance_bulk( $event_id, json_decode( wp_unslash( $_POST['data'] ?? 'null' ), true ) );
+			$result = MI_Management_Service::save_attendance_bulk( $event_id, json_decode( wp_unslash( $_POST['data'] ?? 'null' ), true ), 'wp_' . get_current_user_id() . '_' . sanitize_text_field( wp_unslash( $_POST['request_id'] ?? '' ) ) );
 		} elseif ( 'identity_preview' === $operation ) {
 			try { $result = MI_Attendance_Report::target( $event_id, sanitize_text_field( wp_unslash( $_POST['target_order'] ?? '' ) ), absint( $_POST['target_number'] ?? 0 ) ); }
 			catch ( Throwable $error ) { wp_send_json_error( array( 'message' => $error->getMessage() ), 400 ); }

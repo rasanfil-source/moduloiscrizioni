@@ -6,7 +6,6 @@ require_once __DIR__ . '/class-mi-booking-search.php';
 final class MI_Portal_Payments {
 	public static function boot() {
 		add_action( 'wp_ajax_mi_portal_payment', array( __CLASS__, 'ajax' ) );
-		add_action( 'wp_ajax_nopriv_mi_portal_payment', array( __CLASS__, 'ajax' ) );
 	}
 	public static function allowed() {
 		return is_user_logged_in() && ! MI_Access::is_suspended() && ( current_user_can( 'manage_options' ) || ( current_user_can( 'mi_portal_access' ) && current_user_can( 'mi_manage_payments' ) ) );

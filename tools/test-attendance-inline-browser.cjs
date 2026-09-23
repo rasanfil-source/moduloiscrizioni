@@ -13,12 +13,16 @@ const server=http.createServer(async(req,res)=>{try{if(req.url==='/')return res.
 const rows=async count=>page.waitForFunction(n=>document.querySelectorAll('[data-list] tbody tr').length===n,count);
 await rows(30);
 const box=page.locator('[data-attendance-toggle="1"]');assert.equal(await box.isChecked(),false);
-assert.equal(await page.locator('[data-list] th').last().innerText(),'Presente');
+assert.equal(await page.locator('[data-list] th').last().innerText(),'Stato');
+const presenceIndex=await page.locator('[data-list] th').evaluateAll(headers=>headers.findIndex(header=>header.textContent==='Presente'));
+assert.ok([2,3].includes(presenceIndex));
+assert.equal(await box.evaluate(input=>input.closest('td').cellIndex),presenceIndex);
+assert.equal(await page.locator('[data-list] tbody tr').first().locator('td').nth(-2).locator('[data-open]').count(),1);
 await box.check();await page.getByText('Presenza salvata. Il foglio verrà aggiornato.',{exact:true}).waitFor();assert.equal(people[0].attendance,'PRESENT');
 await page.locator('[data-refresh]').click();await rows(30);assert.equal(await box.isChecked(),true);
 failAttendance=true;await box.uncheck();await page.getByText(/Presenza non salvata/).waitFor();assert.equal(await box.isChecked(),true);
 failAttendance=false;await box.uncheck();await page.getByText('Presenza salvata. Il foglio verrà aggiornato.',{exact:true}).waitFor();assert.equal(people[0].attendance,'ABSENT');
 summary.attendance_availability.available=false;summary.attendance_availability.enabled=false;await page.locator('[data-refresh]').click();await rows(30);assert.equal(await page.locator('[data-attendance-toggle]').count(),0);
 summary.attendance_availability={enabled:true,available:false,starts_at:Math.floor(Date.now()/1000)+3600,server_now:Math.floor(Date.now()/1000)};await page.locator('[data-refresh]').click();await rows(30);assert.equal(await page.locator('[data-attendance-toggle]').count(),0);
-assert.deepEqual(errors,[]);console.log('PASS: casella destra, salvataggio e rilettura, revoca, rollback UI, gruppo disabilitato e evento futuro.');
+assert.deepEqual(errors,[]);console.log('PASS: presenza al posto dello stato, stato dopo Gestisci, salvataggio e rilettura, revoca, rollback UI, gruppo disabilitato e evento futuro.');
 }finally{await browser.close();server.close();}})().catch(e=>{console.error(e);server.close();process.exitCode=1;});

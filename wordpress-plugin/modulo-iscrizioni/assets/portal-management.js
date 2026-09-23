@@ -101,10 +101,23 @@
       status.classList.toggle('mi-management-status--busy',busy);
       status.classList.toggle('mi-management-status--success',!error&&!busy&&/^(dati aggiornati|salvataggio completato|assegnazioni salvate|presenze salvate|esportati\b)/i.test(text));
     };
+    const attendanceRetries=new Map();
     async function request(operation,data={}) {
+      const attendanceKey=operation==='attendance_bulk'?event+'|'+data.data:null;
+      if(attendanceKey){
+        if(!attendanceRetries.has(attendanceKey))attendanceRetries.set(attendanceKey,crypto.randomUUID());
+        data={...data,request_id:attendanceRetries.get(attendanceKey)};
+      }
       const abort=new AbortController(),timeout=setTimeout(()=>abort.abort(),operation==='open_sheet'?240000:90000);
       try{const response=await fetch(root.dataset.endpoint,{method:'POST',credentials:'same-origin',cache:'no-store',signal:abort.signal,body:new URLSearchParams({action:'mi_portal_management',nonce:root.dataset.nonce,event_id:event,order_code:order,operation,...data})});
       const json=await response.json();if(!response.ok||!json.success)throw new Error(json.data?.message||'Operazione non riuscita.');
+      if(attendanceKey){
+        const savedIds=new Set(JSON.parse(data.data).map(person=>Number(person.id)));
+        for(const key of attendanceRetries.keys()){
+          const separator=key.indexOf('|');
+          if(key.slice(0,separator)===String(event)&&JSON.parse(key.slice(separator+1)).some(person=>savedIds.has(Number(person.id))))attendanceRetries.delete(key);
+        }
+      }
       const sheetLink=root.querySelector('[data-open-sheet]');
       if(sheetLink&&Object.hasOwn(json.data||{},'sheet_url')){const url=json.data?.sheet_url||'';let valid=false;try{const link=new URL(url,location.href);valid=!!url&&link.origin===location.origin&&link.searchParams.has('mi_open_sheet');}catch(error){}sheetLink.hidden=!valid;if(!sheetLink.hidden)sheetLink.href=url;else sheetLink.removeAttribute('href');}
       if(['participant','room_save','room_delete','change_options','identity_link','adjust_due','attendance','attendance_bulk','request_review','cancel','sheet_save','room_swap','room_assign','event_room_save','event_room_delete'].includes(operation)&&json.data?.saved!==false)document.dispatchEvent(new Event('mi:operational-saved'));
@@ -137,9 +150,16 @@
     const paymentDraft=()=>!!content.querySelector('[data-payment-draft="1"]');
     root.addEventListener('mi:before-booking-navigation',e=>{if(dirty||pending||busy||paymentDraft()){e.preventDefault();say('Salva le modifiche oppure scarta la bozza prima di uscire dalla scheda.');}});
     const resolveDraft=()=>new Promise(resolve=>{const dialog=document.createElement('dialog');dialog.className='mi-management-confirm';dialog.innerHTML='<form method="dialog" novalidate><h2>Modifiche non salvate</h2><p>Vuoi salvare le modifiche prima di proseguire?</p><button value="stay" autofocus>Continua a modificare</button> <button value="discard">Annulla modifiche</button> <button value="save">Salva</button></form>';dialog.addEventListener('close',()=>{const choice=dialog.returnValue||'stay';dialog.remove();resolve(choice);});document.body.append(dialog);dialog.showModal();});
+    const personalBaselines=new WeakMap();
+    const personalValues=form=>JSON.stringify([...new FormData(form).entries()]);
     const trackEdit=e=>{
       if(e.target.closest('[data-mi-payments]'))return;
-      e.target.removeAttribute('aria-invalid');const edited=e.target.closest('form');if(!edited)return;dirty=true;dirtyForm=edited;
+      e.target.removeAttribute('aria-invalid');const edited=e.target.closest('form');if(!edited)return;
+      const changed=!personalBaselines.has(edited)||personalValues(edited)!==personalBaselines.get(edited);
+      edited.toggleAttribute('data-unsaved-edit',changed);
+      if(personalBaselines.has(edited))edited.querySelector('button[type="submit"]').hidden=!changed;
+      dirtyForm=changed?edited:content.querySelector('form[data-unsaved-edit]');dirty=!!dirtyForm;
+      if(!dirty){say('Nessuna modifica da salvare.');return;}
       say('Modifiche non salvate. Salva il modulo quando hai concluso.');
     };
     content.addEventListener('mi:payment-updated',e=>{const summary=content.querySelector('[data-booking-economics]');if(summary)summary.textContent=e.detail?'Totale '+money(e.detail.totale)+' · Versato '+money(e.detail.versato)+' · Residuo '+money(e.detail.residuo):'Movimento registrato. Aggiorna la scheda per verificare il saldo.';const history=content.querySelector('[data-booking-history]');if(history)history.remove();const deposit=content.querySelector('[data-booking-deposit]');if(deposit&&e.detail)deposit.textContent=depositDetailText({...e.detail,balance:e.detail.residuo});});
@@ -171,7 +191,7 @@
     }
     async function summary(){
       if(!await canLeave())return;const ticket=++generation;order='';booking=null;printList=null;parkPanels();content.replaceChildren();const sheetLink=root.querySelector('[data-open-sheet]');if(sheetLink){sheetLink.hidden=true;sheetLink.removeAttribute('href');}if(!event){await allPeople();return;}say('Caricamento riepilogo…');
-      if(printButton)printButton.hidden=false;returnEvent=event;currentPerson=null;
+      if(printButton){printButton.hidden=false;printButton.textContent='Stampa riepilogo iscritti';}returnEvent=event;currentPerson=null;
       try{const data=await request('summary');if(ticket!==generation)return;
         const attendanceWindow=data.attendance_availability;
         if(attendanceWindow?.enabled&&!attendanceWindow.available&&attendanceWindow.starts_at>attendanceWindow.server_now){
@@ -395,7 +415,7 @@
         closedToggle.onchange=()=>{listContext.includeClosed=closedToggle.checked;listContext.shown=30;draw();};
         if(data.attendance_availability?.available){
           const attendancePeople=(data.people||[]).filter(person=>['CONFIRMED','PENDING_PAYMENT'].includes(person.status));
-          if(attendancePeople.length){const attendancePanel=document.createElement('details');attendancePanel.dataset.attendancePanel='';attendancePanel.innerHTML='<summary>Registra presenze</summary><p>Seleziona le persone da aggiornare, imposta lo stato e salva tutte le modifiche insieme.</p><div class="mi-attendance-actions"><button type="button" data-attendance-select-all>Seleziona tutti</button><button type="button" data-attendance-clear-all>Deseleziona tutti</button></div><form data-attendance-bulk><div class="mi-attendance-table" role="region" aria-label="Registrazione presenze"><table><thead><tr><th scope="col">Seleziona</th><th scope="col">Partecipante</th><th scope="col">Presenza</th></tr></thead><tbody>'+attendancePeople.map(person=>'<tr><td><input type="checkbox" data-attendance-person="'+person.id+'" aria-label="Seleziona '+esc(person.name)+'"></td><td>'+esc(person.name)+'</td><td><select data-attendance-state aria-label="Presenza di '+esc(person.name)+'">'+[['UNRECORDED','Non rilevata'],['PRESENT','Presente'],['ABSENT','Assente']].map(([value,label])=>'<option value="'+value+'" '+((person.attendance?.state||person.attendance||'UNRECORDED')===value?'selected':'')+'>'+label+'</option>').join('')+'</select></td></tr>').join('')+'</tbody></table></div><button type="submit" class="mi-primary">Salva presenze selezionate</button></form>';listHost.after(attendancePanel);attendancePanel.querySelector('[data-attendance-select-all]').onclick=()=>attendancePanel.querySelectorAll('[data-attendance-person]').forEach(input=>input.checked=true);attendancePanel.querySelector('[data-attendance-clear-all]').onclick=()=>attendancePanel.querySelectorAll('[data-attendance-person]').forEach(input=>input.checked=false);attendancePanel.querySelector('form').onsubmit=async e=>{e.preventDefault();const changes=[...attendancePanel.querySelectorAll('[data-attendance-person]:checked')].map(input=>({id:Number(input.dataset.attendancePerson),attendance:input.closest('tr').querySelector('[data-attendance-state]').value}));if(!changes.length){say('Seleziona almeno una persona.');return;}busy=true;attendancePanel.querySelectorAll('button,input,select').forEach(control=>control.disabled=true);say('Salvataggio presenze…');try{const result=await request('attendance_bulk',{data:JSON.stringify(changes)});busy=false;dirty=false;dirtyForm=null;await summary();say(result.message);}catch(error){say('Presenze non salvate. '+error.message);}finally{busy=false;}};}
+          if(attendancePeople.length){const attendancePanel=document.createElement('details');attendancePanel.dataset.attendancePanel='';attendancePanel.innerHTML='<summary>Registra presenze</summary><p>Seleziona le persone da aggiornare, imposta lo stato e salva tutte le modifiche insieme.</p><div class="mi-attendance-actions"><button type="button" data-attendance-select-all>Seleziona tutti</button><button type="button" data-attendance-clear-all>Deseleziona tutti</button></div><form data-attendance-bulk><div class="mi-attendance-table" role="region" aria-label="Registrazione presenze"><table><thead><tr><th scope="col">Seleziona</th><th scope="col">Partecipante</th><th scope="col">Presenza</th></tr></thead><tbody>'+attendancePeople.map(person=>'<tr><td><input type="checkbox" data-attendance-person="'+person.id+'" aria-label="Seleziona '+esc(person.name)+'"></td><td>'+esc(person.name)+'</td><td><select data-attendance-state aria-label="Presenza di '+esc(person.name)+'">'+[['UNRECORDED','Non rilevata'],['PRESENT','Presente'],['ABSENT','Assente']].map(([value,label])=>'<option value="'+value+'" '+((person.attendance?.state||person.attendance||'UNRECORDED')===value?'selected':'')+'>'+label+'</option>').join('')+'</select></td></tr>').join('')+'</tbody></table></div><button type="submit" class="mi-primary">Salva presenze selezionate</button></form>';listHost.after(attendancePanel);attendancePanel.querySelector('[data-attendance-select-all]').onclick=()=>attendancePanel.querySelectorAll('[data-attendance-person]').forEach(input=>input.checked=true);attendancePanel.querySelector('[data-attendance-clear-all]').onclick=()=>attendancePanel.querySelectorAll('[data-attendance-person]').forEach(input=>input.checked=false);attendancePanel.querySelector('form').onsubmit=async e=>{e.preventDefault();const changes=[...attendancePanel.querySelectorAll('[data-attendance-person]:checked')].map(input=>({id:Number(input.dataset.attendancePerson),attendance:input.closest('tr').querySelector('[data-attendance-state]').value}));if(!changes.length){say('Seleziona almeno una persona.');return;}busy=true;attendancePanel.querySelectorAll('button,input,select').forEach(control=>control.disabled=true);say('Salvataggio presenze…');try{const result=await request('attendance_bulk',{data:JSON.stringify(changes)});busy=false;dirty=false;dirtyForm=null;await summary();say(result.message);}catch(error){say('Presenze non salvate. '+error.message);}finally{busy=false;attendancePanel.querySelectorAll('button,input,select').forEach(control=>control.disabled=false);}};}
         }
         search.closest('label').firstChild.textContent='Cerca nome ';serviceFilter.closest('label').firstChild.textContent='Servizio scelto';
         const searchButton=document.createElement('button');searchButton.type='button';searchButton.dataset.runQuery='';searchButton.textContent='Cerca';searchBar.append(searchButton);
@@ -491,9 +511,10 @@
           }
           if(individual && data.attendance_availability?.available){
             const table=content.querySelector('[data-list] table');
-            const heading=document.createElement('th');heading.scope='col';heading.textContent='Presente';table.tHead.rows[0].append(heading);
+            const statusIndex=features.rooms?3:2,headerRow=table.tHead.rows[0],statusHeading=headerRow.cells[statusIndex];
+            const heading=document.createElement('th');heading.scope='col';heading.textContent='Presente';headerRow.insertBefore(heading,statusHeading);headerRow.append(statusHeading);
             [...table.tBodies[0].rows].forEach((row,index)=>{
-              const person=list[index],cell=row.insertCell();cell.className='mi-attendance-cell';
+              const person=list[index],statusCell=row.cells[statusIndex],cell=row.insertCell(statusIndex);cell.className='mi-attendance-cell';row.append(statusCell);
               if(!['CONFIRMED','PENDING_PAYMENT'].includes(person.status))return;
               const input=document.createElement('input');input.type='checkbox';input.dataset.attendanceToggle=person.id;input.setAttribute('aria-label','Presente: '+person.name);
               input.checked=(person.attendance?.state||person.attendance)==='PRESENT';cell.append(input);
@@ -597,7 +618,8 @@
     async function detail(code,personNumber){
       if(!await canLeave())return;const ticket=++generation;if(order!==code)currentPerson=null;order=code;personNumber=personNumber??currentPerson;say('Caricamento scheda…');
       try{const b=await request('detail');if(ticket!==generation)return;booking=b;printList=null;parkPanels();dirty=false;select.disabled=false;const selectedPerson=b.participants.find(p=>p.number===Number(personNumber))||b.participants[0];currentPerson=selectedPerson?.number??null;document.title=(selectedPerson?personName(selectedPerson):'Iscritto')+' — Scheda iscritto';
-        content.innerHTML='<button data-back>Torna al riepilogo</button><h3>'+(selectedPerson?esc(personName(selectedPerson)):'Scheda iscritto')+'</h3><p data-person-contact></p><div data-person-intro-end></div>';
+        if(printButton){printButton.hidden=false;printButton.textContent='Stampa riepilogo prenotazione';}
+        content.innerHTML='<p class="mi-detail-back"><button type="button" data-back>Vai a Elenco partecipanti</button></p><div data-booking-print></div><h3>'+(selectedPerson?esc(personName(selectedPerson)):'Scheda iscritto')+'</h3><p data-person-contact></p><div data-person-intro-end></div>';
         const position=b.individual,personEconomics=position?.people?.find(p=>p.id===selectedPerson?.id);
         const economics=p=>!p?'<p>Importi individuali non disponibili.</p>':'<dl><div><dt>Quota</dt><dd>'+(position.quotes_known?money(p.total):'Da verificare')+'</dd></div><div><dt>Versato</dt><dd>'+(position.payments_known?money(p.paid):'Da attribuire')+'</dd></div><div><dt>'+(p.credit?'Credito da restituire':'Residuo')+'</dt><dd>'+(position.quotes_known&&position.payments_known?money(p.credit||p.balance):'Da verificare')+'</dd></div></dl>';
         if(!b.is_free_event)content.querySelector('[data-person-intro-end]').insertAdjacentHTML('beforebegin','<section class="mi-person-economic" aria-label="Importi personali">'+economics(personEconomics)+(position?.message?'<p>'+esc(position.message)+'</p>':'')+'</section>');
@@ -630,7 +652,15 @@
           content.insertAdjacentHTML('beforeend',`<form data-person="${p.number}" novalidate><fieldset ${p.status==='CANCELLED'?'disabled':''}><legend>Dati dell’iscritto</legend>${roomStatus}${selectedOptions}<div class="mi-management-grid">${input('first_name','Nome',p.first_name)}${input('last_name','Cognome',p.last_name)}${[...definitions.values()].map(f=>fieldInput(f,p.fields[f.key]??'')).join('')}</div><p>Per rimuovere un dato facoltativo, svuota il campo e salva.</p><button type="submit">Salva iscritto</button> <button class="mi-danger" type="button" data-cancel="${p.id}">Annulla partecipazione</button></fieldset></form>`);
         }
         const personForm=content.querySelector('form[data-person]'),introEnd=content.querySelector('[data-person-intro-end]'),serviceEditor=content.querySelector('[data-person-services-editor]');if(personForm&&introEnd){introEnd.after(personForm);if(serviceEditor)personForm.after(serviceEditor);}
-        content.insertAdjacentHTML('beforeend','<p class="mi-detail-back"><button type="button" data-back>Torna al riepilogo</button></p>');
+        const printFallback=content.querySelector('[data-booking-print]');
+        if(personForm){
+          const fieldset=personForm.querySelector('fieldset'),save=fieldset.querySelector('button[type="submit"]'),cancel=fieldset.querySelector('[data-cancel]');
+          const actions=document.createElement('div');actions.className='mi-person-actions';
+          save.disabled=fieldset.disabled;cancel.disabled=fieldset.disabled;
+          actions.append(save);if(printButton)actions.append(printButton);actions.append(cancel);personForm.append(actions);printFallback.remove();
+          personalBaselines.set(personForm,personalValues(personForm));save.hidden=true;
+        }else if(printButton)printFallback.append(printButton);
+        content.insertAdjacentHTML('beforeend','<p class="mi-detail-back"><button type="button" data-back>Vai a Elenco partecipanti</button></p>');
         if(personNumber){const person=content.querySelector('[data-person="'+Number(personNumber)+'"]');person?.scrollIntoView({block:'center'});person?.querySelector('input')?.focus();}
         say('Dati aggiornati. Le modifiche vengono salvate nel registro centrale.');if(b.pending){pending=b.pending;say('Un salvataggio interrotto può essere completato.');const resume=document.createElement('button');resume.textContent='Completa il salvataggio interrotto';resume.onclick=()=>mutate(pending.operation,JSON.parse(pending.data));status.append(' ',resume);}
       }catch(e){if(ticket===generation)say('Scheda non disponibile. '+e.message);}

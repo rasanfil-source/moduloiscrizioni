@@ -65,6 +65,7 @@ final class MI_Workspace_Client {
 		// La replica gira nella coda: la formattazione Google può superare un minuto.
 		$timeout = 'PROIETTA_EVENTO' === $action ? 240 : ( 'ELIMINA_DATI_EVENTO' === $action ? 110 : ( 'LEGGI_MODIFICHE_FOGLIO' === $action ? 45 : ( 'INVIA_EMAIL_PROVA' === $action ? 30 : 15 ) ) );
 		if ( 'CONFERMA_MODIFICHE_FOGLIO' === $action ) $timeout = 180;
+		if ( in_array( $action, array( 'INVIA_EMAIL_PROVA', 'INVIA_EMAIL_CONFERMA' ), true ) ) $timeout = 60;
 		if ( in_array( $action, array( 'VERIFICA_FOGLI_EVENTO', 'ORGANIZZA_FOGLI_EVENTO' ), true ) ) $timeout = 60;
 		// These deliveries carry revisions and Google tombstones reject late writes.
 		// Email/deletion retain their stronger exclusion until their side effect completes.

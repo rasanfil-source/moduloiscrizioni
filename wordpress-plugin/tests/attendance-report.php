@@ -9,6 +9,8 @@ $report=MI_Attendance_Report::aggregate($people,$audit,$events,2026,2);check_rep
 $audit[]=['registration_id'=>2,'event_type'=>'MANAGEMENT_identity_link','detail_json'=>json_encode(['participant_id'=>2,'target_id'=>1])];
 $audit[]=['registration_id'=>3,'event_type'=>'MANAGEMENT_identity_link','detail_json'=>json_encode(['participant_id'=>3,'target_id'=>2])];
 $report=MI_Attendance_Report::aggregate($people,$audit,$events,2026,2);check_report(count($report['items'])===1&&$report['items'][0]['count']===2,'Collegamenti espliciti o deduplica evento errati');
+$stored_audit=array_map(static function($row){$row['event_type']=strtolower($row['event_type']);return $row;},$audit);
+check_report(MI_Attendance_Report::aggregate($people,$stored_audit,$events,2026,2)===$report,'Tipi normalizzati dal database non riconosciuti');
 $audit[]=['registration_id'=>2,'event_type'=>'MANAGEMENT_identity_link','detail_json'=>json_encode(['participant_id'=>2,'target_id'=>0])];
 check_report(count(MI_Attendance_Report::aggregate($people,$audit,$events,2026,2)['items'])===0,'Rimozione collegamento non rispettata');
 $audit[]=['registration_id'=>1,'event_type'=>'MANAGEMENT_attendance','detail_json'=>json_encode(['participant_id'=>1,'attendance'=>'ABSENT'])];

@@ -37,19 +37,20 @@ function validaProiezioneDiretta_(eventId, projection) {
 }
 
 function generaVistaDaProiezioneDiretta_(projection) {
+  const cache=creaCacheDecodificaVista_();
   const evento=projection.event, idEvento=String(evento.id_evento), iscrizioni=projection.registrations, partecipanti=projection.participants, pagamenti=projection.payments;
   const iscrizioniPerCodice=iscrizioni.reduce((index,row)=>{index[String(row.codice_ordine)]=row;return index;},{});
   const attive=partecipanti.filter(row=>iscrizioniPerCodice[String(row.codice_ordine)] && !['ANNULLATO','SCADUTO','CANCELLED','EXPIRED'].includes(String(iscrizioniPerCodice[String(row.codice_ordine)].stato).toUpperCase()) && String(row.stato_partecipante||'ACTIVE').toUpperCase()!=='CANCELLED');
-  const profilo=determinaProfiloVistaOperativa_(iscrizioni,attive,evento.profilo_operativo);
-  const catalogo=campiElencoOperativo_(true,attive).reduce((index,field)=>{index[field.key]=field;return index;},{});
+  const profilo=determinaProfiloVistaOperativa_(iscrizioni,attive,evento.profilo_operativo,cache);
+  const catalogo=campiElencoOperativo_(true,attive,cache).reduce((index,field)=>{index[field.key]=field;return index;},{});
   const colonne=profilo.campi.filter(key=>!!catalogo[key]).map(key=>({key:key,label:catalogo[key].label,gruppo:gruppoCampoVistaOperativa_(key),comprimibile:['paid_cash','paid_transfer','paid_card'].includes(key)}));
   aggiungiColonneServizi_(colonne,decodificaElenco_(evento.servizi_json));
-  aggiungiColonneDomande_(colonne,evento,iscrizioni,attive);
-  applicaSchemaColonneEvento_(colonne,evento,iscrizioni,attive,pagamenti);
+  aggiungiColonneDomande_(colonne,evento,iscrizioni,attive,cache);
+  applicaSchemaColonneEvento_(colonne,evento,iscrizioni,attive,pagamenti,cache);
   const ordiniEconomici=new Set();
   const righe=attive.map(persona=>{
-    const iscrizione=iscrizioniPerCodice[String(persona.codice_ordine)], dati=decodificaOggetto_(persona.dati_aggiuntivi_json), valori={};
-    colonne.forEach(colonna=>valori[colonna.key]=valoreCampoElenco_(colonna.key,evento,iscrizione,persona,dati,pagamenti));
+    const iscrizione=iscrizioniPerCodice[String(persona.codice_ordine)], dati=cache.object(persona.dati_aggiuntivi_json), valori={};
+    colonne.forEach(colonna=>valori[colonna.key]=valoreCampoElenco_(colonna.key,evento,iscrizione,persona,dati,pagamenti,cache));
     const personale={total:'totale_centesimi',paid:'versato_centesimi',balance:'saldo_centesimi'};
     Object.keys(personale).forEach(key=>{const amount=persona[personale[key]];if(amount!==''&&amount!=null&&Number.isFinite(Number(amount)))valori[key]=Number(amount)/100;else if(ordiniEconomici.has(String(persona.codice_ordine)))valori[key]='';});
     if(ordiniEconomici.has(String(persona.codice_ordine)))['paid_cash','paid_transfer','paid_card'].forEach(key=>valori[key]='');
@@ -66,11 +67,12 @@ function apriFoglioEventoFirmato_(payload, create, title) {
   let book,created=false;
   if(requested){try{const file=DriveApp.getFileById(requested);if(file.isTrashed())throw new Error('EVENT_SHEET_MISSING');book=SpreadsheetApp.openById(requested);}catch(error){if(explicit||!create)throw error;properties.deleteProperty(registryKey);requested='';}}
   if(!book){if(!create)throw new Error('EVENT_SHEET_MISSING');book=SpreadsheetApp.create('Evento '+eventId+' - '+String(title||eventId).replace(/[\\/:*?"<>|#%{}]/g,' ').replace(/\s+/g,' ').trim().slice(0,140));properties.setProperty(registryKey,book.getId());spostaFoglioAccantoAlDatabase_(book.getId());created=true;}
-  const sheet=book.getSheetByName('Dati operativi')||book.getSheets()[0];sheet.setName('Dati operativi');
+  let sheet=book.getSheetByName('Dati operativi');
+  if(!sheet){sheet=book.getSheets()[0];sheet.setName('Dati operativi');}
   const metadata=sheet.getDeveloperMetadata().find(item=>item.getKey()==='MI_ID_EVENTO');
   if(metadata && metadata.getValue()!==eventId)throw new Error('EVENT_SHEET_MISMATCH');
-  impostaMetadatoVista_(sheet,'MI_ID_EVENTO',eventId);
-  properties.setProperty(registryKey,book.getId());
+  if(!metadata)sheet.addDeveloperMetadata('MI_ID_EVENTO',eventId);
+  if(properties.getProperty(registryKey)!==book.getId())properties.setProperty(registryKey,book.getId());
   return {book:book,sheet:sheet,created:created,eventId:eventId};
 }
 
@@ -99,22 +101,40 @@ function aggiornaPagamentiDaProiezione_(book, projection, readOnly) {
 }
 
 function proiettaEventoDaWordPress_(payload) {
+  const started=Date.now(), timings={};
   const projection=caricaProiezioneDiretta_(payload), eventId=String((payload||{}).event_id||'');validaProiezioneDiretta_(eventId,projection);
+  timings.load_ms=Date.now()-started;
   const lock=LockService.getScriptLock();if((payload||{}).background===true){if(!lock.tryLock(100))return {ok:true,ready:false,busy:true,retry_after:3};}else if(!lock.tryLock(1000))return {ok:true,ready:false,busy:true,retry_after:3};
+  const lockedAt=Date.now();timings.lock_wait_ms=lockedAt-started-timings.load_ms;
   try{
     if(typeof eventoInEliminazione_==='function'&&eventoInEliminazione_(eventId))throw new Error('EVENT_DELETED');
     verificaGenerazioneProiezione_(eventId,payload);
-    const opened=apriFoglioEventoFirmato_(payload,true,projection.event.titolo), view=generaVistaDaProiezioneDiretta_(projection), properties=PropertiesService.getScriptProperties(), key='MI_DIRECT_VIEW_'+opened.book.getId(), fingerprint=String(payload.fingerprint||'');
+    const opened=apriFoglioEventoFirmato_(payload,true,projection.event.titolo), properties=PropertiesService.getScriptProperties(), key='MI_DIRECT_VIEW_'+opened.book.getId(), fingerprint=String(payload.fingerprint||'');
+    // Older receipts contain only the fingerprint: rebuild once to learn read_only.
+    let receipt;try{receipt=JSON.parse(properties.getProperty(key)||'null');}catch(error){receipt=null;}
     if(typeof riprendiScritturaProiezione_==='function')riprendiScritturaProiezione_(opened.sheet);
     abilitaLetturaFoglioEventoConLink_(opened.book.getId());
     const pending=modificheCorrentiFoglio_(opened.sheet);
     let result={aggiunte:0,manuali:pending.changes.length,conflitti:pending.errors.length};
-    const changed=properties.getProperty(key)!==fingerprint||pending.changes.length||pending.errors.length;
-    if(changed)result=scriviProiezioneEvento_(opened.sheet,view);
-    if(!result.manuali&&!result.conflitti){if(changed)aggiornaPagamentiDaProiezione_(opened.book,projection,view.sola_lettura);properties.setProperty(key,fingerprint);}else properties.deleteProperty(key);
+    const changed=!receipt||receipt.fingerprint!==fingerprint||typeof receipt.read_only!=='boolean'||pending.changes.length||pending.errors.length;
+    timings.inspect_ms=Date.now()-lockedAt;
+    const viewStarted=Date.now(),view=changed?generaVistaDaProiezioneDiretta_(projection):null;
+    const readOnly=view?view.sola_lettura===true:receipt.read_only;
+    timings.view_ms=Date.now()-viewStarted;
+    const writeStarted=Date.now();
+    if(changed){
+      // Invalidate before writing so an interrupted update cannot reuse an old receipt.
+      properties.deleteProperty(key);
+      result=scriviProiezioneEvento_(opened.sheet,view);
+      if(!result.manuali&&!result.conflitti)aggiornaPagamentiDaProiezione_(opened.book,projection,readOnly);
+    }
     SpreadsheetApp.flush();
     const complete=!result.manuali&&!result.conflitti;
-    return {ok:true,ready:complete,event_sheet_complete:complete,read_only:view.sola_lettura===true,id_foglio:opened.book.getId(),url_foglio:complete?opened.book.getUrl():undefined,creato:opened.created,projection_hash:String(payload.projection_hash||''),fingerprint:fingerprint,event_schema:decodificaOggetto_(projection.event.schema_vista_json),operational_profile:String(projection.event.profilo_operativo||''),esito:result};
+    if(changed&&complete)properties.setProperty(key,JSON.stringify({fingerprint:fingerprint,read_only:readOnly}));
+    timings.write_ms=Date.now()-writeStarted;timings.lock_ms=Date.now()-lockedAt;timings.total_ms=Date.now()-started;
+    const response={ok:true,ready:complete,event_sheet_complete:complete,read_only:readOnly,id_foglio:opened.book.getId(),url_foglio:complete?opened.book.getUrl():undefined,creato:opened.created,projection_hash:String(payload.projection_hash||''),fingerprint:fingerprint,event_schema:decodificaOggetto_(projection.event.schema_vista_json),operational_profile:String(projection.event.profilo_operativo||''),esito:result};
+    if((payload||{}).measure_performance===true)response.performance=Object.assign(timings,{view_built:Boolean(changed),registrations:projection.registrations.length,participants:projection.participants.length,payments:projection.payments.length});
+    return response;
   }finally{lock.releaseLock();}
 }
 

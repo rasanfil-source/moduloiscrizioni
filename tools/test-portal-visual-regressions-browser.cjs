@@ -110,17 +110,17 @@ const bounds=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.w
    if([360,390,1280].includes(width))await shot('scheda-'+width);
   }
   await page.setViewportSize({width:360,height:480});assert.ok((await content.evaluate(bounds)).height>300);await fits('Short mobile modal');
-  await previous.focus();await page.keyboard.press('Shift+Tab');assert.ok(await page.locator('.mi-detail-back [data-back]').evaluate(e=>e===document.activeElement));await page.keyboard.press('Tab');assert.ok(await previous.evaluate(e=>e===document.activeElement));
-  await next.click();await page.waitForFunction(()=>document.querySelector('.mi-person-economic strong')?.textContent==='ORD-3');assert.ok(await next.isDisabled());
-  await previous.click();await page.waitForFunction(()=>document.querySelector('.mi-person-economic strong')?.textContent==='ORD-2');
-  await close.focus();await page.keyboard.press('ArrowLeft');await page.waitForFunction(()=>document.querySelector('.mi-person-economic strong')?.textContent==='ORD-1');assert.ok(await previous.isDisabled());
+  await previous.focus();await page.keyboard.press('Shift+Tab');assert.ok(await page.locator('.mi-detail-back [data-back]').last().evaluate(e=>e===document.activeElement));await page.keyboard.press('Tab');assert.ok(await previous.evaluate(e=>e===document.activeElement));
+  await next.click();await page.waitForFunction(()=>document.querySelector('[data-booking-overview] [data-open]')?.dataset.open==='ORD-3');assert.ok(await next.isDisabled());
+  await previous.click();await page.waitForFunction(()=>document.querySelector('[data-booking-overview] [data-open]')?.dataset.open==='ORD-2');
+  await close.focus();await page.keyboard.press('ArrowLeft');await page.waitForFunction(()=>document.querySelector('[data-booking-overview] [data-open]')?.dataset.open==='ORD-1');assert.ok(await previous.isDisabled());
   await page.keyboard.press('Escape');assert.ok(await page.locator('.mi-portal-modal').isHidden());assert.ok(await page.getByRole('link',{name:'Scheda 1',exact:true}).evaluate(e=>e===document.activeElement));
   await page.getByRole('link',{name:'Scheda 2',exact:true}).click();await page.locator('[data-person]').waitFor();
   await page.locator('[data-back]').first().click();await page.locator('[data-room-section]>summary').click();await page.locator('[data-room-person]').first().waitFor();
-  assert.ok((await page.locator('.mi-room-assignment-table').evaluate(bounds)).width>260,'Room overview also gains content width');await fits('Room overview inside modal');
+  assert.ok((await page.locator('[data-room-section]').evaluate(bounds)).width>260,'Room overview also gains content width');await fits('Room overview inside modal');
   await close.click();await page.getByRole('link',{name:'Scheda 3',exact:true}).click();await page.locator('[data-person]').waitFor();await page.locator('[data-person] input').first().fill('Bozza sintetica');
   for(const action of [previous,close]){await action.click();await page.getByRole('dialog').getByRole('button',{name:'Continua a modificare',exact:true}).click();}
-  await page.keyboard.press('Escape');assert.ok(await page.locator('.mi-portal-modal').isVisible());assert.equal(await page.locator('[data-person] input').first().inputValue(),'Bozza sintetica');assert.equal(await page.locator('.mi-person-economic strong').textContent(),'ORD-3');
+  await page.keyboard.press('Escape');assert.ok(await page.locator('.mi-portal-modal').isVisible());assert.equal(await page.locator('[data-person] input').first().inputValue(),'Bozza sintetica');assert.equal(await page.locator('[data-booking-overview] [data-open]').first().getAttribute('data-open'),'ORD-3');
   assert.deepEqual(result.errors,[]);fs.writeFileSync(path.join(out,'misure.json'),JSON.stringify(result,null,2));
   console.log('Browser: link visibili 320–1280px; storico contenuto con riferimenti fino a 120 caratteri, tastiera e stampa; controlli 44px; modale, frecce, focus, Escape e protezione bozze verificati. Screenshot: '+out);
  }catch(error){await shot('failure');throw error;}finally{await browser.close();}

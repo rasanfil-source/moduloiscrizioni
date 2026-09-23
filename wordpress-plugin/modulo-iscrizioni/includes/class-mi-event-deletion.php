@@ -11,6 +11,7 @@ final class MI_Event_Deletion {
 
 	public static function boot() {
 		add_filter( 'pre_delete_post', array( __CLASS__, 'guard_delete' ), 10, 3 );
+		add_filter( 'pre_trash_post', array( __CLASS__, 'guard_trash' ), 10, 3 );
 		add_filter( 'wp_insert_post_data', array( __CLASS__, 'guard_post' ), 10, 2 );
 		add_action( 'save_post_' . MI_Event_Post_Type::EVENT_TYPE, array( __CLASS__, 'guard_saved_post' ), 0 );
 		add_filter( 'post_row_actions', array( __CLASS__, 'row_actions' ), 20, 2 );
@@ -64,6 +65,13 @@ final class MI_Event_Deletion {
 		if ( MI_Event_Post_Type::EVENT_TYPE !== $post->post_type || self::$finalizing === (int) $post->ID ) return $delete;
 		if ( ! wp_doing_cron() && self::allowed() ) { wp_safe_redirect( self::url( $post->ID ) ); exit; }
 		return false;
+	}
+	public static function guard_trash( $trash, $post, $previous_status ) {
+		if ( MI_Event_Post_Type::EVENT_TYPE !== $post->post_type ) return $trash;
+		if ( ! MI_Access::can_access_event( $post->ID ) ) return false;
+		global $wpdb;
+		$exists = $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d LIMIT 1", $post->ID ) );
+		return $wpdb->last_error || $exists || 'draft' !== $post->post_status ? false : $trash;
 	}
 	public static function guard_post( $data, $postarr ) {
 		$id = absint( $postarr['ID'] ?? 0 );

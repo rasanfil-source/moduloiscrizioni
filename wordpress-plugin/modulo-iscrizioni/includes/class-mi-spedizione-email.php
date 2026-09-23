@@ -224,8 +224,10 @@ final class MI_Spedizione_Email {
 			$order_codes = array_keys( $recipient_state );
 			$placeholders = implode( ',', array_fill( 0, count( $order_codes ), '%s' ) );
 			$query_args = array_merge( array( $event_id ), $order_codes );
-			$registrations = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,status,economic_mode,buyer_first_name,buyer_last_name,buyer_email,total_qty,total_cents,initial_due_cents,balance_cents,payment_methods_json FROM {$registrations_table} WHERE event_id=%d AND order_code IN ({$placeholders}) AND status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED','WAITLIST_OFFERED') AND capacity_released_at IS NULL ORDER BY id LIMIT 1000", $query_args ), ARRAY_A );
+			$status_filter = 'EVENT_CANCELLATION' === $template_type ? "status='CANCELLED'" : "status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED','WAITLIST_OFFERED') AND capacity_released_at IS NULL";
+			$registrations = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,status,economic_mode,buyer_first_name,buyer_last_name,buyer_email,total_qty,total_cents,initial_due_cents,balance_cents,payment_methods_json FROM {$registrations_table} WHERE event_id=%d AND order_code IN ({$placeholders}) AND {$status_filter} ORDER BY id LIMIT 1000", $query_args ), ARRAY_A );
 			if ( $wpdb->last_error ) return new WP_Error( 'mi_email_read', 'Prenotazioni non disponibili.' );
+			if ( 'EVENT_CANCELLATION' === $template_type && count( $registrations ) !== count( $order_codes ) ) return new WP_Error( 'mi_email_cancel_incomplete', 'Annullamento dei destinatari non completato.' );
 			try { $positions = MI_Payment_Ledger::positions( $registrations ); }
 			catch ( Throwable $error ) { return new WP_Error( 'mi_email_balance', 'Saldi non disponibili. Comunicazione non preparata.' ); }
 			$now = current_time( 'mysql', true );
@@ -369,7 +371,7 @@ final class MI_Spedizione_Email {
 		$table = $wpdb->prefix . 'mi_email_outbox';
 		$status_corrente = (string) $wpdb->get_var( $wpdb->prepare( "SELECT status FROM {$table} WHERE id = %d", $id ) );
 		$nuovo_status = in_array( $status_corrente, array( 'TEST_FAILED', 'TEST_SENDING' ), true ) ? 'TEST_PENDING' : 'PENDING';
-		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = %s, attempts = 0, last_error = NULL, sent_at = NULL WHERE id = %d AND status IN ('FAILED', 'SENDING', 'TEST_FAILED', 'TEST_SENDING')", $nuovo_status, $id ) );
+		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = %s, attempts = 0, last_error = NULL, sent_at = NULL WHERE id = %d AND status IN ('FAILED', 'TEST_FAILED')", $nuovo_status, $id ) );
 		self::pianifica_spedizione();
 		wp_safe_redirect( add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox', 'email_id' => $id, 'mi_esito' => 'riaccodata' ), admin_url( 'edit.php' ) ) );
 		exit;

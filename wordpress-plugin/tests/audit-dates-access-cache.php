@@ -44,6 +44,17 @@ foreach ( array( 1, 3 ) as $id ) check_audit( 'ALL' === MI_Access::event_ids( $i
 check_audit( MI_Access::can_access_event( 999 ), 'Current global user rejected' );
 check_audit( MI_Access::can_access_event( 42, 2 ) && ! MI_Access::can_access_event( 43, 2 ), 'Assigned scope bypassed' );
 check_audit( MI_Access::can_access_event( 42, 4 ) && ! MI_Access::can_access_event( 42, 99 ), 'Group or unknown user access changed' );
+$GLOBALS['scope'][2]['_mi_access_suspended']=1;
+check_audit(!MI_Access::can_access_event(42,2)&&MI_Access::event_ids(2)===array(),'Suspended session retained event access');
+unset($GLOBALS['scope'][2]['_mi_access_suspended']);
+class MI_Event_Post_Type {const EVENT_TYPE='mi_event';}
+function get_post_type($id){return $id===1000?'post':'mi_event';}
+function get_post($id){return (object)['post_status'=>'draft','post_author'=>2];}
+foreach(['edit_post','delete_post','read_post'] as $cap){
+ check_audit(MI_Access::map_event_meta_cap(['original'],$cap,2,[43])===['do_not_allow'],'Core capability escaped scope');
+ check_audit(MI_Access::map_event_meta_cap(['original'],$cap,2,[42])!==['do_not_allow'],'Assigned event rejected');
+ check_audit(MI_Access::map_event_meta_cap(['original'],$cap,2,[1000])===['original'],'Other post type changed');
+}
 
 class CardAuditDB {
     public $prefix = 'wp_', $last_error = '', $queries = 0, $fail = false;

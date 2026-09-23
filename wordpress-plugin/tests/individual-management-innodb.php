@@ -2,7 +2,7 @@
 require __DIR__.'/innodb-fixture.php';
 function is_wp_error($v){return $v instanceof WP_Error;}
 function get_post_meta($id,$key,$single){return $GLOBALS['test_event_meta'][$key]??'';}
-function get_the_title($id){return 'Pellegrinaggio ad Assisi';}
+function get_the_title($id){return $GLOBALS['test_event_title']??'Pellegrinaggio ad Assisi';}
 function wp_date($format){return date($format);}
 class MI_Portal_Management {static function allowed(){return true;}}
 require __DIR__.'/../modulo-iscrizioni/includes/class-mi-management-service.php';
@@ -48,4 +48,17 @@ $GLOBALS['test_payment_permission']=false;
 check(is_wp_error(MI_Management_Service::options_preview(1,$data,version())),'anteprima servizi senza permesso pagamenti');
 check(is_wp_error(MI_Management_Service::save(1,'change_options',$data,version(),'wp_7_12345678-1234-4234-8234-123456789a05')),'salvataggio servizi senza permesso pagamenti');
 $GLOBALS['test_payment_permission']=true;
+$GLOBALS['test_event_meta']['_mi_pricing_mode']='ZERO';
+foreach ([
+ 'L&#8217;Uomo nel progetto di Dio &#8211; Chi sono?' => 'L’Uomo nel progetto di Dio – Chi sono?',
+ 'Accenti: città &amp; comunità &quot;insieme&quot;' => 'Accenti: città & comunità "insieme"',
+ 'Titolo già Unicode – perché?' => 'Titolo già Unicode – perché?',
+] as $encoded=>$plain) {
+ $GLOBALS['test_event_title']=$encoded;
+ $detail=MI_Management_Service::detail(1);
+ check(!is_wp_error($detail)&&$detail['event_title']===$plain,'titolo dettaglio come testo Unicode '.json_encode($detail));
+ $people=MI_Management_Service::all_people([42],'');
+ check(count($people['items'])===2&&$people['items'][0]['event_title']===$plain,'titolo elenco coerente con dettaglio');
+}
+unset($GLOBALS['test_event_title'],$GLOBALS['test_event_meta']['_mi_pricing_mode']);
 echo "PASS: anteprima, rimozione/aggiunta servizi, quote personali, credito, caparre fisse, permesso pagamenti, retry, versioni e ricerca autorizzata.\n";

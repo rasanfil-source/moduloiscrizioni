@@ -530,6 +530,7 @@ final class MI_Portal {
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,buyer_email,total_cents,economic_mode FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status IN ('CONFIRMED','PENDING_PAYMENT') AND capacity_released_at IS NULL ORDER BY id LIMIT 1001", $event_id ), ARRAY_A );
 		if ( $wpdb->last_error || ! is_array( $rows ) ) return self::redirect_portal_result( 'Destinatari non disponibili. Nessun invio preparato.', true, 'communications' );
 		if ( count( $rows ) > 1000 ) return self::redirect_portal_result( 'Oltre 1000 prenotazioni: invio non disponibile da questa schermata.', true, 'communications' );
+		if ( $wpdb->last_error || ! is_array( $rows ) ) return self::redirect_result( 'Iscrizioni non disponibili. Annullamento non eseguito.', true, $event_id );
 		$recipients = array();
 		try { $positions = MI_Payment_Ledger::positions( $rows ); }
 		catch ( Throwable $error ) { return self::redirect_portal_result( 'Saldo non disponibile. Nessuna comunicazione preparata.', true, 'communications' ); }
@@ -726,11 +727,24 @@ final class MI_Portal {
 		try { $positions = MI_Payment_Ledger::positions( $rows ); }
 		catch ( Throwable $error ) { return self::redirect_result( 'Saldo non disponibile. Annullamento non eseguito.', true, $event_id ); }
 		foreach ( $rows as $row ) { $position = $positions[$row['id']]; $recipients[] = array( 'order_code' => $row['order_code'], 'paid_cents' => $position['effective_paid'], 'balance_cents' => $position['managed'] ? $position['effective_balance'] : 0 ); }
-		$email_result = $recipients ? MI_Spedizione_Email::accoda_comunicazione_operativa( array( 'communication_id' => 'event-cancel-' . $event_id . '-' . time(), 'event_id' => $event_id, 'template_type' => 'EVENT_CANCELLATION', 'message' => $reason, 'allow_operational' => true, 'recipients' => $recipients ) ) : array( 'count' => 0, 'mode' => MI_Spedizione_Email::modalita() );
-		if ( is_wp_error( $email_result ) ) return self::redirect_result( 'Impossibile preparare gli avvisi: evento non annullato.', true, $event_id );
+		if ( $wpdb->last_error ) return self::redirect_result( 'Iscrizioni non disponibili. Annullamento non eseguito.', true, $event_id );
+		// The event lease protects this durable recipient list and every retry.
+		$job = get_post_meta( $event_id, '_mi_event_cancellation_job', true );
+		if ( ! is_array( $job ) ) {
+			$job = array( 'recipients' => $recipients, 'reason' => $reason );
+			if ( ! update_post_meta( $event_id, '_mi_event_cancellation_job', $job ) ) return self::redirect_result( 'Impossibile salvare l’annullamento. Riprova.', true, $event_id );
+		}
+		$reason = $job['reason'];
 		foreach ( $rows as $row ) {
 			$result = MI_Registration_Service::cancel_registration( (int) $row['id'], wp_get_current_user()->display_name, false, false );
 			if ( is_wp_error( $result ) ) return self::redirect_result( 'Annullamento incompleto: controlla le iscrizioni prima di riprovare.', true, $event_id );
+		}
+		$email_result = array( 'count' => 0, 'mode' => MI_Spedizione_Email::modalita() );
+		foreach ( array_chunk( $job['recipients'], 1000 ) as $batch_index => $batch ) {
+			$queued = MI_Spedizione_Email::accoda_comunicazione_operativa( array( 'communication_id' => 'event-cancel-' . $event_id . '-' . $batch_index, 'event_id' => $event_id, 'template_type' => 'EVENT_CANCELLATION', 'message' => $reason, 'allow_operational' => true, 'recipients' => $batch ) );
+			if ( is_wp_error( $queued ) ) return self::redirect_result( 'Iscrizioni annullate, ma avvisi non salvati. Ripeti l’annullamento per completarli.', true, $event_id );
+			$email_result['count'] += $queued['count'];
+			$email_result['mode'] = $queued['mode'];
 		}
 		$secretariat_result = MI_Spedizione_Email::accoda_avviso_annullamento_segreteria( $event_id, $reason );
 		if ( is_wp_error( $secretariat_result ) ) return self::redirect_result( 'Iscrizioni annullate, ma avviso alla segreteria non salvato. Ripeti l’annullamento per completarlo.', true, $event_id );

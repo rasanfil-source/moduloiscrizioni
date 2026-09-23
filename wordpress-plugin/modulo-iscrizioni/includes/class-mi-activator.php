@@ -3,6 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class MI_Activator {
+	const SCHEMA_REVISION = 1;
 	public static function activate() {
 		self::create_tables();
 		self::add_roles_and_capabilities();
@@ -23,7 +24,7 @@ final class MI_Activator {
 	}
 
 	public static function maybe_upgrade() {
-		if ( MI_VERSION !== get_option( 'mi_db_version' ) ) {
+		if ( MI_VERSION !== get_option( 'mi_db_version' ) || self::SCHEMA_REVISION !== (int) get_option( 'mi_db_schema_revision', 0 ) ) {
 			self::create_tables();
 			self::add_roles_and_capabilities();
 			self::ensure_default_groups();
@@ -222,7 +223,8 @@ final class MI_Activator {
 			created_at datetime NOT NULL,
 			PRIMARY KEY (id),
 			KEY registration_id (registration_id),
-			KEY reg_type (registration_id,event_type)
+			KEY reg_type (registration_id,event_type),
+			KEY type_actor (event_type,actor_label)
 		) ENGINE=InnoDB {$charset};" );
 
 		dbDelta( "CREATE TABLE {$outbox} (
@@ -300,6 +302,9 @@ final class MI_Activator {
 
 		self::backfill_ticket_counters( $ticket_counters, $registrations, $items );
 		update_option( 'mi_db_version', MI_VERSION, false );
+		// Retry a failed index migration instead of marking an incomplete schema current.
+		$audit_index = $wpdb->get_results( "SHOW INDEX FROM {$registration_events} WHERE Key_name='type_actor'", ARRAY_A );
+		if ( ! $wpdb->last_error && array_column( (array) $audit_index, 'Column_name' ) === array( 'event_type', 'actor_label' ) ) update_option( 'mi_db_schema_revision', self::SCHEMA_REVISION, false );
 	}
 
 	private static function backfill_ticket_counters( $ticket_counters, $registrations, $items ) {

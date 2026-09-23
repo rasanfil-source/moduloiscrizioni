@@ -46,7 +46,7 @@ try {
         'option-rules.php', 'sheet-open.php', 'event-projection-transfer.php', 'rest-projection.php', 'workspace-schema.php', 'attendance-report.php',
 		'group-attendance.php', 'sheet-organization.php', 'audit-regressions.php', 'audit-dates-access-cache.php',
 		'event-wizard.php', 'management-list.php', 'management-page-sql.php', 'payment-counts.php', 'code-image.php', 'assets.php',
-        'registration-failures.php', 'email-transaction-failures.php'
+        'registration-failures.php', 'email-transaction-failures.php', 'event-cancellation-retry.php', 'attendance-idempotency.php', 'publication-stored-config.php'
     )
     foreach ($test in $phpTests) {
         & $phpExecutable @phpArguments (Join-Path 'wordpress-plugin/tests' $test) | Out-Host

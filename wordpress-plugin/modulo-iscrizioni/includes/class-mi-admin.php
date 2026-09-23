@@ -832,6 +832,27 @@ final class MI_Admin {
 			return $data;
 		}
 		if ( ! isset( $_POST['mi_event_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['mi_event_nonce'] ) ), 'mi_save_event' ) ) {
+			$id = absint( $postarr['ID'] ?? 0 );
+			if ( $id && 'publish' === get_post_status( $id ) ) return $data;
+			$config = $id ? MI_Registration_Service::public_event( $id, true ) : new WP_Error( 'mi_missing_event', 'Evento non configurato.' );
+			$group = $id ? absint( get_post_meta( $id, '_mi_activity_id', true ) ) : 0;
+			$valid = ! is_wp_error( $config ) && $group && MI_Event_Post_Type::ACTIVITY_TYPE === get_post_type( $group );
+			if ( $valid ) {
+				$valid = ! is_wp_error( MI_Registration_Service::validate_event_dates( $config ) ) && ! empty( $config['privacy_url'] ) && ! empty( $config['ticket_types'] );
+				$managed = in_array( $config['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
+				if ( $managed && empty( $config['payment_methods'] ) ) $valid = false;
+				if ( 'FIXED' === ( $config['pricing_mode'] ?? '' ) && empty( $config['fixed_price_cents'] ) ) $valid = false;
+				$economic = $config['economic_mode'] ?? '';
+				$pricing = $config['pricing_mode'] ?? '';
+				$max_price = max( array_merge( array( 0 ), array_column( $config['ticket_types'], 'price_cents' ), array_column( $config['options'] ?? array(), 'price_cents' ) ) );
+				$free = 'REGISTRATION_ONLY' === $economic && in_array( $pricing, array( 'NONE', 'ZERO' ), true ) && $max_price <= 0;
+				$priced = in_array( $economic, array( 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) && ( ( 'FIXED' === $pricing && ( $config['fixed_price_cents'] ?? 0 ) > 0 ) || ( 'CALCULATED' === $pricing && $max_price > 0 ) );
+				if ( ! $free && ! $priced ) $valid = false;
+			}
+			if ( ! $valid ) {
+				$data['post_status'] = 'draft';
+				set_transient( 'mi_publication_error_' . get_current_user_id(), 'Evento mantenuto in bozza: completa e verifica la configurazione prima di pubblicare.', MINUTE_IN_SECONDS );
+			}
 			return $data;
 		}
 		$activity_id = isset( $_POST['mi_activity_id'] ) ? absint( $_POST['mi_activity_id'] ) : 0;

@@ -12,6 +12,8 @@ La parrocchia è l'ente base. Ogni gruppo può avere logo, immagine, colori e co
 
 ## Stato
 
+Il rilascio corrente preparato è **[3.26.155](docs/rilascio-3.26.155.md)**: scheda personale, pulsanti email, presenze, titoli e stampa compatta. Installazione WordPress a cura dell'utente. GAS è già al deployment **9**, sorgente 3.26.154, funzionalmente invariato nella 3.26.155: non serve ridistribuirlo. La segnalazione di errori 500 su altre pagine resta da diagnosticare con i log del server. Le informazioni seguenti conservano la cronologia delle release precedenti.
+
 La [campagna di stabilizzazione del 22 settembre 2026](docs/campagna-stabilizzazione-2026-09-22.md) documenta correzioni su transazioni, retry concorrenti, annullamenti e notifiche, più un'ottimizzazione del catalogo servizi, incluse nella **3.26.152**. Per i test integrati su database sintetico e browser usare `tools/verify-campaign.ps1`, con MariaDB locale sulla porta 33317 e Playwright disponibile; il comando completo è nel rapporto.
 
 Il rilascio **3.26.152** riunisce anche le correzioni degli audit su date, permessi, cache, conteggi individuali e sincronizzazione recuperabile. Pacchetti e stato aggiornato di distribuzione sono descritti nelle [note del rilascio](docs/rilascio-3.26.152.md). Lo ZIP locale conserva la configurazione privata; su GitHub viene distribuito solo lo ZIP pubblico senza tale configurazione. L'installazione WordPress resta a cura dell'utente; la pubblicazione GitHub non aggiorna il sito. Il paragrafo seguente descrive il precedente stato documentato.

@@ -368,7 +368,8 @@ final class MI_Modello_Email {
 		$text = "È stata registrata una nuova prenotazione per {$event_title}.\n\nPrenotazione a nome di: {$buyer_name}\nStato: {$status}\nPartecipanti: {$quantity}";
 		$actions = array();
 		if ( absint( $registration_id ) && class_exists( 'MI_Portal_Management' ) ) {
-			$actions[] = array( 'label' => 'Apri la scheda del primo iscritto', 'url' => MI_Portal_Management::url( $event_id, $order_code ) );
+			$actions[] = array( 'label' => 'Apri prenotazione', 'url' => MI_Portal_Management::url( $event_id, $order_code ) );
+			$actions[] = array( 'label' => 'Apri elenco iscritti', 'url' => MI_Portal_Management::url( $event_id ) );
 		}
 		return self::crea_istantanea_istituzionale( $event_id, $subject, 'Una nuova prenotazione è stata registrata.', $body, $text, $actions );
 	}

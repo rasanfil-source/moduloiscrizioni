@@ -18,7 +18,7 @@ function esc_html($v){return htmlspecialchars($v,ENT_QUOTES,'UTF-8');}
 function get_post_status($id){return 'publish';}
 function get_post($id){return (object)['post_type'=>'event','post_status'=>'publish'];}
 function wp_list_pluck($rows,$key){return array_column($rows,$key);}
-function get_post_meta(...$args){return '';}
+function get_post_meta($id,$key,...$args){return $key==='_mi_event_cancellation_job'&&!empty($GLOBALS['cancellation_pending'])?['recipients'=>[]]:'';}
 function wp_next_scheduled(...$args){return false;}
 function wp_schedule_single_event(...$args){if($GLOBALS['fail_schedule'])throw new RuntimeException('cron unavailable');}
 class MI_Event_Post_Type {const EVENT_TYPE='event';}
@@ -88,7 +88,7 @@ class FaultDatabase {
   if(str_contains($sql,'COUNT(*)')){if($this->failure==='people_count'){$this->last_error='injected';return null;}return 1;}
   return 42;
  }
- function insert($table,$data,...$args){if($this->failure==='outbox'&&$table==='wp_mi_email_outbox')return false;$this->writes++;$this->insert_id++;
+ function insert($table,$data,...$args){if($table==='wp_mi_email_outbox'&&strlen($data['template_type'])>40)return false;if($this->failure==='outbox'&&$table==='wp_mi_email_outbox')return false;$this->writes++;$this->insert_id++;
   if($table==='wp_mi_registrations')$this->registration=$data+['id'=>$this->insert_id,'workspace_status'=>'PENDING'];return 1;
  }
  function update($table,$data,...$args){$this->last_error='';$this->writes++;if($table==='wp_mi_registrations')$this->registration=array_replace($this->registration,$data);return 1;}
@@ -139,4 +139,12 @@ foreach(['type_read','candidate_read'] as $failure){
  try{(new ReflectionMethod(MI_Registration_Service::class,'promote_waitlisted_locked'))->invoke(null,42,current_time('mysql'));}catch(RuntimeException $e){$caught=true;}
  check_case($caught&&$wpdb->writes===0,'waitlist promotion rejects '.$failure);
 }
+$GLOBALS['cancellation_pending']=true;$wpdb=new FaultDatabase();
+$result=MI_Registration_Service::create(42,$payload,'synthetic-request-0001',false,'TEST',true);
+check_case(is_wp_error($result)&&$result->code==='mi_event_cancelled'&&$wpdb->writes===0,'pending cancellation blocks new registrations');
+$wpdb->registration=$stored;
+$result=$transition->invoke(null,1,'EXPIRED','SYSTEM_CRON');
+check_case(is_wp_error($result)&&$wpdb->writes===0,'pending cancellation prevents expiry from losing recipients');
+$result=(new ReflectionMethod(MI_Registration_Service::class,'promote_waitlisted_locked'))->invoke(null,42,current_time('mysql'));
+check_case($result===[]&&$wpdb->writes===0,'pending cancellation blocks waitlist promotions');
 exit($failures?1:0);

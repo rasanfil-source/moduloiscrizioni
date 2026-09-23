@@ -1,7 +1,7 @@
 const fs=require('fs'),assert=require('node:assert/strict');
 const {chromium}=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright');
 const assets='wordpress-plugin/modulo-iscrizioni/assets/';
-const template=`<main class="mi-portal"><section class="mi-management" data-mi-management data-endpoint="/ajax" data-nonce="test" data-event="0" data-order=""><h2>Gestione iscrizioni</h2><div class="mi-management-event-selectors"><select data-period-select><option value="current">Eventi attivi</option><option value="past">Eventi passati</option></select><select data-event-select><option value="">Tutti gli eventi</option><option value="42" data-period="current">Pellegrinaggio ad Assisi</option></select></div><div data-event-actions><button data-refresh>Aggiorna riepilogo</button><button data-print>Stampa</button><a data-open-sheet hidden></a><p data-management-status role="status"></p></div><div data-management-content></div></section></main>`;
+const template=`<main class="mi-portal"><section class="mi-management" data-mi-management data-endpoint="/ajax" data-nonce="test" data-event="0" data-order=""><h2>Gestione iscrizioni</h2><div class="mi-management-event-selectors"><select data-period-select><option value="current">Eventi attivi</option><option value="past">Eventi passati</option></select><select data-event-select><option value="">Tutti gli eventi</option><option value="42" data-period="current">Pellegrinaggio ad Assisi</option></select></div><div data-event-actions><button data-refresh>Aggiorna riepilogo</button><button type="button" data-print>Stampa</button><a data-open-sheet hidden></a><p data-management-status role="status"></p></div><div data-management-content></div></section></main>`;
 let removed=false,saves=0,requests=[];
 const options=()=>removed?[]:[{code:'bus-andata',name:'Pullman di andata',quantity:1,unit_price_cents:2500,category:'trasporti'}];
 const detail=()=>({registration_id:1,event_id:42,event_title:'Pellegrinaggio ad Assisi',order_code:'FAMILY',status:'CONFIRMED',version:removed?'v2':'v1',total_cents:removed?60000:62500,paid_cents:42500,balance_cents:removed?17500:20000,is_free_event:false,can_change_options:true,buyer:{email:'',phone:''},fields:[],features:{rooms:true},option_scope:'ALL',option_definitions:[{code:'bus-andata',name:'Pullman di andata',scope:'TICKET',category:'trasporti',price_cents:2500,max_quantity:1}],participants:[{id:1,number:1,first_name:'Raimondo',last_name:'Sanfilippo',status:'ACTIVE',room:'DS1',fields:{},options:[]},{id:2,number:2,first_name:'Gustavo',last_name:'Lora',status:'ACTIVE',room:'DS1',fields:{},options:options()}],individual:{ready:true,quotes_known:true,payments_known:true,people:[{id:1,total:30000,paid:10000,balance:20000,credit:0},{id:2,total:removed?30000:32500,paid:32500,balance:0,credit:removed?2500:0}]}});
@@ -18,6 +18,13 @@ const detail=()=>({registration_id:1,event_id:42,event_title:'Pellegrinaggio ad 
  });
  await page.goto('https://management-demo.invalid/');for(const css of ['portal.css','portal-management.css'])await page.addStyleTag({content:fs.readFileSync(assets+css,'utf8')});await page.addScriptTag({content:fs.readFileSync(assets+'portal-management.js','utf8')});await page.evaluate(()=>document.dispatchEvent(new Event('DOMContentLoaded')));
  await page.locator('[data-all-query]').fill('Gustavo');await page.locator('[data-open]').click();await page.locator('form[data-person="2"]').waitFor();
+ const personalSave=page.locator('form[data-person] button[type="submit"]');
+ assert.ok(await personalSave.isHidden(),'salva nascosto all’apertura');
+ await page.locator('form[data-person] [name="first_name"]').fill('Gustavo modificato');
+ assert.ok(await personalSave.isVisible(),'salva visibile dopo modifica personale');
+ await page.locator('form[data-person] [name="first_name"]').fill('Gustavo');
+ assert.ok(await personalSave.isHidden(),'salva nascosto dopo ripristino');
+ assert.equal(await page.locator('form[data-person][data-unsaved-edit]').count(),0,'ripristino elimina bozza personale');
  assert.match(await page.locator('[aria-label="Importi personali"]').innerText(),/325,00/);assert.doesNotMatch(await page.locator('[aria-label="Importi personali"]').innerText(),/625,00/);
  await page.locator('[data-booking-overview] summary').click();assert.match(await page.locator('[data-booking-overview]').innerText(),/Raimondo/);assert.match(await page.locator('[data-booking-overview]').innerText(),/625,00/);assert.match(await page.locator('[data-booking-overview]').innerText(),/Pullman di andata/);
  await page.locator('[data-person-services-editor] summary').click();await page.locator('[name="option:bus-andata"]').uncheck();await page.getByRole('button',{name:'Verifica e salva servizi'}).click();await page.locator('dialog[open]').waitFor();assert.match(await page.locator('dialog').innerText(),/325,00.*300,00/);assert.match(await page.locator('dialog').innerText(),/25,00/);assert.equal(saves,0);await page.locator('dialog [value=accept]').click();await page.waitForFunction(()=>document.querySelector('[aria-label="Importi personali"]')?.textContent.includes('Credito da restituire'));
@@ -26,5 +33,14 @@ const detail=()=>({registration_id:1,event_id:42,event_title:'Pellegrinaggio ad 
  await page.locator('[data-back]').first().click();await page.locator('[data-all-query]').waitFor();assert.equal(await page.locator('[data-event-select]').inputValue(),'');assert.equal(await page.locator('[data-all-query]').inputValue(),'Gustavo');
  await page.locator('[data-open]').click();await page.locator('[data-booking-overview] summary').click();
  for(const width of [1024,390,320]){await page.setViewportSize({width,height:900});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'overflow '+width);await page.screenshot({path:'.tmp/individual-management-'+width+'.png',fullPage:true});}
- assert.deepEqual(errors,[]);console.log('PASS browser: ricerca unica, quota personale, prenotazione completa, anteprima credito, salvataggio sulla persona corretta, ritorno ai risultati, 320–1024px.');
+ await page.setViewportSize({width:718,height:1047});
+ await page.evaluate(()=>{window.print=()=>{};});await page.locator('[data-print]').click();
+ await page.emulateMedia({media:'print'});
+ for(const selector of ['.mi-management>h2','[data-event-actions]','[data-management-status]','.mi-detail-back','.mi-person-actions','.mi-management-event-selectors']){
+  assert.ok(await page.locator(selector).evaluateAll(elements=>elements.every(e=>getComputedStyle(e).display==='none')),'elementi operativi esclusi: '+selector);
+ }
+ assert.ok(await page.locator('.mi-management').evaluate(e=>e.getBoundingClientRect().height<1047),'prenotazione sintetica su una facciata A4 con margini di 10 mm');
+ assert.ok(await page.locator('.mi-print-value').count()>0,'valori dei campi presenti in stampa');
+ await page.screenshot({path:'.tmp/prenotazione-stampa-compatta.png',fullPage:true});
+ assert.deepEqual(errors,[]);console.log('PASS browser: gestione individuale 320–1024px e stampa compatta senza comandi, navigazione e messaggi operativi.');
 }finally{await browser.close();}})().catch(error=>{console.error(error);process.exitCode=1;});

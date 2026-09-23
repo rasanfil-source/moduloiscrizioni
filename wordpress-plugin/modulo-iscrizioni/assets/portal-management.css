@@ -292,3 +292,32 @@
 @media(max-width:480px){.mi-all-person{align-items:flex-start;flex-wrap:wrap}.mi-booking-overview{padding:12px}}
 
 .mi-event-management__toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:16px 0}.mi-event-management__toolbar>.mi-sheet-button{margin-left:auto}
+.mi-management .mi-person-actions{display:flex;flex-wrap:wrap;align-items:center;gap:12px;width:100%;margin-top:16px}
+.mi-management .mi-person-actions>button{margin:0}
+.mi-management .mi-person-actions>[data-cancel]{margin-left:auto}
+.mi-management .mi-detail-back>[data-back]{border:1px solid #9bbfdf;background:#f5f9fd;color:var(--navy,#17224a)}
+.mi-management .mi-detail-back>[data-back]:hover:not(:disabled){border-color:#689ac5;background:#edf5fc}
+@media(max-width:600px){.mi-management .mi-person-actions>button{width:100%}.mi-management .mi-person-actions>[data-cancel]{margin-left:0}}
+/* Stampa della scheda: solo dati, senza navigazione o messaggi operativi. */
+@media print{
+  .mi-management:not(.mi-printing-list)>h2,
+  .mi-management .mi-management-event-selectors,
+  .mi-management [data-event-actions],
+  .mi-management [data-management-status],
+  .mi-management .mi-detail-back,
+  .mi-management .mi-person-actions,
+  .mi-management [data-booking-print],
+  .mi-management [data-person-services-editor],
+  .mi-management [data-open-sheet],
+  .mi-management [data-refresh],
+  .mi-management form[data-person]>fieldset>p{display:none!important}
+  .mi-management:not(.mi-printing-list){margin:0;padding:0;max-width:none;box-sizing:border-box;font-size:10pt;line-height:1.25}
+  .mi-management:not(.mi-printing-list) form{margin:8px 0}
+  .mi-management:not(.mi-printing-list) fieldset{padding:8px;border-radius:0}
+  .mi-management:not(.mi-printing-list) .mi-management-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 14px}
+  .mi-management:not(.mi-printing-list) label{margin:3px 0;gap:2px;break-inside:avoid}
+  .mi-management:not(.mi-printing-list) :is(h3,h4,p,details){margin-top:6px;margin-bottom:6px}
+  .mi-management:not(.mi-printing-list) .mi-booking-overview{padding:8px}
+  .mi-management:not(.mi-printing-list) .mi-booking-overview section{padding:4px 0}
+  .mi-management:not(.mi-printing-list) .mi-booking-overview h4>button{display:inline!important;border:0;padding:0;min-height:0;background:none;color:inherit;font:inherit}
+}

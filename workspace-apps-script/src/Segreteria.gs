@@ -391,11 +391,12 @@ function leggiVistaOperativaConservata_(idEvento) {
   return { evento: { id: idEvento, titolo: String(metadati.MI_TITOLO_EVENTO || idEvento) }, profilo: String(metadati.MI_PROFILO || ''), nome_profilo: String(metadati.MI_NOME_PROFILO || 'Vista operativa'), personalizzata: String(metadati.MI_PERSONALIZZATA || '') === '1', conservata: true, data_aggiornamento: String(metadati.MI_DATA_AGGIORNAMENTO || ''), colonne: colonne, righe: righe };
 }
 
-function determinaProfiloVistaOperativa_(iscrizioni, partecipanti, profiloEvento) {
+function determinaProfiloVistaOperativa_(iscrizioni, partecipanti, profiloEvento, cache) {
+  const decode=cache?cache.object:decodificaOggetto_,list=cache?cache.list:decodificaElenco_;
   const profiliEspliciti = ['MINIMO', 'QUOTA_UNICA', 'SERVIZI_MULTIPLI', 'VIAGGIO_COMPLESSO'];
   let profiloEsplicito = profiliEspliciti.includes(profiloEvento) ? profiloEvento : '';
   if (!profiloEsplicito) iscrizioni.some(function (riga) {
-    const istantanea = decodificaOggetto_(riga.snapshot_json);
+    const istantanea = decode(riga.snapshot_json);
     const candidato = normalizzaTesto_((istantanea.event || {}).operational_profile, 30).toUpperCase();
     if (profiliEspliciti.indexOf(candidato) < 0) return false;
     profiloEsplicito = candidato;
@@ -403,8 +404,8 @@ function determinaProfiloVistaOperativa_(iscrizioni, partecipanti, profiloEvento
   });
   let haDocumenti = false, haServizi = false;
   partecipanti.forEach(function (riga) {
-    const dati = decodificaOggetto_(riga.dati_aggiuntivi_json);
-    const opzioni = JSON.stringify(decodificaElenco_(riga.opzioni_json)).toLowerCase();
+    const dati = decode(riga.dati_aggiuntivi_json);
+    const opzioni = JSON.stringify(list(riga.opzioni_json)).toLowerCase();
     if (dati.document_number || dati.numero_documento || dati.document_issue_date || dati.data_rilascio_documento || dati.document_expiry_date || dati.scadenza_documento || dati.room || dati.camera || dati.alloggio) haDocumenti = true;
     if (dati.transport || dati.pullman || dati.lunch || dati.pranzo || /pullman|pranzo|colazione|cena/.test(opzioni)) haServizi = true;
   });
@@ -428,7 +429,7 @@ function gruppoCampoVistaOperativa_(chiave) {
   return 'persona';
 }
 
-function campiElencoOperativo_(includiDinamici, partecipantiLetti) {
+function campiElencoOperativo_(includiDinamici, partecipantiLetti, cache) {
   const fields = [
     { key: 'event', label: 'Evento' }, { key: 'order_code', label: 'Codice prenotazione' }, { key: 'participant_number', label: 'N.' }, { key: 'first_name', label: 'Nome' }, { key: 'last_name', label: 'Cognome' }, { key: 'status', label: 'Stato' },
     { key: 'email', label: 'Email' }, { key: 'phone', label: 'Cellulare' }, { key: 'birth_date', label: 'Data di nascita' }, { key: 'document_type', label: 'Tipo documento' }, { key: 'document_number', label: 'Numero documento' }, { key: 'document_issue_date', label: 'Data di rilascio del documento' }, { key: 'document_expiry_date', label: 'Scadenza documento' }, { key: 'nationality', label: 'Nazionalità' }, { key: 'room', label: 'Alloggio' }, { key: 'transport', label: 'Pullman/trasporto' }, { key: 'breakfast', label: 'Colazione' },
@@ -437,7 +438,7 @@ function campiElencoOperativo_(includiDinamici, partecipantiLetti) {
 	if (includiDinamici === false) return fields;
   const known = fields.reduce(function (result, field) { result[field.key] = true; return result; }, {});
   (partecipantiLetti || convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS))).forEach(function (participant) {
-    const data = decodificaOggetto_(participant.dati_aggiuntivi_json);
+    const data = cache?cache.object(participant.dati_aggiuntivi_json):decodificaOggetto_(participant.dati_aggiuntivi_json);
     Object.keys(data).forEach(function (key) {
       if (known[key] || data[key] == null || String(data[key]).trim() === '' || !/^[A-Za-z0-9_-]{1,80}$/.test(key)) return;
       known[key] = true;
@@ -448,17 +449,17 @@ function campiElencoOperativo_(includiDinamici, partecipantiLetti) {
   return fields;
 }
 
-function valoreCampoElenco_(field, event, registration, participant, data, payments) {
+function valoreCampoElenco_(field, event, registration, participant, data, payments, cache) {
   if (field === 'attendance') return ({PRESENT:'Presente',ABSENT:'Assente',UNRECORDED:'Non rilevata'})[data.attendance] || 'Non rilevata';
   if (field === 'status') return etichettaStatoIscrizione_(['CANCELLED', 'CANCELLED_PARTICIPANT'].indexOf(String(participant.stato_partecipante).toUpperCase()) >= 0 ? 'CANCELLED' : registration.stato);
   if (String(field).indexOf('option_')===0) {
-    const option=decodificaElenco_(participant.opzioni_json).find(o=>'option_'+String(o.code)===field);
+    const option=cache?cache.option(participant.opzioni_json,field):decodificaElenco_(participant.opzioni_json).find(o=>'option_'+String(o.code)===field);
     return option ? Number(option.quantity)||0 : 0;
   }
   const aliases = { email: ['participant_email', 'email'], phone: ['participant_phone', 'phone', 'mobile'], birth_date: ['birth_date', 'data_nascita'], document_type: ['document_type', 'tipo_documento'], document_number: ['document_number', 'numero_documento'], document_issue_date: ['document_issue_date', 'data_rilascio_documento', 'data_emissione_documento'], document_expiry_date: ['document_expiry_date', 'document_expiry', 'scadenza_documento'], nationality: ['nationality', 'nazionalita'], room: ['room', 'camera', 'alloggio'], transport: ['pullman', 'transport'], breakfast: ['colazione', 'breakfast'], lunch: ['pranzo', 'lunch'], insurance: ['assicurazione', 'insurance'], emergency_contact: ['emergency_contact', 'emergency_phone', 'contatto_emergenza', 'telefono_emergenza'] };
   const direct = { event: event.titolo || registration.id_evento, order_code: registration.codice_ordine, participant_number: participant.numero_partecipante, first_name: participant.nome, last_name: participant.cognome, status: participant.stato_partecipante || registration.stato, special_requests: registration.richieste_particolari || '' };
   if (Object.prototype.hasOwnProperty.call(direct, field)) return direct[field];
-  if (field === 'options') return decodificaElenco_(participant.opzioni_json).map(function (option) { return option.name || option.label || option.code || ''; }).filter(Boolean).join(', ');
+  if (field === 'options') return (cache?cache.list(participant.opzioni_json):decodificaElenco_(participant.opzioni_json)).map(function (option) { return option.name || option.label || option.code || ''; }).filter(Boolean).join(', ');
   if (['total','paid','paid_cash','paid_transfer','paid_card','balance'].includes(field)) {
     const totals = riepilogoPagamentiIndicizzato_(payments)[String(registration.codice_ordine)] || {};
     const economic = posizioneEconomicaRegistrazione_(registration, totals.total || 0);
@@ -483,6 +484,23 @@ function aggiornaStatoOperativo_(orderCode, participantNumber, key, value, opera
 
 function decodificaOggetto_(value) { try { const parsed = JSON.parse(String(value || '{}')); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; } catch (error) { return {}; } }
 function decodificaElenco_(value) { try { const parsed = JSON.parse(String(value || '[]')); return Array.isArray(parsed) ? parsed : []; } catch (error) { return []; } }
+
+/** Read-only decoding scoped to one generated view, never shared across requests.
+ * Exact JSON is the key: equal revision hashes can still have different snapshots.
+ */
+function creaCacheDecodificaVista_() {
+  const objects=new Map(),lists=new Map(),options=new Map();
+  const object=value=>{const key=String(value||'{}');if(!objects.has(key))objects.set(key,decodificaOggetto_(key));return objects.get(key);};
+  const list=value=>{const key=String(value||'[]');if(!lists.has(key))lists.set(key,decodificaElenco_(key));return lists.get(key);};
+  const option=(value,field)=>{
+    const key=String(value||'[]');
+    if(!options.has(key)){
+      const index=new Map();list(value).forEach(item=>{const name='option_'+String(item.code);if(!index.has(name))index.set(name,item);});options.set(key,index);
+    }
+    return options.get(key).get(field);
+  };
+  return {object:object,list:list,option:option};
+}
 
 /** Economic columns belong to the order, even in a person-based report. */
 function limitaImportiAUnaRigaPerOrdine_(rows, fields) {

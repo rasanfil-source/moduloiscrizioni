@@ -47,8 +47,8 @@ final class MI_Attendance_Report {
 			$detail = json_decode( (string) $row['detail_json'], true ); if ( ! is_array( $detail ) ) continue;
 			$id = (int) ( $detail['participant_id'] ?? 0 );
 			if ( ! isset( $by_id[$id] ) || (int) $by_id[$id]['registration_id'] !== (int) $row['registration_id'] ) continue;
-			if ( 'MANAGEMENT_attendance' === $row['event_type'] ) $attendance[$id] = $detail['attendance'] ?? 'UNRECORDED';
-			if ( 'MANAGEMENT_identity_link' === $row['event_type'] ) $links[$id] = (int) ( $detail['target_id'] ?? 0 );
+			if ( 'management_attendance' === strtolower( $row['event_type'] ) ) $attendance[$id] = $detail['attendance'] ?? 'UNRECORDED';
+			if ( 'management_identity_link' === strtolower( $row['event_type'] ) ) $links[$id] = (int) ( $detail['target_id'] ?? 0 );
 		}
 		// Path halving shortens repeated lookups without changing the chosen identity.
 		$root = static function ( $id ) use ( &$parents ) { while ( $parents[$id] !== $id ) { $parents[$id] = $parents[$parents[$id]]; $id = $parents[$id]; } return $id; };

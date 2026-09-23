@@ -53,7 +53,7 @@ test('large projections are fetched only through the signed WordPress command an
 });
 
 test('an unchanged direct projection does not rewrite the event sheet',()=>{
- const values=new Map(), calls={write:0,payments:0,flush:0};
+ const values=new Map(), calls={write:0,payments:0,flush:0,view:0};
  const props={getProperty:key=>values.get(key)||null,setProperty:(key,value)=>values.set(key,value),deleteProperty:key=>values.delete(key)};
  const book={getId:()=> 'sheet-id',getUrl:()=> 'https://docs.google.com/spreadsheets/d/sheet-id/edit'};
  const context=vm.createContext({
@@ -68,12 +68,33 @@ test('an unchanged direct projection does not rewrite the event sheet',()=>{
  context.aggiornaPagamentiDaProiezione_=()=>{calls.payments++;};
  context.decodificaProiezioneDiretta_=()=>projection;
  context.apriFoglioEventoFirmato_=()=>({book,sheet:{}});
- context.generaVistaDaProiezioneDiretta_=()=>({sola_lettura:true});
+ context.generaVistaDaProiezioneDiretta_=()=>{calls.view++;return {sola_lettura:true};};
  context.decodificaOggetto_=JSON.parse;
  const request={event_id:'42',fingerprint:'revision-three',projection_hash:'hash'};
  const first=context.proiettaEventoDaWordPress_(request);
  assert.equal(first.ready,true);assert.equal(calls.write,1);assert.equal(calls.payments,1);
  const second=context.proiettaEventoDaWordPress_(request);
  assert.equal(second.ready,true);assert.equal(calls.write,1);assert.equal(calls.payments,1);
- assert.equal(values.get('MI_DIRECT_VIEW_sheet-id'),'revision-three');
+ assert.equal(calls.view,1);
+ assert.deepEqual(JSON.parse(values.get('MI_DIRECT_VIEW_sheet-id')),{fingerprint:'revision-three',read_only:true});
+ const measured=context.proiettaEventoDaWordPress_({...request,measure_performance:true});
+ assert.equal(measured.performance.view_built,false);assert.equal(measured.performance.participants,1);
+ assert.equal(Object.hasOwn(second,'performance'),false);
+
+ // Existing installations upgrade their old receipt once, without assuming read-only.
+ values.set('MI_DIRECT_VIEW_sheet-id','revision-three');context.proiettaEventoDaWordPress_(request);
+ assert.equal(calls.view,2);
+ context.modificheCorrentiFoglio_=()=>({changes:[{id:1}],errors:[]});
+ context.scriviProiezioneEvento_=()=>({aggiunte:0,manuali:1,conflitti:0});
+ assert.equal(context.proiettaEventoDaWordPress_(request).ready,false);
+ assert.equal(values.has('MI_DIRECT_VIEW_sheet-id'),false);
+
+ // A failed flush must not publish a ready receipt; a later request retries.
+ context.modificheCorrentiFoglio_=()=>({changes:[],errors:[]});
+ context.scriviProiezioneEvento_=()=>({aggiunte:0,manuali:0,conflitti:0});
+ context.SpreadsheetApp.flush=()=>{throw Error('synthetic flush failure');};
+ assert.throws(()=>context.proiettaEventoDaWordPress_(request),/flush failure/);
+ assert.equal(values.has('MI_DIRECT_VIEW_sheet-id'),false);
+ context.SpreadsheetApp.flush=()=>{};
+ assert.equal(context.proiettaEventoDaWordPress_(request).ready,true);
 });

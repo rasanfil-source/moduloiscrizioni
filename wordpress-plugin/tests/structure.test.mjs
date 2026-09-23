@@ -502,7 +502,7 @@ test('ogni partecipante dispone di annullamento individuale confermato e auditab
   assert.match(portal, /mi_portal_message.*L’annullamento è stato registrato\./);
   assert.match(service, /\$secretariat_recipient = MI_Spedizione_Email::destinatario_evento\( \$event_id \)/);
   assert.match(service, /crea_istantanea_annullamento_partecipazione_segreteria/);
-  assert.match(service, /'template_type' => 'PARTICIPANT_CANCELLATION_SECRETARIAT_NOTIFICATION'/);
+  assert.match(service, /'template_type' => 'PARTICIPANT_CANCEL_SECRETARIAT'/);
   assert.match(service, /MI_Spedizione_Email::stato_nuova_email\( \$secretariat_snapshot \)/);
   assert.match(service, /email_da_spedire\( \$secretariat_email_status \)/);
   const emailModel = await read('includes/class-mi-modello-email.php');
@@ -704,7 +704,7 @@ test('le email fallite possono essere riaccodate con protezione amministrativa',
   const sender = await read('includes/class-mi-spedizione-email.php');
   const admin = await read('includes/class-mi-admin.php');
   assert.match(sender, /admin_post_mi_riaccoda_email/);
-  assert.match(sender, /status IN \('FAILED', 'SENDING', 'TEST_FAILED', 'TEST_SENDING'\)/);
+  assert.match(sender, /WHERE id = %d AND status IN \('FAILED', 'TEST_FAILED'\)/);
   assert.match(sender, /attempts = 0/);
   assert.match(sender, /check_admin_referer/);
   assert.match(admin, /mi_riaccoda_email/);
@@ -1297,7 +1297,8 @@ test('le comunicazioni descrivono il nome dell iscrizione senza chiamarlo refere
   assert.match(emailSender, /Iscrizione a nome di: Persona Esempio/);
   assert.doesNotMatch(emailSender, /Referente: Persona Esempio/);
   assert.match(emailSender, /REGISTRATION_SECRETARIAT_NOTIFICATION[\s\S]*Iscrizione a nome di:/);
-  assert.match(emailModel, /Apri la scheda del primo iscritto/);
+  assert.match(emailModel, /Apri prenotazione/);
+  assert.match(emailModel, /Apri elenco iscritti/);
   assert.match(emailModel, /Se desideri chiarimenti, puoi contattare la segreteria/);
   assert.match(emailModel, /crea_istantanea_annullamento_iscrizione_iscritto/);
   const registrationService = await read('includes/class-mi-registration-service.php');

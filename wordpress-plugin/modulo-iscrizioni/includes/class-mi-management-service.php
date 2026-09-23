@@ -18,8 +18,12 @@ final class MI_Management_Service {
 		$rows = $wpdb->get_results( "SELECT p.id,p.first_name,p.last_name,p.status,r.status AS booking_status,r.order_code,r.event_id,r.created_at,(SELECT COUNT(*) FROM {$wpdb->prefix}mi_participants sibling WHERE sibling.registration_id=r.id AND sibling.id<=p.id) AS number FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE $where ORDER BY p.last_name,p.first_name,r.event_id,p.id LIMIT $offset,31", ARRAY_A );
 		if ( $wpdb->last_error ) return new WP_Error( 'mi_search', 'Ricerca non disponibile.' );
 		$more = count( $rows ) > 30; $rows = array_slice( $rows, 0, 30 );
-		foreach ( $rows as &$row ) $row['event_title'] = html_entity_decode( get_the_title( $row['event_id'] ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		foreach ( $rows as &$row ) $row['event_title'] = self::event_title( $row['event_id'] );
 		return array( 'items' => $rows, 'more' => $more );
+	}
+	/** JSON carries plain text; the browser escapes it when rendering HTML. */
+	private static function event_title( $event_id ) {
+		return html_entity_decode( get_the_title( $event_id ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 	}
 	private static function decode( $value ) {
 		$result = json_decode( (string) $value, true );
@@ -93,7 +97,7 @@ final class MI_Management_Service {
 		}
 		$rooms = self::rooms( (int) $registration['event_id'] );
 		$review = self::request_review( $registration );
-		return array( 'ok' => true, 'registration_id' => (int) $registration['id'], 'event_id' => (int) $registration['event_id'], 'order_code' => $registration['order_code'], 'status' => $registration['status'], 'buyer' => array( 'first_name' => $registration['buyer_first_name'], 'last_name' => $registration['buyer_last_name'], 'email' => $registration['buyer_email'] ?? '', 'phone' => $registration['buyer_phone'] ?? '' ), 'special_requests' => self::visible_special_requests( $registration['special_requests'] ?? '' ), 'order_options' => self::decode( $registration['order_options_json'] ?? '' ), 'workspace_status' => $registration['workspace_status'] ?? '', 'workspace_synced_at' => $registration['workspace_synced_at'] ?? '', 'offer_expires_at' => $registration['waitlist_offer_expires_at'] ?? '', 'participants' => $participants, 'accommodations' => $rooms, 'features' => array( 'rooms' => '1' === get_post_meta( (int) $registration['event_id'], '_mi_overnight', true ) ), 'request_review' => $review, 'fields' => array_values( self::definitions( $registration ) ), 'version' => hash( 'sha256', wp_json_encode( array( $registration['status'], $participants, $rooms, $review, $registration['special_requests'] ?? '', $registration['total_cents'] ?? 0, $registration['initial_due_cents'] ?? 0, $registration['order_options_json'] ?? '', $registration['workspace_revision'] ?? 0 ) ) ) );
+		return array( 'ok' => true, 'registration_id' => (int) $registration['id'], 'event_id' => (int) $registration['event_id'], 'order_code' => $registration['order_code'], 'status' => $registration['status'], 'buyer' => array( 'first_name' => $registration['buyer_first_name'], 'last_name' => $registration['buyer_last_name'], 'email' => $registration['buyer_email'] ?? '', 'phone' => $registration['buyer_phone'] ?? '' ), 'special_requests' => self::visible_special_requests( $registration['special_requests'] ?? '' ), 'order_options' => self::decode( $registration['order_options_json'] ?? '' ), 'workspace_status' => $registration['workspace_status'] ?? '', 'workspace_synced_at' => $registration['workspace_synced_at'] ?? '', 'offer_expires_at' => $registration['waitlist_offer_expires_at'] ?? '', 'participants' => $participants, 'accommodations' => $rooms, 'features' => array( 'rooms' => '1' === get_post_meta( (int) $registration['event_id'], '_mi_overnight_enabled', true ) ), 'request_review' => $review, 'fields' => array_values( self::definitions( $registration ) ), 'version' => hash( 'sha256', wp_json_encode( array( $registration['status'], $participants, $rooms, $review, $registration['special_requests'] ?? '', $registration['total_cents'] ?? 0, $registration['initial_due_cents'] ?? 0, $registration['order_options_json'] ?? '', $registration['workspace_revision'] ?? 0 ) ) ) );
 	}
 	private static function attendance_map( $rows ) {
 		$map = array();
@@ -137,7 +141,7 @@ final class MI_Management_Service {
             foreach ( $booking['option_changes'] as &$option_row ) $option_row['change'] = self::decode( $option_row['detail_json'] );
 			$booking['accommodation_changes'] = $wpdb->get_results( $wpdb->prepare( "SELECT detail_json,actor_label,created_at FROM {$wpdb->prefix}mi_registration_events WHERE registration_id=%d AND event_type='CHANGE_ACCOMMODATION' ORDER BY id DESC", $id ), ARRAY_A ); self::check_database();
 			foreach ( $booking['accommodation_changes'] as &$change_row ) $change_row['change'] = self::decode( $change_row['detail_json'] );
-            $booking['event_title'] = get_the_title( $booking['event_id'] );
+            $booking['event_title'] = self::event_title( $booking['event_id'] );
 			$booking['payment_url'] = ! $booking['is_free_event'] && MI_Portal_Payments::allowed() ? add_query_arg( array( 'mi_portal_view' => 'payments', 'mi_order' => $booking['order_code'] ), MI_Portal::url() ) : '';
 			if ( ! $booking['is_free_event'] && MI_Portal_Payments::allowed() ) { ob_start(); MI_Portal_Payments::render(); $booking['payment_html'] = ob_get_clean(); }
 			return $booking;
@@ -609,9 +613,10 @@ final class MI_Management_Service {
 		return array( 'enabled' => (bool) $enabled, 'starts_at' => $start, 'server_now' => time(), 'available' => $enabled && $start > 0 && time() >= $start );
 	}
 
-	public static function save_attendance_bulk( $event_id, $items ) {
+	public static function save_attendance_bulk( $event_id, $items, $request_id = '' ) {
 		global $wpdb;
 		if ( ! MI_Portal_Management::allowed() || ! MI_Access::can_access_event( $event_id ) ) return new WP_Error( 'mi_attendance_access', 'Evento non accessibile.' );
+		if ( ! preg_match( '/^wp_' . get_current_user_id() . '_[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', $request_id ) ) return new WP_Error( 'mi_attendance_request', 'Identificativo non valido. Ricarica e riprova.' );
 		if ( ! self::attendance_availability( $event_id )['available'] ) return new WP_Error( 'mi_attendance_start', 'Le presenze si registrano dall’inizio dell’evento, per i gruppi che le richiedono.' );
 		$group_id = absint( get_post_meta( $event_id, '_mi_activity_id', true ) );
 		if ( ! $group_id || '1' !== get_post_meta( $group_id, '_mi_annual_attendance_report', true ) ) return new WP_Error( 'mi_attendance_disabled', 'La registrazione delle presenze non è attiva per questo gruppo.' );
@@ -623,17 +628,25 @@ final class MI_Management_Service {
 			if ( ! $id || ! in_array( $state, array( 'UNRECORDED', 'PRESENT', 'ABSENT' ), true ) ) return new WP_Error( 'mi_attendance_bulk', 'Presenza non valida.' );
 			$normalized[$id] = $state;
 		}
+		ksort( $normalized, SORT_NUMERIC );
+		$hash = hash( 'sha256', wp_json_encode( array( 'attendance_bulk', absint( $event_id ), $normalized ) ) );
 		$ids = implode( ',', array_map( 'absint', array_keys( $normalized ) ) );
-		$rows = $wpdb->get_results( "SELECT p.id,p.registration_id FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE p.id IN ({$ids}) AND p.status='ACTIVE' AND r.event_id=" . absint( $event_id ) . " AND r.status IN ('CONFIRMED','PENDING_PAYMENT')", ARRAY_A );
-		self::check_database();
-		if ( count( $rows ) !== count( $normalized ) ) return new WP_Error( 'mi_attendance_bulk', 'Una o più persone non sono più disponibili. Aggiorna l’elenco.' );
 		try {
 			if ( false === $wpdb->query( 'START TRANSACTION' ) ) throw new RuntimeException( 'Registro non disponibile.' );
+			self::lock_room_event( $event_id );
+			$previous = $wpdb->get_row( $wpdb->prepare( "SELECT request_hash FROM {$wpdb->prefix}mi_management_requests WHERE request_id=%s", $request_id ), ARRAY_A );
+			self::check_database();
+			if ( $previous ) {
+				if ( ! hash_equals( $previous['request_hash'], $hash ) ) throw new InvalidArgumentException( 'Identificativo già utilizzato con dati diversi.' );
+				if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma non ricevuta.' );
+				return array( 'ok' => true, 'saved' => true, 'replayed' => true, 'count' => count( $normalized ), 'message' => 'Presenze già registrate.' );
+			}
 			$rows = $wpdb->get_results( "SELECT p.id,p.registration_id FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE p.id IN ({$ids}) AND p.status='ACTIVE' AND r.event_id=" . absint( $event_id ) . " AND r.status IN ('CONFIRMED','PENDING_PAYMENT') ORDER BY r.id,p.id FOR UPDATE", ARRAY_A );
 			self::check_database();
 			if ( count( $rows ) !== count( $normalized ) ) throw new RuntimeException( 'Partecipanti cambiati. Aggiorna l’elenco.' );
 			foreach ( $rows as $row ) if ( ! MI_Registration_Service::append_registration_event( (int) $row['registration_id'], 'MANAGEMENT_attendance', '', '', 'WP#' . get_current_user_id(), array( 'participant_id' => (int) $row['id'], 'attendance' => $normalized[(int) $row['id']] ) ) ) throw new RuntimeException( 'Presenza non registrata.' );
 			foreach ( array_unique( array_column( $rows, 'registration_id' ) ) as $registration_id ) MI_Registration_Service::mark_workspace_changed_locked( (int) $registration_id );
+			if ( false === $wpdb->insert( $wpdb->prefix . 'mi_management_requests', array( 'request_id' => $request_id, 'event_id' => $event_id, 'registration_id' => 0, 'request_hash' => $hash, 'actor_id' => get_current_user_id(), 'created_at' => current_time( 'mysql', true ) ) ) ) throw new RuntimeException( 'Richiesta non registrata.' );
 			if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma delle presenze non disponibile.' );
 		} catch ( Throwable $error ) { $wpdb->query( 'ROLLBACK' ); return new WP_Error( 'mi_attendance_bulk', $error->getMessage() ); }
 		foreach ( array_unique( array_column( $rows, 'registration_id' ) ) as $registration_id ) { try { MI_Registration_Service::accoda_iscrizione_workspace( (int) $registration_id ); } catch ( Throwable $error ) { /* Persistent replica queue retains the change. */ } }
@@ -775,7 +788,7 @@ final class MI_Management_Service {
 					if ( false === $wpdb->update( $wpdb->prefix . 'mi_participants', array( 'room_code' => $assignment['room'], 'extra_json' => wp_json_encode( $assignment['fields'] ) ), array( 'id' => $person_id ) ) ) throw new RuntimeException( 'Assegnazioni non salvate.' );
 				}
 				if ( false === $wpdb->update( $wpdb->prefix . 'mi_registrations', $option_change['changes'], array( 'id' => $id ) ) ) throw new RuntimeException( 'Importi non aggiornati.' );
-				foreach ( $option_change['deposits'] as $person_id => $deposit ) if ( false === $wpdb->update( $wpdb->prefix . 'mi_participants', array( 'deposit_due_cents' => $deposit ), array( 'id' => $person_id ) ) ) throw new RuntimeException( 'Caparre non aggiornate.' );
+				foreach ( $option_change['deposits'] as $person_id => $deposit ) if ( false === $wpdb->update( $wpdb->prefix . 'mi_participants', array( 'deposit_due_cents' => $deposit ), array( 'id' => $person_id, 'registration_id' => $id ) ) ) throw new RuntimeException( 'Caparre non aggiornate.' );
 			} elseif ( 'identity_link' === $operation ) {
 				$person = array_column( $booking['participants'], null, 'id' )[$data['participant_id'] ?? 0] ?? null;
 				if ( ! $person || ! is_int( $data['target_id'] ?? null ) || $data['target_id'] < 0 ) throw new InvalidArgumentException( 'Collegamento personale non valido.' );
@@ -812,7 +825,7 @@ final class MI_Management_Service {
 					$changes['expires_at'] = $deadline;
 					if ( null !== $deadline ) $changes['payment_deadline_at'] = $deadline;
 				}
-				foreach ( $deposits as $pid => $deposit ) if ( false === $wpdb->update( $wpdb->prefix . 'mi_participants', array( 'deposit_due_cents' => $deposit ), array( 'id' => $pid ) ) ) throw new RuntimeException( 'Caparra non aggiornata.' );
+				foreach ( $deposits as $pid => $deposit ) if ( false === $wpdb->update( $wpdb->prefix . 'mi_participants', array( 'deposit_due_cents' => $deposit ), array( 'id' => $pid, 'registration_id' => $id ) ) ) throw new RuntimeException( 'Caparra non aggiornata.' );
 				$adjustment['participant_id'] = $person_id; $adjustment['person_delta'] = $delta;
 				if ( false === $wpdb->update( $wpdb->prefix . 'mi_registrations', $changes, array( 'id' => $id ) ) ) throw new RuntimeException( 'Rettifica non salvata.' );
 			} elseif ( 'attendance' === $operation ) {

@@ -300,6 +300,7 @@ final class MI_Registration_Service {
 			return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'workspace_status' => $workspace_status, 'economic_summary' => self::riepilogo_salvato( $existing ), 'replayed' => true );
 		}
 
+		if ( get_post_meta( $event_id, '_mi_event_cancellation_job', true ) || get_post_meta( $event_id, '_mi_event_cancelled_at', true ) ) return new WP_Error( 'mi_event_cancelled', 'Evento in annullamento o annullato.', array( 'status' => 409 ) );
 		$event = self::public_event( $event_id, (bool) $allow_unpublished );
 		if ( is_wp_error( $event ) ) {
 			return $event;
@@ -1008,7 +1009,7 @@ final class MI_Registration_Service {
 				$secretariat_snapshot = MI_Modello_Email::crea_istantanea_annullamento_partecipazione_segreteria( $event_id, trim( $participant['first_name'] . ' ' . $participant['last_name'] ), $registration['order_code'] );
 				$secretariat_email_status = MI_Spedizione_Email::stato_nuova_email( $secretariat_snapshot );
 				$secretariat_payload = wp_json_encode( array( 'event_title' => get_the_title( $event_id ), 'order_code' => $registration['order_code'], 'status' => 'CANCELLED', 'participant_id' => $participant_id, 'email_preview' => $secretariat_snapshot ) );
-				if ( false === $secretariat_payload || false === $wpdb->insert( $outbox, array( 'registration_id' => $registration['id'], 'recipient' => $secretariat_recipient, 'template_type' => 'PARTICIPANT_CANCELLATION_SECRETARIAT_NOTIFICATION', 'payload_json' => $secretariat_payload, 'status' => $secretariat_email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) throw new RuntimeException( 'Notifica di annullamento alla segreteria non salvata.' );
+				if ( false === $secretariat_payload || false === $wpdb->insert( $outbox, array( 'registration_id' => $registration['id'], 'recipient' => $secretariat_recipient, 'template_type' => 'PARTICIPANT_CANCEL_SECRETARIAT', 'payload_json' => $secretariat_payload, 'status' => $secretariat_email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) throw new RuntimeException( 'Notifica di annullamento alla segreteria non salvata.' );
 			}
 			$promoted = in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLIST_OFFERED' ), true ) ? self::promote_waitlisted_locked( $event_id, $now ) : array();
 			if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma non ricevuta.' );
@@ -1048,6 +1049,7 @@ final class MI_Registration_Service {
 				throw new RuntimeException( 'Iscrizione non annullabile.' );
 			}
 			if ( 'EXPIRED' === $target_status ) {
+				if ( get_post_meta( (int) $registration['event_id'], '_mi_event_cancellation_job', true ) ) throw new RuntimeException( 'Annullamento evento in corso.' );
 				$coverage = self::payment_coverage( $registration );
 				if ( $coverage['covered'] ) {
 					if ( false === $wpdb->update( $registrations, array( 'status' => 'CONFIRMED', 'expires_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_status_changed' ), array( 'id' => $registration_id ), array( '%s', '%s', '%s', '%s' ), array( '%d' ) ) ) throw new RuntimeException( 'Stato pagamento non aggiornato.' );
@@ -1122,6 +1124,7 @@ final class MI_Registration_Service {
 			if ( class_exists( 'MI_Management_Service' ) ) MI_Management_Service::lock_room_event( $room_event_id );
 			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$registrations} WHERE id=%d FOR UPDATE", $registration_id ), ARRAY_A );
 			if ( ! $row || 'WAITLIST_OFFERED' !== $row['status'] ) throw new RuntimeException( 'Proposta non disponibile.' );
+			if ( get_post_meta( (int) $row['event_id'], '_mi_event_cancellation_job', true ) ) throw new RuntimeException( 'Annullamento evento in corso.' );
 			if ( ! $system_expiry && ( ! preg_match( '/^[a-f0-9]{64}$/', (string) $token ) || ! hash_equals( (string) $row['waitlist_offer_token_hash'], hash( 'sha256', (string) $token ) ) ) ) throw new RuntimeException( 'Collegamento non valido.' );
 			$expires_at = ! empty( $row['waitlist_offer_expires_at'] ) ? strtotime( $row['waitlist_offer_expires_at'] . ' UTC' ) : false;
 			if ( 'EXPIRE' === $decision && $expires_at && $expires_at > time() ) throw new RuntimeException( 'Proposta non ancora scaduta.' );
@@ -1201,6 +1204,7 @@ final class MI_Registration_Service {
 	}
 
 	private static function promote_waitlisted_locked( $event_id, $now ) {
+		if ( get_post_meta( $event_id, '_mi_event_cancellation_job', true ) || get_post_meta( $event_id, '_mi_event_cancelled_at', true ) ) return array();
 		global $wpdb;
 		$registrations = $wpdb->prefix . 'mi_registrations';
 		$participants = $wpdb->prefix . 'mi_participants';
@@ -1395,7 +1399,7 @@ final class MI_Registration_Service {
 			$remaining[ $item['code'] ] = (int) $item['quantity'];
 			$seen_indexes[ $item['code'] ] = array();
 		}
-		foreach ( $raw_participants as $participant_position => $raw ) {
+		foreach ( array_values( $raw_participants ) as $participant_position => $raw ) {
 			if ( ! is_array( $raw ) ) {
 				return new WP_Error( 'mi_participant_invalid', 'Controlla i dati dei partecipanti.', array( 'status' => 400 ) );
 			}
@@ -1541,13 +1545,14 @@ final class MI_Registration_Service {
 	}
 
 	private static function validate_buyer( $raw ) {
+		if ( ! is_array( $raw ) ) return new WP_Error( 'mi_buyer_invalid', 'Controlla le informazioni di contatto.', array( 'status' => 400 ) );
 		$buyer = array(
 			'first_name' => sanitize_text_field( $raw['first_name'] ?? '' ),
 			'last_name'  => sanitize_text_field( $raw['last_name'] ?? '' ),
 			'email'      => sanitize_email( $raw['email'] ?? '' ),
 			'phone'      => MI_Field_Schema::normalize_phone( $raw['phone'] ?? '' ),
 		);
-		if ( ! $buyer['first_name'] || ! $buyer['last_name'] || ( $buyer['email'] && ! is_email( $buyer['email'] ) ) || ! preg_match( '/^\+[1-9][0-9().\s-]{6,30}$/', $buyer['phone'] ) ) {
+		if ( ! $buyer['first_name'] || ! $buyer['last_name'] || mb_strlen( $buyer['first_name'] ) > 80 || mb_strlen( $buyer['last_name'] ) > 80 || ( $buyer['email'] && ! is_email( $buyer['email'] ) ) || ! preg_match( '/^\+[1-9][0-9().\s-]{6,30}$/', $buyer['phone'] ) ) {
 			return new WP_Error( 'mi_buyer_invalid', 'Controlla le informazioni di contatto.', array( 'status' => 400 ) );
 		}
 		return $buyer;
