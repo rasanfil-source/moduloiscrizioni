@@ -10,6 +10,7 @@ test('view decoding preserves results, parses each JSON once and does not retain
  assert.equal(JSON.stringify(actual),JSON.stringify(expected));
  assert.equal(JSON.stringify(projection),before);
  assert.ok(cached.parses()<plain.parses()/4,`${cached.parses()} vs ${plain.parses()} parses`);
+ assert.deepEqual(actual.righe.slice(0,3).map(row=>row.valori.participant_number),[1,2,3]);
  projection.participants[0].dati_aggiuntivi_json='{"custom_test":"Changed"}';
  assert.equal(cached.context.generaVistaDaProiezioneDiretta_(projection).righe[0].valori.custom_test,'Changed');
 });

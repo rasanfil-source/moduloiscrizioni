@@ -13,7 +13,7 @@ const free={fields:[{key:'birth_date',label:'Data di nascita'},{key:'custom_food
 test('free event with birth date does not inherit travel columns, even empty or with a saved view',()=>{
  const {c}=fixture(free);
  for(const view of [c.generaVistaOperativaIniziale_('42','12 ceste','VIAGGIO_COMPLESSO'),c.generaVistaOperativaEvento_('42')]) {
-  assert.deepEqual(Array.from(view.colonne,x=>x.key),['last_name','first_name','phone','birth_date','custom_food']);
+  assert.deepEqual(Array.from(view.colonne,x=>x.key),['participant_number','last_name','first_name','phone','birth_date','custom_food']);
   assert.equal(view.sola_lettura,true);
  }
 });

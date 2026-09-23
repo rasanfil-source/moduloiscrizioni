@@ -2,6 +2,10 @@
 function campoModificabileFoglio_(key) {
   return /^[a-z][a-z0-9_-]{0,79}$/.test(key) && !String(key).startsWith('option_') && !['_ordine','_numero','event','order_code','participant_number','status','options','total','paid','paid_cash','paid_transfer','paid_card','balance','special_requests','attendance','constructor','prototype'].includes(key);
 }
+/** Valori di presentazione modificabili nel foglio, ma non inviati a WordPress. */
+function campoLocaleFoglio_(key) {
+  return key === 'participant_number';
+}
 function aggiungiColonneServizi_(columns, options) {
   (Array.isArray(options)?options:[]).forEach(option=>{
     if (option.scope!=='TICKET' || !/^[a-z0-9_-]{1,64}$/.test(String(option.code))) return;
@@ -21,6 +25,7 @@ function confrontaModificheFoglio_(base, current) {
       if (!Object.prototype.hasOwnProperty.call(row.values, key)) { errors.push('Colonna mancante: ' + key); return; }
       const before = String(original[key] ?? ''), after = String(row.values[key] ?? '');
       if (before !== after) {
+        if (campoLocaleFoglio_(key)) return;
         if (!campoModificabileFoglio_(key)) errors.push('Colonna non modificabile: ' + key);
         else changes.push({order_code:String(row.order),number:Number(row.number),key:key,before:before,after:after});
       }

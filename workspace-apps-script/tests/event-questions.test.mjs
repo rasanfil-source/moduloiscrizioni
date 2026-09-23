@@ -26,7 +26,7 @@ test('initial and saved event sheets include every question and preserve blank o
  assert.deepEqual(Array.from(initial.colonne.slice(-3),f=>f.label),fields.map(f=>f.label));
  const view=c.generaVistaOperativaEvento_('1');
  assert.equal(view.righe.length,2);
- assert.deepEqual(Array.from(view.colonne,c=>c.key),['first_name',...fields.map(f=>f.key)]);
+ assert.deepEqual(Array.from(view.colonne,c=>c.key),['participant_number','first_name',...fields.map(f=>f.key)]);
  assert.equal(view.righe[0].valori.custom_required,'Sì');
  assert.equal(view.righe[0].valori.custom_optional,'Pane');
  assert.equal(view.righe[1].valori.custom_optional,'');

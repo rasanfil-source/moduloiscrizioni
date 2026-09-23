@@ -314,13 +314,15 @@ function generaVistaOperativaEvento_(idEvento, campiForzati) {
   if (partecipanti.some(p=>['PRESENT','ABSENT','UNRECORDED'].includes(decodificaOggetto_(p.dati_aggiuntivi_json).attendance)) && !colonne.some(c=>c.key==='attendance')) colonne.push({key:'attendance',label:'Presenza effettiva',gruppo:'persona',comprimibile:false});
   iscrizioni.forEach(r=>{const snapshot=decodificaOggetto_(r.snapshot_json);aggiungiColonneServizi_(colonne, (snapshot.event||{}).options||[]);});
   applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, pagamenti);
+  anteponiColonnaProgressiva_(colonne);
   const ordiniEconomici = new Set();
-  const righe = partecipanti.map(function (partecipante) {
+  const righe = partecipanti.map(function (partecipante, indicePartecipante) {
     const iscrizione = iscrizioniPerCodice[String(partecipante.codice_ordine)];
     const numero = Number(partecipante.numero_partecipante) || 0;
     const dati = datiOperativiPartecipante_(partecipante, statoOperativo[String(partecipante.codice_ordine) + '|' + numero] || {});
     const valori = {};
     colonne.forEach(function (colonna) { valori[colonna.key] = valoreCampoElenco_(colonna.key, evento, iscrizione, partecipante, dati, pagamenti); });
+    if (Object.prototype.hasOwnProperty.call(valori, 'participant_number')) valori.participant_number = indicePartecipante + 1;
     const personale={total:'totale_centesimi',paid:'versato_centesimi',balance:'saldo_centesimi'};
     Object.keys(personale).forEach(key=>{
       const amount=partecipante[personale[key]];
@@ -447,6 +449,14 @@ function campiElencoOperativo_(includiDinamici, partecipantiLetti, cache) {
     });
   });
   return fields;
+}
+
+/** Il numero mostrato è quello dell'elenco, non quello interno alla prenotazione. */
+function anteponiColonnaProgressiva_(colonne) {
+  const indice = colonne.findIndex(function (colonna) { return colonna.key === 'participant_number'; });
+  const colonna = indice >= 0 ? colonne.splice(indice, 1)[0] : { key: 'participant_number', label: 'N.', gruppo: 'persona', comprimibile: false };
+  colonna.label = 'N.';
+  colonne.unshift(colonna);
 }
 
 function valoreCampoElenco_(field, event, registration, participant, data, payments, cache) {

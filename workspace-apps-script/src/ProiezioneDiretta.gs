@@ -47,10 +47,12 @@ function generaVistaDaProiezioneDiretta_(projection) {
   aggiungiColonneServizi_(colonne,decodificaElenco_(evento.servizi_json));
   aggiungiColonneDomande_(colonne,evento,iscrizioni,attive,cache);
   applicaSchemaColonneEvento_(colonne,evento,iscrizioni,attive,pagamenti,cache);
+  anteponiColonnaProgressiva_(colonne);
   const ordiniEconomici=new Set();
-  const righe=attive.map(persona=>{
+  const righe=attive.map((persona,indice)=>{
     const iscrizione=iscrizioniPerCodice[String(persona.codice_ordine)], dati=cache.object(persona.dati_aggiuntivi_json), valori={};
     colonne.forEach(colonna=>valori[colonna.key]=valoreCampoElenco_(colonna.key,evento,iscrizione,persona,dati,pagamenti,cache));
+    if(Object.prototype.hasOwnProperty.call(valori,'participant_number'))valori.participant_number=indice+1;
     const personale={total:'totale_centesimi',paid:'versato_centesimi',balance:'saldo_centesimi'};
     Object.keys(personale).forEach(key=>{const amount=persona[personale[key]];if(amount!==''&&amount!=null&&Number.isFinite(Number(amount)))valori[key]=Number(amount)/100;else if(ordiniEconomici.has(String(persona.codice_ordine)))valori[key]='';});
     if(ordiniEconomici.has(String(persona.codice_ordine)))['paid_cash','paid_transfer','paid_card'].forEach(key=>valori[key]='');
@@ -116,7 +118,7 @@ function proiettaEventoDaWordPress_(payload) {
     abilitaLetturaFoglioEventoConLink_(opened.book.getId());
     const pending=modificheCorrentiFoglio_(opened.sheet);
     let result={aggiunte:0,manuali:pending.changes.length,conflitti:pending.errors.length};
-    const changed=!receipt||receipt.fingerprint!==fingerprint||typeof receipt.read_only!=='boolean'||pending.changes.length||pending.errors.length;
+    const changed=!receipt||receipt.fingerprint!==fingerprint||receipt.layout_version!==2||typeof receipt.read_only!=='boolean'||pending.changes.length||pending.errors.length;
     timings.inspect_ms=Date.now()-lockedAt;
     const viewStarted=Date.now(),view=changed?generaVistaDaProiezioneDiretta_(projection):null;
     const readOnly=view?view.sola_lettura===true:receipt.read_only;
@@ -130,7 +132,7 @@ function proiettaEventoDaWordPress_(payload) {
     }
     SpreadsheetApp.flush();
     const complete=!result.manuali&&!result.conflitti;
-    if(changed&&complete)properties.setProperty(key,JSON.stringify({fingerprint:fingerprint,read_only:readOnly}));
+    if(changed&&complete)properties.setProperty(key,JSON.stringify({fingerprint:fingerprint,read_only:readOnly,layout_version:2}));
     timings.write_ms=Date.now()-writeStarted;timings.lock_ms=Date.now()-lockedAt;timings.total_ms=Date.now()-started;
     const response={ok:true,ready:complete,event_sheet_complete:complete,read_only:readOnly,id_foglio:opened.book.getId(),url_foglio:complete?opened.book.getUrl():undefined,creato:opened.created,projection_hash:String(payload.projection_hash||''),fingerprint:fingerprint,event_schema:decodificaOggetto_(projection.event.schema_vista_json),operational_profile:String(projection.event.profilo_operativo||''),esito:result};
     if((payload||{}).measure_performance===true)response.performance=Object.assign(timings,{view_built:Boolean(changed),registrations:projection.registrations.length,participants:projection.participants.length,payments:projection.payments.length});

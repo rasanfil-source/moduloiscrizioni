@@ -1,5 +1,8 @@
+param([string]$Version = '3.26.155')
 $ErrorActionPreference = 'Stop'
-$version = '3.26.155'
+$version = $Version
+$bootstrap = Get-Content -LiteralPath 'wordpress-plugin/modulo-iscrizioni/modulo-iscrizioni.php' -Raw
+if ($bootstrap -notmatch ('Version:\s*' + [regex]::Escape($version))) { throw 'La versione richiesta non coincide con il plugin.' }
 $source = (Resolve-Path 'wordpress-plugin/modulo-iscrizioni').Path
 $dist = (Resolve-Path 'dist').Path
 $destination = Join-Path $dist "modulo-iscrizioni-$version.zip"
