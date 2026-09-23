@@ -76,7 +76,7 @@ test('an unchanged direct projection does not rewrite the event sheet',()=>{
  const second=context.proiettaEventoDaWordPress_(request);
  assert.equal(second.ready,true);assert.equal(calls.write,1);assert.equal(calls.payments,1);
  assert.equal(calls.view,1);
- assert.deepEqual(JSON.parse(values.get('MI_DIRECT_VIEW_sheet-id')),{fingerprint:'revision-three',read_only:true});
+ assert.deepEqual(JSON.parse(values.get('MI_DIRECT_VIEW_sheet-id')),{fingerprint:'revision-three',read_only:true,layout_version:2});
  const measured=context.proiettaEventoDaWordPress_({...request,measure_performance:true});
  assert.equal(measured.performance.view_built,false);assert.equal(measured.performance.participants,1);
  assert.equal(Object.hasOwn(second,'performance'),false);

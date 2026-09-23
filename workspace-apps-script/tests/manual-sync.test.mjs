@@ -16,6 +16,13 @@ test('svuotare una cella è una modifica; cancellare una riga o alterare importi
  assert.equal(c.confrontaModificheFoglio_(base,changed.slice(0,1)).errors.length,1);
  assert.equal(c.confrontaModificheFoglio_(base,[...rows(),rows()[0]]).errors.length,1);
 });
+test('il progressivo visibile resta locale e non genera modifiche da inviare',()=>{
+ const numberedBase={'["MI-1",1]':{participant_number:'1',first_name:'Anna'}};
+ const result=c.confrontaModificheFoglio_(numberedBase,[{order:'MI-1',number:1,values:{participant_number:'12',first_name:'Anna'}}]);
+ assert.equal(result.changes.length,0);assert.equal(result.errors.length,0);
+ assert.equal(c.campoLocaleFoglio_('participant_number'),true);
+ assert.equal(c.campoLocaleFoglio_('_numero'),false);
+});
 
 test('una replica conferma soltanto celle coincidenti e conserva una modifica successiva',()=>{
  const stored=[['MI-1',1,JSON.stringify({first_name:'Anna',room:'A'})]];

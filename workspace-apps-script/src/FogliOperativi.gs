@@ -151,6 +151,7 @@ function generaVistaOperativaIniziale_(idEvento, titolo, profiloRichiesto) {
 	aggiungiColonneDomande_(colonne, evento, [], []);
 	aggiungiColonneServizi_(colonne, decodificaElenco_(evento.servizi_json));
 	applicaSchemaColonneEvento_(colonne, evento, [], [], []);
+	anteponiColonnaProgressiva_(colonne);
 	return { evento: { id: idEvento, titolo: titolo || idEvento }, sola_lettura: vistaEventoSolaLettura_(evento, colonne), profilo: profilo, nome_profilo: profilo, personalizzata: false, conservata: false, colonne: colonne, righe: [] };
 }
 

@@ -26,10 +26,25 @@ test('append, removal, empty event and manual row order keep identities and base
   const f=fixture(),c=f.context(),v=view();c.scriviProiezioneEvento_(f.sheet,v);
   [f.sheet.cells[1],f.sheet.cells[3]]=[f.sheet.cells[3],f.sheet.cells[1]];
   const next=view(4);c.scriviProiezioneEvento_(f.sheet,next);
-  assert.deepEqual(f.sheet.cells.slice(1,5).map(r=>r[3]),['ORD2','ORD1','ORD0','ORD3']);
+  assert.deepEqual(f.sheet.cells.slice(1,5).map(r=>r[4]),['ORD2','ORD1','ORD0','ORD3']);
   next.righe=next.righe.filter(r=>r.codice_ordine!=='ORD1');c.scriviProiezioneEvento_(f.sheet,next);
   assert.equal(f.sheet.getLastRow(),4);assert.equal(c.modificheCorrentiFoglio_(f.sheet).errors.length,0);
   c.scriviProiezioneEvento_(f.sheet,view(0));assert.equal(f.sheet.getLastRow(),1);assert.equal(c.modificheCorrentiFoglio_(f.sheet).errors.length,0);
+});
+test('the visible number is local, stays editable and appends from the preceding row',()=>{
+  const f=fixture(),c=f.context(),v=view();
+  v.colonne.unshift({key:'participant_number',label:'N.'});
+  v.righe.forEach((row,index)=>row.valori.participant_number=index+1);
+  c.scriviProiezioneEvento_(f.sheet,v);
+  assert.ok(f.sheet.editable.some(range=>range.col===1));
+  f.sheet.cells[1][0]=7;f.sheet.cells[2][0]=8;f.sheet.cells[3][0]=9;
+  const pending=c.modificheCorrentiFoglio_(f.sheet);
+  assert.equal(pending.initialized,true);assert.equal(pending.changes.length,0);assert.equal(pending.errors.length,0);
+  const next=view(4);next.colonne.unshift({key:'participant_number',label:'N.'});
+  next.righe.forEach((row,index)=>row.valori.participant_number=index+1);
+  c.scriviProiezioneEvento_(f.sheet,next);
+  assert.deepEqual(f.sheet.cells.slice(1,5).map(row=>row[0]),[7,8,9,10]);
+  assert.deepEqual(f.sheet.cells.slice(1,5).map(row=>row[4]),['ORD0','ORD1','ORD2','ORD3']);
 });
 for(const failure of ['clear','data','base'])test('a new execution resumes an interrupted '+failure+' write without false manual conflicts',()=>{
   const f=fixture(),v=view();let c=f.context();c.scriviProiezioneEvento_(f.sheet,v);

@@ -24,19 +24,26 @@ function estendiGrigliaProiezione_(sheet,rows,columns) {
 }
 /** Preserve user column/row order when the schema and participant identities allow it. */
 function pianoProiezioneIncrementale_(vista,mappa,correnti,intestazioni) {
-  const canoniche=[{key:'_numero',label:'Partecipante'}].concat(vista.colonne,[{key:'_ordine',label:'Prenotazione'}]);
-  const keys=Object.keys(mappa), same=keys.length===canoniche.length && canoniche.every(c=>mappa[c.key]>=1 && mappa[c.key]<=canoniche.length);
+  const dichiarate=vista.colonne.filter(c=>c.key!=='participant_number');
+  const canoniche=[{key:'participant_number',label:'N.',gruppo:'persona',comprimibile:false}].concat(dichiarate,[{key:'_numero',label:'Partecipante interno'},{key:'_ordine',label:'Prenotazione'}]);
+  const keys=Object.keys(mappa), same=keys.length===canoniche.length && canoniche.every((c,i)=>mappa[c.key]===i+1);
   const columns=same?canoniche.slice().sort((a,b)=>mappa[a.key]-mappa[b.key]):canoniche;
   const schemaChanged=!same;
   const order=columns.findIndex(c=>c.key==='_ordine'), number=columns.findIndex(c=>c.key==='_numero');
+  const progressive=columns.findIndex(c=>c.key==='participant_number');
   const identity=row=>JSON.stringify([String(row[order]),Number(row[number])]);
-  const incoming=vista.righe.map(r=>columns.map(c=>c.key==='_numero'?r.numero_partecipante:c.key==='_ordine'?r.codice_ordine:typeof r.valori[c.key]==='number'&&Number.isFinite(r.valori[c.key])?r.valori[c.key]:neutralizzaFormula_(r.valori[c.key],5000)));
+  const incoming=vista.righe.map((r,i)=>columns.map(c=>c.key==='_numero'?r.numero_partecipante:c.key==='_ordine'?r.codice_ordine:c.key==='participant_number'?i+1:typeof r.valori[c.key]==='number'&&Number.isFinite(r.valori[c.key])?r.valori[c.key]:neutralizzaFormula_(r.valori[c.key],5000)));
   let rows=incoming;
   if(same){
     const remaining=new Map(incoming.map(row=>[identity(row),row]));
-    rows=[];
-    correnti.forEach(row=>{const key=identity(row);if(remaining.has(key)){rows.push(remaining.get(key));remaining.delete(key);}});
-    remaining.forEach(row=>rows.push(row));
+    rows=[];let precedente=0;
+    correnti.forEach(row=>{
+      const key=identity(row);if(!remaining.has(key))return;
+      const aggiornato=remaining.get(key);
+      if(progressive>=0){const corrente=Number(row[progressive]);aggiornato[progressive]=Number.isSafeInteger(corrente)&&corrente>0?corrente:precedente+1;precedente=Number(aggiornato[progressive]);}
+      rows.push(aggiornato);remaining.delete(key);
+    });
+    remaining.forEach(row=>{if(progressive>=0){row[progressive]=precedente+1;precedente=Number(row[progressive]);}rows.push(row);});
   }
   return {columns:columns,rows:rows,structural:schemaChanged,header:columns.map(c=>c.label),
     header_changed:schemaChanged||!righeProiezioneUguali_(intestazioni,columns.map(c=>c.label)),
@@ -98,6 +105,7 @@ function riprendiScritturaProiezione_(sheet) {
     sheet.getRange(1,1,sheet.getMaxRows(),sheet.getMaxColumns()).clearDataValidations().breakApart();
     sheet.showColumns(1,sheet.getMaxColumns());
     plan.columns.forEach((c,i)=>identificaColonnaEvento_(sheet,i+1,c.key));
+    plan.columns.forEach((c,i)=>{if(c.key==='_numero'||c.key==='_ordine')sheet.hideColumns(i+1);});
   }
   if(plan.header_changed)sheet.getRange(1,1,1,width).setValues([plan.header]).setFontWeight('bold');
   let blocks=[];
@@ -113,7 +121,7 @@ function riprendiScritturaProiezione_(sheet) {
   }
   const editable=[];
   plan.columns.forEach((column,i)=>{
-    if(!plan.read_only&&campoModificabileFoglio_(column.key)&&plan.target_rows){
+    if(((!plan.read_only&&campoModificabileFoglio_(column.key))||campoLocaleFoglio_(column.key))&&plan.target_rows){
       const range=sheet.getRange(2,i+1,plan.target_rows,1);editable.push(range);
       if(plan.structural)range.setBackground('#eef5fc');
       else if(plan.target_rows>plan.old_rows)sheet.getRange(plan.old_rows+2,i+1,plan.target_rows-plan.old_rows,1).setBackground('#eef5fc');

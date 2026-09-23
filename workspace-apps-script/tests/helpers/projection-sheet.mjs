@@ -29,7 +29,7 @@ export function fixture() {
     insertRowsAfter(_row,n){this.rows+=n;}insertColumnsAfter(_col,n){this.cols+=n;}
     getProtections(){return [{getDescription:()=> 'MI_PROIEZIONE',getUnprotectedRanges:()=>this.editable}];}
     clear(){changed('clear',this,{},()=>{this.cells=[];});return this;}clearContents(){return this.clear();}
-    setFrozenRows(){}showColumns(){}hideSheet(){this.hidden=true;}showSheet(){this.hidden=false;}isSheetHidden(){return this.hidden;}
+    setFrozenRows(){}showColumns(){}hideColumns(){}hideSheet(){this.hidden=true;}showSheet(){this.hidden=false;}isSheetHidden(){return this.hidden;}
     createDeveloperMetadataFinder(){return {withKey:key=>({find:()=>this.metadata.filter(m=>m.key===key).map(m=>({getValue:()=>m.value,getLocation:()=>({getColumn:()=>({getColumn:()=>m.col})}),remove:()=>{this.metadata=this.metadata.filter(v=>v!==m);}}))})};}
   }
   const book={sheets:new Map(),getId:()=> 'synthetic-book',getSheetByName(name){return this.sheets.get(name)||null;},insertSheet(name){const sheet=new Sheet(name);this.sheets.set(name,sheet);return sheet;},getSheets(){return [...this.sheets.values()];}};
