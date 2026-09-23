@@ -12,7 +12,7 @@ Include tutte le modifiche della [3.26.155](rilascio-3.26.155.md) e corregge la 
 
 Caricare `modulo-iscrizioni-3.26.156.zip` in WordPress e confermare la sostituzione. Lo ZIP locale conserva la configurazione privata e non va pubblicato; GitHub distribuisce soltanto `modulo-iscrizioni-3.26.156-pubblico.zip`.
 
-Aggiornare inoltre il progetto GAS dal nome storico **MODULI AUTONOMO 3.26.149** con `Codice-Workspace-Progetto-3.26.156.gs` e creare una nuova versione del deployment web app, senza cambiare URL, proprietà o trigger.
+Il progetto GAS dal nome storico **MODULI AUTONOMO 3.26.149** è stato aggiornato al sorgente 3.26.156 e al deployment **10**. URL della web app, proprietà e trigger sono rimasti invariati. `Codice-Workspace-Progetto-3.26.156.gs` e `Workspace-3.26.156.zip` restano disponibili nella release per archivio o reinstallazione.
 
 ## Verifica
 
