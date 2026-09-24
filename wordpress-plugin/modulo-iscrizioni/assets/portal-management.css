@@ -286,6 +286,7 @@
 /* Schede individuali e riepilogo condiviso della prenotazione. */
 .mi-all-person{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 4px;border-bottom:1px solid #dce3eb}
 .mi-all-person>div{min-width:0;overflow-wrap:anywhere}.mi-all-person p{margin:5px 0}.mi-all-person small{color:#566778}
+.mi-all-person--openable{min-height:48px;box-sizing:border-box;padding:12px 8px;cursor:pointer;transition:background-color .15s ease}.mi-all-person--openable:is(:hover,:active,:focus-visible){background:var(--info-light,#e8f0fe)}.mi-all-person--openable:focus-visible{outline:3px solid var(--focus,#244fc2);outline-offset:-3px}.mi-all-person--openable:is(:hover,:active,:focus-visible) .mi-participant-open-label{color:var(--info,#164b85);text-decoration:underline}
 .mi-booking-overview{margin:18px 0;padding:16px;border:1px solid #dce3eb;border-radius:12px;background:#f8fafc}
 .mi-booking-overview>summary{cursor:pointer;font-weight:650;color:#163b65;min-height:24px}
 .mi-booking-overview section{padding:12px 0;border-bottom:1px solid #dce3eb}.mi-booking-overview section:last-child{border-bottom:0}

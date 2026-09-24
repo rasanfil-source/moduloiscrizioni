@@ -1,3 +1,7 @@
+# Aggiornamento 3.26.164
+
+Anche in **Tutti gli eventi** l’intera riga del partecipante apre la scheda personale e il pulsante **Gestisci** è stato eliminato. Su PC la riga è riconoscibile da manina ed evidenza al passaggio del mouse; sul cellulare compare anche il chevron **›**. Apertura da tastiera invariata. Apps Script invariato rispetto al deployment 12.
+
 # Aggiornamento 3.26.163
 
 Sul cellulare, una lieve sfumatura sul bordo inferiore o destro dell’elenco segnala la presenza di altre righe o colonne. Ogni indicatore scompare automaticamente quando lo scorrimento raggiunge il relativo limite. Apps Script invariato rispetto al deployment 12.
