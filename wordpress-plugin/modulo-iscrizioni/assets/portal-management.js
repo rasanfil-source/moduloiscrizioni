@@ -546,11 +546,13 @@
           if(all.length===0)content.querySelector('[data-list]>p:last-child')?.classList.add('mi-list-empty');
           listResize?.disconnect();
           if(list.length>10){
-            const table=content.querySelector('[data-list] table'),viewport=document.createElement('div');
+            const table=content.querySelector('[data-list] table'),shell=document.createElement('div'),viewport=document.createElement('div'),bottomHint=document.createElement('span'),sideHint=document.createElement('span');
+            shell.className='mi-participant-scroll-shell';bottomHint.className='mi-scroll-hint mi-scroll-hint--bottom';sideHint.className='mi-scroll-hint mi-scroll-hint--side';bottomHint.setAttribute('aria-hidden','true');sideHint.setAttribute('aria-hidden','true');
             viewport.className='mi-participant-scroll';viewport.tabIndex=0;viewport.setAttribute('role','region');viewport.setAttribute('aria-label','Elenco partecipanti, scorri per vedere le altre righe');
-            table.before(viewport);viewport.append(table);
-            const fitRows=()=>{if(!table.isConnected){listResize?.disconnect();return;}const tenth=table.tBodies[0].rows[9];viewport.style.maxHeight=Math.ceil(tenth.getBoundingClientRect().bottom-table.getBoundingClientRect().top+2)+'px';};
-            fitRows();listResize=new ResizeObserver(fitRows);listResize.observe(table);
+            table.before(shell);shell.append(viewport,bottomHint,sideHint);viewport.append(table);
+            const updateHints=()=>{const tolerance=2;bottomHint.hidden=viewport.scrollHeight-viewport.scrollTop-viewport.clientHeight<=tolerance;sideHint.hidden=viewport.scrollWidth-viewport.scrollLeft-viewport.clientWidth<=tolerance;};
+            const fitRows=()=>{if(!table.isConnected){listResize?.disconnect();return;}const tenth=table.tBodies[0].rows[9];viewport.style.maxHeight=Math.ceil(tenth.getBoundingClientRect().bottom-table.getBoundingClientRect().top+2)+'px';updateHints();};
+            viewport.addEventListener('scroll',updateHints,{passive:true});fitRows();listResize=new ResizeObserver(fitRows);listResize.observe(table);listResize.observe(viewport);
           }
         };
         criticalFilter.onchange=()=>{listContext.filter=criticalFilter.value;listContext.shown=30;draw();};

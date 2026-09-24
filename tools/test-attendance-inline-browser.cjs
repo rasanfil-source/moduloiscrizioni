@@ -12,6 +12,7 @@ const server=http.createServer(async(req,res)=>{try{if(req.url==='/')return res.
 (async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({channel:'msedge',headless:true});try{const page=await browser.newPage({acceptDownloads:true});const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:'+server.address().port);
 const rows=async count=>page.waitForFunction(n=>document.querySelectorAll('[data-list] tbody tr').length===n,count);
 await rows(30);
+assert.equal(await page.locator('.mi-participant-scroll-shell').count(),1);const bottomHint=page.locator('.mi-scroll-hint--bottom');assert.equal(await bottomHint.isVisible(),true);await page.locator('.mi-participant-scroll').evaluate(viewport=>viewport.scrollTop=viewport.scrollHeight);await page.waitForFunction(()=>document.querySelector('.mi-scroll-hint--bottom').hidden);assert.equal(await bottomHint.evaluate(element=>element.hidden),true);
 const box=page.locator('[data-attendance-toggle="1"]');assert.equal(await box.isChecked(),false);
 assert.equal(await page.locator('[data-list] th').last().innerText(),'Stato');
 const presenceIndex=await page.locator('[data-list] th').evaluateAll(headers=>headers.findIndex(header=>header.textContent==='Presente'));

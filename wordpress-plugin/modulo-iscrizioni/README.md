@@ -1,3 +1,7 @@
+# Aggiornamento 3.26.163
+
+Sul cellulare, una lieve sfumatura sul bordo inferiore o destro dell’elenco segnala la presenza di altre righe o colonne. Ogni indicatore scompare automaticamente quando lo scorrimento raggiunge il relativo limite. Apps Script invariato rispetto al deployment 12.
+
 # Aggiornamento 3.26.162
 
 Il chevron **›** accanto al partecipante resta visibile soltanto sugli schermi fino a 600 px. Nella vista PC l’apertura della riga è comunicata dal cursore a forma di mano e dall’evidenza azzurrina al passaggio del mouse o con il fuoco da tastiera. Apps Script invariato rispetto al deployment 12.

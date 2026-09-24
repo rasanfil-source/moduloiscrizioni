@@ -2111,6 +2111,10 @@ test('camere, stampa e filtri seguono la nuova gerarchia operativa', async () =>
   assert.match(css, /\.mi-participant-row:is\(:hover,:active,:focus-visible\)/);
   assert.match(css, /\.mi-participant-chevron\{display:none/);
   assert.match(css, /@media\(max-width:600px\)\{\.mi-management \.mi-participant-chevron\{display:inline\}\}/);
+  assert.match(script, /mi-scroll-hint mi-scroll-hint--bottom/);
+  assert.match(script, /viewport\.scrollHeight-viewport\.scrollTop-viewport\.clientHeight/);
+  assert.match(css, /\.mi-scroll-hint--bottom\{[^}]*linear-gradient/);
+  assert.match(css, /\.mi-scroll-hint\[hidden\]\{display:block!important;opacity:0\}/);
   assert.doesNotMatch(css, /\.mi-participant-table button\[data-open\]/);
   assert.match(css, /\.mi-participant-table tbody tr\{height:48px\}/);
   assert.match(css, /\.mi-participant-table tbody td\{padding-top:2px;padding-bottom:2px;[^}]*vertical-align:middle/);
