@@ -2109,6 +2109,8 @@ test('camere, stampa e filtri seguono la nuova gerarchia operativa', async () =>
   assert.match(script, /\['Enter',' '\]\.includes\(e\.key\)/);
   assert.match(css, /\.mi-participant-row\{cursor:pointer/);
   assert.match(css, /\.mi-participant-row:is\(:hover,:active,:focus-visible\)/);
+  assert.match(css, /\.mi-participant-chevron\{display:none/);
+  assert.match(css, /@media\(max-width:600px\)\{\.mi-management \.mi-participant-chevron\{display:inline\}\}/);
   assert.doesNotMatch(css, /\.mi-participant-table button\[data-open\]/);
   assert.match(css, /\.mi-participant-table tbody tr\{height:48px\}/);
   assert.match(css, /\.mi-participant-table tbody td\{padding-top:2px;padding-bottom:2px;[^}]*vertical-align:middle/);

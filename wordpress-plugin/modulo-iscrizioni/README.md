@@ -1,3 +1,7 @@
+# Aggiornamento 3.26.162
+
+Il chevron **›** accanto al partecipante resta visibile soltanto sugli schermi fino a 600 px. Nella vista PC l’apertura della riga è comunicata dal cursore a forma di mano e dall’evidenza azzurrina al passaggio del mouse o con il fuoco da tastiera. Apps Script invariato rispetto al deployment 12.
+
 # Aggiornamento 3.26.161
 
 La riga del partecipante mostra ora un chevron **›** sempre visibile accanto al nome, utile soprattutto sul cellulare. Al passaggio del mouse, durante il tocco e con il fuoco da tastiera, la riga assume uno sfondo azzurrino e il nome viene evidenziato. Apps Script invariato rispetto al deployment 12.
