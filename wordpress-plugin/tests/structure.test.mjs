@@ -2102,8 +2102,14 @@ test('camere, stampa e filtri seguono la nuova gerarchia operativa', async () =>
   assert.match(script, /x\.room\|\|requestedRoomCode\(x\)\|\|'—'/);
   assert.match(script, /const showParticipantStatus=individual&&list\.some\(person=>stateLabel\(person\)!=='Partecipante'\)/);
   assert.doesNotMatch(script, /missing\.push\('Camera da assegnare'\)/);
-  assert.match(css, /\.mi-participant-table button\[data-open\]\{min-height:28px;padding:2px 9px/);
-  assert.match(css, /\.mi-participant-table tbody td\{[^}]*vertical-align:middle/);
+  assert.match(script, /<tr class="mi-participant-row" data-open=/);
+  assert.match(script, /tabindex="0" aria-label="Apri la scheda di/);
+  assert.match(script, /b\.matches\('\.mi-participant-row'\)&&e\.target\.closest\('a,button,input,select,textarea,label'\)/);
+  assert.match(script, /\['Enter',' '\]\.includes\(e\.key\)/);
+  assert.match(css, /\.mi-participant-row\{cursor:pointer/);
+  assert.doesNotMatch(css, /\.mi-participant-table button\[data-open\]/);
+  assert.match(css, /\.mi-participant-table tbody tr\{height:48px\}/);
+  assert.match(css, /\.mi-participant-table tbody td\{padding-top:2px;padding-bottom:2px;[^}]*vertical-align:middle/);
   assert.match(script, /mi-room-assignment-actions mi-room-sticky-actions/);
   assert.match(script, /data-accommodation-action-status/);
   const confirmationBinding = script.indexOf('confirmButton.onclick=');

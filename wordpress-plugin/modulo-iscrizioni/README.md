@@ -1,3 +1,7 @@
+# Aggiornamento 3.26.160
+
+Nell’elenco partecipanti l’intera riga apre la scheda personale: si può selezionare il nome, lo stato o uno spazio libero, oppure usare Invio e Barra spaziatrice dopo aver portato il fuoco sulla riga. La colonna e il pulsante **Gestisci** sono stati eliminati dalla vista per partecipante. Le righe sono più compatte, con un’altezza minima di 48 px; telefono, email, presenza e gli altri controlli interattivi conservano la propria funzione senza aprire la scheda. Apps Script invariato rispetto al deployment 12.
+
 # Aggiornamento 3.26.159
 
 Nell’elenco partecipanti, quando **Stato** non è necessario, le colonne successive si spostano subito a sinistra. Larghezze e allineamenti sono ora associati a Contatti, Dati mancanti e Gestisci tramite classi proprie, quindi restano corretti anche quando compaiono condizionatamente Stato, Presente o Stanza. Apps Script invariato rispetto al deployment 12.
