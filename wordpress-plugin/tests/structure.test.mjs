@@ -2104,9 +2104,11 @@ test('camere, stampa e filtri seguono la nuova gerarchia operativa', async () =>
   assert.doesNotMatch(script, /missing\.push\('Camera da assegnare'\)/);
   assert.match(script, /<tr class="mi-participant-row" data-open=/);
   assert.match(script, /tabindex="0" aria-label="Apri la scheda di/);
+  assert.match(script, /mi-participant-chevron" aria-hidden="true">›/);
   assert.match(script, /b\.matches\('\.mi-participant-row'\)&&e\.target\.closest\('a,button,input,select,textarea,label'\)/);
   assert.match(script, /\['Enter',' '\]\.includes\(e\.key\)/);
   assert.match(css, /\.mi-participant-row\{cursor:pointer/);
+  assert.match(css, /\.mi-participant-row:is\(:hover,:active,:focus-visible\)/);
   assert.doesNotMatch(css, /\.mi-participant-table button\[data-open\]/);
   assert.match(css, /\.mi-participant-table tbody tr\{height:48px\}/);
   assert.match(css, /\.mi-participant-table tbody td\{padding-top:2px;padding-bottom:2px;[^}]*vertical-align:middle/);
