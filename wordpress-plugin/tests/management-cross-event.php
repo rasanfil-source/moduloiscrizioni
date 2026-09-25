@@ -17,6 +17,7 @@ foreach ( array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'WAITLIST_OFFERED
 	MI_Management_Service::all_people( array( 42, 99 ), '', 30, false, $status );
 	check_cross( str_contains( $wpdb->sql, "r.status='$status'" ), 'Missing status filter' );
 	check_cross( str_contains( $wpdb->sql, 'r.event_id IN (42)' ) && str_contains( $wpdb->sql, 'LIMIT 30,31' ), 'Scope or pagination lost' );
+	check_cross( str_contains( $wpdb->sql, 'ORDER BY r.created_at DESC,r.id DESC,p.id ASC LIMIT' ), 'Cross-event results must show newest bookings first with stable participant order' );
 	check_cross( ! str_contains( $wpdb->sql, 'r.status NOT IN' ), 'Explicit closed state excluded' );
 	check_cross( str_contains( $wpdb->sql, "p.status='ACTIVE'" ) === ! in_array( $status, array( 'CANCELLED', 'EXPIRED' ), true ), 'Wrong participant scope' );
 }

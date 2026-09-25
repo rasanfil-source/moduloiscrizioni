@@ -12,7 +12,7 @@ La parrocchia è l'ente base. Ogni gruppo può avere logo, immagine, colori e co
 
 ## Stato
 
-Versione **[3.26.179](docs/rilascio-3.26.179.md)**: filtro per stato nella ricerca cross-evento e finestra dedicata al pagamento dopo una rettifica (48 ore predefinite), indipendente dalla lista d’attesa. Include gli aggiornamenti di navigazione della 3.26.178 e le revisioni precedenti della Segreteria. Il pacchetto pubblico esclude la configurazione privata; l’installazione WordPress resta a cura dell’utente. Nessun aggiornamento Workspace/Google Apps Script necessario. I paragrafi seguenti documentano i rilasci precedenti.
+Versione **[3.26.180](docs/rilascio-3.26.180.md)**: in Iscrizioni, «Tutti gli eventi» mostra prima le prenotazioni più recenti; il singolo evento mantiene l’ordine alfabetico per cognome. Include il filtro per stato e la finestra dedicata alle rettifiche della 3.26.179. Il pacchetto pubblico esclude la configurazione privata; l’installazione WordPress resta a cura dell’utente. Nessun aggiornamento Workspace/Google Apps Script necessario. I paragrafi seguenti documentano i rilasci precedenti.
 
 È preparato localmente il plugin **[3.26.166](docs/rilascio-3.26.166.md)**: report pagamenti nel gestionale, con filtri, totali e CSV conservati; rimosso soltanto l’avviso di modalità operativa da Comunicazioni. Include la revisione grafica desktop/mobile della 3.26.165. Pacchetti WordPress in `dist`; nessun aggiornamento Google Apps Script necessario e nessuna installazione sul sito eseguita. Le informazioni seguenti conservano la cronologia precedente.
 
