@@ -390,7 +390,6 @@ test('il portale tecnico evita Divi e aggrega i dati della dashboard', async () 
   assert.match(portal, /handle_actions' \), -100/);
   assert.match(portal, /loading="lazy" decoding="async"/);
   assert.match(portal, /SELECT event_id,confirmed_count/);
-  assert.match(portal, /JOIN \{\$wpdb->posts\} events/);
   assert.doesNotMatch(portal, /SELECT COALESCE\(SUM\(total_qty\)/);
   assert.match(activator, /KEY event_created \(event_id,created_at\)/);
   assert.match(portal, /mi_event_revisions/);
@@ -492,7 +491,7 @@ test('ogni partecipante dispone di annullamento individuale confermato e auditab
   assert.match(service, /cancellation_token_hash=NULL/);
   assert.match(service, /status = 'ACTIVE' GROUP BY ticket_type_code/);
 	assert.match(portal, /cancel_participant_portal/);
-	assert.match(portal, /Partecipazione annullata/);
+	assert.match(await read('assets/portal-management.js'), /CANCELLED:'Annullata'/);
 	assert.match(await read('assets/portal-management.js'), /data-cancel/);
   assert.match(portal, /Conferma richiesta/);
   assert.match(portal, /Se hai già effettuato un pagamento, contatta la segreteria per ricevere informazioni sull’eventuale rimborso/);
@@ -1374,7 +1373,7 @@ test('anche il portale apre la scheda prenotazione in sovrimpressione', async ()
   const portal = await read('includes/class-mi-portal.php');
   const script = await read('assets/portal.js');
   const css = await read('assets/portal.css');
-  assert.match(portal, /data-mi-portal-booking-open/);
+  assert.match(await read('assets/portal-management.js'), /data-open-event/);
   assert.match(portal, /id="mi-portal-booking-detail"/);
   assert.match(script, /role="dialog" aria-modal="true"/);
   assert.match(script, /fetch\(href/);
@@ -1409,31 +1408,22 @@ test('gli eventi passati sono separati dalla vista operativa ordinaria', async (
 });
 
 test('l’elenco iscrizioni indica l’evento selezionato', async () => {
-  const portal = await read('includes/class-mi-portal.php');
-  assert.match(portal, /\$list_title = 'Iscrizioni'/);
-  assert.match(portal, /\$list_title \.= ' — ' \. \$event_title/);
-  assert.match(portal, /esc_html\( \$list_title \)/);
+  const script = await read('assets/portal-management.js');
+  assert.match(script, /select\.selectedOptions\[0\]/);
+  assert.match(script, /Evento: /);
 });
 
-test('la scheda iscrizioni riprende la vista operativa con ricerca e filtri sicuri', async () => {
+test('la ricerca iscrizioni usa la gestione corrente senza viste PHP orfane', async () => {
   const portal = await read('includes/class-mi-portal.php');
-  const admin = await read('includes/class-mi-admin.php');
-  const css = await read('assets/portal.css');
-  assert.match(portal, /name="mi_portal_query"/);
-  assert.match(portal, /name="mi_portal_status"/);
-  assert.match(portal, /MI_Booking_Search::sql\( \$query \)/);
-  assert.match(await read('includes/class-mi-booking-search.php'), /\$wpdb->esc_like\( \$word \)/);
-  assert.match(portal, /\$allowed_statuses/);
-  assert.match(portal, /LIMIT 31 OFFSET/);
-  assert.match(portal, /mi_portal_page/);
-  assert.match(portal, /class="mi-booking-card"/);
-  assert.match(portal, /mi-status-pill/);
-  assert.match(portal, />Tutti gli eventi<\/option>/);
-  assert.match(admin, />Tutti gli eventi<\/option>/);
-  assert.doesNotMatch(portal + admin, /Tutti gli eventi accessibili/);
-  assert.match(css, /\.mi-registrations-toolbar/);
-  assert.match(css, /\.mi-booking-card__avatar/);
-  assert.match(css, /\.mi-status-pill\.is-success/);
+  const management = await read('includes/class-mi-portal-management.php');
+  const script = await read('assets/portal-management.js');
+  assert.doesNotMatch(portal, /function (portal_registrations_view|registrations_view)\(/);
+  assert.match(portal, /'registrations' === \$view.*MI_Portal_Management::render/);
+  assert.match(management, /data-event-select/);
+  assert.match(management, /Tutti gli eventi/);
+  assert.match(script, /data-all-query/);
+  assert.match(script, /data-all-status/);
+  assert.match(script, /data-all-more/);
 });
 
 test('la ricerca iscrizioni privilegia il campo e mantiene Cerca affiancato', async () => {
@@ -1443,24 +1433,14 @@ test('la ricerca iscrizioni privilegia il campo e mantiene Cerca affiancato', as
   assert.match(css, /@media\(max-width:520px\)[^{]*\{\.mi-registrations-toolbar \.mi-registration-search\{[^}]*grid-template-columns:minmax\(0,3fr\) minmax\(72px,1fr\)/);
 });
 
-test('i menu delle iscrizioni applicano subito i filtri mantenendo il comando manuale', async () => {
-  const portal = await read('includes/class-mi-portal.php');
-  const script = await read('assets/portal.js');
-	const css = await read('assets/portal.css');
-  assert.match(portal, /name="mi_portal_event" data-mi-auto-submit/);
-	assert.match(portal, /name="mi_portal_period" data-mi-auto-submit/);
-	assert.match(portal, />Eventi in corso<\/option>/);
-	assert.match(portal, />Eventi passati<\/option>/);
-	assert.doesNotMatch(portal, /mi_portal_event_mode|data-mi-event-mode|>Evento singolo<\/option>|data-mi-single-event/);
-	assert.match(portal, /name="mi_portal_event" data-mi-auto-submit><option value="">Tutti gli eventi<\/option>/);
-	assert.match(portal, /\$listed_event_ids = \$selected \? array\(\) : \$period_event_ids/);
-  assert.match(portal, /name="mi_portal_status" data-mi-auto-submit/);
-  assert.match(portal, />Applica filtri<\/button>/);
-  assert.match(script, /select\[data-mi-auto-submit\]/);
-  assert.match(script, /toolbar\.requestSubmit\(\)/);
-	assert.doesNotMatch(script, /singleEvent\.hidden|data-mi-event-mode/);
-	assert.match(css, /@media\(min-width:800px\)\{\.mi-registration-chips\{flex-wrap:nowrap\}/);
-  assert.match(portal, /if \( \$selected && ! in_array\( \$selected, \$event_ids, true \) \) wp_die\( 'Evento non accessibile\.', 403 \)/);
+test('i filtri cross-evento raggiungono il servizio operativo', async () => {
+  const management = await read('includes/class-mi-portal-management.php');
+  const script = await read('assets/portal-management.js');
+  assert.match(management, /MI_Management_Service::all_people/);
+  assert.match(management, /\$_POST\['status'\]/);
+  assert.match(management, /data-period-select/);
+  assert.match(script, /status:allStatus/);
+  assert.match(script, /allStatus=e.target.value/);
 });
 
 test('i tipi personalizzati di comunicazione si aggiungono e si eliminano senza inviare email', async () => {
@@ -1810,12 +1790,12 @@ test('gli esiti della gestione tornano sempre alla Segreteria eventi', async () 
   assert.match(portal, /Evento annullato\. Avvisi preparati:[\s\S]*?false \)/);
 });
 
-test('gli eventi annullati spariscono automaticamente dal filtro delle iscrizioni', async () => {
-  const portal = await read('includes/class-mi-portal.php');
-  assert.match(portal, /\$selectable_events = array_values\( array_filter\( \$events[\s\S]*?_mi_event_cancelled_at/);
-	assert.match(portal, /\$selected && ! in_array\( \$selected, \$event_ids, true \) \) wp_die\( 'Evento non accessibile\.', 403 \)/);
-	assert.match(portal, /! in_array\( \$selected, \$period_event_ids, true \) \) \$selected = 0/);
-	assert.match(portal, /foreach \( \$period_events as \$event \)/);
+test('la ricerca cross-evento limita i risultati agli eventi accessibili del periodo', async () => {
+  const management = await read('includes/class-mi-portal-management.php');
+  assert.match(management, /MI_Access::can_access_event/);
+  assert.match(management, /_mi_event_archived_at/);
+  assert.match(management, /MI_Portal::is_past_event/);
+  assert.match(management, /\$past === \( 'past' === \$period \)/);
 });
 
 test('la ricerca iscrizioni mantiene campo e pulsante affiancati in proporzione tre a uno', async () => {

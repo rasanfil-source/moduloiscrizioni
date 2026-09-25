@@ -99,7 +99,7 @@
     let event=Number(root.dataset.event)>0?root.dataset.event:'',order=root.dataset.order,booking=null,busy=false,generation=0,pending=null,dirty=false,dirtyForm=null;
     const periodSelect=root.querySelector('[data-period-select]'),eventOptions=[...select.options].map(option=>option.cloneNode(true));
     let period=periodSelect?.value||'current';
-    let printList=null,listResize=null,currentPerson=null,returnEvent=event,allQuery='',allClosed=false;
+    let printList=null,listResize=null,currentPerson=null,returnEvent=event,allQuery='',allClosed=false,allStatus='';
     const eventActions=root.querySelector('[data-event-actions]');
     const mobileLayout=window.matchMedia('(max-width:760px)');
     const eventSelectors=root.querySelector('.mi-management-event-selectors');
@@ -125,6 +125,7 @@
     filterEvents();
     arrangeManagement();
     const updateLocation=()=>{const url=new URL(location.href);url.searchParams.set('mi_portal_period',period);url.searchParams.set('mi_portal_event',event);url.searchParams.delete('mi_order');url.searchParams.delete('mi_sheet_sync');history.replaceState(null,'',url);};
+    if(event&&!order&&!new URL(location.href).searchParams.has('mi_portal_event')){const url=new URL(location.href);url.searchParams.set('mi_portal_event',event);url.searchParams.set('mi_portal_period',period);history.replaceState(null,'',url);}
     if(periodSelect)periodSelect.onchange=async()=>{const next=periodSelect.value;if(!await canLeave()){periodSelect.value=period;return;}period=next;event='';filterEvents();updateLocation();await summary();if(select.options.length===1)say(period==='past'?'Non ci sono eventi passati.':'Non ci sono eventi attivi.');};
     const say=t=>{
       const text=String(t),error=/(non disponibile|non confermat[oa]|non riuscit[oa]|non salvat[oeia]|non completat[oa]|errore|impossibile|riprova|controlla|interrott[oa])/i.test(text);
@@ -218,16 +219,17 @@
     async function allPeople(){
       const ticket=generation;currentPerson=null;returnEvent='';
       if(printButton)printButton.hidden=true;
-      content.innerHTML='<div class="mi-management-grid"><label>Cerca persona<input type="search" data-all-query placeholder="Nome, cognome, email o cellulare" value="'+esc(allQuery)+'"></label><label><input type="checkbox" data-all-closed '+(allClosed?'checked':'')+'> Includi annullate e scadute</label></div><div data-all-results></div><button type="button" data-all-more hidden>Mostra altre 30</button>';
+      content.innerHTML='<div class="mi-management-grid"><label>Cerca persona<input type="search" data-all-query placeholder="Nome, cognome, email, cellulare o codice prenotazione" value="'+esc(allQuery)+'"></label><label>Stato prenotazione<select data-all-status>'+[['','Tutti gli stati'],['CONFIRMED','Confermate'],['PENDING_PAYMENT','Da pagare'],['WAITLISTED','Lista d’attesa'],['WAITLIST_OFFERED','Posto proposto'],['CANCELLED','Annullate'],['EXPIRED','Scadute']].map(([value,label])=>'<option value="'+value+'" '+(allStatus===value?'selected':'')+'>'+label+'</option>').join('')+'</select></label><label data-all-closed-label '+(allStatus?'hidden':'')+'><input type="checkbox" data-all-closed '+(allClosed?'checked':'')+'> Includi annullate e scadute</label></div><div data-all-results></div><button type="button" data-all-more hidden>Mostra altre 30</button>';
       const host=content.querySelector('[data-all-results]'),more=content.querySelector('[data-all-more]');let offset=0,sequence=0,timer;
       const load=async(reset=true)=>{const seq=++sequence;if(reset){offset=0;host.replaceChildren();}more.hidden=true;say('Caricamento iscrizioni…');
-        try{const data=await request('all_people',{query:allQuery,period,offset,include_closed:allClosed?'1':'0'});if(ticket!==generation||seq!==sequence)return;
-          const labels={WAITLISTED:'Lista d’attesa',WAITLIST_OFFERED:'Posto proposto',CANCELLED:'Annullata',EXPIRED:'Scaduta'};
+        try{const data=await request('all_people',{query:allQuery,period,offset,status:allStatus,include_closed:allClosed?'1':'0'});if(ticket!==generation||seq!==sequence)return;
+          const labels={CONFIRMED:'Confermata',PENDING_PAYMENT:'Da pagare',WAITLISTED:'Lista d’attesa',WAITLIST_OFFERED:'Posto proposto',CANCELLED:'Annullata',EXPIRED:'Scaduta'};
           for(const p of data.items){const state=p.status==='CANCELLED'?'CANCELLED':p.booking_status,name=[p.last_name,p.first_name].join(' ');host.insertAdjacentHTML('beforeend','<article class="mi-all-person mi-all-person--openable" data-open="'+esc(p.order_code)+'" data-open-event="'+Number(p.event_id)+'" data-person-focus="'+Number(p.number)+'" tabindex="0" aria-label="Apri la scheda di '+esc(name)+' per '+esc(p.event_title)+'"><div><strong class="mi-participant-open-label">'+esc(name)+' <span class="mi-participant-chevron" aria-hidden="true">›</span></strong><p>'+esc(p.event_title)+'</p><small>Iscrizione del '+esc(String(p.created_at).slice(0,10).split('-').reverse().join('/'))+(labels[state]?' · '+esc(labels[state]):'')+'</small></div></article>');}
           offset+=data.items.length;more.hidden=!data.more;say(offset?'Iscrizioni visualizzate: '+offset+'.':'Nessuna iscrizione trovata.');
         }catch(error){if(ticket===generation&&seq===sequence)say('Ricerca non disponibile. '+error.message);}
       };
       content.querySelector('[data-all-query]').oninput=e=>{allQuery=e.target.value;clearTimeout(timer);sequence++;timer=setTimeout(()=>{if(ticket===generation)load();},250);};
+      content.querySelector('[data-all-status]').onchange=e=>{allStatus=e.target.value;content.querySelector('[data-all-closed-label]').hidden=!!allStatus;clearTimeout(timer);load();};
       content.querySelector('[data-all-closed]').onchange=e=>{allClosed=e.target.checked;load();};more.onclick=()=>load(false);await load();
     }
     async function summary(){

@@ -12,7 +12,7 @@ La parrocchia è l'ente base. Ogni gruppo può avere logo, immagine, colori e co
 
 ## Stato
 
-Versione **[3.26.175](docs/rilascio-3.26.175.md)**: restyling della Segreteria, report pagamenti, correzioni mobile e filtri, palette semantica e immagini a filo delle tessere Eventi. Include le revisioni fino alla [3.26.174](docs/rilascio-3.26.174.md). Il pacchetto pubblico esclude la configurazione privata; pubblicare su GitHub non installa il plugin sul sito. Nessun aggiornamento Google Apps Script necessario. I paragrafi seguenti documentano i rilasci precedenti.
+Versione **[3.26.179](docs/rilascio-3.26.179.md)**: filtro per stato nella ricerca cross-evento e finestra dedicata al pagamento dopo una rettifica (48 ore predefinite), indipendente dalla lista d’attesa. Include gli aggiornamenti di navigazione della 3.26.178 e le revisioni precedenti della Segreteria. Il pacchetto pubblico esclude la configurazione privata; l’installazione WordPress resta a cura dell’utente. Nessun aggiornamento Workspace/Google Apps Script necessario. I paragrafi seguenti documentano i rilasci precedenti.
 
 È preparato localmente il plugin **[3.26.166](docs/rilascio-3.26.166.md)**: report pagamenti nel gestionale, con filtri, totali e CSV conservati; rimosso soltanto l’avviso di modalità operativa da Comunicazioni. Include la revisione grafica desktop/mobile della 3.26.165. Pacchetti WordPress in `dist`; nessun aggiornamento Google Apps Script necessario e nessuna installazione sul sito eseguita. Le informazioni seguenti conservano la cronologia precedente.
 

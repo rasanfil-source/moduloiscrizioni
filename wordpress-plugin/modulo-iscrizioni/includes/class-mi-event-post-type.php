@@ -123,6 +123,7 @@ final class MI_Event_Post_Type {
 		$payment_methods = get_post_meta( $post->ID, '_mi_payment_methods', true );
 		$payment_methods = is_array( $payment_methods ) ? $payment_methods : array();
 		$identifier_display = get_post_meta( $post->ID, '_mi_identifier_display', true ) ?: 'TEXT';
+		$reopened_payment_hours = min( 168, max( 1, absint( get_post_meta( $post->ID, '_mi_reopened_payment_hours', true ) ?: 48 ) ) );
 		$payment_deadline_at = (string) get_post_meta( $post->ID, '_mi_payment_deadline_at', true );
 		$marketing_enabled = '1' === get_post_meta( $post->ID, '_mi_marketing_enabled', true );
 		$custom_participant_fields = MI_Field_Schema::sanitize_custom_fields( get_post_meta( $post->ID, '_mi_custom_participant_fields', true ) );
@@ -161,6 +162,7 @@ final class MI_Event_Post_Type {
 			<p><label><input name="mi_waitlist_enabled" type="checkbox" value="1" <?php checked( $waitlist ); ?>> Attiva automaticamente la lista d’attesa a esaurimento posti</label></p>
 			<p><label for="mi_waitlist_offer_hours"><strong>Tempo per accettare un posto liberato</strong></label><br><input id="mi_waitlist_offer_hours" name="mi_waitlist_offer_hours" type="number" min="1" max="168" value="<?php echo esc_attr( $waitlist_offer_hours ); ?>"> ore</p>
 			<h3 class="mi-admin-section-title">Quote e pagamenti</h3>
+			<p><label for="mi_reopened_payment_hours"><strong>Tempo per pagare dopo una rettifica</strong></label><br><input id="mi_reopened_payment_hours" name="mi_reopened_payment_hours" type="number" min="1" max="168" value="<?php echo esc_attr( $reopened_payment_hours ); ?>"> ore<br><small>Da 1 a 168 ore; predefinito 48. Usato quando il pagamento viene riaperto senza una scadenza ancora futura. Indipendente dalla lista d’attesa.</small></p>
 			<p><label for="mi_payment_deadline_at"><strong>Scadenza prenotazioni non saldate</strong></label><br><input id="mi_payment_deadline_at" name="mi_payment_deadline_at" type="datetime-local" value="<?php echo esc_attr( $payment_deadline_at ); ?>"></p>
 			<p class="description">Lascia vuoto per non applicare una scadenza automatica. È usata soltanto per gli eventi con versamenti tracciati.</p>
 			<p><label for="mi_pricing_mode"><strong>Prezzo</strong></label><br><select id="mi_pricing_mode" name="mi_pricing_mode"><option value="NONE" <?php selected( $pricing_mode, 'NONE' ); ?>>Nessun prezzo</option><option value="ZERO" <?php selected( $pricing_mode, 'ZERO' ); ?>>Gratuito</option><option value="FIXED" <?php selected( $pricing_mode, 'FIXED' ); ?>>Quota di partecipazione uguale per tutti</option><option value="CALCULATED" <?php selected( $pricing_mode, 'CALCULATED' ); ?>>Prezzi diversi secondo la tipologia</option></select></p>
@@ -312,6 +314,7 @@ final class MI_Event_Post_Type {
 		update_post_meta( $post_id, '_mi_capacity', $capacity );
 		update_post_meta( $post_id, '_mi_waitlist_enabled', isset( $_POST['mi_waitlist_enabled'] ) ? '1' : '0' );
 		update_post_meta( $post_id, '_mi_waitlist_offer_hours', min( 168, max( 1, absint( $_POST['mi_waitlist_offer_hours'] ?? 48 ) ) ) );
+		if ( isset( $_POST['mi_reopened_payment_hours'] ) ) update_post_meta( $post_id, '_mi_reopened_payment_hours', min( 168, max( 1, absint( $_POST['mi_reopened_payment_hours'] ) ) ) );
 		$payment_deadline_at = isset( $_POST['mi_payment_deadline_at'] ) ? sanitize_text_field( wp_unslash( $_POST['mi_payment_deadline_at'] ) ) : '';
 		if ( '' === $payment_deadline_at || preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $payment_deadline_at ) ) {
 			update_post_meta( $post_id, '_mi_payment_deadline_at', $payment_deadline_at );

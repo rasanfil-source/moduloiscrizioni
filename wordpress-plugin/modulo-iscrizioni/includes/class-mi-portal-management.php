@@ -18,7 +18,7 @@ final class MI_Portal_Management {
 				$past = get_post_meta( $candidate->ID, '_mi_event_archived_at', true ) || MI_Portal::is_past_event( $end );
 				if ( $past === ( 'past' === $period ) ) $ids[] = (int) $candidate->ID;
 			}
-			$result = MI_Management_Service::all_people( $ids, sanitize_text_field( wp_unslash( $_POST['query'] ?? '' ) ), absint( $_POST['offset'] ?? 0 ), '1' === ( $_POST['include_closed'] ?? '' ) );
+			$result = MI_Management_Service::all_people( $ids, sanitize_text_field( wp_unslash( $_POST['query'] ?? '' ) ), absint( $_POST['offset'] ?? 0 ), '1' === ( $_POST['include_closed'] ?? '' ), strtoupper( sanitize_text_field( wp_unslash( $_POST['status'] ?? '' ) ) ) );
 			if ( is_wp_error( $result ) ) wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
 			wp_send_json_success( $result );
 		}
@@ -113,7 +113,7 @@ final class MI_Portal_Management {
 		if ( ! $event_id && $order ) { global $wpdb; $event_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$wpdb->prefix}mi_registrations WHERE order_code=%s", $order ) ); }
 		if ( $event_id && ! MI_Access::can_access_event( $event_id ) ) { echo '<p>Evento non accessibile.</p>'; return; }
 		$scope = MI_Access::event_ids();
-		$query = array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish','private','draft' ), 'numberposts' => -1 );
+		$query = array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish','private','draft' ), 'numberposts' => -1, 'orderby' => array( 'date' => 'DESC', 'ID' => 'DESC' ) );
 		if ( 'ALL' !== $scope ) $query['post__in'] = $scope ?: array( 0 );
 		$events = get_posts( $query );
 		$periods = array();
@@ -122,6 +122,11 @@ final class MI_Portal_Management {
 			$periods[$event->ID] = get_post_meta( $event->ID, '_mi_event_archived_at', true ) || MI_Portal::is_past_event( $end ) ? 'past' : 'current';
 		}
 		$period = $periods[$event_id] ?? ( 'past' === ( $_GET['mi_portal_period'] ?? '' ) ? 'past' : 'current' );
+		if ( ! isset( $_GET['mi_portal_event'] ) && ! $event_id && ! $order && ! $registration_id ) {
+			foreach ( $events as $event ) {
+				if ( $periods[$event->ID] === $period ) { $event_id = (int) $event->ID; break; }
+			}
+		}
 		$compact = (bool) $registration_id;
 		?>
 		<section class="mi-management<?php echo $compact ? ' mi-management--compact' : ''; ?>" data-mi-management data-endpoint="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'mi_portal_management' ) ); ?>" data-event="<?php echo esc_attr( $event_id ); ?>" data-order="<?php echo esc_attr( $order ); ?>">

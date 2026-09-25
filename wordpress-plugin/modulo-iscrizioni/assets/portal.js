@@ -721,8 +721,8 @@ document.addEventListener('DOMContentLoaded', () => {
 	  });
 	  document.addEventListener('visibilitychange', () => { if (document.hidden) eventPanelCache.clear(); });
 	  document.addEventListener('mi:operational-saved', () => eventPanelCache.clear());
-	  const listUrl = new URL(window.location.href);
-	  listUrl.searchParams.delete('mi_portal_event');
+  const listUrl = new URL(window.location.href);
+	  listUrl.searchParams.set('mi_portal_event', '0');
 	  listUrl.searchParams.delete('mi_portal_event_panel');
 	  let eventNavigationId = 0;
 	  const fetchEventPanel = (link, prefetch = false) => {
@@ -984,7 +984,9 @@ document.addEventListener('click', event => {
   const link=event.target.closest('.mi-portal-switcher a');if(!link)return;
   const destination=new URL(link.href),current=new URL(location.href);
   if(!['management','registrations','payments'].includes(destination.searchParams.get('mi_portal_view')))return;
-  destination.searchParams.set('mi_portal_event',current.searchParams.get('mi_portal_event')||'0');
+  const selected=current.searchParams.get('mi_portal_event')??document.querySelector('.mi-event-card-shell.is-selected [data-mi-event-id]')?.dataset.miEventId;
+  if(selected!==undefined&&selected!==null)destination.searchParams.set('mi_portal_event',selected);
+  else destination.searchParams.delete('mi_portal_event');
   destination.searchParams.set('mi_portal_period',current.searchParams.get('mi_portal_period')||(current.searchParams.get('mi_portal_history')==='1'?'past':'current'));
   link.href=destination.href;
 },true);

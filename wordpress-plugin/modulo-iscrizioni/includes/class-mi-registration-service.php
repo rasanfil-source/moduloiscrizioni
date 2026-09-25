@@ -8,7 +8,9 @@ final class MI_Registration_Service {
 	/**
 	 * Restituisce una scadenza UTC utilizzabile quando una posizione già confermata
 	 * torna in attesa di pagamento. Una scadenza storica non deve provocare
-	 * l'annullamento automatico al cron immediatamente successivo.
+	 * l'annullamento automatico al cron immediatamente successivo. La finestra
+	 * dedicata alle rettifiche è indipendente dalle offerte della lista d'attesa.
+	 * Per le prenotazioni precedenti usa il valore dell'evento, oppure 48 ore.
 	 */
 	public static function reopened_payment_deadline( array $registration, $now = null ) {
 		$now = null === $now ? time() : (int) $now;
@@ -16,8 +18,8 @@ final class MI_Registration_Service {
 		$deadline_timestamp = '' === $deadline ? false : strtotime( $deadline . ' UTC' );
 		if ( false !== $deadline_timestamp && $deadline_timestamp > $now ) return $deadline;
 		$snapshot = json_decode( (string) ( $registration['snapshot_json'] ?? '' ), true );
-		$snapshot_hours = is_array( $snapshot ) ? absint( $snapshot['event']['waitlist_offer_hours'] ?? 0 ) : 0;
-		$stored_hours = function_exists( 'get_post_meta' ) ? absint( get_post_meta( (int) ( $registration['event_id'] ?? 0 ), '_mi_waitlist_offer_hours', true ) ) : 0;
+		$snapshot_hours = is_array( $snapshot ) ? absint( $snapshot['event']['reopened_payment_hours'] ?? 0 ) : 0;
+		$stored_hours = function_exists( 'get_post_meta' ) ? absint( get_post_meta( (int) ( $registration['event_id'] ?? 0 ), '_mi_reopened_payment_hours', true ) ) : 0;
 		$hours = min( 168, max( 1, $snapshot_hours ?: ( $stored_hours ?: 48 ) ) );
 		return gmdate( 'Y-m-d H:i:s', $now + $hours * 3600 );
 	}
@@ -173,6 +175,7 @@ final class MI_Registration_Service {
 			'event_location'   => (string) get_post_meta( $event_id, '_mi_event_location', true ),
 			'capacity'         => max( 1, absint( get_post_meta( $event_id, '_mi_capacity', true ) ) ),
 			'waitlist_enabled' => '1' === get_post_meta( $event_id, '_mi_waitlist_enabled', true ),
+			'reopened_payment_hours' => min( 168, max( 1, absint( get_post_meta( $event_id, '_mi_reopened_payment_hours', true ) ?: 48 ) ) ),
 			'waitlist_offer_hours' => min( 168, max( 1, absint( get_post_meta( $event_id, '_mi_waitlist_offer_hours', true ) ?: 48 ) ) ),
 			'opens_at'         => (string) get_post_meta( $event_id, '_mi_registration_opens_at', true ),
 			'closes_at'        => (string) get_post_meta( $event_id, '_mi_registration_closes_at', true ),

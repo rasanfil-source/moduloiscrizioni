@@ -6,14 +6,18 @@ require_once __DIR__ . '/class-mi-booking-search.php';
 
 /** Operational records in MySQL. Google receives a projection of these records. */
 final class MI_Management_Service {
-	public static function all_people( $event_ids, $query, $offset = 0, $include_closed = false ) {
+	public static function all_people( $event_ids, $query, $offset = 0, $include_closed = false, $status = '' ) {
 		global $wpdb;
 		if ( ! MI_Portal_Management::allowed() ) return new WP_Error( 'mi_scope', 'Accesso non consentito.' );
 		$event_ids = array_values( array_filter( array_map( 'intval', $event_ids ), array( 'MI_Access', 'can_access_event' ) ) );
 		if ( ! $event_ids ) return array( 'items' => array(), 'more' => false );
 		$where = 'r.event_id IN (' . implode( ',', $event_ids ) . ')';
-		if ( ! $include_closed ) $where .= " AND p.status='ACTIVE' AND r.status NOT IN ('CANCELLED','EXPIRED')";
-		foreach ( MI_Booking_Search::words( $query ) as $word ) $where .= $wpdb->prepare( " AND CONCAT_WS(' ',p.first_name,p.last_name,r.order_code,r.buyer_email,r.buyer_phone,IF(JSON_VALID(p.extra_json),JSON_UNQUOTE(JSON_EXTRACT(p.extra_json,'$.email')),''),IF(JSON_VALID(p.extra_json),JSON_UNQUOTE(JSON_EXTRACT(p.extra_json,'$.phone')),'')) LIKE %s", '%' . $wpdb->esc_like( $word ) . '%' );
+		$allowed_statuses = array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'WAITLIST_OFFERED', 'CANCELLED', 'EXPIRED' );
+		if ( in_array( $status, $allowed_statuses, true ) ) {
+			$where .= $wpdb->prepare( ' AND r.status=%s', $status );
+			if ( ! in_array( $status, array( 'CANCELLED', 'EXPIRED' ), true ) ) $where .= " AND p.status='ACTIVE'";
+		} elseif ( ! $include_closed ) $where .= " AND p.status='ACTIVE' AND r.status NOT IN ('CANCELLED','EXPIRED')";
+		foreach ( MI_Booking_Search::words( $query ) as $word ) $where .= $wpdb->prepare( " AND CONCAT_WS(' ',p.first_name,p.last_name,r.buyer_first_name,r.buyer_last_name,r.order_code,r.buyer_email,r.buyer_phone,IF(JSON_VALID(p.extra_json),JSON_UNQUOTE(JSON_EXTRACT(p.extra_json,'$.email')),''),IF(JSON_VALID(p.extra_json),JSON_UNQUOTE(JSON_EXTRACT(p.extra_json,'$.phone')),'')) LIKE %s", '%' . $wpdb->esc_like( $word ) . '%' );
 		$offset = max( 0, (int) $offset );
 		$rows = $wpdb->get_results( "SELECT p.id,p.first_name,p.last_name,p.status,r.status AS booking_status,r.order_code,r.event_id,r.created_at,(SELECT COUNT(*) FROM {$wpdb->prefix}mi_participants sibling WHERE sibling.registration_id=r.id AND sibling.id<=p.id) AS number FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE $where ORDER BY p.last_name,p.first_name,r.event_id,p.id LIMIT $offset,31", ARRAY_A );
 		if ( $wpdb->last_error ) return new WP_Error( 'mi_search', 'Ricerca non disponibile.' );
