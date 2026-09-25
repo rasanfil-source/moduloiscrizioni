@@ -34,3 +34,20 @@
 .mi-payments .mi-payment-person:has(input:checked){border-color:var(--navy,#17224a);background:var(--bg,#f5f7fa)}
 .mi-payments [data-selection-total]{font-weight:600;font-variant-numeric:tabular-nums}
 .mi-payments input[readonly]{background:var(--bg,#f5f7fa)}
+
+/* Same visual hierarchy as the other operational tabs; no payment logic changes. */
+@media screen {
+  .mi-payments>h2 { margin:0 0 20px; }
+  .mi-payments :is(input,select,textarea):where(:not([type=checkbox]):not([type=hidden])) { border-color:var(--field-border); }
+  .mi-payments input.mi-amount-highlight { border-color:var(--focus); }
+  .mi-payments .mi-payment-summary { background:var(--work-filter,#f5f6f8); border-radius:8px; padding:20px; }
+  .mi-payments .mi-payment-grid { gap:20px; padding-top:20px; border-top:1px solid var(--line); }
+  .mi-payments .mi-payment-actions { padding-top:16px; margin-top:16px; border-top:1px solid var(--line); }
+  .mi-payments .mi-payment-choice { border-radius:8px; }
+  .mi-payments .mi-payment-history-table th { color:var(--muted); background:var(--work-filter,#f5f6f8); }
+}
+@media screen and (max-width:760px) {
+  .mi-payments .mi-payment-summary { padding:14px; }
+  .mi-payments .mi-payment-grid { grid-template-columns:minmax(0,1fr); gap:16px; }
+  .mi-payments .mi-payment-actions button { min-width:0; width:100%; }
+}

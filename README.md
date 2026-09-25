@@ -12,6 +12,10 @@ La parrocchia è l'ente base. Ogni gruppo può avere logo, immagine, colori e co
 
 ## Stato
 
+Versione **[3.26.175](docs/rilascio-3.26.175.md)**: restyling della Segreteria, report pagamenti, correzioni mobile e filtri, palette semantica e immagini a filo delle tessere Eventi. Include le revisioni fino alla [3.26.174](docs/rilascio-3.26.174.md). Il pacchetto pubblico esclude la configurazione privata; pubblicare su GitHub non installa il plugin sul sito. Nessun aggiornamento Google Apps Script necessario. I paragrafi seguenti documentano i rilasci precedenti.
+
+È preparato localmente il plugin **[3.26.166](docs/rilascio-3.26.166.md)**: report pagamenti nel gestionale, con filtri, totali e CSV conservati; rimosso soltanto l’avviso di modalità operativa da Comunicazioni. Include la revisione grafica desktop/mobile della 3.26.165. Pacchetti WordPress in `dist`; nessun aggiornamento Google Apps Script necessario e nessuna installazione sul sito eseguita. Le informazioni seguenti conservano la cronologia precedente.
+
 Il rilascio corrente preparato è **[3.26.158](docs/rilascio-3.26.158.md)**: recupera in modo controllato i fogli rimasti nel vecchio tracciato quando il progressivo `1…N` è stato scritto nella precedente colonna tecnica, quindi applica il nuovo layout con progressivo visibile e identificatori nascosti. Include la colonna “Stato” condizionale della 3.26.157. Il progetto GAS è aggiornato al deployment **11**; l’installazione WordPress resta a cura dell'utente. La segnalazione di errori 500 su altre pagine resta da diagnosticare con i log del server. Le informazioni seguenti conservano la cronologia delle release precedenti.
 
 La [campagna di stabilizzazione del 22 settembre 2026](docs/campagna-stabilizzazione-2026-09-22.md) documenta correzioni su transazioni, retry concorrenti, annullamenti e notifiche, più un'ottimizzazione del catalogo servizi, incluse nella **3.26.152**. Per i test integrati su database sintetico e browser usare `tools/verify-campaign.ps1`, con MariaDB locale sulla porta 33317 e Playwright disponibile; il comando completo è nel rapporto.

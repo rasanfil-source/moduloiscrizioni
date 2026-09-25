@@ -10,6 +10,16 @@ final class MI_Portal_Payments {
 	public static function allowed() {
 		return is_user_logged_in() && ! MI_Access::is_suspended() && ( current_user_can( 'manage_options' ) || ( current_user_can( 'mi_portal_access' ) && current_user_can( 'mi_manage_payments' ) ) );
 	}
+	public static function report_allowed() {
+		return is_user_logged_in() && ! MI_Access::is_suspended() && ( current_user_can( 'mi_portal_access' ) || current_user_can( 'manage_options' ) ) && current_user_can( 'mi_view_registrations' );
+	}
+	public static function report_url( $event_id = 0 ) {
+		return add_query_arg( array( 'mi_portal_view' => 'payment-report', 'payment_event_id' => absint( $event_id ), 'mi_portal_event' => absint( $event_id ) ), MI_Portal::url() );
+	}
+	public static function render_report() {
+		if ( ! self::report_allowed() ) { echo '<p class="mi-portal-notice mi-portal-error">Non disponi del permesso per consultare il report pagamenti.</p>'; return; }
+		MI_Admin::payments_page( true );
+	}
 	public static function registration( $id ) {
 		global $wpdb;
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id,event_id,order_code,status FROM {$wpdb->prefix}mi_registrations WHERE id=%d", absint( $id ) ), ARRAY_A );
@@ -89,7 +99,7 @@ final class MI_Portal_Payments {
 		<fieldset data-search-fields><label for="mi-payment-search">Nome della persona, email, telefono o codice prenotazione</label>
 		<div class="mi-payment-search"><input id="mi-payment-search" type="search" autocomplete="off" maxlength="80" aria-describedby="mi-payment-search-status"><button type="button" data-clear class="mi-secondary" hidden>Cancella ricerca</button></div>
 		<p id="mi-payment-search-status" role="status" aria-live="polite">Digita almeno due caratteri.</p><div data-results class="mi-booking-list"></div></fieldset>
-		<?php if ( current_user_can( 'mi_view_registrations' ) || current_user_can( 'manage_options' ) ) : ?><p><a class="mi-secondary" href="<?php echo esc_url( add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-payments', 'payment_event_id' => absint( $_GET['mi_portal_event'] ?? 0 ) ), admin_url( 'edit.php' ) ) ); ?>">Report pagamenti e rimborsi</a></p><?php endif; ?>
+		<?php if ( current_user_can( 'mi_view_registrations' ) || current_user_can( 'manage_options' ) ) : ?><p><a class="mi-secondary" href="<?php echo esc_url( self::report_url( absint( $_GET['mi_portal_event'] ?? 0 ) ) ); ?>">Report pagamenti e rimborsi</a></p><?php endif; ?>
 		<p data-status class="mi-payment-status" role="status" aria-live="polite"></p>
 		<button type="button" data-retry-detail class="mi-secondary" hidden>Riprova caricamento saldo</button>
 		<form data-payment-form novalidate hidden>

@@ -1,6 +1,6 @@
 // Synthetic PHP-rendered wizard, exercised in a local browser only.
 const fs=require('fs'),http=require('http'),assert=require('node:assert/strict'),{execFileSync}=require('child_process');
-const {chromium}=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright');
+const chromium=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright')[process.env.MI_BROWSER_ENGINE||'chromium'];
 const php=process.env.MI_PHP_BINARY||'php';
 const server=http.createServer((req,res)=>{
  if(req.url==='/portal.js'){res.setHeader('Content-Type','text/javascript');return res.end(fs.readFileSync('wordpress-plugin/modulo-iscrizioni/assets/portal.js'));}
@@ -8,7 +8,7 @@ const server=http.createServer((req,res)=>{
  const html=execFileSync(php,['wordpress-plugin/tests/event-wizard.php',id,'--html'],{encoding:'utf8'});
  res.setHeader('Content-Type','text/html; charset=utf-8');res.end('<!doctype html><style>.mi-wizard-step{display:none}.mi-wizard-step.is-active{display:block}[hidden]{display:none!important}</style>'+html+'<script src="/portal.js"></script>');
 });
-(async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({channel:'msedge',headless:true});try{
+(async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({...(process.env.MI_BROWSER_ENGINE?{}:{channel:'msedge'}),headless:true});try{
  const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:'+server.address().port);
  await page.locator('[name=title]').fill('Nuovo ciclo');await page.locator('[data-mi-copy-event]').selectOption('42');await page.waitForURL('**mi_copy_from=42');
  assert.equal(await page.locator('[name=title]').inputValue(),'Nuovo ciclo');assert.equal(await page.locator('[name=capacity]').inputValue(),'77');assert.equal(await page.locator('[name=max_per_order]').inputValue(),'8');

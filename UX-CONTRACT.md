@@ -1,5 +1,15 @@
 # Contratto della gestione web
 
+## Revisione grafica del 24 settembre 2026 — vincolo di conservazione
+
+La revisione approvata riguarda esclusivamente presentazione, gerarchia visiva e disposizione responsive. Tutte le funzioni esistenti devono rimanere disponibili in ogni scheda: permessi, campi, validazioni, filtri, ordinamenti, rapporti, collegamenti, presenze, camere e operazioni economiche non vengono semplificati né sostituiti dai facsimile.
+
+Nei Rapporti partecipanti rimangono tutte le caselle di «Scegli i dati del rapporto», incluse le colonne condizionali e le domande dell'evento. Stampa ed Excel continuano a utilizzare le colonne selezionate e i filtri correnti, con la persistenza delle scelte già prevista. Il selettore semplificato dei facsimile non è una specifica funzionale.
+
+Su mobile il Menu raccoglie gli stessi collegamenti autorizzati, compreso Esci. L'evento si può espandere per cambiare periodo o selezione. Nuova iscrizione precede il riepilogo nel DOM; le due tessere Iscritti e Dati mancanti restano visibili affiancate, con titoli e numeri centrati. La ricerca resta visibile e Filtri apre i campi sotto i comandi. Progressivo, ordinamento per nome/camera, presenze, stato e dati mancanti sono conservati; le colonne aggiuntive si dispongono sotto il nome senza tagliare telefono ed email. Gli elenchi mobile lunghi scorrono entro il 55% dell'altezza della finestra, mantenendo la paginazione esistente. Questi dettagli incorporano le correzioni approvate fino alla 3.26.175.
+
+Queste disposizioni aggiornano le precedenti indicazioni di sola impaginazione, in particolare la barra mobile orizzontale e l'ordine riepilogo/nuova iscrizione. Non cambiano le regole operative descritte di seguito.
+
 ## Contesto e decisioni
 
 Le variazioni operative comprendono tutti i servizi configurati, non soltanto la sistemazione. Ogni cambio conserva motivo, prima e dopo; ricalcola automaticamente il dovuto in base alla variazione dei servizi e non crea rimborsi. La rettifica del dovuto richiede il permesso pagamenti; il rimborso effettivo rimane un movimento separato. Le presenze non sono dedotte dalle iscrizioni e i collegamenti personali per il rapporto annuale richiedono verifica e conferma esplicite. Gli omonimi e i contatti familiari non vengono uniti automaticamente.

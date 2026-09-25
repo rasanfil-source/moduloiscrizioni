@@ -1,6 +1,6 @@
 // Read-only UI verification: current assets, synthetic data, intercepted requests.
 const fs=require('fs'),path=require('path'),assert=require('node:assert/strict');
-const {chromium}=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright');
+const chromium=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright')[process.env.MI_BROWSER_ENGINE||'chromium'];
 const assets=path.resolve('wordpress-plugin/modulo-iscrizioni/assets');
 const out=path.resolve('.tmp/portal-visual-regressions');fs.mkdirSync(out,{recursive:true});
 const widths=[1280,1024,800,768,760,600,480,390,360,320];
@@ -20,7 +20,7 @@ const result={browser:'',links:[],payments:[],modal:[],controls:[],errors:[]};
 const equalPx=(actual,expected)=>assert.ok(Math.abs(actual-expected)<0.1,actual+'px differs from '+expected+'px');
 const bounds=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,right:r.right,bottom:r.bottom,clientWidth:e.clientWidth,scrollWidth:e.scrollWidth};};
 (async()=>{
- const browser=await chromium.launch({channel:process.env.MI_BROWSER_CHANNEL||'msedge',headless:true});result.browser=browser.version();
+ const browser=await chromium.launch({...(process.env.MI_BROWSER_ENGINE?{}:{channel:process.env.MI_BROWSER_CHANNEL||'msedge'}),headless:true});result.browser=browser.version();
  const page=await browser.newPage({viewport:{width:1280,height:900},locale:'it-IT'});page.setDefaultTimeout(10000);
  page.on('pageerror',e=>result.errors.push(e.message));
  let mode='management',reference='',emptyHistory=false;
@@ -38,7 +38,7 @@ const bounds=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.w
     else data=p.operation==='summary'?summary:{...booking,order_code:p.order_code};
     return route.fulfill({json:{success:true,data}});
    }
-   if(css.includes(file)||['portal.js','portal-management.js','portal-payments.js'].includes(file))return route.fulfill({body:fs.readFileSync(path.join(assets,file)),contentType:file.endsWith('.css')?'text/css':'text/javascript'});
+   if(css.includes(file)||['portal.js','portal-management.js','portal-payments.js'].includes(file))return route.fulfill({body:fs.readFileSync(path.join(assets,file)),contentType:file.endsWith('.css')?'text/css; charset=utf-8':'text/javascript; charset=utf-8'});
    let body,scripts=[];
    if(mode==='management'){body='<main class="mi-portal">'+management()+'</main>';scripts=['portal-management.js'];}
    if(mode==='modal'){

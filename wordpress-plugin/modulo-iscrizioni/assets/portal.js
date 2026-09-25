@@ -46,6 +46,30 @@ function miPanelCache(load, { ttl = 30000, limit = 12 } = {}) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Move the existing navigation, including its permission-filtered links; never clone actions.
+  document.querySelectorAll('.mi-portal').forEach((portal, index) => {
+    const header=portal.querySelector('.mi-portal-header'), nav=portal.querySelector('.mi-portal-switcher[aria-label="Segreteria eventi"]');
+    if(!header||!nav)return;
+    if(!portal.dataset.miPortalScope)portal.dataset.miPortalScope='reserved';
+    if(portal.dataset.miPortalScope!=='reserved')return;
+    const mobile=window.matchMedia('(max-width:760px)'), logout=header.querySelector('.mi-portal-logout');
+    const logoutAnchor=document.createComment('portal logout position');
+    if(logout)logout.before(logoutAnchor);
+    const current=nav.querySelector('.is-active,[aria-current="page"]');
+    const toggle=document.createElement('button');toggle.type='button';toggle.className='mi-portal-menu-toggle';toggle.textContent='☰ Menu'+(current?' · '+current.textContent.trim():'');
+    nav.id=nav.id||'mi-portal-navigation-'+index;toggle.setAttribute('aria-controls',nav.id);toggle.setAttribute('aria-expanded','false');header.append(toggle);
+    portal.classList.add('mi-portal--responsive-nav');
+    const layout=()=>{
+      const hadFocus=nav.contains(document.activeElement)||document.activeElement===toggle;
+      nav.classList.remove('is-open');toggle.setAttribute('aria-expanded','false');
+      if(logout){if(mobile.matches)nav.append(logout);else logoutAnchor.after(logout);}
+      if(hadFocus){if(mobile.matches)toggle.focus();else nav.querySelector('.is-active,a')?.focus();}
+    };
+    toggle.onclick=()=>{const open=nav.classList.toggle('is-open');toggle.setAttribute('aria-expanded',String(open));};
+    nav.addEventListener('keydown',event=>{if(event.key==='Escape'&&mobile.matches){nav.classList.remove('is-open');toggle.setAttribute('aria-expanded','false');toggle.focus();}});
+    if(mobile.addEventListener)mobile.addEventListener('change',layout);else mobile.addListener(layout);
+    layout();
+  });
   const bindPanelIntent = (link, preload) => {
     let timer;
     const cancel = () => clearTimeout(timer);
@@ -798,6 +822,7 @@ document.addEventListener('DOMContentLoaded', () => {
   listUrl.searchParams.delete('mi_portal_booking');
   const modal = document.createElement('div');
   modal.className = 'mi-portal-modal';
+  modal.dataset.miPortalScope = 'reserved';
   modal.hidden = true;
   modal.innerHTML = '<div class="mi-portal-modal__backdrop" data-mi-portal-booking-close></div><section class="mi-portal-modal__dialog" role="dialog" aria-modal="true" aria-label="Scheda prenotazione"><div class="mi-portal-modal__toolbar"><button type="button" class="mi-portal-modal__nav mi-portal-modal__nav--previous" data-mi-portal-booking-previous aria-label="Scheda precedente" title="Scheda precedente">◀</button><button type="button" class="mi-portal-modal__nav mi-portal-modal__nav--next" data-mi-portal-booking-next aria-label="Scheda successiva" title="Scheda successiva">▶</button><button type="button" class="mi-portal-modal__close" data-mi-portal-booking-close aria-label="Chiudi la scheda">×</button></div><div class="mi-portal-modal__content" aria-live="polite"></div></section>';
   document.body.append(modal);

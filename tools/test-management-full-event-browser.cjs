@@ -57,7 +57,10 @@ rooms=[{code:'DS1',name:'Camera doppia con accesso facilitato',capacity:2,occupi
   fail=false;await page.locator('[data-refresh]').click();await page.locator('[data-more]').waitFor();
   for(const width of [390,320]){
    await page.setViewportSize({width,height:844});await page.reload();await page.locator('[data-more]').waitFor();
+   assert.equal(await page.locator('.mi-management-summary-cards').isVisible(),true);
+
    assert.equal(await page.locator('.mi-management-summary-cards').evaluate(e=>getComputedStyle(e).gridTemplateColumns.split(' ').length),2);
+
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
    await page.screenshot({path:'.tmp/evento-completo-mobile-'+width+'.png'});
    await page.locator('[data-room-section]>summary').click();await page.getByLabel('Tipo di sistemazione',{exact:true}).selectOption('alloggio-doppia-separati');

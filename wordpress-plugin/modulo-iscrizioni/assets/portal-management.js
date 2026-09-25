@@ -28,6 +28,7 @@
     return new Blob([...parts,...directory,endRecord],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   }
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const requestId = () => globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
   const personName = person => [person?.last_name,person?.first_name].filter(Boolean).join(' ');
   const downloadExcel=(filename,rows)=>{const url=URL.createObjectURL(reportWorkbook(rows));const link=document.createElement('a');link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
   const depositText=b=>b.deposit_plan?'Caparra prevista '+money(b.deposit_due)+' · Ancora da coprire '+money(b.deposit_missing)+(b.deposit_covered&&(b.balance??b.balance_cents)>0?' · Caparra coperta, saldo da completare':b.deposit_due===0?' · Nessuna caparra richiesta':''):'';
@@ -35,13 +36,28 @@
   const money = n => (Number(n || 0)/100).toLocaleString('it-IT',{style:'currency',currency:'EUR'});
   const emailContact = email => email ? '<a class="mi-contact-icon" href="mailto:'+esc(email)+'" title="Scrivi a '+esc(email)+'" aria-label="Scrivi a '+esc(email)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 5.5h17v13h-17zM4 6l8 6 8-6"/></svg></a>' : '';
   const phoneContact = phone => phone ? '<a class="mi-contact-icon" href="tel:'+esc(phone).replace(/[^+0-9]/g,'')+'" title="Chiama '+esc(phone)+'" aria-label="Chiama '+esc(phone)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5 4.7 5.8c-.7.7-.9 1.8-.5 2.7 2.1 5 5.9 8.8 10.9 10.9.9.4 2 .2 2.7-.5l2.3-2.3-3.5-3.5-2.2 1.5c-1.5-.8-2.8-2.1-3.6-3.6l1.5-2.2z"/></svg></a>' : '';
+  const presentDialog=(dialog,previous,done)=>{
+    document.body.append(dialog);
+    const finish=value=>{dialog.remove();previous?.focus();done(value);};
+    if(dialog.showModal){dialog.addEventListener('close',()=>finish(dialog.returnValue||'cancel'),{once:true});dialog.showModal();return;}
+    const backdrop=document.createElement('div');backdrop.className='mi-management-confirm-backdrop';backdrop.dataset.miPortalScope='reserved';document.body.insertBefore(backdrop,dialog);
+    const hidden=[...document.body.children].filter(element=>element!==dialog&&element!==backdrop).map(element=>({element,aria:element.getAttribute('aria-hidden'),inert:element.inert}));
+    hidden.forEach(({element})=>{element.setAttribute('aria-hidden','true');element.inert=true;});
+    const restore=value=>{hidden.forEach(({element,aria,inert})=>{if(aria===null)element.removeAttribute('aria-hidden');else element.setAttribute('aria-hidden',aria);element.inert=inert;});backdrop.remove();finish(value);};
+    const focusable=()=>[...dialog.querySelectorAll('button:not([disabled]),[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled])')];
+    dialog.dataset.miFallbackDialog='';dialog.setAttribute('open','');dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');
+    dialog.addEventListener('click',event=>{const button=event.target.closest('button');if(!button)return;event.preventDefault();restore(button.value||'cancel');});
+    dialog.addEventListener('submit',event=>{event.preventDefault();restore(event.submitter?.value||'cancel');});
+    dialog.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();restore('cancel');return;}if(event.key!=='Tab')return;const items=focusable();if(!items.length)return;const first=items[0],last=items.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}});
+    (dialog.querySelector('[autofocus]')||focusable()[0]||dialog).focus();
+  };
     async function ask(message,action='Continua') {
       const previous=document.activeElement,dialog=document.createElement('dialog');dialog.className='mi-management-confirm'+(/^(Annulla|Elimina|Rimuovi)/i.test(action)?' mi-management-confirm--danger':'');
+    dialog.dataset.miPortalScope='reserved';
     dialog.innerHTML='<form method="dialog" novalidate><h2>Conferma operazione</h2><p></p><button value="cancel" autofocus>Torna indietro</button> <button value="accept"></button></form>';
     dialog.querySelector('p').textContent=message;dialog.querySelector('[value=accept]').textContent=action;
-    const title='mi-confirm-'+crypto.randomUUID();dialog.querySelector('h2').id=title;dialog.setAttribute('aria-labelledby',title);
-    document.body.append(dialog);dialog.showModal();
-    return new Promise(resolve=>dialog.addEventListener('close',()=>{const accepted=dialog.returnValue==='accept';dialog.remove();previous?.focus();resolve(accepted);},{once:true}));
+    const title='mi-confirm-'+requestId();dialog.querySelector('h2').id=title;dialog.setAttribute('aria-labelledby',title);
+    return new Promise(resolve=>presentDialog(dialog,previous,value=>resolve(value==='accept')));
   }
   // Confirmations also serve the event and group forms outside management.
   const confirmingForms = new WeakSet(), approvedForms = new WeakSet();
@@ -85,11 +101,29 @@
     let period=periodSelect?.value||'current';
     let printList=null,listResize=null,currentPerson=null,returnEvent=event,allQuery='',allClosed=false;
     const eventActions=root.querySelector('[data-event-actions]');
+    const mobileLayout=window.matchMedia('(max-width:760px)');
+    const eventSelectors=root.querySelector('.mi-management-event-selectors');
+    let eventContext=null;
+    if(eventSelectors&&!eventSelectors.hidden){
+      eventContext=document.createElement('details');eventContext.className='mi-management-event-context';
+      const heading=document.createElement('summary');heading.setAttribute('aria-label','Mostra o cambia evento');
+      eventSelectors.before(eventContext);eventContext.append(heading,eventSelectors);
+    }
+    const updateEventContext=()=>{if(eventContext){const heading=eventContext.querySelector('summary');heading.textContent=select.selectedOptions[0]?.textContent||'Tutti gli eventi';heading.setAttribute('aria-label','Evento: '+heading.textContent+'. Mostra o cambia evento');}};
+    const arrangeManagement=()=>{
+      const focused=document.activeElement;
+      if(eventContext){eventContext.open=!mobileLayout.matches;updateEventContext();if(mobileLayout.matches&&eventSelectors.contains(focused))eventContext.querySelector('summary').focus();}
+      const summaryPanel=content.querySelector('.mi-management-summary');
+      const primary=content.querySelector('[data-new-registration]'),bar=content.querySelector('.mi-management-actionbar');
+      if(primary&&summaryPanel&&bar){const restoreFocus=primary.contains(focused);if(mobileLayout.matches)summaryPanel.before(primary);else bar.append(primary);if(restoreFocus)focused.focus();}
+    };
+    if(mobileLayout.addEventListener)mobileLayout.addEventListener('change',arrangeManagement);else mobileLayout.addListener(arrangeManagement);
     const printButton=root.querySelector('[data-print]');
     const parkPanels=()=>{if(eventActions){if(printButton)eventActions.append(printButton);eventActions.hidden=false;root.insertBefore(eventActions,content);}};
     let listContext={query:'',filter:'all',state:'',orderService:'',requests:'',deadline:'',room:'',service:'',sort:'name',view:'people',shown:30},listEvent=event;
     const filterEvents=()=>{if(!periodSelect)return;select.replaceChildren(...eventOptions.filter(option=>!option.value||option.dataset.period===period).map(option=>option.cloneNode(true)));select.value=event;};
     filterEvents();
+    arrangeManagement();
     const updateLocation=()=>{const url=new URL(location.href);url.searchParams.set('mi_portal_period',period);url.searchParams.set('mi_portal_event',event);url.searchParams.delete('mi_order');url.searchParams.delete('mi_sheet_sync');history.replaceState(null,'',url);};
     if(periodSelect)periodSelect.onchange=async()=>{const next=periodSelect.value;if(!await canLeave()){periodSelect.value=period;return;}period=next;event='';filterEvents();updateLocation();await summary();if(select.options.length===1)say(period==='past'?'Non ci sono eventi passati.':'Non ci sono eventi attivi.');};
     const say=t=>{
@@ -105,7 +139,7 @@
     async function request(operation,data={}) {
       const attendanceKey=operation==='attendance_bulk'?event+'|'+data.data:null;
       if(attendanceKey){
-        if(!attendanceRetries.has(attendanceKey))attendanceRetries.set(attendanceKey,crypto.randomUUID());
+        if(!attendanceRetries.has(attendanceKey))attendanceRetries.set(attendanceKey,requestId());
         data={...data,request_id:attendanceRetries.get(attendanceKey)};
       }
       const abort=new AbortController(),timeout=setTimeout(()=>abort.abort(),operation==='open_sheet'?240000:90000);
@@ -156,7 +190,7 @@
     });
     const paymentDraft=()=>!!content.querySelector('[data-payment-draft="1"]');
     root.addEventListener('mi:before-booking-navigation',e=>{if(dirty||pending||busy||paymentDraft()){e.preventDefault();say('Salva le modifiche oppure scarta la bozza prima di uscire dalla scheda.');}});
-    const resolveDraft=()=>new Promise(resolve=>{const dialog=document.createElement('dialog');dialog.className='mi-management-confirm';dialog.innerHTML='<form method="dialog" novalidate><h2>Modifiche non salvate</h2><p>Vuoi salvare le modifiche prima di proseguire?</p><button value="stay" autofocus>Continua a modificare</button> <button value="discard">Annulla modifiche</button> <button value="save">Salva</button></form>';dialog.addEventListener('close',()=>{const choice=dialog.returnValue||'stay';dialog.remove();resolve(choice);});document.body.append(dialog);dialog.showModal();});
+    const resolveDraft=()=>new Promise(resolve=>{const dialog=document.createElement('dialog'),previous=document.activeElement;dialog.className='mi-management-confirm';dialog.dataset.miPortalScope='reserved';dialog.innerHTML='<form method="dialog" novalidate><h2>Modifiche non salvate</h2><p>Vuoi salvare le modifiche prima di proseguire?</p><button value="stay" autofocus>Continua a modificare</button> <button value="discard">Annulla modifiche</button> <button value="save">Salva</button></form>';const title='mi-draft-'+requestId();dialog.querySelector('h2').id=title;dialog.setAttribute('aria-labelledby',title);presentDialog(dialog,previous,value=>resolve(['stay','discard','save'].includes(value)?value:'stay'));});
     const personalBaselines=new WeakMap();
     const personalValues=form=>JSON.stringify([...new FormData(form).entries()]);
     const trackEdit=e=>{
@@ -197,6 +231,7 @@
       content.querySelector('[data-all-closed]').onchange=e=>{allClosed=e.target.checked;load();};more.onclick=()=>load(false);await load();
     }
     async function summary(){
+      updateEventContext();
       if(!await canLeave())return;const ticket=++generation;order='';booking=null;printList=null;parkPanels();content.replaceChildren();const sheetLink=root.querySelector('[data-open-sheet]'),sheetSync=root.querySelector('[data-sheet-sync]');if(sheetLink){sheetLink.hidden=true;sheetLink.removeAttribute('href');}if(sheetSync)sheetSync.hidden=true;if(!event){await allPeople();return;}say('Caricamento riepilogo…');
       if(printButton){printButton.hidden=false;printButton.textContent='Stampa riepilogo iscritti';}returnEvent=event;currentPerson=null;
       try{const data=await request('summary');if(ticket!==generation)return;
@@ -213,7 +248,7 @@
 
         const summaryRow=(label,value,attention=false)=>'<tr'+(attention?' class="mi-summary-attention"':'')+'><th scope="row">'+label+'</th><td>'+value+'</td></tr>';
         const summaryGroup=(title,rows)=>'<tbody><tr class="mi-summary-section"><th scope="rowgroup" colspan="2">'+title+'</th></tr>'+rows+'</tbody>';
-        const summaryCard=(label,value,detail='',attention=false)=>'<article class="mi-summary-card'+(attention?' mi-summary-card--attention':'')+'"><span>'+label+'</span><strong>'+value+'</strong>'+(detail?'<small>'+detail+'</small>':'')+'</article>';
+        const summaryCard=(label,value,detail='',attention=false,key='')=>'<article class="mi-summary-card'+(attention?' mi-summary-card--attention':'')+(key?' mi-summary-card--'+key:'')+'"><span>'+label+'</span><strong>'+value+'</strong>'+(detail?'<small>'+detail+'</small>':'')+'</article>';
         const waitlistRows=(people('WAITLISTED')>0?summaryRow('Persone in lista d’attesa',people('WAITLISTED')):'')+(people('WAITLIST_OFFERED')>0?summaryRow('Persone con posto proposto',people('WAITLIST_OFFERED')):'');
         const registeredPeople=people('CONFIRMED')+people('PENDING_PAYMENT');
         const paymentCounts=data.payment_counts||{};
@@ -222,10 +257,12 @@
         const peopleRows=(features.payments?paidPeopleRows:summaryRow('Persone confermate',people('CONFIRMED')))+waitlistRows;
         const economicRows=features.payments?summaryGroup('Importi',summaryRow('Da incassare',money(receivable),receivable>0)+'<tr data-net-paid><th scope="row">Versato netto<small>Esclusi rimborsi effettuati</small></th><td>'+money(netPaid)+'</td></tr>'):'';
         const qualityRows=(sum('missing')>0?summaryRow('Partecipanti con dati mancanti',sum('missing'),true):'')+(features.rooms?summaryRow('Partecipanti senza camera',sum('unassigned'),sum('unassigned')>0):'');
-        const summaryCards=[summaryCard('Persone iscritte',registeredPeople,features.deposit?'Caparra versata: '+people('CONFIRMED'):'Persone confermate: '+people('CONFIRMED')),features.payments?summaryCard('Da incassare',money(receivable),'Versato netto: '+money(netPaid),receivable>0):'',features.rooms?summaryCard('Senza camera',sum('unassigned'),sum('unassigned')?'Da assegnare':'Nessuna persona',sum('unassigned')>0):'',summaryCard('Dati mancanti',sum('missing'),sum('missing')?'Da completare':'Nessuna azione',sum('missing')>0),waitlistRows?summaryCard('Lista d’attesa',people('WAITLISTED')+people('WAITLIST_OFFERED'),people('WAITLIST_OFFERED')?'Posti proposti: '+people('WAITLIST_OFFERED'):'Nessuna persona'):'' ].filter(Boolean).join('');
+        const summaryCards=[summaryCard('Iscritti',registeredPeople,features.deposit?'Caparra versata: '+people('CONFIRMED'):'Confermati: '+people('CONFIRMED')),features.payments?summaryCard('Da incassare',money(receivable),'Versato netto: '+money(netPaid),receivable>0):'',features.rooms?summaryCard('Senza camera',sum('unassigned'),sum('unassigned')?'Da assegnare':'Nessuna persona',sum('unassigned')>0):'',summaryCard('Dati mancanti',sum('missing'),sum('missing')?'Richiede attenzione':'Dati completi',sum('missing')>0,'missing'),waitlistRows?summaryCard('Lista d’attesa',people('WAITLISTED')+people('WAITLIST_OFFERED'),people('WAITLIST_OFFERED')?'Posti proposti: '+people('WAITLIST_OFFERED'):'Nessuna persona'):'' ].filter(Boolean).join('');
         content.innerHTML=`<section class="mi-management-summary" aria-label="Riepilogo evento"><h3>Riepilogo</h3><div class="mi-management-summary-cards">${summaryCards}</div></section><p data-new-registration><a class="mi-primary mi-new-registration" href="${esc(data.registration_url||'#')}" target="_blank" rel="noopener">Inserisci nuova iscrizione</a></p><label>Cerca nome o codice <input type="search" data-query></label><button data-clear-query>Cancella ricerca</button><div data-list></div>`;
         const newRegistration=content.querySelector('[data-new-registration]');
         if(eventActions){eventActions.hidden=false;const actionBar=document.createElement('div');actionBar.className='mi-management-actionbar';newRegistration.before(actionBar);actionBar.append(eventActions,newRegistration);}
+        // Metrics remain visible on every viewport, without an expandable wrapper.
+        arrangeManagement();
         if(!features.payments)content.querySelector('[data-net-paid]')?.setAttribute('hidden','');
 
         if(listEvent!==event){listContext={query:'',filter:'all',state:'',requests:'',deadline:'',room:'',service:'',sort:'name',view:'people',shown:30};listEvent=event;}
@@ -347,7 +384,7 @@
           };
           changeForm.addEventListener('change',e=>{if(e.target.name==='type'||e.target.name==='person')refreshDestinations();});refreshDestinations();
           const previewButton=changeForm.querySelector('[data-preview-accommodation]'),confirmButton=changeForm.querySelector('[data-confirm-accommodation]'),actionStatus=changeForm.querySelector('[data-accommodation-action-status]');
-          confirmButton.onclick=()=>{if(!changePreview||busy||pending)return;pending={operation:'change_accommodation',data:JSON.stringify(changePreview.payload),preview_version:changePreview.version,request_id:crypto.randomUUID()};mutate('change_accommodation',changePreview.payload);};
+          confirmButton.onclick=()=>{if(!changePreview||busy||pending)return;pending={operation:'change_accommodation',data:JSON.stringify(changePreview.payload),preview_version:changePreview.version,request_id:requestId()};mutate('change_accommodation',changePreview.payload);};
           const updateAccommodationStatus=()=>{const selected=changeForm.querySelectorAll('[name=person]:checked').length;actionStatus.textContent=selected?(selected+' '+(selected===1?'persona selezionata':'persone selezionate')):'Nessuna persona selezionata';};
           const invalidate=()=>{changePreview=null;previewHost.replaceChildren();previewButton.hidden=false;confirmButton.hidden=true;updateAccommodationStatus();};changeForm.addEventListener('input',invalidate);changeForm.addEventListener('change',invalidate);
           changeForm.querySelector('[data-discard-accommodation]').onclick=()=>{if(busy||pending)return;changeForm.reset();refreshDestinations();invalidate();dirty=false;dirtyForm=null;content.querySelectorAll('[data-draft-locked]').forEach(el=>{el.disabled=false;delete el.dataset.draftLocked;});say('Cambio annullato. Nessuna modifica registrata.');};
@@ -377,7 +414,7 @@
           const swap=content.querySelector('[data-swap]');swap.onclick=async()=>{
             if(busy)return;if(dirty||(pending&&pending.operation!=='room_swap')){say('Completa o scarta la modifica in corso prima di scambiare le camere.');return;}
             const a=occupants.find(p=>String(p.id)===content.querySelector('[data-swap-first]').value),b=occupants.find(p=>String(p.id)===content.querySelector('[data-swap-second]').value);
-            if(!pending){if(!a||!b||a.id===b.id||a.room===b.room){say('Scegli due persone diverse con assegnazioni diverse.');return;}if(!await ask('Scambiare le camere di '+a.name+' e '+b.name+'?','Scambia camere'))return;pending={operation:"room_swap",data:JSON.stringify([{order_code:a.code,number:a.number,key:'room',before:a.room,after:b.room},{order_code:b.code,number:b.number,key:'room',before:b.room,after:a.room}]),request_id:crypto.randomUUID()};}
+            if(!pending){if(!a||!b||a.id===b.id||a.room===b.room){say('Scegli due persone diverse con assegnazioni diverse.');return;}if(!await ask('Scambiare le camere di '+a.name+' e '+b.name+'?','Scambia camere'))return;pending={operation:"room_swap",data:JSON.stringify([{order_code:a.code,number:a.number,key:'room',before:a.room,after:b.room},{order_code:b.code,number:b.number,key:'room',before:b.room,after:a.room}]),request_id:requestId()};}
             busy=true;swap.disabled=true;
             try{const result=await request('room_swap',pending);if(result.saved===false){if(result.rejected){pending=null;say(result.message);return;}throw new Error(result.message);}pending=null;busy=false;await summary();say('Camere scambiate. Aggiornamento del foglio accodato.');}catch(error){say('Scambio non confermato. '+error.message);swap.textContent='Riprova lo stesso scambio';}finally{busy=false;swap.disabled=false;}
           };
@@ -402,12 +439,12 @@
         const questionLabels=new Map(columns.filter(([key])=>key.startsWith('field:custom_')).map(([key],index)=>[key,'D'+(index+1)]));
         const reportLabel=(key,label)=>questionLabels.get(key)||label;
         let savedReportColumns=[],hasSavedReportColumns=false;try{const saved=localStorage.getItem('mi-report-columns:'+event);hasSavedReportColumns=saved!==null;savedReportColumns=JSON.parse(saved||'[]');if(!Array.isArray(savedReportColumns)){savedReportColumns=[];hasSavedReportColumns=false;}}catch(error){savedReportColumns=[];hasSavedReportColumns=false;}
-        content.querySelector('[data-list]').insertAdjacentHTML('afterend','<section data-participant-reports><header class="mi-report-heading"><h3>Rapporti partecipanti</h3></header><details data-export-settings><summary>Scegli i dati del rapporto</summary><div class="mi-report-columns">'+columns.map(([key,label])=>'<label><input type="checkbox" data-export-column="'+esc(key)+'" '+(!hasSavedReportColumns||savedReportColumns.includes(key)?'checked':'')+'> '+esc(questionLabels.has(key)?questionLabels.get(key)+' — '+label:label)+'</label>').join('')+'</div></details><div class="mi-booking-detail__actions" data-report-actions><button data-export>Esporta Excel</button></div></section>');
+        content.querySelector('[data-list]').insertAdjacentHTML('afterend','<section data-participant-reports><header class="mi-report-heading"><h3>Rapporti partecipanti</h3></header><details data-export-settings><summary>Scegli i dati del rapporto</summary><div class="mi-report-columns">'+columns.map(([key,label])=>'<label><input type="checkbox" data-export-column="'+esc(key)+'" '+(!hasSavedReportColumns||savedReportColumns.includes(key)?'checked':'')+'> '+esc(questionLabels.has(key)?questionLabels.get(key)+' — '+label:label)+'</label>').join('')+'</div></details><div class="mi-booking-detail__actions" data-report-actions><button data-export><span class="mi-action-icon mi-action-icon--excel" aria-hidden="true">▦</span><span>Esporta Excel</span></button></div></section>');
         content.querySelectorAll('[data-export-column]').forEach(input=>input.addEventListener('change',()=>{try{localStorage.setItem('mi-report-columns:'+event,JSON.stringify([...content.querySelectorAll('[data-export-column]:checked')].map(item=>item.dataset.exportColumn)));}catch(error){/* La scelta resta valida per la sessione corrente. */}}));
-        if(printButton){printButton.textContent='Stampa';content.querySelector('[data-report-actions]').prepend(printButton);}
+        if(printButton){printButton.innerHTML='<svg class="mi-action-icon mi-action-icon--print" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 9V3h12v6M6 17H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg><span>Stampa</span>';content.querySelector('[data-report-actions]').prepend(printButton);}
         if(!features.rooms&&listContext.sort==='room')listContext.sort='name';
         const searchBar=document.createElement('div');searchBar.className='mi-management-search';searchBar.append(search.closest('label'),content.querySelector('[data-clear-query]'));content.querySelector('[data-list]').before(searchBar);
-        const participantHeading=document.createElement('h3');participantHeading.dataset.participantHeading='';participantHeading.textContent='Elenco partecipanti';
+        const participantHeading=document.createElement('h3');participantHeading.dataset.participantHeading='';participantHeading.innerHTML='<span class="mi-participant-heading-label">Elenco partecipanti</span><span class="mi-participant-count" data-participant-count></span>';
         const listHost=content.querySelector('[data-list]');
         listHost.before(participantHeading);
         const filterSection=document.createElement('section');filterSection.dataset.participantFilters='';filterSection.innerHTML='<header class="mi-filter-heading"><h3>Filtra</h3></header><div class="mi-participant-filters"></div>';participantHeading.before(filterSection);
@@ -415,7 +452,7 @@
         const closedLabel=document.createElement('label');closedLabel.className='mi-include-closed';
         const closedToggle=document.createElement('input');closedToggle.type='checkbox';closedToggle.checked=!!listContext.includeClosed;closedToggle.dataset.includeClosed='';closedLabel.append(closedToggle,' Mostra anche le iscrizioni chiuse');filterSection.append(closedLabel);
         const advancedFilters=document.createElement('details');advancedFilters.className='mi-advanced-filters';
-        advancedFilters.innerHTML='<summary>Altri filtri <span data-filter-count></span></summary>';
+        advancedFilters.innerHTML='<summary><svg class="mi-filter-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16l-6 7v5l-4 2v-7z"/></svg><span>Filtri</span><span data-filter-count></span></summary>';
         filterControls.before(searchBar,advancedFilters);advancedFilters.append(filterControls,closedLabel);
         const activeFilterCount=()=>[listContext.filter&&listContext.filter!=='all',listContext.deposit,listContext.service,listContext.requests,listContext.deadline,listContext.includeClosed].filter(Boolean).length;
         advancedFilters.open=activeFilterCount()>0||!window.matchMedia('(max-width:900px)').matches;
@@ -426,6 +463,13 @@
         }
         search.closest('label').firstChild.textContent='Cerca nome ';serviceFilter.closest('label').firstChild.textContent='Servizio scelto';
         const searchButton=document.createElement('button');searchButton.type='button';searchButton.dataset.runQuery='';searchButton.textContent='Cerca';searchBar.append(searchButton);
+        const filterButton=document.createElement('button');filterButton.type='button';filterButton.dataset.toggleFilters='';
+        filterButton.innerHTML=advancedFilters.querySelector('summary').innerHTML;
+        advancedFilters.querySelector('summary').hidden=true;
+        advancedFilters.id='mi-participant-filters-'+requestId();filterButton.setAttribute('aria-controls',advancedFilters.id);
+        const syncFilterButton=()=>filterButton.setAttribute('aria-expanded',String(advancedFilters.open));
+        filterButton.onclick=()=>{advancedFilters.open=!advancedFilters.open;syncFilterButton();};
+        advancedFilters.addEventListener('toggle',syncFilterButton);syncFilterButton();searchBar.append(filterButton);
         const clearSearch=content.querySelector('[data-clear-query]');clearSearch.type='button';clearSearch.textContent='×';clearSearch.setAttribute('aria-label','Cancella ricerca');clearSearch.title='Cancella ricerca';
         const searchInputWrap=document.createElement('span');searchInputWrap.className='mi-search-input';search.before(searchInputWrap);searchInputWrap.append(search,clearSearch);
         const searchStatus=document.createElement('span');searchStatus.setAttribute('role','status');searchStatus.setAttribute('aria-live','polite');filterSection.querySelector('header').append(searchStatus);
@@ -458,7 +502,7 @@
         };
         const draw=async(append=false,provided=null)=>{
           const revision=++listGeneration;
-          const activeCount=activeFilterCount();advancedFilters.querySelector('[data-filter-count]').textContent=activeCount?'('+activeCount+' attivi)':'';
+          const activeCount=activeFilterCount();filterButton.querySelector('[data-filter-count]').textContent=activeCount?'('+activeCount+')':'';
           if(data.server_paging){
             try{
               if(provided){pageRows=provided.rows;pageTotal=provided.total;}
@@ -493,14 +537,15 @@
           if(listContext.deadline)titleParts.push(listContext.deadline==='expired'?'con proposta di posto scaduta':'con proposta di posto in scadenza');
           if(listContext.service)titleParts.push('che hanno scelto '+(serviceFilter.selectedOptions[0]?.textContent||listContext.service));
           if(listContext.query.trim())titleParts.push('per la ricerca «'+listContext.query.trim()+'»');
-          participantHeading.textContent='Elenco partecipanti'+(titleParts.length?' '+titleParts.join(', '):'');
-          searchStatus.textContent=total+' '+(individual?'persone':'prenotazioni')+' trovate';
+          participantHeading.querySelector('.mi-participant-heading-label').textContent='Elenco partecipanti'+(titleParts.length?' '+titleParts.join(', '):'');
+          participantHeading.querySelector('[data-participant-count]').textContent=String(total)+' '+(individual?(total===1?'persona':'persone'):(total===1?'prenotazione':'prenotazioni'));
+          searchStatus.textContent='';
           const requestedRoomCode=person=>{
             const selected=(person.options||[]).find(option=>Number(option.quantity||0)>0&&data.room_types?.[option.code]);
             return selected?data.room_types[selected.code].prefix+'-':'';
           };
           const showParticipantStatus=individual&&list.some(person=>stateLabel(person)!=='Partecipante');
-          content.querySelector('[data-list]').innerHTML='<table><thead><tr>'+(individual?'<th class="mi-progressive-number">N.</th>'+(features.rooms?'<th class="mi-participant-room-code">Stanza</th>':'')+'<th class="mi-participant-name">Partecipante</th>'+(showParticipantStatus?'<th class="mi-participant-status">Stato</th>':'')+'<th class="mi-participant-contacts-cell">Contatti</th><th class="mi-participant-missing">Dati mancanti</th>':'<th>Prenotazione</th><th>Persone nella prenotazione</th><th>Stato</th><th>Versato</th><th>Residuo</th><th class="mi-participant-actions"></th>')+'</tr></thead><tbody>'+list.map((x,index)=>(individual?'<tr class="mi-participant-row" data-open="'+esc(x.code)+'" data-person-focus="'+x.number+'" tabindex="0" aria-label="Apri la scheda di '+esc(x.name)+'"><td class="mi-progressive-number">'+(index+1)+'</td>'+(features.rooms?'<td class="mi-participant-room-code">'+esc(x.room||requestedRoomCode(x)||'—')+'</td>':'')+'<td class="mi-participant-name"><span class="mi-participant-open-label">'+esc(x.name)+' <span class="mi-participant-chevron" aria-hidden="true">›</span></span></td>'+(showParticipantStatus?'<td class="mi-participant-status"><span class="mi-status-pill mi-status-pill--'+stateClass(x)+'">'+esc(stateLabel(x))+'</span></td>':'')+'<td class="mi-participant-contacts-cell">'+emailContact(x.email)+'<br>'+esc(x.phone)+'</td><td class="mi-participant-missing">'+(x.missing.length?'Mancano: '+esc(x.missing.join(', ')):'')+'</td></tr>':'<tr><td>'+esc(x.code)+'</td><td>'+esc(x.name)+(data.people||[]).filter(p=>p.code===x.code).map(p=>'<div>'+esc(p.name)+(p.status==='CANCELLED'?' (annullato)':'')+'</div>').join('')+'</td><td><span class="mi-status-pill mi-status-pill--'+stateClass(x)+'">'+esc(stateLabel(x))+'</span></td><td>'+money(x.paid)+'</td><td>'+money(x.balance)+(x.deposit_plan?'<small>'+esc(depositText(x))+'</small>':'')+'</td><td class="mi-participant-actions"><button data-open="'+esc(x.code)+'">Gestisci</button></td></tr>')).join('')+'</tbody></table><p>'+list.length+' di '+total+' '+(individual?'persone':'prenotazioni')+'</p>'+(total>list.length?'<button data-more>Mostra altre 30</button>':'')+(all.length===0?'<p>Nessun risultato. Modifica la ricerca o i filtri.</p>':'');
+          content.querySelector('[data-list]').innerHTML='<table><thead><tr>'+(individual?'<th class="mi-progressive-number">N.</th>'+(features.rooms?'<th class="mi-participant-room-code">Stanza</th>':'')+'<th class="mi-participant-name">Partecipante</th>'+(showParticipantStatus?'<th class="mi-participant-status">Stato</th>':'')+'<th class="mi-participant-contacts-cell">Contatti</th><th class="mi-participant-missing">Dati mancanti</th>':'<th>Prenotazione</th><th>Persone nella prenotazione</th><th>Stato</th><th>Versato</th><th>Residuo</th><th class="mi-participant-actions"></th>')+'</tr></thead><tbody>'+list.map((x,index)=>(individual?'<tr class="mi-participant-row" data-open="'+esc(x.code)+'" data-person-focus="'+x.number+'" tabindex="0" aria-label="Apri la scheda di '+esc(x.name)+'"><td class="mi-progressive-number">'+(index+1)+'</td>'+(features.rooms?'<td class="mi-participant-room-code">'+esc(x.room||requestedRoomCode(x)||'—')+'</td>':'')+'<td class="mi-participant-name"><span class="mi-participant-open-label">'+esc(x.name)+' <span class="mi-participant-chevron" aria-hidden="true">›</span></span></td>'+(showParticipantStatus?'<td class="mi-participant-status"><span class="mi-status-pill mi-status-pill--'+stateClass(x)+'">'+esc(stateLabel(x))+'</span></td>':'')+'<td class="mi-participant-contacts-cell">'+emailContact(x.email)+'<br>'+esc(x.phone)+'</td><td class="mi-participant-missing">'+(x.missing.length?'Mancano: '+esc(x.missing.join(', ')):'')+'</td></tr>':'<tr><td>'+esc(x.code)+'</td><td>'+esc(x.name)+(data.people||[]).filter(p=>p.code===x.code).map(p=>'<div>'+esc(p.name)+(p.status==='CANCELLED'?' (annullato)':'')+'</div>').join('')+'</td><td><span class="mi-status-pill mi-status-pill--'+stateClass(x)+'">'+esc(stateLabel(x))+'</span></td><td>'+money(x.paid)+'</td><td>'+money(x.balance)+(x.deposit_plan?'<small>'+esc(depositText(x))+'</small>':'')+'</td><td class="mi-participant-actions"><button data-open="'+esc(x.code)+'">Gestisci</button></td></tr>')).join('')+'</tbody></table>'+(total>list.length?'<button data-more>Mostra altre 30</button>':'')+(all.length===0?'<p>Nessun risultato. Modifica la ricerca o i filtri.</p>':'');
           const participantStatusIndex=features.rooms?3:2,participantContactsIndex=participantStatusIndex+(showParticipantStatus?1:0),participantMissingIndex=participantContactsIndex+1;
           const showMissing=individual&&list.some(p=>(p.missing||[]).length);
           if(individual){
@@ -539,6 +584,7 @@
           for(const [index,key,label] of [[features.rooms?2:1,'name','Partecipante'],...(features.rooms?[[1,'room','Stanza']]:[])]){
             const header=content.querySelectorAll('[data-list] thead th')[index];
             const selected=listContext.sort===key,descending=selected&&listContext.direction==='desc';
+            header.classList.add('mi-sortable-heading');
             header.setAttribute('aria-sort',selected?(descending?'descending':'ascending'):'none');
             header.innerHTML='<button type="button" data-sort-column="'+key+'">'+label+' <span aria-hidden="true">'+(selected?(descending?'↓':'↑'):'↕')+'</span></button>';
             header.querySelector('button').onclick=async()=>{listContext.direction=selected&&!descending?'desc':'asc';listContext.sort=key;listContext.shown=30;await draw();content.querySelector('[data-sort-column="'+key+'"]')?.focus();};
@@ -564,13 +610,13 @@
         searchButton.onclick=runSearch;
 
         requestFilter.onchange=()=>{listContext.requests=requestFilter.value;listContext.shown=30;draw();};deadlineFilter.onchange=()=>{listContext.deadline=deadlineFilter.value;listContext.shown=30;draw();};serviceFilter.onchange=()=>{listContext.service=serviceFilter.value;listContext.shown=30;draw();};
-        await draw();printList=async()=>{let printHost;const cleanup=()=>{printHost?.remove();root.classList.remove('mi-printing-list');};try{
+        await draw();printList=async()=>{let printHost;const cleanup=()=>{printHost?.remove();root.classList.remove('mi-printing-list');document.body.classList.remove('mi-management-printing');};try{
           const individual=listContext.view==='people',chosen=individual?columns.filter(([key])=>content.querySelector('[data-export-column="'+key+'"]').checked):[],selected=individual?[['ordinal','N.'],...(features.rooms?[['room','Stanza']]:[]),...chosen.filter(([key])=>key!=='room')]:[['code','Prenotazione'],['name','Persone'],['status','Stato'],['paid','Versato netto (EUR)'],['balance','Residuo (EUR)']];
           if(!selected.length){say('Seleziona almeno una colonna.');return;}
           const rows=await readAll();printHost=document.createElement('section');printHost.dataset.printList='1';
           const value=(row,key,index)=>key==='ordinal'?index+1:key==='name'?row.name:key.startsWith('field:')?(row.fields?.[key.slice(6)]??''):key==='attendance'?({PRESENT:'Presente',ABSENT:'Assente',UNRECORDED:'Non rilevata'}[row.attendance?.state||row.attendance]||'Non rilevata'):key==='status'?stateLabel(row):key==='offer_expires_at'?deadlineLabel(row[key]):['paid','balance'].includes(key)?money(row[key]):Array.isArray(row[key])?row[key].join(', '):row[key];
           const filters=[listContext.query?'Ricerca: '+listContext.query:'',...['[data-deposit-filter]','[data-request-filter]','[data-deadline-filter]','[data-service-filter]'].map(selector=>{const input=content.querySelector(selector);return input.value?input.selectedOptions[0].textContent:'';}),listContext.filter!=='all'?criticalFilter.selectedOptions[0].textContent:'',listContext.orderService?orderServices.get(listContext.orderService)?.name:''].filter(Boolean);
-          printHost.innerHTML='<h2>'+esc(select.selectedOptions[0]?.textContent||'Evento')+'</h2><p>'+rows.length+' '+(individual?'persone':'prenotazioni')+' · '+esc(filters.join(' · ')||'Tutti i risultati')+'</p><table><thead><tr>'+selected.map(([key,label])=>'<th>'+esc(reportLabel(key,label))+'</th>').join('')+'</tr></thead><tbody>'+rows.map((row,index)=>'<tr>'+selected.map(([key])=>'<td>'+esc(value(row,key,index))+'</td>').join('')+'</tr>').join('')+'</tbody></table>';root.append(printHost);root.classList.add('mi-printing-list');window.addEventListener('afterprint',cleanup,{once:true});window.print();
+          printHost.innerHTML='<h2>'+esc(select.selectedOptions[0]?.textContent||'Evento')+'</h2><p>'+rows.length+' '+(individual?'persone':'prenotazioni')+' · '+esc(filters.join(' · ')||'Tutti i risultati')+'</p><table><thead><tr>'+selected.map(([key,label])=>'<th>'+esc(reportLabel(key,label))+'</th>').join('')+'</tr></thead><tbody>'+rows.map((row,index)=>'<tr>'+selected.map(([key])=>'<td>'+esc(value(row,key,index))+'</td>').join('')+'</tr>').join('')+'</tbody></table>';root.append(printHost);root.classList.add('mi-printing-list');document.body.classList.add('mi-management-printing');window.addEventListener('afterprint',cleanup,{once:true});window.print();
         }catch(error){cleanup();say('Stampa non completata. '+error.message);}};say('Aggiornato: '+new Date(data.updated_at).toLocaleString('it-IT'));updateSheetSyncVisibility(ticket,event);
       }catch(e){if(ticket===generation)say('Riepilogo non disponibile. '+e.message);}
     }
@@ -586,7 +632,7 @@
         const button=content.querySelector('[data-apply-sheet]');
         button.onclick=async()=>{
           if(busy)return;busy=true;button.disabled=true;select.disabled=true;
-          pending=pending||{operation:'sheet_save',data:JSON.stringify(changes),request_id:crypto.randomUUID()};say('Sincronizzazione…');
+          pending=pending||{operation:'sheet_save',data:JSON.stringify(changes),request_id:requestId()};say('Sincronizzazione…');
           try{
             const saved=await request('sheet_save',pending);
             if(saved.ack_pending)throw new Error(saved.message);
@@ -627,6 +673,7 @@
       return input(name,label,value,f.type);
     }
     async function detail(code,personNumber){
+      updateEventContext();
       if(!await canLeave())return;const ticket=++generation;if(order!==code)currentPerson=null;order=code;personNumber=personNumber??currentPerson;say('Caricamento scheda…');
       try{const b=await request('detail');if(ticket!==generation)return;booking=b;printList=null;parkPanels();dirty=false;select.disabled=false;const selectedPerson=b.participants.find(p=>p.number===Number(personNumber))||b.participants[0];currentPerson=selectedPerson?.number??null;document.title=(selectedPerson?personName(selectedPerson):'Iscritto')+' — Scheda iscritto';
         if(printButton){printButton.hidden=false;printButton.textContent='Stampa riepilogo prenotazione';}
@@ -673,13 +720,13 @@
         }else if(printButton)printFallback.append(printButton);
         content.insertAdjacentHTML('beforeend','<p class="mi-detail-back"><button type="button" data-back>Vai a Elenco partecipanti</button></p>');
         if(personNumber){const person=content.querySelector('[data-person="'+Number(personNumber)+'"]');person?.scrollIntoView({block:'center'});person?.querySelector('input')?.focus();}
-        say('Dati aggiornati. Le modifiche vengono salvate nel registro centrale.');if(b.pending){pending=b.pending;say('Un salvataggio interrotto può essere completato.');const resume=document.createElement('button');resume.textContent='Completa il salvataggio interrotto';resume.onclick=()=>mutate(pending.operation,JSON.parse(pending.data));status.append(' ',resume);}
+        say('');if(b.pending){pending=b.pending;say('Un salvataggio interrotto può essere completato.');const resume=document.createElement('button');resume.textContent='Completa il salvataggio interrotto';resume.onclick=()=>mutate(pending.operation,JSON.parse(pending.data));status.append(' ',resume);}
       }catch(e){if(ticket===generation)say('Scheda non disponibile. '+e.message);}
     }
     async function mutate(operation,data){
       if(busy)return;busy=true;
       root.querySelectorAll('button,input,select,textarea').forEach(el=>{el.dataset.wasDisabled=el.disabled?'1':'0';el.disabled=true;});
-      pending=pending||{operation,data:JSON.stringify(data),version:booking.version,request_id:crypto.randomUUID()};say('Salvataggio…');
+      pending=pending||{operation,data:JSON.stringify(data),version:booking.version,request_id:requestId()};say('Salvataggio…');
       try{const result=await request(pending.operation,pending);if(result.saved===false){if(result.rejected){pending=null;say(result.message);return;}throw new Error(result.message);}pending=null;dirty=false;dirtyForm=null;busy=false;if(order)await detail(order);else await summary();say(result.message||'Modifica salvata.');}
       catch(e){say('Salvataggio non confermato: '+e.message);const retry=document.createElement('button');retry.textContent='Riprova lo stesso salvataggio';retry.onclick=()=>mutate(operation,data);status.append(' ',retry);const reload=document.createElement('button');reload.textContent='Ricarica la scheda';reload.onclick=async()=>{if(!await ask('Ricaricare i dati? Le modifiche non salvate verranno perse.','Ricarica la scheda'))return;pending=null;dirty=false;if(order)detail(order);else summary();};status.append(' ',reload);}
       finally{busy=false;select.disabled=false;root.querySelectorAll('[data-was-disabled]').forEach(el=>{el.disabled=el.dataset.wasDisabled==='1';delete el.dataset.wasDisabled;});}
@@ -694,7 +741,9 @@ const assignmentText=preview.assignment&&Object.keys(preview.assignment).length?
 const message=assignmentText+(preview.before_total!==null?'Quota personale: '+money(preview.before_total)+' → '+money(preview.after_total)+'. ':'Variazione: '+money(preview.delta)+'. ')+(preview.credit>0?'Credito da restituire: '+money(preview.credit)+'. ':'')+(change.participant_id===0?'Ripartizione: '+booking.participants.map(p=>p.first_name+' '+p.last_name+': '+money(preview.allocations[p.id]||0)).join('; ')+'. ':'')+'La modifica riguarda soltanto questa iscrizione. Salvare?';if(await ask(message,'Salva servizi')){button.disabled=false;busy=false;await mutate('change_options',change);}}catch(error){say('Verifica non disponibile. '+error.message);}finally{button.disabled=false;f.inert=false;busy=false;}}else if(f.hasAttribute('data-identity')){try{const target=await request('identity_preview',{target_order:values.target_order,target_number:values.target_number});if(await ask('Confermi che '+target.first_name+' '+target.last_name+' è la stessa persona di questa iscrizione?','Conferma collegamento'))mutate('identity_link',{participant_id:Number(f.dataset.identity),target_id:Number(target.id),target_order:values.target_order,target_number:Number(values.target_number)});}catch(error){say(error.message);}}else if(f.hasAttribute('data-adjust-due')){const cents=Math.round(Number(values.total.replace(',','.'))*100);ask('Confermi il nuovo totale di '+money(cents)+'? Incassi e rimborsi restano invariati.','Salva rettifica').then(ok=>{if(ok)mutate('adjust_due',{total_cents:cents,reason:values.reason,participant_id:Number(values.participant_id)});});}else if(f.hasAttribute('data-attendance')){mutate('attendance',{participant_id:Number(f.dataset.attendance),attendance:values.attendance});}else if(f.hasAttribute('data-request-review')){mutate('request_review',{reviewed:f.elements.namedItem('reviewed').checked});}else if(f.hasAttribute('data-person')){const fields={};for(const [k,v]of Object.entries(values))if(k.startsWith('field:'))fields[k.slice(6)]=v;mutate('participant',{number:Number(f.dataset.person),first_name:values.first_name,last_name:values.last_name,room:values.room,fields});}else if(f.hasAttribute('data-room'))mutate(order?'room_save':'event_room_save',{...values,capacity:Number(values.capacity)});});
     content.addEventListener('click',async e=>{const b=e.target.closest('button,.mi-participant-row[data-open],.mi-all-person[data-open]');if(!b||busy||pending)return;if(b.matches('.mi-participant-row,.mi-all-person')&&e.target.closest('a,button,input,select,textarea,label'))return;if(dirty&&(b.dataset.cancel||b.dataset.deleteRoom)){say('Salva le modifiche oppure scartale con Aggiorna riepilogo prima di annullare o eliminare.');return;}if(b.closest('[data-mi-payments]'))return;if(b.dataset.unlink){if(dirty){say('Salva o scarta la bozza prima di rimuovere il collegamento.');return;}if(await ask('Rimuovere questo collegamento personale dal rapporto annuale?','Rimuovi collegamento'))mutate('identity_link',{participant_id:Number(b.dataset.unlink),target_id:0});}if(b.dataset.open){if(b.dataset.openEvent){if(!await canLeave())return;returnEvent=event;event=b.dataset.openEvent;select.value=event;}detail(b.dataset.open,b.dataset.personFocus);}if(b.hasAttribute('data-back')){if(!await canLeave())return;event=returnEvent;select.value=event;summary();}if(b.dataset.deleteRoom&&await ask('Eliminare la camera '+b.dataset.deleteRoom+'? La camera è vuota.','Elimina camera'))mutate(order?'room_delete':'event_room_delete',{code:b.dataset.deleteRoom});if(b.dataset.cancel&&await ask('Annullare la partecipazione?'+(booking?.is_free_event?'':' L’annullamento non riduce automaticamente gli importi: verifica il dovuto ed eventualmente usa «Rettifica il dovuto». Eventuali rimborsi si registrano separatamente.'),'Annulla partecipazione')){busy=true;b.disabled=true;try{const result=await request('cancel',{participant_id:b.dataset.cancel});dirty=false;busy=false;await detail(order);say(result.message);}catch(err){say(err.message);}finally{busy=false;b.disabled=false;}}});
     content.addEventListener('keydown',e=>{const row=e.target.closest('.mi-participant-row[data-open],.mi-all-person[data-open]');if(!row||e.target!==row||!['Enter',' '].includes(e.key))return;e.preventDefault();row.click();});
-    select.onchange=async()=>{const next=select.value;if(!await canLeave()){select.value=event;return;}event=next;updateLocation();summary();};root.querySelector('[data-refresh]').onclick=()=>order?detail(order):summary();root.querySelector('[data-print]').onclick=()=>{if(printList){printList();return;}root.querySelectorAll('.mi-print-value').forEach(el=>el.remove());root.querySelectorAll('form input,form select,form textarea').forEach(el=>{const span=document.createElement('span');span.className='mi-print-value';span.textContent=el.tagName==='SELECT'?(el.selectedOptions[0]?.textContent||''):el.value;el.after(span);});window.print();};
+    select.onchange=async()=>{const next=select.value;if(!await canLeave()){select.value=event;return;}event=next;updateLocation();summary();};root.querySelector('[data-refresh]').onclick=()=>order?detail(order):summary();root.querySelector('[data-print]').onclick=()=>{if(printList){printList();return;}root.querySelectorAll('.mi-print-value').forEach(el=>el.remove());root.querySelectorAll('form input,form select,form textarea').forEach(el=>{const span=document.createElement('span');span.className='mi-print-value';span.textContent=el.tagName==='SELECT'?(el.selectedOptions[0]?.textContent||''):el.value;el.after(span);});document.body.classList.add('mi-management-printing');window.addEventListener('afterprint',()=>document.body.classList.remove('mi-management-printing'),{once:true});window.print();};
+    // Refresh the visible context after the existing draft/cancel guard has settled.
+    for(const control of [select,periodSelect])if(control?.onchange){const change=control.onchange;control.onchange=async function(...args){try{return await change.apply(this,args);}finally{updateEventContext();}};}
     if(eventActions?.dataset.sheetAuto==='1'&&event)syncSheet();else if(order&&event)detail(order);else summary();
   }
   const scan=()=>{document.querySelectorAll('[data-mi-management]').forEach(init);document.querySelectorAll('[data-group-attendance]').forEach(initGroupAttendance);};

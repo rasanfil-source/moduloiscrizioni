@@ -3,12 +3,12 @@ version: alpha
 name: "Modulo iscrizioni — Segreteria eventi"
 description: "Interfaccia operativa sobria, coerente con il sito parrocchiale e orientata a compiti chiari."
 colors:
-  inchiostro: "#172033"
-  blu-notte: "#17224a"
-  sfondo: "#f5f7fa"
+  inchiostro: "#202a3a"
+  blu-notte: "#243b6b"
+  sfondo: "#f1f3f5"
   superficie: "#ffffff"
-  bordo: "#d7dde6"
-  testo-secondario: "#657084"
+  bordo: "#d8dee7"
+  testo-secondario: "#526071"
   successo: "#126b38"
   successo-chiaro: "#dff6e9"
   fuoco: "#244fc2"
@@ -33,6 +33,26 @@ components:
 ---
 
 ## Overview
+
+### Correzioni di usabilità — 3.26.173
+
+Filtri apre i campi sotto la barra Cerca e conserva l'allineamento dei comandi. Le tessere Iscritti e Dati mancanti hanno titoli e valori centrati; il dettaglio ordinario è Confermati. La navigazione usa caratteri da 16 px, consentendo due righe su desktop senza ingrandire i singoli controlli. Il menu mobile aperto mostra tutte le voci autorizzate su due colonne. Per gli elenchi lunghi, lo scorrimento interno mobile occupa al massimo il 55% della finestra. Queste indicazioni sostituiscono le precedenti regole di scorrimento naturale dell'intero elenco mobile e di riduzione dei caratteri del menu.
+
+### Iscrizioni mobile — 3.26.169
+
+I riepiloghi restano sempre visibili, senza soffietto. Su mobile Persone iscritte e Dati mancanti occupano la prima riga di due tesserine compatte; gli altri conteggi condizionali seguono nella griglia a due colonne, anche a 320 px. Aggiorna (icona con etichetta accessibile) e Apri sono affiancati. Stampa ed Esporta Excel conservano il testo e dimensioni compatte, con bersagli di almeno 44 px, sulla stessa riga alle larghezze mobili verificate. Questa indicazione supera la precedente previsione del riepilogo espandibile.
+
+### Correzione accenti — 3.26.168
+
+La palette della specifica v2 usa blu #1B2B52, sfondo avorio #F5F3EE e oro #B08D3F per i dettagli. L'oro sottolinea l'intestazione, la voce attiva e il comando Menu su mobile; il testo piccolo dorato usa #83682F. Il collegamento «+ Crea evento» conserva un solo più, quello testuale. Queste regole riguardano soltanto lo schermo e il portale riservato. Le indicazioni storiche sulla palette grigia e blu #243b6b sono superate.
+
+### Revisione operativa approvata — 24 settembre 2026
+
+Il portale usa superfici bianche su fondo grigio neutro, filtri #f5f6f8, testo antracite e blu #243b6b per le azioni. I campi hanno bordo #7e8da3, più riconoscibile dei divisori. Le icone di contatto esistenti diventano 22px su pulsanti 44×44px con fondo #e7edf7 e raggio 11px. I colori semantici e quelli configurati per i gruppi conservano il proprio significato.
+
+La palette e il ritmo dei controlli sono condivisi da iscrizioni, eventi, wizard, pagamenti, comunicazioni, gruppi e operatori. Su mobile, fino a 760px, il menu è espandibile e non occupa permanentemente lo schermo durante lo scorrimento. L'elenco dei partecipanti dispone le informazioni aggiuntive sotto il nome, conserva progressivo e ordinamenti e mantiene entrambe le icone entro la larghezza disponibile. Il riepilogo compatto si espande senza perdere alcun conteggio. I rapporti conservano la selezione dettagliata delle voci.
+
+Le regole di questa revisione sono limitate a `@media screen`; le impaginazioni di stampa rimangono dedicate. Le indicazioni storiche successive su colori, barra orizzontale e dimensioni del riepilogo vanno lette alla luce di questa revisione. Il vincolo di conservazione delle funzioni è in UX-CONTRACT.md. Il test `tools/test-portal-work-layout-browser.cjs` controlla layout, ordine DOM, colonne condizionali, selezione dei rapporti e contenuto effettivo di stampa/Excel a 320–1280px.
 
 La gestione camere mette in primo piano Tipo di sistemazione e una tabella delle persone raggruppate per codice. Prefissi operativi S, DM, DS, T e M; M identifica singole persone in camerate senza limite. Sezione sobria con bordo blu, intestazioni di gruppo e numeri modificabili, senza tessere cliccabili per i conteggi. Inventario e scambio camere restano funzioni secondarie.
 

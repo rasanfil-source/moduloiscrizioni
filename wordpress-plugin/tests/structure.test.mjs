@@ -1433,7 +1433,7 @@ test('la scheda iscrizioni riprende la vista operativa con ricerca e filtri sicu
   assert.doesNotMatch(portal + admin, /Tutti gli eventi accessibili/);
   assert.match(css, /\.mi-registrations-toolbar/);
   assert.match(css, /\.mi-booking-card__avatar/);
-  assert.match(css, /\.mi-status-pill\.is-green/);
+  assert.match(css, /\.mi-status-pill\.is-success/);
 });
 
 test('la ricerca iscrizioni privilegia il campo e mantiene Cerca affiancato', async () => {
@@ -2567,4 +2567,23 @@ test('Sincronizza resta disponibile nel riepilogo anche per i fogli in sola lett
   assert.match(script, /sheetSyncButton\.addEventListener\('click',syncSheet\)/);
   assert.match(script, /request\('sheet_changes'\)[\s\S]*sheetSyncButton\.hidden=!\(\(result\.changes\|\|\[\]\)\.length\|\|\(result\.errors\|\|\[\]\)\.length\)/);
   assert.match(script, /updateSheetSyncVisibility\(ticket,event\)/);
+});
+
+test('il restyling resta circoscritto alla Segreteria eventi e conserva le etichette di ruolo', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const style = await read('assets/portal.css');
+  const managementStyle = await read('assets/portal-management.css');
+  const script = await read('assets/portal.js');
+  const management = await read('assets/portal-management.js');
+  assert.match(portal, /<main class="mi-portal" data-mi-portal-scope="reserved">/);
+  assert.match(portal, />Eventi<\/a>/);
+  assert.match(portal, />Iscrizioni<\/a>/);
+  assert.match(portal, /aria-current="page"/);
+  assert.match(style, /\[data-mi-portal-scope="reserved"\]\s*\{[\s\S]*--portal-primary:/);
+  assert.match(script, /mi-portal-switcher\[aria-label="Segreteria eventi"\]/);
+  assert.match(script, /portal\.dataset\.miPortalScope='reserved'/);
+  assert.match(management, /globalThis\.crypto\?\.randomUUID/);
+  assert.match(management, /header\.classList\.add\('mi-sortable-heading'\)/);
+  assert.doesNotMatch(managementStyle, /:has\(button\)/);
+  assert.match(managementStyle, /body\.mi-management-printing \*/);
 });

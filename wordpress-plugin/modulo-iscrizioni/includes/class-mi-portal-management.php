@@ -98,7 +98,7 @@ final class MI_Portal_Management {
 		}
 		if ( is_wp_error( $result ) ) wp_send_json_error( array( 'message' => $result->get_error_message() ), 502 );
 		$result['sheet_url'] = get_post_meta( $event_id, '_mi_operational_sheet_url', true ) ? MI_Sheet_Open::url( $event_id ) : '';
-		$result['report_url'] = current_user_can( 'mi_view_registrations' ) || current_user_can( 'manage_options' ) ? add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-payments', 'payment_event_id' => $event_id ), admin_url( 'edit.php' ) ) : '';
+		$result['report_url'] = current_user_can( 'mi_view_registrations' ) || current_user_can( 'manage_options' ) ? MI_Portal_Payments::report_url( $event_id ) : '';
 		wp_send_json_success( $result );
 	}
 	public static function render( $registration_id = 0 ) {
