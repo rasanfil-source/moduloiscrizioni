@@ -418,6 +418,25 @@
   /* Navigation typography is shared in portal.css. */
 }
 
+/* Mobile search: keep the input and its 44px action on the same line. */
+@media screen and (max-width:760px) {
+  [data-mi-portal-scope="reserved"] .mi-management .mi-management-search.mi-search-order-row>label {
+    flex:1 1 calc(100% - 52px); min-width:0; width:calc(100% - 52px);
+  }
+  [data-mi-portal-scope="reserved"] .mi-management .mi-management-search.mi-search-order-row>button:is([data-run-query],[data-all-search]) {
+    position:relative; flex:0 0 44px; width:44px; min-width:44px; height:44px; min-height:44px;
+    padding:0; font-size:0; line-height:1; align-self:flex-end;
+  }
+  [data-mi-portal-scope="reserved"] .mi-management .mi-management-search.mi-search-order-row>button:is([data-run-query],[data-all-search])::before {
+    content:""; position:absolute; left:12px; top:10px; width:13px; height:13px;
+    border:2px solid currentColor; border-radius:50%; box-sizing:border-box;
+  }
+  [data-mi-portal-scope="reserved"] .mi-management .mi-management-search.mi-search-order-row>button:is([data-run-query],[data-all-search])::after {
+    content:""; position:absolute; left:24px; top:22px; width:9px; height:2px;
+    background:currentColor; transform:rotate(45deg); transform-origin:left center;
+  }
+}
+
 /* Search and ordering share a wrapping row at every viewport width. */
 .mi-management .mi-management-search.mi-search-order-row,
 [data-mi-portal-scope="reserved"] .mi-management .mi-management-search.mi-search-order-row,
