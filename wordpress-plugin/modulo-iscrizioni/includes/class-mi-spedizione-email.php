@@ -401,6 +401,9 @@ final class MI_Spedizione_Email {
 		$stale = gmdate( 'Y-m-d H:i:s', time() - 15 * MINUTE_IN_SECONDS );
 		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'PENDING', processing_started_at = NULL WHERE status = 'SENDING' AND processing_started_at < %s", $stale ) );
 		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'TEST_PENDING', processing_started_at = NULL WHERE status = 'TEST_SENDING' AND processing_started_at < %s", $stale ) );
+		// Exhausted interrupted attempts must remain visible and manually recoverable.
+		$wpdb->query( "UPDATE {$table} SET status = 'FAILED', processing_started_at = NULL, last_error = 'Tentativi esauriti; verifica l esito prima di riaccodare.' WHERE status = 'PENDING' AND attempts >= 5" );
+		$wpdb->query( "UPDATE {$table} SET status = 'TEST_FAILED', processing_started_at = NULL, last_error = 'Tentativi esauriti; verifica l esito prima di riaccodare.' WHERE status = 'TEST_PENDING' AND attempts >= 5" );
 		// La modalità selezionata decide il canale: un invio di prova non può
 		// raggiungere la casella di test dopo il passaggio in Operativo.
 		$stati = 'OPERATIVO' === $modalita ? array( "'PENDING'" ) : array( "'TEST_PENDING'" );

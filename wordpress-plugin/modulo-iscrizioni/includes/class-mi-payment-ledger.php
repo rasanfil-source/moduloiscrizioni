@@ -8,7 +8,7 @@ final class MI_Payment_Ledger {
 	public static function position( array $registration, $net_paid ) {
 		$total = max( 0, (int) $registration['total_cents'] );
 		$paid = max( 0, (int) $net_paid );
-		$managed = in_array( $registration['economic_mode'] ?? 'FULL_PAYMENT', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
+		$managed = in_array( $registration['economic_mode'] ?? 'REGISTRATION_ONLY', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 		$deposit = 'DEPOSIT_BALANCE' === ( $registration['economic_mode'] ?? '' );
 		$initial = $deposit ? min( $total, max( 0, (int) ( $registration['initial_due_cents'] ?? 0 ) ) ) : 0;
 		return array( 'total' => $total, 'paid' => $paid, 'balance' => max( 0, $total - $paid ), 'managed' => $managed, 'deposit_plan' => $deposit, 'deposit_due' => $initial, 'deposit_missing' => max( 0, $initial - $paid ), 'deposit_covered' => $deposit && $initial > 0 && $paid >= $initial );

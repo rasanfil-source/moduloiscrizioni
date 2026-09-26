@@ -9,10 +9,10 @@ function sanitize_text_field( $s ) { return $s; }
 function absint( $n ) { return abs( (int) $n ); }
 function get_the_title( $id ) { return 'Evento ' . $id; }
 function wp_die( $message ) { echo 'ERROR:' . $message; exit( 2 ); }
-class MI_Access { static function activity_ids() { return 'ALL'; } static function can_access_event( $id ) { return true; } }
+class MI_Access { static function event_ids() { return 'ALL'; } static function activity_ids() { return 'ALL'; } static function can_access_event( $id ) { return true; } }
 class MI_Field_Schema { static function catalog() { return array(); } }
 class CsvDatabase {
-	public $prefix = 'csv_audit_', $last_error = '', $db, $batches = 0;
+	public $prefix = 'csv_audit_', $posts = 'csv_audit_mi_posts', $last_error = '', $db, $batches = 0;
 	function __construct() {
 		mysqli_report( MYSQLI_REPORT_OFF );
 		$this->db = new mysqli( '127.0.0.1', 'root', 'local-ledger-test-only', 'mi_ledger_test', 33317 );
@@ -42,6 +42,7 @@ require_once __DIR__ . '/../modulo-iscrizioni/includes/class-mi-admin.php';
 require_once __DIR__ . '/../modulo-iscrizioni/includes/class-mi-payment-ledger.php';
 $wpdb = new CsvDatabase();
 if ( ( $argv[1] ?? '' ) === 'child' ) {
+	if ( ( $argv[3] ?? '' ) === 'workspace' ) $_GET = array( 'mi_workspace_status' => 'SYNCED' );
 	if ( ( $argv[3] ?? '' ) === 'empty' ) $_GET = array( 'event_id' => 99, 'payment_event_id' => 99 );
 	if ( ( $argv[3] ?? '' ) === 'filtered' ) $_GET = array( 'event_id' => 42, 'mi_search' => 'ORDER-2', 'payment_event_id' => 42, 'transaction_kind' => 'REFUND', 'payment_from' => '2026-01-01', 'payment_to' => '2026-01-01' );
 	if ( $argv[2] === 'payments' ) MI_Admin::export_payments(); else MI_Admin::export_registrations();
@@ -52,6 +53,7 @@ function sql_csv( $sql ) { global $wpdb; if ( ! $wpdb->query( $sql ) ) throw new
 function seed_csv() {
 	foreach ( array( 'payments', 'participants', 'registrations' ) as $table ) sql_csv( 'DELETE FROM csv_audit_mi_' . $table );
 	for ( $i = 1; $i <= 4; $i++ ) sql_csv( "INSERT INTO csv_audit_mi_registrations (id,event_id,order_code,total_cents,initial_due_cents,economic_mode) VALUES ($i,42,'ORDER-$i',10000,3000,'DEPOSIT_BALANCE')" );
+	sql_csv("UPDATE csv_audit_mi_registrations SET workspace_status=IF(id=3,'SYNCED','PENDING'),status='CONFIRMED'");
 	$id = 0;
 	foreach ( array( 2 => 501, 3 => 500, 4 => 200 ) as $rid => $count ) for ( $i = 0; $i < $count; $i++ ) {
 		$id++; $extra = $rid === 2 && $i === 500 ? '{"late":"=formula"}' : '{}';
@@ -61,6 +63,7 @@ function seed_csv() {
 		$kind = $i % 2 === 0 ? 'REFUND' : 'PAYMENT'; $day = $i <= 600 ? '2026-01-01' : '2026-01-02';
 		sql_csv( "INSERT INTO csv_audit_mi_payments (id,registration_id,effective_at,transaction_kind,amount_cents) VALUES ($i,2,'$day','$kind',10)" );
 	}
+	sql_csv("UPDATE csv_audit_mi_participants SET status=IF(id=502,'CANCELLED','ACTIVE')");
 }
 function run_csv( $kind, $mode ) {
 	$tmp = tmpfile(); $errors = tmpfile();
@@ -75,15 +78,20 @@ function run_csv( $kind, $mode ) {
 $created_tables = array();
 try {
 	// Refuse to overwrite tables from another unfinished run.
+	sql_csv('CREATE TABLE csv_audit_mi_posts (ID INT PRIMARY KEY,post_title VARCHAR(255)) ENGINE=InnoDB');
+	$created_tables[]='posts';
+	sql_csv("INSERT INTO csv_audit_mi_posts VALUES (42,'Evento 42')");
 	$registration_text = array( 'order_code','status','workspace_status','buyer_first_name','buyer_last_name','buyer_email','buyer_phone','special_requests','economic_mode','order_options_json','privacy_consent_id','privacy_policy_version','privacy_accepted_at','created_at' );
-	$participant_text = array( 'ticket_type_code','first_name','last_name','extra_json','options_json' );
+	$participant_text = array( 'ticket_type_code','first_name','last_name','extra_json','options_json','status' );
 	$payment_text = array( 'transaction_kind','installment_kind','payment_source','external_reference','operator_label','administrative_note' );
 	$columns = static function ( $names ) { return implode( ',', array_map( static function ( $n ) { return "$n VARCHAR(255) NOT NULL DEFAULT ''"; }, $names ) ); };
 	sql_csv( 'CREATE TABLE csv_audit_mi_registrations (id INT PRIMARY KEY,event_id INT,total_cents INT,initial_due_cents INT,balance_cents INT DEFAULT 7000,' . $columns( $registration_text ) . ') ENGINE=InnoDB' );
 	$created_tables[] = 'registrations';
-	sql_csv( 'CREATE TABLE csv_audit_mi_participants (id INT PRIMARY KEY,registration_id INT,' . $columns( $participant_text ) . ',KEY(registration_id)) ENGINE=InnoDB' );
+	sql_csv( 'CREATE TABLE csv_audit_mi_participants (id INT PRIMARY KEY,registration_id INT,deposit_due_cents INT DEFAULT NULL,' . $columns( $participant_text ) . ',KEY(registration_id)) ENGINE=InnoDB' );
 	$created_tables[] = 'participants';
-	sql_csv( 'CREATE TABLE csv_audit_mi_payments (id INT AUTO_INCREMENT PRIMARY KEY,registration_id INT,effective_at DATETIME,amount_cents INT,' . $columns( $payment_text ) . ',KEY(effective_at),KEY(registration_id)) ENGINE=InnoDB' );
+	sql_csv( 'CREATE TABLE csv_audit_mi_registration_items (id INT AUTO_INCREMENT PRIMARY KEY,registration_id INT,ticket_type_code VARCHAR(64),unit_price_cents INT) ENGINE=InnoDB' );
+	$created_tables[] = 'registration_items';
+	sql_csv( 'CREATE TABLE csv_audit_mi_payments (id INT AUTO_INCREMENT PRIMARY KEY,registration_id INT,effective_at DATETIME,amount_cents INT,participant_allocations_json TEXT,' . $columns( $payment_text ) . ',KEY(effective_at),KEY(registration_id)) ENGINE=InnoDB' );
 	$created_tables[] = 'payments';
 	foreach ( array( 'payments' => 1001, 'registrations' => 1202 ) as $kind => $count ) {
 		seed_csv(); $baseline = run_csv( $kind, 'normal' );
@@ -96,7 +104,12 @@ try {
 			check_csv( array_sum( array_map( 'intval', array_column( $rows, 10 ) ) ) === 40000, 'Duplicate totals' );
 			check_csv( array_sum( array_map( 'intval', array_column( $rows, 12 ) ) ) === 10, 'Incorrect net payments' );
 			check_csv( array_sum( array_map( 'intval', array_column( $rows, 13 ) ) ) === 39990, 'Incorrect balance' );
-			check_csv( end( $headers ) === 'Dato aggiuntivo (late)', 'Missing late dynamic column' );
+			check_csv( in_array('Dato aggiuntivo (late)', $headers, true), 'Missing late dynamic column' );
+			check_csv( end($headers)==='Stato partecipante', 'Missing participant status column');
+			$closed=array_values(array_filter($rows,static function($row){return $row[20]==='Person-502';}));
+			check_csv(count($closed)===1&&end($closed[0])==='CANCELLED','Cancelled participant exported without own status');
+			$workspace=run_csv('registrations','workspace');
+			check_csv(substr_count($workspace,"\n")===501&&!str_contains($workspace,'ORDER-2')&&str_contains($workspace,'ORDER-3'),'Workspace export filter lost');
 			check_csv( strpos( $baseline, "'=formula" ) !== false, 'CSV injection protection lost' );
 		}
 		check_csv( strpos( run_csv( $kind, 'fail' ), 'ERROR:' ) === 0, 'Partial CSV sent on database failure' );

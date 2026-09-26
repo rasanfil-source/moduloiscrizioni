@@ -39,3 +39,12 @@ test('schema update targets the event and updates price mode before rendering',(
  c.aggiornaSchemaEventoMysql_('42',free);assert.equal(width,13);assert.deepEqual(writes,[[1,13,'schema_vista_json'],[3,13,JSON.stringify(free)],[3,8,'ZERO']]);
  assert.throws(()=>c.aggiornaSchemaEventoMysql_('42',{}),/INVALID_EVENT_SCHEMA/);
 });
+
+test('historical answers and purchased services survive removal from current schema',()=>{
+ const {c,rows}=fixture(free);
+ rows.orders.push({id_evento:'42',codice_ordine:'A',stato:'CONFIRMED',snapshot_json:JSON.stringify({event:{participant_fields:[{key:'custom_old',label:'Historical'}]}})});
+ rows.people.push({codice_ordine:'A',numero_partecipante:1,dati_aggiuntivi_json:'{"custom_old":"Answer"}',opzioni_json:'[{"code":"old-service","name":"Historical service","quantity":1}]'});
+ const keys=Array.from(c.generaVistaOperativaEvento_('42').colonne,x=>x.key);
+ assert.ok(keys.includes('custom_old'));assert.ok(keys.includes('option_old-service'));
+ assert.ok(!keys.includes('document_number'));
+});

@@ -18,6 +18,12 @@ check_report(count(MI_Attendance_Report::aggregate($people,$audit,$events,2026,1
 $audit[]=['registration_id'=>1,'event_type'=>'MANAGEMENT_identity_link','detail_json'=>json_encode(['participant_id'=>2,'target_id'=>1])];
 check_report(count(MI_Attendance_Report::aggregate($people,$audit,$events,2026,2)['items'])===0,'Audit riferito a un’altra prenotazione accettato');
 echo "Rapporto annuale: omonimi separati, collegamenti confermati, rimozioni, anno, presenza effettiva ed eventi unici verificati.\n";
+$closed_people=array_map(static function($p){$p['status']='CANCELLED';$p['booking_status']='CONFIRMED';return $p;},$people);
+check_report(MI_Attendance_Report::aggregate($closed_people,[],$events,2026,1)['unrecorded']===0,'Cancelled people counted as unrecorded');
+$waiting_people=array_map(static function($p){$p['status']='ACTIVE';$p['booking_status']='WAITLISTED';return $p;},$people);
+check_report(MI_Attendance_Report::aggregate($waiting_people,[],$events,2026,1)['unrecorded']===0,'Waiting people counted as unrecorded');
+$recorded=[['registration_id'=>1,'event_type'=>'MANAGEMENT_attendance','detail_json'=>json_encode(['participant_id'=>1,'attendance'=>'PRESENT'])]];
+check_report(count(MI_Attendance_Report::aggregate($closed_people,$recorded,$events,2026,1)['items'])===1,'Historical actual attendance erased by later cancellation');
 $mobile_people=$people;
 $mobile_people[0]['extra_json']=json_encode(['participant_phone'=>'+39 312 345 6789']);
 $mobile_people[1]['extra_json']=json_encode(['participant_phone'=>'0039 3123456789']);

@@ -50,6 +50,10 @@ $_GET=['mi_portal'=>1,'mi_portal_view'=>'payment-report','payment_event_id'=>42,
 if(($argv[1]??'')==='--html'){parse_str($argv[2]??'', $query);$_GET=array_merge($_GET,$query);echo MI_Portal::render();exit;}
 check(str_contains(MI_Portal::render(),'mi-payment-report-title'),'Portal route missing');$wpdb->queries=[];
 $portal=report_html();$queries=$wpdb->queries;$wpdb->queries=[];report_html(false);check($queries===$wpdb->queries,'Admin and portal queries differ');
+$admin=report_html(false);
+preg_match('/<form[^>]*class="mi-admin-filters"[^>]*>(.*?)<\/form>/s',$admin,$admin_form);
+foreach(['payment_from','payment_to'] as $key)check(str_contains($admin_form[1]??'','name="'.$key.'" value="'.$_GET[$key].'"'),'Admin date filter lost: '.$key);
+check(strpos($admin,'<div class="wrap">')<strpos($admin,'Azzera filtri'),'Admin filters outside wrapper');
 check(substr_count($portal,'scope="col"')===9,'Missing report columns');
 check(str_contains($portal,'Riferimento &lt;sicuro&gt;'),'Escaping lost');
 check(str_contains($portal,'-15,00'),'Signed totals lost');

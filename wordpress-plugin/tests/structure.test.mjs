@@ -2122,7 +2122,7 @@ test('la variazione distingue checkbox dei servizi e assegnazione della sistemaz
   const script = await read('assets/portal-management.js');
   const service = await read('includes/class-mi-management-service.php');
   assert.match(script, /Varia servizi e sistemazione/);
-  assert.match(script, /!String\(o\.code\|\|''\)\.startsWith\('alloggio-'\)/);
+  assert.match(script, /!Object\.prototype\.hasOwnProperty\.call\(b\.room_types\|\|\{\},o\.code\)/);
   assert.match(script, /name="accommodation_type"/);
   assert.match(service, /combined_assignment_plan/);
   assert.match(service, /Per cambiare alloggio o camera usa Cambia sistemazione/);

@@ -63,7 +63,8 @@ final class MI_Attendance_Report {
 		$groups = array(); $unrecorded = 0;
 		foreach ( $people as $person ) {
 			$event = $events[(int) $person['event_id']] ?? null; if ( ! $event || substr( $event['date'], 0, 7 ) < $from_month || substr( $event['date'], 0, 7 ) > $to_month ) continue;
-			if ( ! isset( $attendance[$person['id']] ) || 'UNRECORDED' === $attendance[$person['id']] ) $unrecorded++;
+			$admitted = 'ACTIVE' === ( $person['status'] ?? 'ACTIVE' ) && in_array( $person['booking_status'] ?? 'CONFIRMED', array( 'CONFIRMED', 'PENDING_PAYMENT' ), true );
+			if ( $admitted && ( ! isset( $attendance[$person['id']] ) || 'UNRECORDED' === $attendance[$person['id']] ) ) $unrecorded++;
 			if ( 'PRESENT' !== ( $attendance[$person['id']] ?? '' ) ) continue;
 			$key = $root( (int) $person['id'] );
 			if ( ! isset( $groups[$key] ) ) $groups[$key] = array( 'identity' => $key, 'names' => array(), 'events' => array(), 'records' => array() );
@@ -83,7 +84,7 @@ final class MI_Attendance_Report {
 		$events = array(); foreach ( $posts as $post ) if ( MI_Access::can_access_event( $post->ID ) ) $events[$post->ID] = array( 'title' => $post->post_title, 'date' => (string) get_post_meta( $post->ID, '_mi_event_starts_at', true ) );
 		if ( ! $events ) return self::aggregate( array(), array(), array(), $year, $minimum, $from_month, $to_month );
 		$ids = implode( ',', array_map( 'intval', array_keys( $events ) ) );
-		$people = $wpdb->get_results( "SELECT p.id,p.registration_id,p.first_name,p.last_name,p.extra_json,r.event_id,r.order_code FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id IN ({$ids}) ORDER BY p.id", ARRAY_A );
+		$people = $wpdb->get_results( "SELECT p.id,p.registration_id,p.first_name,p.last_name,p.extra_json,p.status,r.status AS booking_status,r.event_id,r.order_code FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id IN ({$ids}) ORDER BY p.id", ARRAY_A );
 		if ( $wpdb->last_error ) return new WP_Error( 'mi_report_read', 'Presenze non disponibili.' );
 		$audit = $wpdb->get_results( "SELECT a.registration_id,a.event_type,a.detail_json FROM {$wpdb->prefix}mi_registration_events a JOIN {$wpdb->prefix}mi_registrations r ON r.id=a.registration_id WHERE r.event_id IN ({$ids}) AND a.event_type IN ('MANAGEMENT_attendance','MANAGEMENT_identity_link') ORDER BY a.id", ARRAY_A );
 		if ( $wpdb->last_error ) return new WP_Error( 'mi_report_read', 'Storico presenze non disponibile.' );

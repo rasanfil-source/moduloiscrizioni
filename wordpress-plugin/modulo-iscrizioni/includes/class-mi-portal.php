@@ -834,6 +834,7 @@ final class MI_Portal {
 
 	private static function save_date( $event_id, $key, $value ) {
 		$value = sanitize_text_field( wp_unslash( $value ) );
+		if ( '' === $value ) { delete_post_meta( $event_id, $key ); return; }
 		if ( preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $value ) ) update_post_meta( $event_id, $key, $value );
 	}
 

@@ -12,6 +12,8 @@ La parrocchia è l'ente base. Ogni gruppo può avere logo, immagine, colori e co
 
 ## Stato
 
+Versione **[3.26.196](docs/rilascio-3.26.196.md)**: correzioni degli audit su iscrizioni, pagamenti, lista d'attesa, servizi, email e sincronizzazione. Richiede aggiornamento WordPress e Apps Script. Pacchetti verificati in `dist`; installazione WordPress a cura dell'utente.
+
 Versione **[3.26.195](docs/rilascio-3.26.195.md)**: ricerca mobile con pulsante a lente accanto al campo di testo nella sezione Iscrizioni. Include la 3.26.194; nessun nuovo aggiornamento Apps Script necessario.
 
 Versione **[3.26.194](docs/rilascio-3.26.194.md)**: segnaposto per il solo nome nella conferma, titolo in grassetto, firma collegata al contatto email, pulsante Tutti i dettagli navy e filtri chiusi all'apertura. Include il mittente configurabile per gruppo introdotto nella 3.26.189. Lo ZIP pubblico esclude la configurazione privata; l'installazione WordPress resta a cura dell'utente. Chi ha già aggiornato Apps Script alla 3.26.189 non deve aggiornarlo nuovamente.

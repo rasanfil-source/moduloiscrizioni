@@ -64,6 +64,8 @@ class FaultDatabase {
   if(str_contains($sql,'mi_booking_codes'))return ['prefix'=>'TEST','sequence'=>0];
   if($this->failure==='concurrent'&&str_contains($sql,'mi_event_counters')&&str_contains($sql,'FOR UPDATE')){
    $this->registration=['id'=>7,'order_code'=>'TEST7','status'=>'CONFIRMED','workspace_status'=>'SYNCED','economic_mode'=>'REGISTRATION_ONLY','total_cents'=>0,'initial_due_cents'=>0,'balance_cents'=>0,'payment_methods_json'=>'[]'];
+   $hash=(new ReflectionMethod(MI_Registration_Service::class,'registration_request_hash'))->invoke(null,$GLOBALS['payload']);
+   $this->registration['snapshot_json']=json_encode(['request_hash'=>$hash]);
    $this->snapshot=[$this->registration,0];
    return ['confirmed_count'=>10,'waitlisted_count'=>0];
   }

@@ -297,8 +297,10 @@ final class MI_Registration_Service {
 			return new WP_Error( 'mi_idempotency', 'Identificativo richiesta non valido.', array( 'status' => 400 ) );
 		}
 		$registrations_table = $wpdb->prefix . 'mi_registrations';
-		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, workspace_status, economic_mode, total_cents, initial_due_cents, balance_cents, payment_methods_json FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
+		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, workspace_status, economic_mode, total_cents, initial_due_cents, balance_cents, payment_methods_json, snapshot_json FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
 		if ( $existing ) {
+			$replay_error = self::check_replay_payload( $existing, $payload );
+			if ( $replay_error ) return $replay_error;
 			$workspace_status = self::accoda_sincronizzazione_workspace( (int) $existing['id'], $existing['workspace_status'] );
 			return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'workspace_status' => $workspace_status, 'economic_summary' => self::riepilogo_salvato( $existing ), 'replayed' => true );
 		}
@@ -376,10 +378,12 @@ final class MI_Registration_Service {
 			}
 			// Another request with this key may have committed while we waited for the event lock.
 			// A locking read sees it even under REPEATABLE READ, before capacity/date rejection.
-			$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, workspace_status, economic_mode, total_cents, initial_due_cents, balance_cents, payment_methods_json FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s FOR UPDATE", $event_id, $idempotency_key ), ARRAY_A );
+			$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, workspace_status, economic_mode, total_cents, initial_due_cents, balance_cents, payment_methods_json, snapshot_json FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s FOR UPDATE", $event_id, $idempotency_key ), ARRAY_A );
 			if ( $wpdb->last_error ) throw new RuntimeException( 'Verifica richiesta non disponibile.' );
 			if ( $existing ) {
 				$wpdb->query( 'ROLLBACK' );
+				$replay_error = self::check_replay_payload( $existing, $payload );
+				if ( $replay_error ) return $replay_error;
 				$workspace_status = self::accoda_sincronizzazione_workspace( (int) $existing['id'], $existing['workspace_status'] );
 				return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'workspace_status' => $workspace_status, 'economic_summary' => self::riepilogo_salvato( $existing ), 'replayed' => true );
 			}
@@ -432,6 +436,7 @@ final class MI_Registration_Service {
 			$revision = (array) ( $event['revision'] ?? array() );
 			$accepted_at = current_time( 'mysql', true );
 			$snapshot = self::build_order_snapshot( $event, $selection, $participants, $order_options, $buyer, $economic_summary, $status, $accepted_at, $marketing_accepted, $special_requests );
+			$snapshot['request_hash'] = self::registration_request_hash( $payload );
 			$snapshot_json = wp_json_encode( $snapshot );
 			if ( false === $snapshot_json || strlen( $snapshot_json ) > 45000 ) {
 				throw new RuntimeException( 'Istantanea ordine non serializzabile.' );
@@ -472,8 +477,10 @@ final class MI_Registration_Service {
 			);
 			if ( ! $inserted ) {
 				$wpdb->query( 'ROLLBACK' );
-				$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, workspace_status, economic_mode, total_cents, initial_due_cents, balance_cents, payment_methods_json FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
+				$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, workspace_status, economic_mode, total_cents, initial_due_cents, balance_cents, payment_methods_json, snapshot_json FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s", $event_id, $idempotency_key ), ARRAY_A );
 				if ( $existing ) {
+					$replay_error = self::check_replay_payload( $existing, $payload );
+					if ( $replay_error ) return $replay_error;
 					$workspace_status = self::accoda_sincronizzazione_workspace( (int) $existing['id'], $existing['workspace_status'] );
 					return array( 'order_code' => $existing['order_code'], 'status' => $existing['status'], 'workspace_status' => $workspace_status, 'economic_summary' => self::riepilogo_salvato( $existing ), 'replayed' => true );
 				}
@@ -1062,6 +1069,12 @@ final class MI_Registration_Service {
 			}
 			if ( 'EXPIRED' === $target_status ) {
 				if ( get_post_meta( (int) $registration['event_id'], '_mi_event_cancellation_job', true ) ) throw new RuntimeException( 'Annullamento evento in corso.' );
+				// The cron candidate may have received a new deadline while waiting for this lock.
+				$deadline = empty( $registration['expires_at'] ) ? false : strtotime( $registration['expires_at'] . ' UTC' );
+				if ( 'PENDING_PAYMENT' !== $registration['status'] || ! $deadline || $deadline > time() ) {
+					if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma non ricevuta.' );
+					return $registration['status'];
+				}
 				$coverage = self::payment_coverage( $registration );
 				if ( $coverage['covered'] ) {
 					if ( false === $wpdb->update( $registrations, array( 'status' => 'CONFIRMED', 'expires_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_status_changed' ), array( 'id' => $registration_id ), array( '%s', '%s', '%s', '%s' ), array( '%d' ) ) ) throw new RuntimeException( 'Stato pagamento non aggiornato.' );
@@ -1149,10 +1162,18 @@ final class MI_Registration_Service {
 			if ( 'ACCEPT' === $decision ) {
 				$event = self::public_event( $event_id, 'publish' !== get_post_status( $event_id ) );
 				if ( is_wp_error( $event ) ) throw new RuntimeException( 'Evento non disponibile.' );
+				// Acceptance retains the economic terms of the original registration.
+				$snapshot = json_decode( (string) $row['snapshot_json'], true );
+				$original = (array) ( $snapshot['event'] ?? array() );
+				foreach ( array( 'deposit_mode', 'deposit_fixed_cents', 'deposit_percentage', 'payment_methods', 'payment_instructions' ) as $key ) {
+					if ( array_key_exists( $key, $original ) ) $event[$key] = $original[$key];
+				}
+				$event['economic_mode'] = $row['economic_mode'];
 				$target = in_array( $event['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) && (int) $row['total_cents'] > 0 ? 'PENDING_PAYMENT' : 'CONFIRMED';
 				$position = MI_Payment_People::read( $row, array() );
 				if ( empty( $position['quotes_known'] ) ) throw new RuntimeException( 'Quote individuali non disponibili.' );
 				$economic = self::riepilogo_economico( $event, (int) $row['total_cents'], $target, $active_qty, array_column( $position['people'], 'total' ) );
+				if ( 'PENDING_PAYMENT' === $target && (int) $economic['initial_due_cents'] < 1 ) $target = 'CONFIRMED';
 				$payment_deadline = self::registration_expiry( $event, $target, $now );
 				if ( 'PENDING_PAYMENT' === $target && ( ! $payment_deadline || strtotime( $payment_deadline . ' UTC' ) <= time() ) ) {
 					$hours = min( 168, max( 1, absint( $event['waitlist_offer_hours'] ?? 48 ) ) );
@@ -1520,6 +1541,26 @@ final class MI_Registration_Service {
 		if ( ! $minutes ) return null;
 		$base = DateTimeImmutable::createFromFormat( 'Y-m-d H:i:s', $now, new DateTimeZone( 'UTC' ) );
 		return $base ? $base->modify( '+' . $minutes . ' minutes' )->format( 'Y-m-d H:i:s' ) : null;
+	}
+
+	private static function registration_request_hash( $payload ) {
+		$canonical = static function ( $value ) use ( &$canonical ) {
+			if ( ! is_array( $value ) ) return $value;
+			if ( $value && array_keys( $value ) !== range( 0, count( $value ) - 1 ) ) ksort( $value, SORT_STRING );
+			return array_map( $canonical, $value );
+		};
+		$data = array();
+		foreach ( array( 'tickets', 'participants', 'buyer', 'order_options', 'special_requests', 'privacy_accepted', 'marketing_accepted' ) as $key ) {
+			$data[$key] = $payload[$key] ?? ( in_array( $key, array( 'privacy_accepted', 'marketing_accepted' ), true ) ? false : ( 'special_requests' === $key ? '' : array() ) );
+		}
+		return hash( 'sha256', wp_json_encode( $canonical( $data ) ) );
+	}
+	private static function check_replay_payload( $existing, $payload ) {
+		$snapshot = json_decode( (string) ( $existing['snapshot_json'] ?? '' ), true );
+		$hash = (string) ( $snapshot['request_hash'] ?? '' );
+		if ( '' === $hash ) return new WP_Error( 'mi_idempotency_legacy', 'Questa richiesta risulta già registrata, ma non è possibile verificare automaticamente i dati originari. Contatta la segreteria prima di creare un\'altra iscrizione.', array( 'status' => 409 ) );
+		if ( $hash && hash_equals( $hash, self::registration_request_hash( $payload ) ) ) return null;
+		return new WP_Error( 'mi_idempotency_conflict', 'Questa richiesta ha già registrato un\'iscrizione. I dati modificati non sono stati salvati: contatta la segreteria per verificare o correggere l\'iscrizione esistente, senza crearne un\'altra.', array( 'status' => 409 ) );
 	}
 
 	private static function build_order_snapshot( $event, $selection, $participants, $order_options, $buyer, $economic_summary, $status, $accepted_at, $marketing_accepted, $special_requests = '' ) {

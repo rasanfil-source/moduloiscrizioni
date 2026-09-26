@@ -39,8 +39,13 @@ function applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, 
   };
   ['last_name','first_name','phone'].forEach(key=>add(key));
   schema.fields.forEach(field=>{if (field) add(field.key, field.label);});
+  aggiungiColonneDomande_(result, {domande_json:'[]'}, iscrizioni, partecipanti, cache);
   if (schema.room) add('room');
   aggiungiColonneServizi_(result, schema.options);
+  partecipanti.forEach(person=>{
+    const options=cache?cache.list(person.opzioni_json):decodificaElenco_(person.opzioni_json);
+    aggiungiColonneServizi_(result, options.filter(option=>Number(option.quantity)>0).map(option=>Object.assign({},option,{scope:'TICKET'})));
+  });
   if (schema.special_requests) add('special_requests');
   const codes = new Set(iscrizioni.map(r=>String(r.codice_ordine)));
   const economic = schema.pricing !== 'ZERO' || iscrizioni.some(r=>Number(r.totale_centesimi)>0 || Number(r.versato_centesimi)>0) || pagamenti.some(p=>codes.has(String(p.codice_ordine)));

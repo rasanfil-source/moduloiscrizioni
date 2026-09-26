@@ -28,6 +28,15 @@ test('ricevuta tardiva non cancella una nuova modifica e il retry è innocuo',()
 test('normalizzazione della vista usa lo stesso testo visualizzato nelle celle',()=>{
  const e=environment();e.value='Anna Maria';e.c.allineaBaseConVista_(e.sheet,{righe:[{codice_ordine:'DEMO',numero_partecipante:1,valori:{first_name:'Anna\nMaria'}}]});assert.equal(e.base.first_name,'Anna Maria');
 });
+
+test('replica multilinea senza ricevuta riconosce il valore identico senza perdere modifiche nuove',()=>{
+ const e=environment();e.value='Anna\nMaria';
+ e.c.allineaBaseConVista_(e.sheet,{righe:[{codice_ordine:'DEMO',numero_partecipante:1,valori:{first_name:'Anna\nMaria'}}]});
+ assert.equal(e.base.first_name,'Anna\nMaria');assert.equal(e.c.modificheCorrentiFoglio_(e.sheet).changes.length,0);
+ e.value='Anna\nNuova';
+ e.c.allineaBaseConVista_(e.sheet,{righe:[{codice_ordine:'DEMO',numero_partecipante:1,valori:{first_name:'Anna\nMaria'}}]});
+ assert.equal(e.c.modificheCorrentiFoglio_(e.sheet).changes.length,1);
+});
 test('replica successiva riconosce una modifica accettata anche se quella intermedia è stata accorpata',()=>{
  const e=environment();
  e.c.confermaModificheFoglio_({event_id:'42',direct_projection:true,confirmations:[{...receipt,workspace_revision:'8'}]});

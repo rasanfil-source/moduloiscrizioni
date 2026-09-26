@@ -62,7 +62,7 @@ final class MI_Management_Service {
 		$fields = array();
 		foreach ( (array) ( $snapshot['event']['participant_fields'] ?? array() ) as $field ) {
 			$key = $field['key'] ?? '';
-			if ( ! preg_match( '/^[a-z][a-z0-9_]{0,79}$/', $key ) || in_array( $key, array( 'constructor','prototype','room','camera','alloggio','first_name','last_name' ), true ) ) continue;
+			if ( ! preg_match( '/^[a-z][a-z0-9_-]{0,79}$/', $key ) || in_array( $key, array( 'constructor','prototype','room','camera','alloggio','first_name','last_name' ), true ) ) continue;
 			$fields[$key] = array( 'key' => $key, 'label' => $field['label'] ?? $key, 'type' => $field['type'] ?? 'text', 'required' => ! empty( $field['required'] ), 'options' => (array) ( $field['options'] ?? array() ) );
 		}
 		if ( '1' === get_post_meta( $registration['event_id'], '_mi_bus_assignment_enabled', true ) ) {
@@ -453,11 +453,19 @@ final class MI_Management_Service {
 			foreach ( $numbers as $n ) {
 				$person = array_column( $booking['participants'], null, 'number' )[$n] ?? null;
 				if ( ! $person || 'ACTIVE' !== $person['status'] ) throw new InvalidArgumentException( 'Persona non disponibile in ' . $code );
-				$old = array_values( array_filter( $person['options'], static function ( $option ) { return 0 === strpos( $option['code'] ?? '', 'alloggio-' ) && (int) ( $option['quantity'] ?? 0 ) > 0; } ) );
+				$room_types = self::room_types();
+				$old = array_values( array_filter( $person['options'], static function ( $option ) use ( $room_types ) { return isset( $room_types[$option['code'] ?? ''] ) && (int) ( $option['quantity'] ?? 0 ) > 0; } ) );
 				if ( count( $old ) !== 1 || (int) $old[0]['quantity'] !== 1 || ! isset( $old[0]['unit_price_cents'] ) ) throw new InvalidArgumentException( 'Verifica la sistemazione e la quota precedente di ' . $person['last_name'] . ' ' . $person['first_name'] . '.' );
 				if ( $old[0]['code'] === $data['type'] ) throw new InvalidArgumentException( 'La sistemazione è già quella scelta. Per cambiare solo il numero usa Salva assegnazioni.' );
-				$options = array_values( array_filter( $person['options'], static function ( $option ) { return 0 !== strpos( $option['code'] ?? '', 'alloggio-' ); } ) );
+				$options = array_values( array_filter( $person['options'], static function ( $option ) use ( $room_types ) { return ! isset( $room_types[$option['code'] ?? ''] ); } ) );
 				$options[] = array( 'code' => $data['type'], 'name' => sanitize_text_field( $target['name'] ?? $type['name'] ), 'quantity' => 1, 'unit_price_cents' => (int) $target['price_cents'] );
+				$groups = array();
+				foreach ( $options as $option ) {
+					$group = MI_Option_Rules::choice_group( $definitions[$option['code']] ?? $option );
+					if ( empty( $option['quantity'] ) || ! $group ) continue;
+					if ( isset( $groups[$group] ) ) throw new InvalidArgumentException( 'Scegli una sola voce per il gruppo ' . $group . '.' );
+					$groups[$group] = true;
+				}
 				$pricing = $snapshot['event']['pricing_mode'] ?? '';
 				if ( ! in_array( $pricing, array( 'FIXED', 'CALCULATED', 'ZERO', 'NONE' ), true ) ) throw new InvalidArgumentException( 'Modalità tariffaria non disponibile per ' . $code . '. Verifica l’iscrizione prima del cambio.' );
 				$change = 'ZERO' === $pricing ? 0 : (int) $target['price_cents'] - (int) $old[0]['unit_price_cents']; $delta += $change;
@@ -670,7 +678,8 @@ final class MI_Management_Service {
 			$person = array_column( $booking['participants'], null, 'id' )[$data['participant_id']] ?? null;
 			if ( ! $person || 'ACTIVE' !== $person['status'] ) throw new InvalidArgumentException( 'Servizi individuali non modificabili per questa persona.' );
 		}
-		$is_accommodation = static function ( $definition ) { return MI_Option_Rules::is_accommodation( (array) $definition ); };
+		$room_types = self::room_types();
+		$is_accommodation = static function ( $definition ) use ( $room_types ) { return isset( $room_types[$definition['code'] ?? ''] ); };
 		$definitions = array_values( array_filter( (array) ( $snapshot['event']['options'] ?? array() ), static function ( $definition ) use ( $is_accommodation ) { return ! $is_accommodation( (array) $definition ); } ) );
 		$accommodation_codes = array_map( static function ( $definition ) { return sanitize_key( $definition['code'] ?? '' ); }, array_filter( (array) ( $snapshot['event']['options'] ?? array() ), $is_accommodation ) );
 		if ( $person ) foreach ( array_keys( $data['options'] ) as $option_code ) if ( in_array( sanitize_key( $option_code ), $accommodation_codes, true ) ) throw new InvalidArgumentException( 'Per cambiare alloggio o camera usa Cambia sistemazione.' );
@@ -678,8 +687,11 @@ final class MI_Management_Service {
 		$options = MI_Registration_Service::validate_options( $data['options'], $definitions, $person ? 'TICKET' : 'ORDER' );
 		if ( is_wp_error( $options ) ) throw new InvalidArgumentException( $options->get_error_message() );
 		$current_options = $person ? $person['options'] : self::decode( $locked['order_options_json'] );
-		if ( $person ) $options = array_merge( array_values( array_filter( $current_options, static function ( $option ) use ( $accommodation_codes ) { return in_array( sanitize_key( $option['code'] ?? '' ), $accommodation_codes, true ) || 0 === strpos( sanitize_key( $option['code'] ?? '' ), 'alloggio-' ); } ) ), $options );
+		if ( $person ) $options = array_merge( array_values( array_filter( $current_options, static function ( $option ) use ( $accommodation_codes ) { return in_array( sanitize_key( $option['code'] ?? '' ), $accommodation_codes, true ); } ) ), $options );
 		$assignment = $person ? self::combined_assignment_plan( $locked, $booking, $person, $data, $options ) : array();
+		$all_quantities = array_column( $options, 'quantity', 'code' );
+		$validated = MI_Registration_Service::validate_options( $all_quantities, $snapshot['event']['options'] ?? array(), $person ? 'TICKET' : 'ORDER' );
+		if ( is_wp_error( $validated ) ) throw new InvalidArgumentException( $validated->get_error_message() );
 		if ( ! $person && ( isset( $data['accommodation_type'] ) || isset( $data['room'] ) || isset( $data['bus'] ) ) ) throw new InvalidArgumentException( 'Le assegnazioni richiedono una persona.' );
 		$cost = static function ( $values ) { $sum = 0; foreach ( $values as $value ) $sum += (int) $value['quantity'] * (int) $value['unit_price_cents']; return $sum; };
 		$delta = $cost( $options ) - $cost( $current_options );
@@ -873,7 +885,7 @@ final class MI_Management_Service {
 		if ( ! $changes ) return array( 'ok' => true, 'saved' => true, 'message' => 'Nessuna modifica da sincronizzare.' );
 		$grouped = array();
 		foreach ( $changes as $change ) {
-			if ( ! is_array( $change ) || ! is_string( $change['order_code'] ?? null ) || ! is_int( $change['number'] ?? null ) || $change['number'] < 1 || ! is_string( $change['key'] ?? null ) || ! preg_match( '/^[a-z][a-z0-9_]{0,79}$/', $change['key'] ) || ! is_string( $change['before'] ?? null ) || ! is_string( $change['after'] ?? null ) || mb_strlen( $change['after'] ) > 1000 ) return new WP_Error( 'mi_sheet_data', 'Una delle celle contiene dati non validi.' );
+			if ( ! is_array( $change ) || ! is_string( $change['order_code'] ?? null ) || ! is_int( $change['number'] ?? null ) || $change['number'] < 1 || ! is_string( $change['key'] ?? null ) || ! preg_match( '/^[a-z][a-z0-9_-]{0,79}$/', $change['key'] ) || ! is_string( $change['before'] ?? null ) || ! is_string( $change['after'] ?? null ) || mb_strlen( $change['after'] ) > 1000 ) return new WP_Error( 'mi_sheet_data', 'Una delle celle contiene dati non validi.' );
 			$grouped[$change['order_code']][] = $change;
 		}
 		ksort( $grouped );
@@ -916,12 +928,15 @@ final class MI_Management_Service {
 						}
 					}
 					$key = self::sheet_field_key( $patch['key'], $booking, $p );
+					if ( 'phone' === $key && ! in_array( $key, array_column( $booking['fields'], 'key' ), true ) ) $booking['fields'][] = array( 'key' => 'phone', 'type' => 'tel', 'required' => false );
 					$identity = $p['number'] . ':' . $key;
 					if ( isset( $seen[$identity] ) ) throw new InvalidArgumentException( 'La stessa cella compare più volte.' );
 					$seen[$identity] = true;
 					$current = in_array( $key, array( 'first_name','last_name','room' ), true ) ? $p[$key] : ( $p['fields'][$key] ?? '' );
+					$displayed = $current;
+					if ( '' === (string) $current && in_array( $patch['key'], array( 'email', 'phone' ), true ) ) $displayed = $booking['buyer'][$patch['key']] ?? '';
 					$accepted = 'room' === $key ? $patch['after'] : ( in_array( $key, array( 'first_name', 'last_name' ), true ) ? sanitize_text_field( $patch['after'] ) : sanitize_textarea_field( $patch['after'] ) );
-					if ( (string) $current !== $patch['before'] && (string) $current !== (string) $accepted ) throw new InvalidArgumentException( 'Conflitto in ' . $code . ', partecipante ' . $p['number'] . ', campo ' . $patch['key'] . '. Nessuna modifica applicata.' );
+					if ( (string) $current !== $patch['before'] && (string) $current !== (string) $accepted && (string) $displayed !== $patch['before'] ) throw new InvalidArgumentException( 'Conflitto in ' . $code . ', partecipante ' . $p['number'] . ', campo ' . $patch['key'] . '. Nessuna modifica applicata.' );
 					if ( ! isset( $updates[$p['number']] ) ) $updates[$p['number']] = array( 'number' => $p['number'], 'first_name' => $p['first_name'], 'last_name' => $p['last_name'], 'room' => $p['room'], 'fields' => array() );
 					if ( in_array( $key, array( 'first_name','last_name','room' ), true ) ) $updates[$p['number']][$key] = $patch['after'];
 					else $updates[$p['number']]['fields'][$key] = $patch['after'];
@@ -976,7 +991,10 @@ final class MI_Management_Service {
 		if ( in_array( $key, array( 'event','order_code','participant_number','status','options','total','paid','paid_cash','paid_transfer','paid_card','balance','special_requests','constructor','prototype' ), true ) ) throw new InvalidArgumentException( 'Colonna non modificabile: ' . $key );
 		$aliases = array( 'email' => array( 'participant_email','email' ), 'phone' => array( 'participant_phone','phone','mobile' ), 'document_expiry_date' => array( 'document_expiry_date','document_expiry' ), 'transport' => array( 'pullman','transport' ) );
 		$known = array_column( $booking['fields'], null, 'key' );
+		foreach ( $aliases[$key] ?? array( $key ) as $candidate ) if ( isset( $person['fields'][$candidate] ) && '' !== (string) $person['fields'][$candidate] ) return $candidate;
 		foreach ( $aliases[$key] ?? array( $key ) as $candidate ) if ( isset( $known[$candidate] ) || array_key_exists( $candidate, $person['fields'] ) ) return $candidate;
+		// The sheet exposes a personal phone column even for minimal profiles.
+		if ( 'phone' === $key ) return 'phone';
 		throw new InvalidArgumentException( 'Campo non previsto nell’iscrizione: ' . $key );
 	}
 	private static function save_participant( $booking, $data, $defer_capacity = false ) {

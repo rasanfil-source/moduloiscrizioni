@@ -137,7 +137,7 @@ function allineaBaseConVista_(sheet, vista) {
         confirmed[id][change.key]=receipt.accepted;
         delete receipts[id][change.key];
       }
-    } else if (values && Object.prototype.hasOwnProperty.call(values,change.key) && normalizzaTesto_(values[change.key],5000)===change.after) {
+    } else if (values && Object.prototype.hasOwnProperty.call(values,change.key) && (String(values[change.key])===change.after || normalizzaTesto_(values[change.key],5000)===change.after)) {
       if (!confirmed[id]) confirmed[id]={};
       confirmed[id][change.key]=change.after;
     }
