@@ -516,7 +516,7 @@ final class MI_Registration_Service {
 				throw new RuntimeException( 'Evento di audit non salvato.' );
 			}
 			$email_items = array_merge( $selection['items'], $order_options );
-			$email_values = MI_Modello_Email::valori_ordine( $event, $order_code, 'CONFIRMED' === $status ? 'Confermata' : ( 'PENDING_PAYMENT' === $status ? 'Da pagare' : 'Lista d’attesa' ), $selection['quantity'], $buyer['first_name'] . ' ' . $buyer['last_name'], $economic_summary, $email_items );
+			$email_values = MI_Modello_Email::valori_ordine( $event, $order_code, 'CONFIRMED' === $status ? 'Confermata' : ( 'PENDING_PAYMENT' === $status ? 'Da pagare' : 'Lista d’attesa' ), $selection['quantity'], $buyer['first_name'] . ' ' . $buyer['last_name'], $economic_summary, $email_items, $buyer['first_name'] );
 			$email_values['_participant_management'] = $participant_management;
 			$email_snapshot = 'WAITLISTED' === $status
 				? MI_Modello_Email::crea_istantanea_lista_attesa( $event_id, $email_values )
@@ -966,6 +966,7 @@ final class MI_Registration_Service {
 		$outbox = $wpdb->prefix . 'mi_email_outbox';
 		$participant_id = absint( $participant_id );
 		$secretariat_email_status = '';
+		$participant_email_status = '';
 		try {
 			if ( false === $wpdb->query( 'START TRANSACTION' ) ) throw new RuntimeException( 'Transazione non disponibile.' );
 			$participant = $wpdb->get_row( $wpdb->prepare( "SELECT id,registration_id,ticket_type_code,first_name,last_name,status FROM {$participants} WHERE id=%d FOR UPDATE", $participant_id ), ARRAY_A );
@@ -1014,11 +1015,19 @@ final class MI_Registration_Service {
 				$secretariat_payload = wp_json_encode( array( 'event_title' => get_the_title( $event_id ), 'order_code' => $registration['order_code'], 'status' => 'CANCELLED', 'participant_id' => $participant_id, 'email_preview' => $secretariat_snapshot ) );
 				if ( false === $secretariat_payload || false === $wpdb->insert( $outbox, array( 'registration_id' => $registration['id'], 'recipient' => $secretariat_recipient, 'template_type' => 'PARTICIPANT_CANCEL_SECRETARIAT', 'payload_json' => $secretariat_payload, 'status' => $secretariat_email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) throw new RuntimeException( 'Notifica di annullamento alla segreteria non salvata.' );
 			}
+			// La conferma personale e la cancellazione devono essere salvate insieme.
+			$participant_recipient = sanitize_email( $registration['buyer_email'] );
+			if ( is_email( $participant_recipient ) ) {
+				$participant_snapshot = MI_Modello_Email::crea_istantanea_annullamento_partecipazione_iscritto( $event_id, trim( $participant['first_name'] . ' ' . $participant['last_name'] ) );
+				$participant_email_status = MI_Spedizione_Email::stato_nuova_email( $participant_snapshot );
+				$participant_payload = wp_json_encode( array( 'event_title' => get_the_title( $event_id ), 'order_code' => $registration['order_code'], 'status' => 'CANCELLED', 'participant_id' => $participant_id, 'email_preview' => $participant_snapshot ) );
+				if ( false === $participant_payload || false === $wpdb->insert( $outbox, array( 'registration_id' => $registration['id'], 'recipient' => $participant_recipient, 'template_type' => 'PARTICIPANT_CANCEL_CONFIRMATION', 'payload_json' => $participant_payload, 'status' => $participant_email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) throw new RuntimeException( 'Conferma di annullamento all’iscritto non salvata.' );
+			}
 			$promoted = in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLIST_OFFERED' ), true ) ? self::promote_waitlisted_locked( $event_id, $now ) : array();
 			if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma non ricevuta.' );
 			self::accoda_sincronizzazione_workspace( (int) $registration['id'], 'PENDING' );
 			foreach ( $promoted as $promoted_id ) self::accoda_sincronizzazione_workspace( $promoted_id, 'PENDING' );
-			if ( $promoted || MI_Spedizione_Email::email_da_spedire( $secretariat_email_status ) ) self::schedule_email_safely();
+			if ( $promoted || MI_Spedizione_Email::email_da_spedire( $secretariat_email_status ) || MI_Spedizione_Email::email_da_spedire( $participant_email_status ) ) self::schedule_email_safely();
 			return 'CANCELLED';
 		} catch ( Throwable $error ) {
 			$wpdb->query( 'ROLLBACK' );
@@ -1182,7 +1191,7 @@ final class MI_Registration_Service {
 		global $wpdb;
 		$email_items = array();
 		foreach ( $items as $item ) foreach ( $event['ticket_types'] as $ticket ) if ( $ticket['code'] === $item['ticket_type_code'] ) { $email_items[] = array( 'name' => $ticket['name'], 'quantity' => $item['quantity'] ); break; }
-		$values = MI_Modello_Email::valori_ordine( $event, $row['order_code'], 'PENDING_PAYMENT' === $target ? 'Da pagare' : 'Confermata', array_sum( array_map( 'intval', wp_list_pluck( $items, 'quantity' ) ) ), trim( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ), $economic, $email_items );
+		$values = MI_Modello_Email::valori_ordine( $event, $row['order_code'], 'PENDING_PAYMENT' === $target ? 'Da pagare' : 'Confermata', array_sum( array_map( 'intval', wp_list_pluck( $items, 'quantity' ) ) ), trim( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ), $economic, $email_items, $row['buyer_first_name'] );
 		$management = array();
 		foreach ( $wpdb->get_results( $wpdb->prepare( "SELECT id,first_name,last_name FROM {$participants} WHERE registration_id=%d AND status='ACTIVE' ORDER BY id", $row['id'] ), ARRAY_A ) as $participant ) {
 			$cancel_token = bin2hex( random_bytes( 32 ) );
@@ -1264,7 +1273,7 @@ final class MI_Registration_Service {
 				}
 			}
 			$economic = self::riepilogo_economico( $event, (int) $candidate['total_cents'], 'WAITLISTED', $active_qty );
-			$email_values = MI_Modello_Email::valori_ordine( $event, $candidate['order_code'], 'Posto disponibile: risposta richiesta', $active_qty, $candidate['buyer_first_name'] . ' ' . $candidate['buyer_last_name'], $economic, $email_items );
+			$email_values = MI_Modello_Email::valori_ordine( $event, $candidate['order_code'], 'Posto disponibile: risposta richiesta', $active_qty, $candidate['buyer_first_name'] . ' ' . $candidate['buyer_last_name'], $economic, $email_items, $candidate['buyer_first_name'] );
 			$offer_url = MI_Portal::waitlist_offer_url( (int) $candidate['id'], $offer_token );
 			$expires_timestamp = DateTimeImmutable::createFromFormat( 'Y-m-d H:i:s', $offer_expires, new DateTimeZone( 'UTC' ) )->getTimestamp();
 			$expires_label = wp_date( 'j F Y, \\o\\r\\e H:i', $expires_timestamp, wp_timezone() );
@@ -1295,7 +1304,10 @@ final class MI_Registration_Service {
 
 	/** The durable outbox is authoritative; cron scheduling is only a wake-up hint. */
 	private static function schedule_email_safely() {
-		try { MI_Spedizione_Email::pianifica_spedizione(); } catch ( Throwable $error ) { /* Periodic outbox recovery retries. */ }
+		try {
+			MI_Spedizione_Email::tenta_spedizione_immediata();
+			MI_Spedizione_Email::pianifica_spedizione();
+		} catch ( Throwable $error ) { /* Periodic outbox recovery retries. */ }
 	}
 
 	private static function accoda_sincronizzazione_workspace( $registration_id, $current_status ) {

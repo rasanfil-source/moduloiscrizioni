@@ -65,7 +65,7 @@ final class MI_Workspace_Client {
 		// La replica gira nella coda: la formattazione Google può superare un minuto.
 		$timeout = 'PROIETTA_EVENTO' === $action ? 240 : ( 'ELIMINA_DATI_EVENTO' === $action ? 110 : ( 'LEGGI_MODIFICHE_FOGLIO' === $action ? 45 : ( 'INVIA_EMAIL_PROVA' === $action ? 30 : 15 ) ) );
 		if ( 'CONFERMA_MODIFICHE_FOGLIO' === $action ) $timeout = 180;
-		if ( in_array( $action, array( 'INVIA_EMAIL_PROVA', 'INVIA_EMAIL_CONFERMA' ), true ) ) $timeout = 60;
+		if ( in_array( $action, array( 'INVIA_EMAIL_PROVA', 'INVIA_EMAIL_CONFERMA', 'INVIA_EMAIL_CONFERMA_MITTENTE' ), true ) ) $timeout = 60;
 		if ( in_array( $action, array( 'VERIFICA_FOGLI_EVENTO', 'ORGANIZZA_FOGLI_EVENTO' ), true ) ) $timeout = 60;
 		// These deliveries carry revisions and Google tombstones reject late writes.
 		// Email/deletion retain their stronger exclusion until their side effect completes.
@@ -117,6 +117,9 @@ final class MI_Workspace_Client {
 			$remote_code = is_array( $decoded ) ? strtoupper( sanitize_key( (string) ( $decoded['error'] ?? '' ) ) ) : '';
 			$motivi = array(
 				'EMAIL_SENDER_NOT_AUTHORIZED' => 'distribuisci Apps Script con l’account info@parrocchiasanteugenio.it; nessun invio eseguito',
+				'EMAIL_ALIAS_NOT_AUTHORIZED' => 'il mittente del gruppo non è tra gli indirizzi verificati in «Invia messaggio come» dell’account Google che esegue Apps Script; nessun invio eseguito',
+				'EMAIL_ALIAS_CHECK_FAILED' => 'impossibile verificare i mittenti Google: autorizza il nuovo accesso Gmail nel progetto Apps Script e aggiorna la distribuzione; nessun invio eseguito',
+				'INVALID_SENDER_EMAIL' => 'indirizzo mittente non valido; nessun invio eseguito',
 				'EMAIL_DELIVERY_UNCERTAIN' => 'esito invio incerto: verificare il Registro invii email e i log Google prima di ritentare; reinvio automatico bloccato',
 				'EMAIL_QUOTA_EXCEEDED' => 'quota giornaliera Google esaurita',
 				'EMAIL_BUSY' => 'un altro invio è in corso',

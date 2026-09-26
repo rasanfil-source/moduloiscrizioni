@@ -6,7 +6,7 @@ require_once __DIR__ . '/class-mi-booking-search.php';
 
 /** Operational records in MySQL. Google receives a projection of these records. */
 final class MI_Management_Service {
-	public static function all_people( $event_ids, $query, $offset = 0, $include_closed = false, $status = '' ) {
+	public static function all_people( $event_ids, $query, $offset = 0, $include_closed = false, $status = '', $sort = 'name' ) {
 		global $wpdb;
 		if ( ! MI_Portal_Management::allowed() ) return new WP_Error( 'mi_scope', 'Accesso non consentito.' );
 		$event_ids = array_values( array_filter( array_map( 'intval', $event_ids ), array( 'MI_Access', 'can_access_event' ) ) );
@@ -18,8 +18,9 @@ final class MI_Management_Service {
 			if ( ! in_array( $status, array( 'CANCELLED', 'EXPIRED' ), true ) ) $where .= " AND p.status='ACTIVE'";
 		} elseif ( ! $include_closed ) $where .= " AND p.status='ACTIVE' AND r.status NOT IN ('CANCELLED','EXPIRED')";
 		foreach ( MI_Booking_Search::words( $query ) as $word ) $where .= $wpdb->prepare( " AND CONCAT_WS(' ',p.first_name,p.last_name,r.buyer_first_name,r.buyer_last_name,r.order_code,r.buyer_email,r.buyer_phone,IF(JSON_VALID(p.extra_json),JSON_UNQUOTE(JSON_EXTRACT(p.extra_json,'$.email')),''),IF(JSON_VALID(p.extra_json),JSON_UNQUOTE(JSON_EXTRACT(p.extra_json,'$.phone')),'')) LIKE %s", '%' . $wpdb->esc_like( $word ) . '%' );
+		$order = 'created_at' === $sort ? 'r.created_at DESC,r.id DESC,p.id ASC' : 'p.last_name ASC,p.first_name ASC,r.id DESC,p.id ASC';
 		$offset = max( 0, (int) $offset );
-		$rows = $wpdb->get_results( "SELECT p.id,p.first_name,p.last_name,p.status,r.status AS booking_status,r.order_code,r.event_id,r.created_at,(SELECT COUNT(*) FROM {$wpdb->prefix}mi_participants sibling WHERE sibling.registration_id=r.id AND sibling.id<=p.id) AS number FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE $where ORDER BY r.created_at DESC,r.id DESC,p.id ASC LIMIT $offset,31", ARRAY_A );
+		$rows = $wpdb->get_results( "SELECT p.id,p.first_name,p.last_name,p.status,r.status AS booking_status,r.order_code,r.event_id,r.created_at,(SELECT COUNT(*) FROM {$wpdb->prefix}mi_participants sibling WHERE sibling.registration_id=r.id AND sibling.id<=p.id) AS number FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE $where ORDER BY $order LIMIT $offset,31", ARRAY_A );
 		if ( $wpdb->last_error ) return new WP_Error( 'mi_search', 'Ricerca non disponibile.' );
 		$more = count( $rows ) > 30; $rows = array_slice( $rows, 0, 30 );
 		foreach ( $rows as &$row ) $row['event_title'] = self::event_title( $row['event_id'] );
@@ -197,10 +198,11 @@ final class MI_Management_Service {
 		// LIKE predicate is not a proven superset across database collations;
 		// scan bounded chunks for exact names, aliases and counts.
 		$where_sql = implode( ' AND ', $where );
-		$direction = 'desc' === ( $context['direction'] ?? '' ) ? 'DESC' : 'ASC';
+		$direction = 'desc' === ( $context['direction'] ?? ( 'created_at' === ( $context['sort'] ?? '' ) ? 'desc' : 'asc' ) ) ? 'DESC' : 'ASC';
 		$sort = $context['sort'] ?? 'name';
 		if ( $individual ) {
 			$order = array(
+				'created_at' => "r.created_at {$direction},r.id {$direction},p.id ASC",
 				'name' => "p.last_name {$direction},p.first_name {$direction}",
 				'buyer' => "r.buyer_last_name {$direction},r.buyer_first_name {$direction}",
 				'code' => "r.order_code {$direction}",
@@ -209,9 +211,11 @@ final class MI_Management_Service {
 			$from = "{$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id";
 			if ( $advanced ) return self::scan_filtered_page( $event_id, $context, $offset, $limit, true, $from, $where_sql );
 			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$from} WHERE {$where_sql}" );
-			$selected = $wpdb->get_results( "SELECT p.id,r.id registration_id FROM {$from} WHERE {$where_sql} ORDER BY (r.status IN ('CANCELLED','EXPIRED') OR p.status='CANCELLED'),{$order},r.order_code,p.id LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
+			$closed_order = 'created_at' === $sort ? '' : "(r.status IN ('CANCELLED','EXPIRED') OR p.status='CANCELLED'),";
+			$selected = $wpdb->get_results( "SELECT p.id,r.id registration_id FROM {$from} WHERE {$where_sql} ORDER BY {$closed_order}{$order},r.order_code,p.id LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
 		} else {
 			$order = array(
+				'created_at' => "r.created_at {$direction},r.id {$direction}",
 				'name' => "r.buyer_last_name {$direction},r.buyer_first_name {$direction}",
 				'buyer' => "r.buyer_last_name {$direction},r.buyer_first_name {$direction}",
 				'code' => "r.order_code {$direction}",
@@ -220,7 +224,8 @@ final class MI_Management_Service {
 			$from = "{$wpdb->prefix}mi_registrations r";
 			if ( $advanced ) return self::scan_filtered_page( $event_id, $context, $offset, $limit, false, $from, $where_sql );
 			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$from} WHERE {$where_sql}" );
-			$selected = $wpdb->get_results( "SELECT r.id registration_id,r.order_code FROM {$from} WHERE {$where_sql} ORDER BY (r.status IN ('CANCELLED','EXPIRED')),{$order},r.id LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
+			$closed_order = 'created_at' === $sort ? '' : "(r.status IN ('CANCELLED','EXPIRED')),";
+			$selected = $wpdb->get_results( "SELECT r.id registration_id,r.order_code FROM {$from} WHERE {$where_sql} ORDER BY {$closed_order}{$order},r.id LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
 		}
 		self::check_database();
 		$registration_ids = array_values( array_unique( array_map( 'intval', array_column( $selected, 'registration_id' ) ) ) );
@@ -353,9 +358,9 @@ final class MI_Management_Service {
 					if ( (int) $person['id'] === $first_person_id || 'ALL' === ( $snapshot['event']['participant_extra_scope'] ?? '' ) ) foreach ( $definitions as $f ) if ( $f['required'] && '' === trim( (string) ( $fields[$f['key']] ?? '' ) ) ) $missing_fields[] = $f['label'];
 					$economic = $individual_economics[(int) $person['id']] ?? array( 'total' => 0, 'deposit' => 0, 'paid' => 0, 'balance' => 0, 'deposit_missing' => 0 );
 					$person_deposit = array( 'deposit_plan' => 'DEPOSIT_BALANCE' === ( $order['economic_mode'] ?? '' ), 'deposit_due' => (int) $economic['deposit'], 'deposit_missing' => (int) $economic['deposit_missing'], 'deposit_covered' => 'DEPOSIT_BALANCE' === ( $order['economic_mode'] ?? '' ) && (int) $economic['deposit'] > 0 && (int) $economic['deposit_missing'] <= 0, 'paid' => (int) $economic['paid'], 'balance' => (int) $economic['balance'] );
-					$individuals[] = $person_deposit + array( 'economics_known' => ! empty( $individual_position['quotes_known'] ) && ! empty( $individual_position['payments_known'] ), 'is_buyer' => (int) $person['id'] === $buyer_participant_id, 'id' => (int) $person['id'], 'number' => $number + 1, 'attendance' => $attendance[$person['id']]['state'] ?? 'UNRECORDED', 'code' => $order['order_code'], 'name' => trim( ( $person['last_name'] ?? '' ) . ' ' . ( $person['first_name'] ?? '' ) ), 'buyer' => trim( $order['buyer_last_name'] . ' ' . $order['buyer_first_name'] ), 'email' => self::participant_contact( $fields, $definitions, 'email', $order['buyer_email'] ?? '' ), 'phone' => self::participant_contact( $fields, $definitions, 'phone', $order['buyer_phone'] ?? '' ), 'status' => 'CANCELLED' === $person['status'] ? 'CANCELLED' : $order['status'], 'room' => $person['room_code'], 'fields' => $fields, 'missing' => $missing_fields, 'unassigned' => $needs_room( $person ) && ! $person['room_code'], 'collectible' => $collectible && (int) $economic['balance'] > 0, 'requests' => self::visible_special_requests( $order['special_requests'] ?? '' ), 'requests_reviewed' => $request_review['reviewed'], 'offer_expires_at' => $order['waitlist_offer_expires_at'] ?? '', 'options' => self::decode( $person['options_json'] ?? '' ) );
+					$individuals[] = $person_deposit + array( 'created_at' => $order['created_at'] ?? '', 'registration_id' => (int) $order['id'], 'economics_known' => ! empty( $individual_position['quotes_known'] ) && ! empty( $individual_position['payments_known'] ), 'is_buyer' => (int) $person['id'] === $buyer_participant_id, 'id' => (int) $person['id'], 'number' => $number + 1, 'attendance' => $attendance[$person['id']]['state'] ?? 'UNRECORDED', 'code' => $order['order_code'], 'name' => trim( ( $person['last_name'] ?? '' ) . ' ' . ( $person['first_name'] ?? '' ) ), 'buyer' => trim( $order['buyer_last_name'] . ' ' . $order['buyer_first_name'] ), 'email' => self::participant_contact( $fields, $definitions, 'email', $order['buyer_email'] ?? '' ), 'phone' => self::participant_contact( $fields, $definitions, 'phone', $order['buyer_phone'] ?? '' ), 'status' => 'CANCELLED' === $person['status'] ? 'CANCELLED' : $order['status'], 'room' => $person['room_code'], 'fields' => $fields, 'missing' => $missing_fields, 'unassigned' => $needs_room( $person ) && ! $person['room_code'], 'collectible' => $collectible && (int) $economic['balance'] > 0, 'requests' => self::visible_special_requests( $order['special_requests'] ?? '' ), 'requests_reviewed' => $request_review['reviewed'], 'offer_expires_at' => $order['waitlist_offer_expires_at'] ?? '', 'options' => self::decode( $person['options_json'] ?? '' ) );
 				}
-				$items[] = $deposit + array( 'code' => $order['order_code'], 'name' => trim( $order['buyer_last_name'] . ' ' . $order['buyer_first_name'] ), 'status' => $order['status'], 'active' => ! in_array( $order['status'], array( 'CANCELLED','EXPIRED' ), true ), 'participants' => count( $participants ), 'total' => $individual_summary['known'] ? $individual_summary['total'] : (int) $order['total_cents'], 'paid' => $individual_summary['known'] ? $individual_summary['paid'] : $sum, 'balance' => $individual_summary['known'] ? $individual_summary['balance'] : $position['balance'], 'collectible' => $collectible, 'missing' => $missing, 'unassigned' => $unassigned, 'requests' => self::visible_special_requests( $order['special_requests'] ?? '' ), 'requests_reviewed' => $request_review['reviewed'], 'offer_expires_at' => $order['waitlist_offer_expires_at'] ?? '', 'order_options' => self::decode( $order['order_options_json'] ?? '' ) );
+				$items[] = $deposit + array( 'created_at' => $order['created_at'] ?? '', 'registration_id' => (int) $order['id'], 'code' => $order['order_code'], 'name' => trim( $order['buyer_last_name'] . ' ' . $order['buyer_first_name'] ), 'status' => $order['status'], 'active' => ! in_array( $order['status'], array( 'CANCELLED','EXPIRED' ), true ), 'participants' => count( $participants ), 'total' => $individual_summary['known'] ? $individual_summary['total'] : (int) $order['total_cents'], 'paid' => $individual_summary['known'] ? $individual_summary['paid'] : $sum, 'balance' => $individual_summary['known'] ? $individual_summary['balance'] : $position['balance'], 'collectible' => $collectible, 'missing' => $missing, 'unassigned' => $unassigned, 'requests' => self::visible_special_requests( $order['special_requests'] ?? '' ), 'requests_reviewed' => $request_review['reviewed'], 'offer_expires_at' => $order['waitlist_offer_expires_at'] ?? '', 'order_options' => self::decode( $order['order_options_json'] ?? '' ) );
 			}
 			$options = function_exists( 'get_post_meta' ) ? (array) get_post_meta( $event_id, '_mi_options', true ) : array();
 			$mode = function_exists( 'get_post_meta' ) ? get_post_meta( $event_id, '_mi_economic_mode', true ) : '';

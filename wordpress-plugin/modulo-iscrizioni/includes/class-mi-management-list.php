@@ -78,11 +78,15 @@ final class MI_Management_List {
 
 	/** One comparator for complete lists and bounded, cross-chunk page selection. */
 	private static function sort_rows( array $rows, array $context ) {
-		$sort = in_array( $context['sort'] ?? '', array( 'name', 'buyer', 'code', 'room' ), true ) ? $context['sort'] : 'name';
-		$direction = 'desc' === ( $context['direction'] ?? '' ) ? -1 : 1;
+		$sort = in_array( $context['sort'] ?? '', array( 'name', 'buyer', 'code', 'room', 'created_at' ), true ) ? $context['sort'] : 'name';
+		$direction = 'desc' === ( $context['direction'] ?? ( 'created_at' === $sort ? 'desc' : 'asc' ) ) ? -1 : 1;
 		$rows = array_map( static function ( $row ) use ( $sort ) { return array( 'row' => $row, 'sort_key' => remove_accents( $row[$sort] ?? '' ) ); }, $rows );
-		usort( $rows, static function ( $left, $right ) use ( $direction ) {
+		usort( $rows, static function ( $left, $right ) use ( $direction, $sort ) {
 			$a = $left['row']; $b = $right['row'];
+			if ( 'created_at' === $sort ) {
+				$result = strcmp( $a['created_at'] ?? '', $b['created_at'] ?? '' ) ?: ( ( $a['registration_id'] ?? 0 ) <=> ( $b['registration_id'] ?? 0 ) );
+				return $direction * $result ?: ( ( $a['id'] ?? 0 ) <=> ( $b['id'] ?? 0 ) );
+			}
 			$closed = (int) in_array( $a['status'], array( 'CANCELLED', 'EXPIRED' ), true ) <=> (int) in_array( $b['status'], array( 'CANCELLED', 'EXPIRED' ), true );
 			if ( $closed ) return $closed;
 			$result = strnatcasecmp( $left['sort_key'], $right['sort_key'] );

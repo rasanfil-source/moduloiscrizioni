@@ -522,7 +522,6 @@ test('le email includono collegamenti personali senza inviare in modalità antep
   assert.doesNotMatch(model, /Ogni collegamento riguarda una sola persona/);
   assert.match(model, /padding:9px 14px/);
   assert.match(model, /evidenzia_titolo_evento\( self::sanitizza_html_email/);
-  assert.match(model, /preg_quote\( \$escaped_title/);
   assert.match(sender, /get_option\( self::OPZIONE_MODALITA, 'ANTEPRIMA' \)/);
   assert.match(sender, /'OPERATIVO' === self::modalita\(\)/);
 });
@@ -635,7 +634,8 @@ test('la coda email resta sicura fino all’attivazione operativa', async () => 
   assert.match(sender, /get_option\( self::OPZIONE_MODALITA, 'ANTEPRIMA' \)/);
   assert.match(sender, /'OPERATIVO' === self::modalita\(\)/);
   assert.match(sender, /prova_verificata/);
-  assert.match(sender, /MI_Workspace_Client::request\( 'INVIA_EMAIL_CONFERMA'/);
+  assert.match(sender, /'INVIA_EMAIL_CONFERMA' : 'INVIA_EMAIL_CONFERMA_MITTENTE'/);
+  assert.match(sender, /MI_Workspace_Client::request\( \$azione/);
   assert.doesNotMatch(sender, /wp_mail\s*\(/);
   assert.doesNotMatch(sender, /MI-PROVA-0001/);
   assert.match(sender, /'PROVA' === self::modalita\(\).*'TEST_PENDING'/s);
@@ -825,10 +825,10 @@ test('le email riparano a capo e Markdown senza mostrare codici letterali', asyn
 	const model = await read('includes/class-mi-modello-email.php');
 	const sender = await read('includes/class-mi-spedizione-email.php');
 	assert.match(model, /ripara_istantanea_codifica/);
-	assert.match(model, /La rimozione va eseguita dopo aver ricostruito gli a capo/);
+	assert.match(model, /senza interpretare lettere n/);
 	assert.match(model, /testo_email_in_html/);
 	assert.match(model, /rimuovi_markdown_testo/);
-	assert.match(model, /\(\?:Quando\|Dove\|Codice iscrizione\|Stato\|Partecipazione\)/);
+	assert.doesNotMatch(model, /\(\?:Quando\|Dove\|Codice iscrizione\|Stato\|Partecipazione\)/);
 	assert.doesNotMatch(model, /\/nn\(\?=\[\\p\{L\}\*\]\)\/u/);
 	assert.match(model, /uniforma_grafica_corpo\( self::sanitizza_html_email/);
 	assert.match(model, /Quando:\|Dove:\|Codice iscrizione:\|Stato:\|Partecipazione:/);
@@ -1672,7 +1672,8 @@ test('il portale gestisce i gruppi in una scheda dedicata e il wizard vi rimanda
   assert.match(portal, /Email per le comunicazioni con gli iscritti/);
   assert.match(portal, /name="group_email_contact"/);
   assert.doesNotMatch(portal, /name="event_email_contact"/);
-  assert.match(emailModel, /unset\( \$event\['contact_email'\] \)/);
+  assert.match(emailModel, /unset\( \$event\['contact_email'\], \$event\['sender_email'\] \)/);
+  assert.match(portal, /name="group_email_sender"/);
   assert.match(emailModel, /'indirizzo_risposte'\s*=> \$style\['contact_email'\]/);
   assert.match(css, /\.mi-group-form-grid/);
 });

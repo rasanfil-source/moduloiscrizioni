@@ -418,6 +418,53 @@
   /* Navigation typography is shared in portal.css. */
 }
 
+/* Search and ordering share a wrapping row at every viewport width. */
+.mi-management .mi-management-search.mi-search-order-row,
+[data-mi-portal-scope="reserved"] .mi-management .mi-management-search.mi-search-order-row,
+[data-mi-portal-scope="reserved"] .mi-management [data-participant-filters]>.mi-management-search.mi-search-order-row {
+  display:flex; flex-wrap:wrap; align-items:flex-end; gap:8px; width:100%; max-width:none; margin-bottom:12px;
+}
+.mi-management .mi-search-order-row>label,
+[data-mi-portal-scope="reserved"] .mi-management .mi-management-search.mi-search-order-row>label {
+  flex:1 1 240px; min-width:0; width:auto; margin:0;
+}
+.mi-management .mi-search-order-row>button,
+[data-mi-portal-scope="reserved"] .mi-management .mi-management-search.mi-search-order-row>button,
+.mi-management .mi-search-order-row>.mi-registration-sort {
+  flex:0 1 auto; width:auto; margin:0; min-width:88px;
+}
+.mi-management .mi-registration-sort { position:relative; padding:0; border:0; background:transparent; overflow:visible; }
+.mi-management .mi-registration-sort>summary {
+  display:flex; align-items:center; justify-content:center; gap:8px; min-height:44px; box-sizing:border-box; padding:8px 12px;
+  border:1px solid var(--line,#d3dbe4); border-radius:8px; background:var(--surface,#fff); color:inherit; font:inherit; font-weight:600; cursor:pointer; list-style:none;
+}
+.mi-management .mi-registration-sort>summary::-webkit-details-marker { display:none; }
+.mi-management .mi-registration-sort>summary::after { content:none; }
+.mi-management .mi-registration-sort-options {
+  position:absolute; z-index:30; right:0; top:calc(100% + 6px); width:200px; max-width:calc(100vw - 48px); padding:6px;
+  border:1px solid var(--line,#d3dbe4); border-radius:10px; background:var(--surface,#fff); box-shadow:0 8px 24px #17203326;
+}
+.mi-management .mi-registration-sort-options>button {
+  display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%; min-height:48px; margin:0; padding:8px 10px;
+  border:0; border-radius:6px; background:transparent; text-align:left;
+}
+.mi-management .mi-registration-sort-options>button[aria-pressed="true"] { background:var(--mi-selected-bg,#edf3fc); font-weight:700; }
+.mi-management .mi-registration-sort-options small { font-weight:400; font-size:.8em; }
+.mi-management .mi-registration-sort :is(summary,button):focus-visible { outline:2px solid var(--primary,#245b9e); outline-offset:2px; }
+.mi-management .mi-management-grid[hidden] { display:none; }
+@media screen and (max-width:360px) {
+  .mi-management .mi-registration-sort-options { right:auto; left:0; }
+}
+@media screen and (max-width:760px) {
+  .mi-management .mi-search-order-row>button,
+  .mi-management .mi-search-order-row>.mi-registration-sort,
+  [data-mi-portal-scope="reserved"] .mi-management .mi-management-search.mi-search-order-row>button,
+  [data-mi-portal-scope="reserved"] .mi-management .mi-management-search.mi-search-order-row>.mi-registration-sort {
+    flex:1 1 0; min-width:0; width:auto;
+  }
+  .mi-management .mi-search-order-row>.mi-registration-sort>summary { width:100%; }
+}
+
 /* Azioni e filtri compatti, con etichette sempre leggibili. */
 @media screen {
   [data-mi-portal-scope="reserved"] .mi-management [data-report-actions] { display:flex; gap:8px; }

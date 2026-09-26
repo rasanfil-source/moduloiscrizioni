@@ -1,4 +1,18 @@
 (() => {
+  const registrationSortOptions=[['name','Cognome','A–Z'],['created_at','Data iscrizione','Più recenti prima']];
+  const registrationSortStorageKey='mi-registration-sort';
+  const readRegistrationSort=()=>{try{const value=localStorage.getItem(registrationSortStorageKey);return registrationSortOptions.some(option=>option[0]===value)?value:'name';}catch(error){return 'name';}};
+  const saveRegistrationSort=value=>{try{localStorage.setItem(registrationSortStorageKey,value);}catch(error){/* La scelta resta valida per la sessione corrente. */}};
+  function registrationSortMenu(current,onChange){
+    const menu=document.createElement('details');menu.className='mi-registration-sort';menu.dataset.orderMenu='';
+    menu.innerHTML='<summary>Ordina <span aria-hidden="true">▾</span></summary><div class="mi-registration-sort-options">'+registrationSortOptions.map(([key,label,hint])=>'<button type="button" data-order-choice="'+key+'" aria-pressed="false"><span>'+label+'</span><small>'+hint+'</small></button>').join('')+'</div>';
+    menu.sync=key=>{menu.querySelectorAll('[data-order-choice]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.orderChoice===key)));menu.querySelector('summary').title='Ordina: '+(registrationSortOptions.find(option=>option[0]===key)?.[1]||'Personalizzato');};
+    menu.sync(current);
+    menu.addEventListener('click',e=>{const choice=e.target.closest('[data-order-choice]');if(!choice)return;menu.sync(choice.dataset.orderChoice);menu.open=false;menu.querySelector('summary').focus();onChange(choice.dataset.orderChoice);});
+    menu.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();menu.open=false;menu.querySelector('summary').focus();}});
+    return menu;
+  }
+  document.addEventListener('click',e=>document.querySelectorAll('[data-order-menu][open]').forEach(menu=>{if(!menu.contains(e.target))menu.open=false;}));
   // Minimal OOXML workbook, packaged locally as a standard uncompressed ZIP.
   // Text is explicitly typed: phone numbers keep leading zeros and input never becomes a formula.
   function reportWorkbook(rows) {
@@ -99,7 +113,7 @@
     let event=Number(root.dataset.event)>0?root.dataset.event:'',order=root.dataset.order,booking=null,busy=false,generation=0,pending=null,dirty=false,dirtyForm=null;
     const periodSelect=root.querySelector('[data-period-select]'),eventOptions=[...select.options].map(option=>option.cloneNode(true));
     let period=periodSelect?.value||'current';
-    let printList=null,listResize=null,currentPerson=null,returnEvent=event,allQuery='',allClosed=false,allStatus='';
+    let printList=null,listResize=null,currentPerson=null,returnEvent=event,allQuery='',allClosed=false,allStatus='',allSort=readRegistrationSort();
     const eventActions=root.querySelector('[data-event-actions]');
     const mobileLayout=window.matchMedia('(max-width:760px)');
     const eventSelectors=root.querySelector('.mi-management-event-selectors');
@@ -222,15 +236,22 @@
       content.innerHTML='<div class="mi-management-grid"><label>Cerca persona<input type="search" data-all-query placeholder="Nome, cognome, email, cellulare o codice prenotazione" value="'+esc(allQuery)+'"></label><label>Stato prenotazione<select data-all-status>'+[['','Tutti gli stati'],['CONFIRMED','Confermate'],['PENDING_PAYMENT','Da pagare'],['WAITLISTED','Lista d’attesa'],['WAITLIST_OFFERED','Posto proposto'],['CANCELLED','Annullate'],['EXPIRED','Scadute']].map(([value,label])=>'<option value="'+value+'" '+(allStatus===value?'selected':'')+'>'+label+'</option>').join('')+'</select></label><label data-all-closed-label '+(allStatus?'hidden':'')+'><input type="checkbox" data-all-closed '+(allClosed?'checked':'')+'> Includi annullate e scadute</label></div><div data-all-results></div><button type="button" data-all-more hidden>Mostra altre 30</button>';
       const host=content.querySelector('[data-all-results]'),more=content.querySelector('[data-all-more]');let offset=0,sequence=0,timer;
       const load=async(reset=true)=>{const seq=++sequence;if(reset){offset=0;host.replaceChildren();}more.hidden=true;say('Caricamento iscrizioni…');
-        try{const data=await request('all_people',{query:allQuery,period,offset,status:allStatus,include_closed:allClosed?'1':'0'});if(ticket!==generation||seq!==sequence)return;
+        try{const data=await request('all_people',{query:allQuery,period,offset,status:allStatus,sort:allSort,include_closed:allClosed?'1':'0'});if(ticket!==generation||seq!==sequence)return;
           const labels={CONFIRMED:'Confermata',PENDING_PAYMENT:'Da pagare',WAITLISTED:'Lista d’attesa',WAITLIST_OFFERED:'Posto proposto',CANCELLED:'Annullata',EXPIRED:'Scaduta'};
           for(const p of data.items){const state=p.status==='CANCELLED'?'CANCELLED':p.booking_status,name=[p.last_name,p.first_name].join(' ');host.insertAdjacentHTML('beforeend','<article class="mi-all-person mi-all-person--openable" data-open="'+esc(p.order_code)+'" data-open-event="'+Number(p.event_id)+'" data-person-focus="'+Number(p.number)+'" tabindex="0" aria-label="Apri la scheda di '+esc(name)+' per '+esc(p.event_title)+'"><div><strong class="mi-participant-open-label">'+esc(name)+' <span class="mi-participant-chevron" aria-hidden="true">›</span></strong><p>'+esc(p.event_title)+'</p><small>Iscrizione del '+esc(String(p.created_at).slice(0,10).split('-').reverse().join('/'))+(labels[state]?' · '+esc(labels[state]):'')+'</small></div></article>');}
           offset+=data.items.length;more.hidden=!data.more;say(offset?'Iscrizioni visualizzate: '+offset+'.':'Nessuna iscrizione trovata.');
         }catch(error){if(ticket===generation&&seq===sequence)say('Ricerca non disponibile. '+error.message);}
       };
+      const allFilters=content.querySelector('.mi-management-grid'),searchBar=document.createElement('div');searchBar.className='mi-management-search mi-search-order-row';
+      const searchButton=document.createElement('button');searchButton.type='button';searchButton.textContent='Cerca';searchButton.dataset.allSearch='';searchButton.onclick=()=>{clearTimeout(timer);load();};
+      const filterButton=document.createElement('button');filterButton.type='button';filterButton.textContent='Filtri';filterButton.dataset.allFiltersToggle='';
+      const syncAllFilterCount=()=>{const count=Number(!!allStatus)+Number(!allStatus&&allClosed);filterButton.textContent='Filtri'+(count?' ('+count+')':'');};syncAllFilterCount();
+      allFilters.hidden=true;filterButton.setAttribute('aria-expanded','false');filterButton.onclick=()=>{allFilters.hidden=!allFilters.hidden;filterButton.setAttribute('aria-expanded',String(!allFilters.hidden));};
+      allFilters.before(searchBar);searchBar.append(content.querySelector('[data-all-query]').closest('label'),searchButton,filterButton,registrationSortMenu(allSort,key=>{allSort=key;saveRegistrationSort(key);clearTimeout(timer);load();}));
+      content.querySelector('[data-all-query]').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();clearTimeout(timer);load();}};
       content.querySelector('[data-all-query]').oninput=e=>{allQuery=e.target.value;clearTimeout(timer);sequence++;timer=setTimeout(()=>{if(ticket===generation)load();},250);};
-      content.querySelector('[data-all-status]').onchange=e=>{allStatus=e.target.value;content.querySelector('[data-all-closed-label]').hidden=!!allStatus;clearTimeout(timer);load();};
-      content.querySelector('[data-all-closed]').onchange=e=>{allClosed=e.target.checked;load();};more.onclick=()=>load(false);await load();
+      content.querySelector('[data-all-status]').onchange=e=>{allStatus=e.target.value;content.querySelector('[data-all-closed-label]').hidden=!!allStatus;syncAllFilterCount();clearTimeout(timer);load();};
+      content.querySelector('[data-all-closed]').onchange=e=>{allClosed=e.target.checked;syncAllFilterCount();load();};more.onclick=()=>load(false);await load();
     }
     async function summary(){
       updateEventContext();
@@ -267,7 +288,7 @@
         arrangeManagement();
         if(!features.payments)content.querySelector('[data-net-paid]')?.setAttribute('hidden','');
 
-        if(listEvent!==event){listContext={query:'',filter:'all',state:'',requests:'',deadline:'',room:'',service:'',sort:'name',view:'people',shown:30};listEvent=event;}
+        if(listEvent!==event){listContext={query:'',filter:'all',state:'',requests:'',deadline:'',room:'',service:'',sort:readRegistrationSort(),view:'people',shown:30};listEvent=event;}
         listContext.view='people';listContext.orderService='';
         const states={CONFIRMED:'Partecipante',PENDING_PAYMENT:'Pagamento atteso',WAITLISTED:'Lista d’attesa',WAITLIST_OFFERED:'Posto proposto',CANCELLED:'Annullata',EXPIRED:'Scaduta'};
         const stateLabel=row=>{
@@ -445,7 +466,7 @@
         content.querySelectorAll('[data-export-column]').forEach(input=>input.addEventListener('change',()=>{try{localStorage.setItem('mi-report-columns:'+event,JSON.stringify([...content.querySelectorAll('[data-export-column]:checked')].map(item=>item.dataset.exportColumn)));}catch(error){/* La scelta resta valida per la sessione corrente. */}}));
         if(printButton){printButton.innerHTML='<svg class="mi-action-icon mi-action-icon--print" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 9V3h12v6M6 17H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/></svg><span>Stampa</span>';content.querySelector('[data-report-actions]').prepend(printButton);}
         if(!features.rooms&&listContext.sort==='room')listContext.sort='name';
-        const searchBar=document.createElement('div');searchBar.className='mi-management-search';searchBar.append(search.closest('label'),content.querySelector('[data-clear-query]'));content.querySelector('[data-list]').before(searchBar);
+        const searchBar=document.createElement('div');searchBar.className='mi-management-search mi-search-order-row';searchBar.append(search.closest('label'),content.querySelector('[data-clear-query]'));content.querySelector('[data-list]').before(searchBar);
         const participantHeading=document.createElement('h3');participantHeading.dataset.participantHeading='';participantHeading.innerHTML='<span class="mi-participant-heading-label">Elenco partecipanti</span><span class="mi-participant-count" data-participant-count></span>';
         const listHost=content.querySelector('[data-list]');
         listHost.before(participantHeading);
@@ -457,7 +478,7 @@
         advancedFilters.innerHTML='<summary><svg class="mi-filter-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16l-6 7v5l-4 2v-7z"/></svg><span>Filtri</span><span data-filter-count></span></summary>';
         filterControls.before(searchBar,advancedFilters);advancedFilters.append(filterControls,closedLabel);
         const activeFilterCount=()=>[listContext.filter&&listContext.filter!=='all',listContext.deposit,listContext.service,listContext.requests,listContext.deadline,listContext.includeClosed].filter(Boolean).length;
-        advancedFilters.open=activeFilterCount()>0||!window.matchMedia('(max-width:900px)').matches;
+        advancedFilters.open=false;
         closedToggle.onchange=()=>{listContext.includeClosed=closedToggle.checked;listContext.shown=30;draw();};
         if(data.attendance_availability?.available){
           const attendancePeople=(data.people||[]).filter(person=>['CONFIRMED','PENDING_PAYMENT'].includes(person.status));
@@ -502,7 +523,9 @@
           const url=URL.createObjectURL(reportWorkbook(rows));const link=document.createElement('a');link.href=url;link.download='evento-'+event+'-'+(individual?'partecipanti':'prenotazioni')+'.xlsx';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);say('Esportati '+exportRows.length+' risultati filtrati.');
           }catch(error){say('Esportazione non completata. '+error.message);}
         };
+        const sortMenu=registrationSortMenu(listContext.sort,key=>{listContext.sort=key;saveRegistrationSort(key);listContext.direction=key==='created_at'?'desc':'asc';listContext.shown=30;draw();});searchBar.append(sortMenu);
         const draw=async(append=false,provided=null)=>{
+          sortMenu.sync(listContext.sort);
           const revision=++listGeneration;
           const activeCount=activeFilterCount();filterButton.querySelector('[data-filter-count]').textContent=activeCount?'('+activeCount+')':'';
           if(data.server_paging){
@@ -528,7 +551,7 @@
           const depositMatch=x=>!listContext.deposit||(['CONFIRMED','PENDING_PAYMENT'].includes(x.status)&&(listContext.deposit==='none'?x.paid<=0&&x.balance>0:listContext.deposit==='partial'?x.paid>0&&x.deposit_missing>0&&x.balance>0:listContext.deposit==='covered'?x.deposit_covered&&x.balance>0:listContext.deposit==='settled'?x.balance<=0:x.balance>0));
           const people=(data.people||[]).filter(p=>(listContext.includeClosed||open(p))&&depositMatch(p)&&personLogistics(p)&&deadlineMatch(p)&&requestMatch(p)&&(!listContext.state||p.status===listContext.state)&&matches(p)&&(filter==='all'||(open(p)&&(filter==='balance'?p.collectible:filter==='missing'?(p.missing||[]).length>0:p.unassigned))));
           const orders=data.items.filter(x=>(listContext.includeClosed||open(x))&&depositMatch(x)&&(!listContext.orderService||(x.order_options||[]).some(o=>(o.code||o.name)===listContext.orderService&&Number(o.quantity)>0))&&deadlineMatch(x)&&requestMatch(x)&&(!(listContext.room||listContext.service)||(data.people||[]).some(p=>p.code===x.code&&personLogistics(p)))&&(!listContext.state||x.status===listContext.state)&&(filter==='all'||(x.active&&x[filter]>0&&(filter!=='balance'||(x.collectible??['CONFIRMED','PENDING_PAYMENT'].includes(x.status)))))&&((x.name+' '+x.code).toLocaleLowerCase('it').includes(query)||(data.people||[]).some(p=>p.code===x.code&&matches(p))));
-          const individual=listContext.view==='people',all=data.server_paging?pageRows:(individual?people:orders).sort((a,b)=>(Number(!open(a))-Number(!open(b)))||(listContext.direction==='desc'?-1:1)*String(a[listContext.sort]||'').localeCompare(String(b[listContext.sort]||''),'it',{numeric:true,sensitivity:'base'})),list=data.server_paging?all:all.slice(0,listContext.shown),total=data.server_paging?pageTotal:all.length;
+          const individual=listContext.view==='people',all=data.server_paging?pageRows:(individual?people:orders).sort((a,b)=>listContext.sort==='created_at'?((listContext.direction==='asc'?1:-1)*(String(a.created_at||'').localeCompare(String(b.created_at||''))||(Number(a.registration_id||0)-Number(b.registration_id||0)))||(Number(a.id||0)-Number(b.id||0))):((Number(!open(a))-Number(!open(b)))||(listContext.direction==='desc'?-1:1)*String(a[listContext.sort]||'').localeCompare(String(b[listContext.sort]||''),'it',{numeric:true,sensitivity:'base'}))),list=data.server_paging?all:all.slice(0,listContext.shown),total=data.server_paging?pageTotal:all.length;
           exportRows=all;
           const titleParts=[];
           if(filter==='unassigned')titleParts.push('senza camera assegnata');

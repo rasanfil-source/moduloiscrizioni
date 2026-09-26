@@ -33,6 +33,7 @@ class MI_Modello_Email {
  static function crea_istantanea(...$args){return [];}
  static function crea_istantanea_nuova_iscrizione_segreteria(...$args){return [];}
  static function crea_istantanea_annullamento_partecipazione_segreteria(...$args){return [];}
+ static function crea_istantanea_annullamento_partecipazione_iscritto(...$args){return ['attivo'=>true,'testo'=>'Conferma singola partecipazione'];}
  static function crea_istantanea_annullamento_iscrizione_iscritto(...$args){return [];}
  static function crea_istantanea_istituzionale(...$args){return [];}
 }
@@ -147,4 +148,35 @@ $result=$transition->invoke(null,1,'EXPIRED','SYSTEM_CRON');
 check_case(is_wp_error($result)&&$wpdb->writes===0,'pending cancellation prevents expiry from losing recipients');
 $result=(new ReflectionMethod(MI_Registration_Service::class,'promote_waitlisted_locked'))->invoke(null,42,current_time('mysql'));
 check_case($result===[]&&$wpdb->writes===0,'pending cancellation blocks waitlist promotions');
+$GLOBALS['cancellation_pending']=false;
+class ParticipantCancellationDatabase extends FaultDatabase {
+ public $emails=[], $cancelled=false, $cancelSnapshot, $remaining=0, $failConfirmation=false;
+ function query($sql){
+  if($sql==='START TRANSACTION')$this->cancelSnapshot=[$this->emails,$this->cancelled];
+  $result=parent::query($sql);
+  if($sql==='ROLLBACK')[$this->emails,$this->cancelled]=$this->cancelSnapshot;
+  if(str_starts_with($sql,'UPDATE wp_mi_participants SET status=')&&$result!==false)$this->cancelled=true;
+  return $result;
+ }
+ function get_row($sql,$mode){$row=parent::get_row($sql,$mode);if(str_contains($sql,'mi_participants')&&$this->cancelled)$row['status']='CANCELLED';return $row;}
+ function get_var($sql){return str_contains($sql,'COUNT(*)')?$this->remaining:parent::get_var($sql);}
+ function insert($table,$data,...$args){
+  if($table==='wp_mi_email_outbox'&&$data['template_type']==='PARTICIPANT_CANCEL_CONFIRMATION'&&$this->failConfirmation)return false;
+  $result=parent::insert($table,$data,...$args);
+  if($table==='wp_mi_email_outbox'&&$result!==false)$this->emails[]=$data;
+  return $result;
+ }
+}
+foreach([0,1] as $remaining){
+ $wpdb=new ParticipantCancellationDatabase();$wpdb->registration=$stored;$wpdb->remaining=$remaining;$GLOBALS['fail_schedule']=false;
+ $result=MI_Registration_Service::cancel_participant(1,'PARTICIPANT_LINK');
+ $confirmations=array_values(array_filter($wpdb->emails,fn($r)=>$r['template_type']==='PARTICIPANT_CANCEL_CONFIRMATION'));
+ check_case($result==='CANCELLED'&&count($wpdb->emails)===2&&count($confirmations)===1&&$confirmations[0]['recipient']===$stored['buyer_email'],'participant cancellation queues buyer and organizer, remaining '.$remaining);
+ check_case($wpdb->registration['status']===($remaining?'WAITLISTED':'CANCELLED'),'partial cancellation preserves booking status');
+ MI_Registration_Service::cancel_participant(1,'PARTICIPANT_LINK');
+ check_case(count($wpdb->emails)===2,'repeated cancellation does not duplicate email');
+}
+$wpdb=new ParticipantCancellationDatabase();$wpdb->registration=$stored;$wpdb->failConfirmation=true;
+$result=MI_Registration_Service::cancel_participant(1,'PARTICIPANT_LINK');
+check_case(is_wp_error($result)&&!$wpdb->cancelled&&$wpdb->emails===[]&&$wpdb->registration===$stored,'buyer outbox failure rolls back cancellation and organizer email');
 exit($failures?1:0);

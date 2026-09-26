@@ -13,6 +13,7 @@ final class MI_Modello_Email {
 			'identity_name'   => get_bloginfo( 'name' ) ?: 'Parrocchia Sant’Eugenio',
 			'identity_detail' => 'Viale delle Belle Arti 10, Roma',
 			'contact_email'   => self::EMAIL_SEGRETERIA,
+			'sender_email'    => self::EMAIL_SEGRETERIA,
 			'logo_url'        => '',
 			'logo_enabled'    => false,
 			'banner_url'      => defined( 'MI_PLUGIN_URL' ) ? MI_PLUGIN_URL . 'assets/email-banner-default.svg' : '',
@@ -33,6 +34,8 @@ final class MI_Modello_Email {
 		}
 		$email = sanitize_email( $style['contact_email'] ?? '' );
 		if ( ! $overrides_only || $email ) $clean['contact_email'] = $email;
+		$sender = trim( (string) ( $style['sender_email'] ?? '' ) );
+		if ( is_email( $sender ) ) $clean['sender_email'] = sanitize_email( $sender );
 		foreach ( array( 'logo_url', 'banner_url' ) as $key ) {
 			$url = esc_url_raw( (string) ( $style[ $key ] ?? '' ), array( 'https' ) );
 			if ( ! $overrides_only || $url ) $clean[ $key ] = $url;
@@ -52,7 +55,7 @@ final class MI_Modello_Email {
 		$group = $group_id ? self::sanitizza_stile( get_post_meta( $group_id, '_mi_email_style', true ) ) : array();
 		$event = $event_id ? self::sanitizza_stile( get_post_meta( $event_id, '_mi_email_style', true ) ) : array();
 		// L’indirizzo per gli iscritti appartiene al gruppo e non può essere sostituito dal gestore del singolo evento.
-		unset( $event['contact_email'] );
+		unset( $event['contact_email'], $event['sender_email'] );
 		$style = array_merge( self::stile_default(), $group, $event );
 		// Contatti e Reply-To seguono la stessa regola delle notifiche agli organizzatori.
 		$style['contact_email'] = MI_Spedizione_Email::destinatario_evento( $event_id );
@@ -89,6 +92,7 @@ final class MI_Modello_Email {
 			'{{ordine.riepilogo_economico}}',
 			'{{ordine.totale}}',
 			'{{sottoscrittore.nome_completo}}',
+			'{{sottoscrittore.nome}}',
 			'{{pagamento.importo_dovuto}}',
 			'{{pagamento.saldo}}',
 			'{{pagamento.metodi}}',
@@ -172,6 +176,7 @@ final class MI_Modello_Email {
 			'{{ordine.riepilogo_economico}}' => 'Totale: 40,00 € · Importo da versare: 20,00 € · Saldo: 20,00 €',
 			'{{ordine.totale}}'           => '40,00 €',
 			'{{sottoscrittore.nome_completo}}' => 'Persona Esempio',
+			'{{sottoscrittore.nome}}' => 'Persona',
 			'{{pagamento.importo_dovuto}}' => '20,00 €',
 			'{{pagamento.saldo}}'         => '20,00 €',
 			'{{pagamento.metodi}}'        => 'Bonifico',
@@ -242,8 +247,8 @@ final class MI_Modello_Email {
 			'cover_url' => esc_url_raw( (string) $style['banner_url'], array( 'https' ) ),
 		);
 		$snapshot['identita_email'] = array(
-			'nome_mittente'        => $settings['sender_name'] ?: self::NOME_SEGRETERIA,
-			'indirizzo_mittente'   => self::EMAIL_SEGRETERIA,
+			'nome_mittente'        => $style['identity_name'] ?: ( $settings['sender_name'] ?: self::NOME_SEGRETERIA ),
+			'indirizzo_mittente'   => $style['sender_email'] ?? self::EMAIL_SEGRETERIA,
 			'indirizzo_risposte'   => $style['contact_email'] ?: self::EMAIL_SEGRETERIA,
 			'destinatari_interni'  => array_values( (array) $settings['internal_recipients'] ),
 		);
@@ -258,7 +263,8 @@ final class MI_Modello_Email {
 			return $name && $url ? array( 'nome' => $name, 'url' => $url ) : null;
 		}, $participant_management ) ) );
 		$snapshot['revisione'] = hash( 'sha256', wp_json_encode( $settings ) );
-		return $snapshot;
+		// Normalizza i separatori espliciti prima dell'accodamento.
+		return self::ripara_istantanea_codifica( $snapshot );
 	}
 
 	/** Comunicazione dedicata: la richiesta è in coda e non richiede azioni o pagamenti. */
@@ -386,6 +392,22 @@ final class MI_Modello_Email {
 		$text = "Gentile {$buyer_name},\n\nti informiamo che la tua iscrizione a {$event_title} è stata annullata dalla segreteria.\n\nSe desideri chiarimenti, puoi contattare la segreteria scrivendo a {$contact}.";
 		$snapshot = self::crea_istantanea_istituzionale( $event_id, $subject, 'La segreteria ha annullato la tua iscrizione.', $body, $text );
 		$snapshot['identita_email']['indirizzo_risposte'] = $contact;
+		$style = self::stile_risolto( $event_id );
+		$snapshot['identita_email']['nome_mittente'] = $style['identity_name'];
+		$snapshot['identita_email']['indirizzo_mittente'] = $style['sender_email'] ?? self::EMAIL_SEGRETERIA;
+		return $snapshot;
+	}
+
+	/** Conferma al sottoscrittore la cancellazione della singola persona. */
+	public static function crea_istantanea_annullamento_partecipazione_iscritto( $event_id, $participant_name ) {
+		$event_title = sanitize_text_field( get_the_title( absint( $event_id ) ) );
+		$participant_name = sanitize_text_field( (string) $participant_name );
+		$body = '<p>Ti confermiamo che la partecipazione di <strong>' . esc_html( $participant_name ) . '</strong> a <strong>' . esc_html( $event_title ) . '</strong> è stata annullata.</p><p>Questa conferma riguarda soltanto la persona indicata. Le eventuali altre partecipazioni della prenotazione restano invariate.</p>';
+		$text = "Ti confermiamo che la partecipazione di {$participant_name} a {$event_title} è stata annullata.\n\nQuesta conferma riguarda soltanto la persona indicata. Le eventuali altre partecipazioni della prenotazione restano invariate.";
+		$snapshot = self::crea_istantanea_istituzionale( $event_id, 'Partecipazione annullata — ' . $event_title, 'Conferma della cancellazione della partecipazione.', $body, $text );
+		$style = self::stile_risolto( $event_id );
+		$snapshot['identita_email']['nome_mittente'] = $style['identity_name'];
+		$snapshot['identita_email']['indirizzo_mittente'] = $style['sender_email'] ?? self::EMAIL_SEGRETERIA;
 		return $snapshot;
 	}
 
@@ -434,7 +456,7 @@ final class MI_Modello_Email {
 		);
 	}
 
-	public static function valori_ordine( $event, $order_code, $status_label, $quantity, $buyer_name, $economic_summary, $items = array() ) {
+	public static function valori_ordine( $event, $order_code, $status_label, $quantity, $buyer_name, $economic_summary, $items = array(), $buyer_first_name = '' ) {
 		$summary_lines = array();
 		foreach ( (array) $items as $item ) {
 			$name = sanitize_text_field( (string) ( $item['name'] ?? $item['code'] ?? '' ) );
@@ -483,6 +505,7 @@ final class MI_Modello_Email {
 			'{{ordine.riepilogo_economico}}' => 'Totale: ' . $total_label . ' · Importo da versare: ' . $due_label . ' · Saldo: ' . $balance_label,
 			'{{ordine.totale}}'              => $total_label,
 			'{{sottoscrittore.nome_completo}}' => sanitize_text_field( (string) $buyer_name ),
+			'{{sottoscrittore.nome}}'         => sanitize_text_field( (string) $buyer_first_name ),
 			'{{pagamento.importo_dovuto}}'   => $due_label,
 			'{{pagamento.saldo}}'            => $balance_label,
 			'{{pagamento.metodi}}'           => implode( ', ', $methods ),
@@ -541,7 +564,7 @@ final class MI_Modello_Email {
 		$action_url = ! empty( $istantanea['action_url'] ) ? esc_url( $istantanea['action_url'] ) : '';
 		$action_label = sanitize_text_field( (string) ( $istantanea['action_label'] ?? 'Apri' ) );
 		$action_html = $action_url ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . $action_url . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">' . esc_html( $action_label ) . '</a></td></tr></table>' : '';
-		$footer = nl2br( esc_html( $istantanea['footer'] ?? '' ) );
+		$footer = nl2br( self::testo_identita_html( self::chiusura_email( $istantanea ), $identity ) );
 		$code = (string) $codice_html;
 
 		return '<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' . esc_html( $title ?: 'Comunicazione iscrizione' ) . '</title></head><body style="margin:0;padding:0;background:#f6f8fc;">' . $preheader
@@ -556,10 +579,10 @@ final class MI_Modello_Email {
 			. '</td></tr></table></td></tr><tr><td style="padding:26px 22px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:17px;line-height:1.68;">'
 			. $body . $code . $action_html . $cta . $status_html . $management_html
 			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#eef2ff" style="width:100%;margin-top:20px;background:#eef2ff;border-radius:14px;"><tr><td style="padding:16px 20px;font-family:Arial,Helvetica,sans-serif;color:#333333;"><div style="font-size:15px;font-weight:700;margin-bottom:8px;">Assistenza</div><div style="font-size:15px;line-height:1.7;">' . $assistance . '</div></td></tr></table>'
-			. '<div style="font-family:Arial,Helvetica,sans-serif;color:' . esc_attr( $secondary ) . ';font-size:14px;font-style:italic;font-weight:700;margin-top:18px;text-align:right;">' . ( $footer ?: esc_html( $identity['firma'] ?? '' ) ) . '</div>'
+			. '<div style="font-family:Arial,Helvetica,sans-serif;color:' . esc_attr( $secondary ) . ';font-size:14px;font-style:italic;font-weight:700;margin-top:18px;text-align:right;">' . $footer . '</div>'
 			. '</td></tr></table>'
 			. ( $event_url ? '<div style="font-family:Arial,Helvetica,sans-serif;color:#666666;font-size:12px;line-height:1.4;margin-top:12px;text-align:center;">Se il pulsante non funziona, apri: <a href="' . $event_url . '" style="color:' . esc_attr( $secondary ) . ';">' . esc_html( $event_url ) . '</a></div>' : '' )
-			. '<div style="font-family:Arial,Helvetica,sans-serif;color:#6B7280;font-size:12px;line-height:1.6;margin-top:16px;text-align:center;">' . esc_html( $identity['nome'] ?? '' ) . ( ! empty( $identity['dettaglio'] ) ? '<br>' . esc_html( $identity['dettaglio'] ) : '' ) . ( ! empty( $identity['contatto'] ) ? '<br><a href="mailto:' . esc_attr( $identity['contatto'] ) . '" style="color:' . esc_attr( $primary ) . ';">' . esc_html( $identity['contatto'] ) . '</a>' : '' ) . '</div>'
+			. '<div style="font-family:Arial,Helvetica,sans-serif;color:#6B7280;font-size:12px;line-height:1.6;margin-top:16px;text-align:center;">' . self::testo_identita_html( $identity['nome'] ?? '', $identity ) . ( ! empty( $identity['dettaglio'] ) ? '<br>' . esc_html( $identity['dettaglio'] ) : '' ) . ( ! empty( $identity['contatto'] ) ? '<br><a href="mailto:' . esc_attr( $identity['contatto'] ) . '" style="color:' . esc_attr( $primary ) . ';">' . esc_html( $identity['contatto'] ) . '</a>' : '' ) . '</div>'
 			. '</td></tr></table></body></html>';
 	}
 
@@ -608,48 +631,71 @@ final class MI_Modello_Email {
 			! empty( $istantanea['status_url'] ) ? 'Controlla stato e saldo: ' . esc_url_raw( $istantanea['status_url'] ) : '',
 			! empty( $istantanea['action_url'] ) ? sanitize_text_field( (string) ( $istantanea['action_label'] ?? 'Apri' ) ) . ': ' . esc_url_raw( $istantanea['action_url'] ) : '',
 			! empty( $email_identity['indirizzo_risposte'] ) ? 'Assistenza: ' . sanitize_email( $email_identity['indirizzo_risposte'] ) : 'Assistenza: rispondi a questa email.',
-			sanitize_textarea_field( (string) ( $istantanea['footer'] ?? '' ) ),
+			self::chiusura_email( $istantanea ),
 		) );
 		return implode( "\n\n", $parts );
+	}
+
+	/** Un collegamento esplicito evita che il client interpreti il nome come un indirizzo geografico. */
+	private static function testo_identita_html( $testo, $identity ) {
+		$nome = (string) ( $identity['nome'] ?? '' );
+		$contatto = (string) ( $identity['contatto'] ?? '' );
+		if ( '' === $nome || ! is_email( $contatto ) ) return esc_html( $testo );
+		$link = '<a href="mailto:' . esc_attr( $contatto ) . '" style="color:inherit;text-decoration:none;">' . esc_html( $nome ) . '</a>';
+		return implode( $link, array_map( 'esc_html', explode( $nome, (string) $testo ) ) );
+	}
+
+	/** Il saluto del modello non sostituisce la firma risolta da evento/gruppo. */
+	private static function chiusura_email( $istantanea ) {
+		$footer = sanitize_textarea_field( (string) ( $istantanea['footer'] ?? '' ) );
+		$firma = sanitize_textarea_field( (string) ( $istantanea['identita']['firma'] ?? '' ) );
+		return implode( "\n", array_unique( array_filter( array( $footer, $firma ), static function ( $value ) { return '' !== $value; } ) ) );
 	}
 
 	/** Ripara modelli e istantanee storiche che contengono a capo o Markdown letterali. */
 	public static function ripara_istantanea_codifica( $istantanea ) {
 		$istantanea = is_array( $istantanea ) ? $istantanea : array();
+		foreach ( array( 'html', 'footer' ) as $field ) $istantanea[ $field ] = self::normalizza_interruzioni( $istantanea[ $field ] ?? '' );
 		$originale = (string) ( $istantanea['testo'] ?? '' );
 		$testo = self::ripara_interruzioni_testo( $originale );
 		$markup = false !== strpos( $testo, '**' ) || preg_match( '/\[[^\]]+\]\(https?:\/\/[^)]+\)/u', $testo );
 		$html_corrotto = false !== strpos( (string) ( $istantanea['html'] ?? '' ), '**' );
-		if ( $markup || $html_corrotto ) {
+		if ( $markup || $html_corrotto || $testo !== $originale ) {
 			$istantanea['html'] = self::testo_email_in_html( $testo );
 		} else {
 			$istantanea['html'] = self::uniforma_grafica_corpo( self::sanitizza_html_email( (string) ( $istantanea['html'] ?? '' ) ) );
 		}
 		$istantanea['testo'] = self::rimuovi_markdown_testo( $testo );
-		// La rimozione va eseguita dopo aver ricostruito gli a capo: nelle vecchie
-		// istantanee il prefisso letterale "n" impediva di riconoscere la riga.
+		// Rimuove il codice soltanto su una riga effettiva, senza interpretare lettere n.
 		$istantanea['testo'] = (string) preg_replace( '/^Codice(?: iscrizione)?:[^\r\n]*(?:\r?\n)?/imu', '', $istantanea['testo'] );
 		$istantanea['html'] = (string) preg_replace( '#(?:<br\s*/?>)?\s*(?:<strong>)?Codice(?: iscrizione)?:(?:</strong>)?\s*[^<]*(?=<br\s*/?>|</p>)#iu', '', $istantanea['html'] );
 		return $istantanea;
 	}
 
 	private static function ripara_modello_testuale( $settings ) {
+		foreach ( array( 'html', 'text', 'footer' ) as $field ) {
+			$settings[ $field ] = self::normalizza_interruzioni( $settings[ $field ] ?? '' );
+		}
 		$originale = (string) ( $settings['text'] ?? '' );
 		$testo = self::ripara_interruzioni_testo( $originale );
 		$markup = false !== strpos( $testo, '**' ) || preg_match( '/\[[^\]]+\]\(https?:\/\/[^)]+\)/u', $testo );
-		if ( $markup || false !== strpos( (string) ( $settings['html'] ?? '' ), '**' ) ) $settings['html'] = self::testo_email_in_html( $testo );
+		if ( $markup || $testo !== $originale || false !== strpos( (string) ( $settings['html'] ?? '' ), '**' ) ) $settings['html'] = self::testo_email_in_html( $testo );
 		$settings['text'] = $testo;
 		return $settings;
 	}
 
+	/** Normalizza solo separatori espliciti, senza interpretare le lettere n nelle parole. */
+	private static function normalizza_interruzioni( $testo ) {
+		$testo = str_replace( array( "\r\n", "\r", "\\r\\n", "\\n", "\\r" ), "\n", (string) $testo );
+		// Hard break Markdown: una barra seguita da un vero LF, mai lettere n nude.
+		return str_replace( "\\\n", "\n", $testo );
+	}
+
 	private static function ripara_interruzioni_testo( $testo ) {
-		$testo = str_replace( array( "\\r\\n", "\\n", "\\r" ), "\n", (string) $testo );
 		$testo = html_entity_decode( $testo, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		$testo = self::normalizza_interruzioni( $testo );
 		$testo = str_replace( array( "\xC2\xA0", "\xE2\x80\x8B" ), array( ' ', '' ), $testo );
-		$testo = (string) preg_replace( '/(?<=[.!?,;:)])nn(?=\*{0,2}[\p{L}])/u', "\n\n", $testo );
-		$testo = (string) preg_replace( '/(?<=[.!?;)])n(?=\*{0,2}[\p{Lu}])/u', "\n", $testo );
-		$testo = (string) preg_replace( '/n(?=\*{0,2}(?:Quando|Dove|Codice iscrizione|Stato|Partecipazione):)/u', "\n", $testo );
-		return trim( (string) preg_replace( "/\n{3,}/", "\n\n", $testo ) );
+		return trim( $testo );
 	}
 
 	private static function testo_email_in_html( $testo ) {
@@ -668,10 +714,25 @@ final class MI_Modello_Email {
 	}
 
 	private static function evidenzia_titolo_evento( $html, $title ) {
-		$title = trim( (string) $title );
+		$title = self::ripara_interruzioni_testo( (string) $title );
 		if ( '' === $title ) return (string) $html;
-		$escaped_title = esc_html( $title );
-		return (string) preg_replace( '#(?<!<strong>)(' . preg_quote( $escaped_title, '#' ) . ')(?!</strong>)#u', '<strong>$1</strong>', (string) $html );
+		// Confronta il testo visibile, senza sostituire titoli dentro attributi o URL.
+		$parts = preg_split( '/(<[^>]+>)/u', (string) $html, -1, PREG_SPLIT_DELIM_CAPTURE );
+		$bold_depth = 0;
+		foreach ( $parts as &$part ) {
+			if ( isset( $part[0] ) && '<' === $part[0] ) {
+				if ( preg_match( '/^<(strong|b)(?:\s|>)/i', $part ) ) ++$bold_depth;
+				if ( preg_match( '/^<\/(strong|b)\s*>/i', $part ) ) $bold_depth = max( 0, $bold_depth - 1 );
+				continue;
+			}
+			if ( $bold_depth ) continue;
+			$text = html_entity_decode( $part, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			$text = str_replace( array( "\xC2\xA0", "\xE2\x80\x8B" ), array( ' ', '' ), $text );
+			if ( false === strpos( $text, $title ) ) continue;
+			$part = implode( '<strong style="font-weight:700;">' . esc_html( $title ) . '</strong>', array_map( 'esc_html', explode( $title, $text ) ) );
+		}
+		unset( $part );
+		return implode( '', $parts );
 	}
 
 	private static function url_pubblica_evento( $event_id ) {
@@ -724,7 +785,9 @@ final class MI_Modello_Email {
 			set_transient( 'mi_email_placeholder_error_' . get_current_user_id(), implode( ', ', $unknown ), MINUTE_IN_SECONDS );
 			return;
 		}
-		update_post_meta( $post_id, '_mi_email_template', $settings );
+		foreach ( array( 'html', 'text', 'footer' ) as $field ) $settings[ $field ] = self::normalizza_interruzioni( $settings[ $field ] );
+		// update_post_meta applica wp_unslash: proteggere i dati già decodificati.
+		update_post_meta( $post_id, '_mi_email_template', wp_slash( $settings ) );
 	}
 
 	/** Salva dal wizard soltanto oggetto e testo, conservando le altre impostazioni email. */
@@ -740,14 +803,14 @@ final class MI_Modello_Email {
 		$settings = self::aggiorna_segnaposto( $settings );
 		$unknown = self::trova_segnaposto_non_ammessi( $settings );
 		if ( $unknown ) return new WP_Error( 'mi_email_segnaposto', 'Elimina i segnaposto non riconosciuti: ' . implode( ', ', $unknown ) . '.' );
-		update_post_meta( $event_id, '_mi_email_template', $settings );
+		update_post_meta( $event_id, '_mi_email_template', wp_slash( $settings ) );
 		return true;
 	}
 
 	/** Nei gratuiti i blocchi economici non devono raggiungere né l’email né la sua anteprima. */
 	public static function rimuovi_riferimenti_pagamento_gratuito( $template, $html = false ) {
 		$placeholders = array( '{{ordine.riepilogo_economico}}', '{{pagamento.istruzioni}}', '{{pagamento.scadenza}}', '{{pagamento.causale}}' );
-		$template = (string) $template;
+		$template = self::normalizza_interruzioni( $template );
 		if ( $html ) {
 			return (string) preg_replace_callback( '#<p\\b[^>]*>.*?</p>#is', static function ( $match ) use ( $placeholders ) {
 				foreach ( $placeholders as $placeholder ) if ( false !== strpos( $match[0], $placeholder ) ) return '';
@@ -759,7 +822,8 @@ final class MI_Modello_Email {
 			foreach ( $placeholders as $placeholder ) if ( false !== strpos( $line, $placeholder ) ) return false;
 			return true;
 		} );
-		return trim( preg_replace( "/\\n{3,}/", "\\n\\n", implode( "\\n", $lines ) ) );
+		// Separatore reale: "\\n" letterale perde la barra nel salvataggio WordPress.
+		return trim( preg_replace( "/\n{3,}/", "\n\n", implode( "\n", $lines ) ) );
 	}
 
 	public static function mostra_avviso() {

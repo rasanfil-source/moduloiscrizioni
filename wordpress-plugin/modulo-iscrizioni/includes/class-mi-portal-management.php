@@ -18,7 +18,7 @@ final class MI_Portal_Management {
 				$past = get_post_meta( $candidate->ID, '_mi_event_archived_at', true ) || MI_Portal::is_past_event( $end );
 				if ( $past === ( 'past' === $period ) ) $ids[] = (int) $candidate->ID;
 			}
-			$result = MI_Management_Service::all_people( $ids, sanitize_text_field( wp_unslash( $_POST['query'] ?? '' ) ), absint( $_POST['offset'] ?? 0 ), '1' === ( $_POST['include_closed'] ?? '' ), strtoupper( sanitize_text_field( wp_unslash( $_POST['status'] ?? '' ) ) ) );
+			$result = MI_Management_Service::all_people( $ids, sanitize_text_field( wp_unslash( $_POST['query'] ?? '' ) ), absint( $_POST['offset'] ?? 0 ), '1' === ( $_POST['include_closed'] ?? '' ), strtoupper( sanitize_text_field( wp_unslash( $_POST['status'] ?? '' ) ) ), sanitize_key( wp_unslash( $_POST['sort'] ?? 'name' ) ) );
 			if ( is_wp_error( $result ) ) wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
 			wp_send_json_success( $result );
 		}

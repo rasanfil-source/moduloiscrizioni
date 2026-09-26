@@ -12,7 +12,13 @@ La parrocchia è l'ente base. Ogni gruppo può avere logo, immagine, colori e co
 
 ## Stato
 
-Versione **[3.26.180](docs/rilascio-3.26.180.md)**: in Iscrizioni, «Tutti gli eventi» mostra prima le prenotazioni più recenti; il singolo evento mantiene l’ordine alfabetico per cognome. Include il filtro per stato e la finestra dedicata alle rettifiche della 3.26.179. Il pacchetto pubblico esclude la configurazione privata; l’installazione WordPress resta a cura dell’utente. Nessun aggiornamento Workspace/Google Apps Script necessario. I paragrafi seguenti documentano i rilasci precedenti.
+Versione **[3.26.194](docs/rilascio-3.26.194.md)**: segnaposto per il solo nome nella conferma, titolo in grassetto, firma collegata al contatto email, pulsante Tutti i dettagli navy e filtri chiusi all'apertura. Include il mittente configurabile per gruppo introdotto nella 3.26.189. Lo ZIP pubblico esclude la configurazione privata; l'installazione WordPress resta a cura dell'utente. Chi ha già aggiornato Apps Script alla 3.26.189 non deve aggiornarlo nuovamente.
+
+Preparata localmente la versione **[3.26.189](docs/rilascio-3.26.189.md)**: indirizzo mittente configurabile per gruppo, distinto da contatti e risposte, anche per gli annullamenti totali e individuali. Richiede aggiornamento WordPress e Apps Script, nuovo scope Gmail, autorizzazione dell'account esecutore e nuova versione della Web App. Installazione e collaudo online restano da eseguire.
+
+Preparata localmente la versione **[3.26.184](docs/rilascio-3.26.184.md)**: corretta alla fonte la trasformazione degli a capo in `n`/`nn` nei modelli email. Pacchetti WordPress e checksum disponibili in `dist`, verificati file per file; test PHP delle email e 189 controlli Node superati. Nessun aggiornamento Workspace/Google Apps Script necessario. La preparazione del pacchetto non aggiorna il sito.
+
+Versione **[3.26.181](docs/rilascio-3.26.181.md)**: menu «Ordina» accanto alla ricerca e ai filtri, con Cognome e Data iscrizione. Entrambe le viste partono in ordine alfabetico per cognome; l’utente può scegliere le iscrizioni più recenti. La barra si adatta allo spazio su desktop e mobile. Include le correzioni della 3.26.179. Il pacchetto pubblico esclude la configurazione privata; l’installazione WordPress resta a cura dell’utente. Nessun aggiornamento Workspace/Google Apps Script necessario. I paragrafi seguenti documentano i rilasci precedenti.
 
 È preparato localmente il plugin **[3.26.166](docs/rilascio-3.26.166.md)**: report pagamenti nel gestionale, con filtri, totali e CSV conservati; rimosso soltanto l’avviso di modalità operativa da Comunicazioni. Include la revisione grafica desktop/mobile della 3.26.165. Pacchetti WordPress in `dist`; nessun aggiornamento Google Apps Script necessario e nessuna installazione sul sito eseguita. Le informazioni seguenti conservano la cronologia precedente.
 

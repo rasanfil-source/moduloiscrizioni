@@ -19,6 +19,7 @@ function doPost(event) {
 	if (envelope.action === 'ORGANIZZA_FOGLI_EVENTO') return creaRispostaJson_(envelope.payload.direct_projection === true ? organizzaFogliEventoDaWordPress_(envelope.payload) : {ok:false,error:'USE_DIRECT_PROJECTION'});
 	if (envelope.action === 'INVIA_EMAIL_PROVA') return creaRispostaJson_(inviaEmailProvaDaWordPress_(envelope.payload));
 	if (envelope.action === 'INVIA_EMAIL_CONFERMA') return creaRispostaJson_(inviaEmailConfermaDaWordPress_(envelope.payload));
+	if (envelope.action === 'INVIA_EMAIL_CONFERMA_MITTENTE') return creaRispostaJson_(envelope.payload && envelope.payload.indirizzo_mittente ? inviaEmailConfermaDaWordPress_(envelope.payload) : {ok:false,error:'INVALID_SENDER_EMAIL'});
 	if (envelope.action === 'STATO_CANALE_EMAIL') return creaRispostaJson_(statoCanaleEmail_());
     if (envelope.action === 'PROIETTA_EVENTO') return creaRispostaJson_(proiettaEventoDaWordPress_(envelope.payload));
     if (envelope.action === 'REGISTRA_PAGAMENTO_PORTALE') return creaRispostaJson_({ok:false,error:'USE_MYSQL_PAYMENT_LEDGER'});

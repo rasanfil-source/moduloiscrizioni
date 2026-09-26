@@ -34,26 +34,50 @@ function inviaEmailConfermaDaWordPress_(payload) {
   if (p.mode === 'OPERATIVO' && (replyTo.length > 254 || !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(replyTo))) return { ok: false, error: 'INVALID_REPLY_TO' };
   if (!p.oggetto || !p.testo || !p.html || String(p.oggetto).length > 250 || String(p.testo).length > 100000 || String(p.html).length > 300000 || /[\r\n]/.test(String(p.oggetto))) return { ok: false, error: 'INVALID_EMAIL_PAYLOAD' };
   const lock = LockService.getScriptLock();
+  const senderName = String(p.nome_mittente || '').trim() || 'Parrocchia Sant’Eugenio';
+  if (senderName.length > 120 || /[\r\n\x00]/.test(senderName)) return { ok: false, error: 'INVALID_SENDER_NAME' };
+  const requestedSender = String(p.indirizzo_mittente || sender.sender).trim().toLowerCase();
+  if (requestedSender.length > 254 || !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(requestedSender)) return { ok: false, error: 'INVALID_SENDER_EMAIL' };
   if (!lock.tryLock(1000)) return { ok: false, error: 'EMAIL_BUSY' };
   try {
     pulisciRicevuteEmail_(props);
     const key='MI_EMAIL_DELIVERY_'+p.delivery_key;
     const previous=String(props.getProperty(key)||'');
     if (previous) return previous.startsWith('ACCEPTED|') ? { ok: true, channel: 'GOOGLE_WORKSPACE', replayed: true } : { ok: false, error: 'EMAIL_DELIVERY_UNCERTAIN' };
+    let alias = '';
+    if (requestedSender !== sender.sender) {
+      try { alias = GmailApp.getAliases().find(address => String(address).toLowerCase() === requestedSender) || ''; }
+      catch (error) { return { ok: false, error: 'EMAIL_ALIAS_CHECK_FAILED' }; }
+      if (!alias) return { ok: false, error: 'EMAIL_ALIAS_NOT_AUTHORIZED' };
+    }
     if (MailApp.getRemainingDailyQuota() < 1) return { ok: false, error: 'EMAIL_QUOTA_EXCEEDED' };
-    props.setProperty(key,'SENDING|'+Date.now());
-    const options = { to: recipient, subject: String(p.oggetto), body: String(p.testo), htmlBody: String(p.html), name: 'Parrocchia Sant’Eugenio', replyTo: recipient };
+    const options = { to: recipient, subject: String(p.oggetto), body: String(p.testo), htmlBody: String(p.html), name: senderName, replyTo: recipient };
     if (p.mode === 'OPERATIVO') options.replyTo = replyTo;
     if (p.codice_svg) options.inlineImages = { 'mi-registration-code': Utilities.newBlob(String(p.codice_svg), 'image/svg+xml', 'codice-iscrizione.svg') };
     // La quota viene controllata prima di registrare SENDING. Dopo sendEmail,
     // un'eccezione non prova che Google non abbia accettato il messaggio:
     // conserviamo l'intento per evitare duplicati, senza dedurlo dal testo
     // dell'errore (localizzato e non un codice di consegna affidabile).
-    try { MailApp.sendEmail(options); }
+    props.setProperty(key,'SENDING|'+Date.now());
+    try {
+      if (alias) {
+        options.from = alias;
+        GmailApp.sendEmail(recipient, options.subject, options.body, options);
+      } else { MailApp.sendEmail(options); }
+    }
     catch (error) { console.error('EMAIL_SEND_FAILED', String(error)); return { ok: false, error: 'EMAIL_DELIVERY_UNCERTAIN' }; }
     props.setProperty(key,'ACCEPTED|'+Date.now());
-    return { ok: true, channel: 'GOOGLE_WORKSPACE', sender: sender.sender };
+    return { ok: true, channel: 'GOOGLE_WORKSPACE', sender: requestedSender };
   } finally { lock.releaseLock(); }
+}
+
+/** Eseguire dall'editor con l'account della distribuzione per autorizzare Gmail. Non invia email. */
+function verificaMittentiEmailAutorizzati() {
+  const state = statoCanaleEmail_();
+  if (!state.ok) throw new Error(state.error);
+  const aliases = GmailApp.getAliases();
+  console.log('Mittenti aggiuntivi autorizzati: ' + aliases.join(', '));
+  return { sender: state.sender, aliases: aliases };
 }
 
 /** Invia soltanto la prova del Modulo Iscrizioni richiesta da WordPress. */

@@ -11,6 +11,7 @@ final class MI_Spedizione_Email {
 	private static $codice_incorporato = '';
 	private static $corpo_testo = '';
 	private static $pubblicazioni = array();
+	private static $invio_immediato_in_corso = false;
 
 	public static function avvia() {
 		add_action( 'admin_menu', array( __CLASS__, 'aggiungi_pagina' ) );
@@ -149,6 +150,18 @@ final class MI_Spedizione_Email {
 		}
 	}
 
+	/**
+	 * Prova a svuotare subito la coda dopo il commit che ha accodato il messaggio.
+	 * L'outbox resta autorevole: il cron continua a recuperare timeout, errori e
+	 * richieste concorrenti. Il confronto atomico sullo stato impedisce duplicati.
+	 */
+	public static function tenta_spedizione_immediata() {
+		if ( self::$invio_immediato_in_corso ) return;
+		self::$invio_immediato_in_corso = true;
+		try { self::spedisci_coda(); } catch ( Throwable $error ) { /* La coda e il cron ritenteranno. */ }
+		self::$invio_immediato_in_corso = false;
+	}
+
 	public static function email_da_spedire( $status ) {
 		return in_array( $status, array( 'PENDING', 'TEST_PENDING' ), true );
 	}
@@ -243,7 +256,7 @@ final class MI_Spedizione_Email {
 					$economic = array( 'total_cents' => (int) $position['effective_total'], 'initial_due_cents' => $position['individual_known'] ? (int) $position['individual_deposit_due'] : (int) $registration['initial_due_cents'], 'balance_cents' => $balance, 'payment_methods' => json_decode( (string) $registration['payment_methods_json'], true ) ?: array() );
 					$status_labels = array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'Da pagare', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto' );
 					$participant_count = (int) $position['individual_people_count'] > 0 ? (int) $position['individual_active_count'] : (int) $registration['total_qty'];
-					$values = MI_Modello_Email::valori_ordine( $event, $registration['order_code'], $status_labels[ $registration['status'] ] ?? $registration['status'], $participant_count, trim( $registration['buyer_first_name'] . ' ' . $registration['buyer_last_name'] ), $economic );
+					$values = MI_Modello_Email::valori_ordine( $event, $registration['order_code'], $status_labels[ $registration['status'] ] ?? $registration['status'], $participant_count, trim( $registration['buyer_first_name'] . ' ' . $registration['buyer_last_name'] ), $economic, array(), $registration['buyer_first_name'] );
 					$status_url = MI_Portal::status_url( $registration['id'], $registration['order_code'], $registration['buyer_email'] );
 					if ( 'BALANCE_REMINDER' === $template_type ) $status_url = MI_Portal::balance_url( $registration['id'], $registration['order_code'], $registration['buyer_email'] );
 					$snapshot = MI_Modello_Email::crea_istantanea_operativa( $event_id, $values, $template_type, $message, $status_url );
@@ -488,11 +501,17 @@ final class MI_Spedizione_Email {
 		}
 		$corpo = MI_Modello_Email::componi_html( $istantanea, $codice_html );
 		self::$corpo_testo = MI_Modello_Email::componi_testo( $istantanea );
-		$inviata = MI_Workspace_Client::request( 'INVIA_EMAIL_CONFERMA', array(
+		$mittente = trim( (string) ( $identita['indirizzo_mittente'] ?? MI_Modello_Email::EMAIL_SEGRETERIA ) );
+		if ( ! is_email( $mittente ) ) return new WP_Error( 'mi_email_sender_invalid', 'Email non inviata: indirizzo mittente del gruppo non valido.' );
+		// Una distribuzione precedente deve rifiutare il nuovo invio, non ignorare il mittente.
+		$azione = strtolower( $mittente ) === strtolower( MI_Modello_Email::EMAIL_SEGRETERIA ) ? 'INVIA_EMAIL_CONFERMA' : 'INVIA_EMAIL_CONFERMA_MITTENTE';
+		$inviata = MI_Workspace_Client::request( $azione, array(
+			'indirizzo_mittente' => sanitize_email( $mittente ),
 			'delivery_key' => $delivery_key,
 			'mode' => $invio_prova ? 'PROVA' : 'OPERATIVO',
 			'destinatario' => sanitize_email( $destinatario ),
 			'reply_to' => $reply_to,
+			'nome_mittente' => html_entity_decode( sanitize_text_field( $identita['nome_mittente'] ?? MI_Modello_Email::NOME_SEGRETERIA ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ),
 			'oggetto' => html_entity_decode( sanitize_text_field( $istantanea['oggetto'] ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ),
 			'html' => $corpo,
 			'testo' => self::$corpo_testo,

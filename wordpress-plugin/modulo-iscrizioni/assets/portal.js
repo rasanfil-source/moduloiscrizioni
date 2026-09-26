@@ -148,6 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	  if (!subjectInput || !textInput || !subjectPreview || !textPreview) return;
 	  const replacements = {
 		'{{sottoscrittore.nome_completo}}': 'Nome di chi sottoscrive l’iscrizione',
+		'{{sottoscrittore.nome}}': 'Solo nome di chi sottoscrive l’iscrizione',
 		'{{evento.titolo}}': form.querySelector('[name="title"]')?.value || 'Titolo dell’evento',
 		'{{evento.data}}': form.querySelector('[name="starts_at"]')?.value || 'Data da definire',
 		'{{evento.luogo}}': form.querySelector('[name="location"]')?.value || 'Luogo da definire',
