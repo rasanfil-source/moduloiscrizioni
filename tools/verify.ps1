@@ -43,7 +43,7 @@ try {
     }
     $phpTests = @(
         'audit-confirmed-admin.php', 'public-balance-audit-regressions.php', 'admin-economics.php', 'email-group-identity.php',
-        'portal-payment-report.php', 'communication-confirmation.php',
+        'portal-payment-report.php', 'communication-confirmation.php', 'portal-pwa.php',
         'public-balance.php', 'public-balance-model.php', 'operational-profile.php', 'workspace-deployment-preflight.php',
         'option-rules.php', 'sheet-open.php', 'event-projection-transfer.php', 'rest-projection.php', 'workspace-schema.php', 'attendance-report.php',
 		'group-attendance.php', 'sheet-organization.php', 'audit-regressions.php', 'audit-dates-access-cache.php',
