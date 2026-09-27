@@ -26,17 +26,17 @@ const server=http.createServer(async(req,res)=>{
   const page=await browser.newPage({viewport:{width,height:900}});const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:'+server.address().port);await page.waitForFunction(()=>!document.querySelector('.btn-cerca').disabled);
   await page.locator('.person-cognome').fill('Rossi');await page.locator('.btn-cerca').click();await page.getByRole('button',{name:'Sono Maria',exact:true}).waitFor();
   await page.getByRole('button',{name:'Sono Maria',exact:true}).click();await page.locator('.person-card.locked').waitFor();
-  assert.equal(await page.locator('.person-nome').inputValue(),'Maria');assert.match(await page.locator('#caparraDaVersare').innerText(),/150/);assert.match(await page.locator('#saldoDaVersare').innerText(),/500/);
-  await page.locator('[data-service="bus"]').check();assert.match(await page.locator('#saldoDaVersare').innerText(),/510/);
+  assert.equal(await page.locator('.person-nome').inputValue(),'Maria');assert.match(await page.locator('#caparraDaVersare').textContent(),/150/);assert.match(await page.locator('#saldoDaVersare').textContent(),/500/);
+  await page.locator('[data-service="bus"]').check();assert.match(await page.locator('#saldoDaVersare').textContent(),/510/);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'No horizontal overflow');
   await page.screenshot({path:'.tmp/public-balance-'+width+'.png',fullPage:true});
   await page.locator(width<900?'#calcBtn':'#calcBtnDesktop').click();await page.locator('#confirmModal.active').waitFor();assert.match(await page.locator('#confirmBody').innerText(),/Caparra ancora da versare/);
   await page.locator('#confirmCancelBtn').click();assert.equal(await page.locator('#confirmModal').evaluate(el=>el.classList.contains('active')),false);
   await page.locator(width<900?'#calcBtn':'#calcBtnDesktop').click();await page.locator('#confirmOkBtn').click();await page.locator('#ibanPopup.active').waitFor();
   assert.match(await page.locator('#globalStatus').innerText(),/riepilogo in invio/);await page.locator('#ibanCloseBtn').click();await page.locator('#payBtn').click();await page.locator('#payPopup.active').waitFor();assert.match(await page.locator('#popupImporto').innerText(),/510/);await page.keyboard.press('Escape');
-  await page.locator('[data-service="bus"]').uncheck();assert.match(await page.locator('#saldoDaVersare').innerText(),/500/);assert.equal(await page.locator('#actionSection').isVisible(),false);
+  await page.locator('[data-service="bus"]').uncheck();assert.match(await page.locator('#saldoDaVersare').textContent(),/500/);assert.equal(await page.locator('#actionSection').isVisible(),false);
   await page.locator('.btn-change').click();await page.locator('.person-cognome').fill('Rossi');await page.locator('.person-nome').fill('Marco');await page.locator('.btn-cerca').click();await page.locator('.person-card.locked').waitFor();assert.equal(await page.locator('.person-nome').inputValue(),'Marco');
-  await page.locator('.btn-change').click();await page.locator('.person-cognome').fill('Coppia');await page.locator('.btn-cerca').click();await page.waitForFunction(()=>document.querySelectorAll('.person-card.locked').length===2);assert.match(await page.locator('#saldoDaVersare').innerText(),/1.?000/);
+  await page.locator('.btn-change').click();await page.locator('.person-cognome').fill('Coppia');await page.locator('.btn-cerca').click();await page.waitForFunction(()=>document.querySelectorAll('.person-card.locked').length===2);assert.match(await page.locator('#saldoDaVersare').textContent(),/1.?000/);
   await page.locator('.btn-change').first().click();assert.equal(await page.locator('.person-card').count(),1);
   assert.deepEqual(errors,[]);await page.close();
  }

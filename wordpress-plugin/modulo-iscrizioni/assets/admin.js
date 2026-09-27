@@ -257,3 +257,10 @@
     button.closest('tr').remove();
   });
 }());
+
+// A disabled attendance report must not block unrelated group changes.
+document.querySelectorAll('[name="mi_annual_attendance_report"]').forEach(toggle=>{
+ const fields=toggle.form?.querySelectorAll('[data-mi-attendance-period] input')||[];
+ const update=()=>fields.forEach(field=>{field.disabled=!toggle.checked;field.required=toggle.checked;});
+ toggle.addEventListener('change',update);update();
+});

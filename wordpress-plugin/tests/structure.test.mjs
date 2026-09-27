@@ -1192,7 +1192,8 @@ test('gli importi italiani con migliaia sono normalizzati e il nome completo è 
   const admin = await read('includes/class-mi-admin.php');
   assert.match(admin, /parse_importo_centesimi/);
   assert.doesNotMatch(admin, /str_replace\( ',', '\.', sanitize_text_field/);
-  assert.match(admin, /str_replace\( array\( '\.', ',' \), array\( '', '\.' \), \$value \)/);
+  assert.match(admin, /MI_Amount::cents/);
+  assert.match(await read('includes/class-mi-amount.php'), /str_replace\( array\( '\.', ',' \), array\( '', '\.' \), \$value \)/);
   assert.match(admin, /CONCAT\(buyer_first_name, ' ', buyer_last_name\)/);
   assert.match(admin, /CONCAT\(r\.buyer_first_name, ' ', r\.buyer_last_name\)/);
 });

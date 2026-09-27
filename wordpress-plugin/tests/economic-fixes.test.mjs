@@ -62,8 +62,9 @@ test('una posizione riaperta non riusa una scadenza già trascorsa', () => {
   assert.match(registration, /\$deadline_timestamp > \$now/);
   assert.match(ledger, /MI_Registration_Service::reopened_payment_deadline\( \$r \)/);
   assert.match(management, /MI_Registration_Service::reopened_payment_deadline\( \$row \)/);
-  assert.match(management, /MI_Registration_Service::reopened_payment_deadline\( \$locked \)/);
-  assert.match(publicBalance, /MI_Registration_Service::reopened_payment_deadline\( \$r \)/);
+  assert.match(management, /MI_Payment_People::payment_deadline_changes/);
+  assert.match(publicBalance, /MI_Payment_People::payment_deadline_changes/);
+  assert.match(people, /MI_Registration_Service::reopened_payment_deadline\( \$registration \)/);
 });
 
 test('i dati condivisi passano al primo partecipante ancora attivo', () => {

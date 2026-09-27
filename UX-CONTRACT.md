@@ -12,6 +12,8 @@ Queste disposizioni aggiornano le precedenti indicazioni di sola impaginazione, 
 
 ## Contesto e decisioni
 
+L'elenco partecipanti, sia per tutti gli eventi sia per un singolo evento, usa come ordinamento predefinito la data di iscrizione, con le iscrizioni piu recenti prima. Il pulsante Ordina permette di cambiare criterio; una scelta esplicita salvata viene conservata.
+
 Le variazioni operative comprendono tutti i servizi configurati, non soltanto la sistemazione. Ogni cambio conserva motivo, prima e dopo; ricalcola automaticamente il dovuto in base alla variazione dei servizi e non crea rimborsi. La rettifica del dovuto richiede il permesso pagamenti; il rimborso effettivo rimane un movimento separato. Le presenze non sono dedotte dalle iscrizioni e i collegamenti personali per il rapporto annuale richiedono verifica e conferma esplicite. Gli omonimi e i contatti familiari non vengono uniti automaticamente.
 
 La scheda e l’accesso Pagamenti separato proteggono bozze e richieste con esito incerto. Il comando di chiusura del dettaglio consulta il blocco della gestione prima di rimuovere il contenuto; le etichette del modulo pagamenti usano identificativi univoci per istanza. I filtri della vista individuale e le colonne dinamiche si applicano anche all’esportazione completa. Gli eventi con inizio futuro restano attivi anche se le iscrizioni sono già chiuse.

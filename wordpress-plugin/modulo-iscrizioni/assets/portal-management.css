@@ -420,7 +420,7 @@
 
 /* Mobile search: keep the input and its 44px action on the same line. */
 @media screen and (max-width:760px) {
-  [data-mi-portal-scope="reserved"] .mi-management .mi-management-search.mi-search-order-row>label {
+  .mi-portal[data-mi-portal-scope="reserved"] .mi-management .mi-management-search.mi-search-order-row>label {
     flex:1 1 calc(100% - 52px); min-width:0; width:calc(100% - 52px);
   }
   [data-mi-portal-scope="reserved"] .mi-management .mi-management-search.mi-search-order-row>button:is([data-run-query],[data-all-search]) {

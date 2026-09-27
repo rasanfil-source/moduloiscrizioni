@@ -479,6 +479,7 @@ function valoreCampoElenco_(field, event, registration, participant, data, payme
     return (totals[({paid_cash:'CONTANTE',paid_transfer:'BONIFICO',paid_card:'CARTA'})[field]] || 0) / 100;
   }
   const candidates = aliases[field] || [field]; for (let index = 0; index < candidates.length; index += 1) if (data[candidates[index]] != null && data[candidates[index]] !== '') return data[candidates[index]];
+  if (['email','phone'].includes(field) && candidates.some(key=>Object.prototype.hasOwnProperty.call(data,key))) return '';
   if (field === 'email') return registration.email_referente || ''; if (field === 'phone') return registration.telefono_referente || ''; return '';
 }
 

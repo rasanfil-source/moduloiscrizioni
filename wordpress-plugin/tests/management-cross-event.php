@@ -17,7 +17,7 @@ foreach ( array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'WAITLIST_OFFERED
 	MI_Management_Service::all_people( array( 42, 99 ), '', 30, false, $status );
 	check_cross( str_contains( $wpdb->sql, "r.status='$status'" ), 'Missing status filter' );
 	check_cross( str_contains( $wpdb->sql, 'r.event_id IN (42)' ) && str_contains( $wpdb->sql, 'LIMIT 30,31' ), 'Scope or pagination lost' );
-	check_cross( str_contains( $wpdb->sql, 'ORDER BY p.last_name ASC,p.first_name ASC,r.id DESC,p.id ASC LIMIT' ), 'Cross-event results must default to alphabetical surname order' );
+	check_cross( str_contains( $wpdb->sql, 'ORDER BY r.created_at DESC,r.id DESC,p.id ASC LIMIT' ), 'Cross-event results must default to newest registrations first' );
 	check_cross( ! str_contains( $wpdb->sql, 'r.status NOT IN' ), 'Explicit closed state excluded' );
 	check_cross( str_contains( $wpdb->sql, "p.status='ACTIVE'" ) === ! in_array( $status, array( 'CANCELLED', 'EXPIRED' ), true ), 'Wrong participant scope' );
 }
@@ -30,7 +30,9 @@ $wpdb->sql = '';
 MI_Management_Service::all_people( array( 42 ), '', 30, true, '', 'created_at' );
 check_cross( str_contains( $wpdb->sql, 'ORDER BY r.created_at DESC,r.id DESC,p.id ASC LIMIT 30,31' ), 'Date selection must sort before pagination' );
 MI_Management_Service::all_people( array( 42 ), '', 0, true, '', 'invalid; DROP TABLE' );
-check_cross( str_contains( $wpdb->sql, 'ORDER BY p.last_name ASC,p.first_name ASC' ) && ! str_contains( $wpdb->sql, 'DROP TABLE' ), 'Unknown sort must fall back to surname safely' );
+check_cross( str_contains( $wpdb->sql, 'ORDER BY r.created_at DESC,r.id DESC,p.id ASC' ) && ! str_contains( $wpdb->sql, 'DROP TABLE' ), 'Unknown sort must fall back to registration date safely' );
+MI_Management_Service::all_people( array( 42 ), '', 0, true, '', 'name' );
+check_cross( str_contains( $wpdb->sql, 'ORDER BY p.last_name ASC,p.first_name ASC' ), 'Explicit surname sorting remains available' );
 $wpdb->sql = '';
 $result = MI_Management_Service::all_people( array( 99 ), '', 0, true, 'CANCELLED' );
 check_cross( $result === array( 'items' => array(), 'more' => false ) && '' === $wpdb->sql, 'Unauthorized event queried' );

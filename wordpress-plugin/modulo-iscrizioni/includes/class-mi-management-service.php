@@ -3,10 +3,11 @@ defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/class-mi-option-rules.php';
 require_once __DIR__ . '/class-mi-payment-people.php';
 require_once __DIR__ . '/class-mi-booking-search.php';
+require_once __DIR__ . '/class-mi-field-schema.php';
 
 /** Operational records in MySQL. Google receives a projection of these records. */
 final class MI_Management_Service {
-	public static function all_people( $event_ids, $query, $offset = 0, $include_closed = false, $status = '', $sort = 'name' ) {
+	public static function all_people( $event_ids, $query, $offset = 0, $include_closed = false, $status = '', $sort = 'created_at' ) {
 		global $wpdb;
 		if ( ! MI_Portal_Management::allowed() ) return new WP_Error( 'mi_scope', 'Accesso non consentito.' );
 		$event_ids = array_values( array_filter( array_map( 'intval', $event_ids ), array( 'MI_Access', 'can_access_event' ) ) );
@@ -17,8 +18,8 @@ final class MI_Management_Service {
 			$where .= $wpdb->prepare( ' AND r.status=%s', $status );
 			if ( ! in_array( $status, array( 'CANCELLED', 'EXPIRED' ), true ) ) $where .= " AND p.status='ACTIVE'";
 		} elseif ( ! $include_closed ) $where .= " AND p.status='ACTIVE' AND r.status NOT IN ('CANCELLED','EXPIRED')";
-		foreach ( MI_Booking_Search::words( $query ) as $word ) $where .= $wpdb->prepare( " AND CONCAT_WS(' ',p.first_name,p.last_name,r.buyer_first_name,r.buyer_last_name,r.order_code,r.buyer_email,r.buyer_phone,IF(JSON_VALID(p.extra_json),JSON_UNQUOTE(JSON_EXTRACT(p.extra_json,'$.email')),''),IF(JSON_VALID(p.extra_json),JSON_UNQUOTE(JSON_EXTRACT(p.extra_json,'$.phone')),'')) LIKE %s", '%' . $wpdb->esc_like( $word ) . '%' );
-		$order = 'created_at' === $sort ? 'r.created_at DESC,r.id DESC,p.id ASC' : 'p.last_name ASC,p.first_name ASC,r.id DESC,p.id ASC';
+		foreach ( MI_Booking_Search::words( $query ) as $word ) $where .= $wpdb->prepare( " AND CONCAT_WS(' ',p.first_name,p.last_name,r.buyer_first_name,r.buyer_last_name,r.order_code,r.buyer_email,r.buyer_phone,IF(JSON_VALID(p.extra_json),JSON_UNQUOTE(JSON_EXTRACT(p.extra_json,'$.email')),''),IF(JSON_VALID(p.extra_json),JSON_UNQUOTE(JSON_EXTRACT(p.extra_json,'$.phone')),''),IF(JSON_VALID(p.extra_json),JSON_UNQUOTE(JSON_EXTRACT(p.extra_json,'$.participant_email')),''),IF(JSON_VALID(p.extra_json),JSON_UNQUOTE(JSON_EXTRACT(p.extra_json,'$.participant_phone')),''),IF(JSON_VALID(p.extra_json),JSON_UNQUOTE(JSON_EXTRACT(p.extra_json,'$.mobile')),'')) LIKE %s", '%' . $wpdb->esc_like( $word ) . '%' );
+		$order = 'name' === $sort ? 'p.last_name ASC,p.first_name ASC,r.id DESC,p.id ASC' : 'r.created_at DESC,r.id DESC,p.id ASC';
 		$offset = max( 0, (int) $offset );
 		$rows = $wpdb->get_results( "SELECT p.id,p.first_name,p.last_name,p.status,r.status AS booking_status,r.order_code,r.event_id,r.created_at,(SELECT COUNT(*) FROM {$wpdb->prefix}mi_participants sibling WHERE sibling.registration_id=r.id AND sibling.id<=p.id) AS number FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE $where ORDER BY $order LIMIT $offset,31", ARRAY_A );
 		if ( $wpdb->last_error ) return new WP_Error( 'mi_search', 'Ricerca non disponibile.' );
@@ -63,7 +64,7 @@ final class MI_Management_Service {
 		foreach ( (array) ( $snapshot['event']['participant_fields'] ?? array() ) as $field ) {
 			$key = $field['key'] ?? '';
 			if ( ! preg_match( '/^[a-z][a-z0-9_-]{0,79}$/', $key ) || in_array( $key, array( 'constructor','prototype','room','camera','alloggio','first_name','last_name' ), true ) ) continue;
-			$fields[$key] = array( 'key' => $key, 'label' => $field['label'] ?? $key, 'type' => $field['type'] ?? 'text', 'required' => ! empty( $field['required'] ), 'options' => (array) ( $field['options'] ?? array() ) );
+			$fields[$key] = array( 'key' => $key, 'label' => $field['label'] ?? $key, 'type' => $field['type'] ?? 'text', 'date_rule' => $field['date_rule'] ?? '', 'required' => ! empty( $field['required'] ), 'options' => (array) ( $field['options'] ?? array() ) );
 		}
 		if ( '1' === get_post_meta( $registration['event_id'], '_mi_bus_assignment_enabled', true ) ) {
 			if ( ! isset( $fields['pullman'] ) ) $fields['pullman'] = array( 'key' => 'pullman', 'label' => 'Assegnato al Pullmann…', 'type' => 'text', 'required' => false );
@@ -198,8 +199,8 @@ final class MI_Management_Service {
 		// LIKE predicate is not a proven superset across database collations;
 		// scan bounded chunks for exact names, aliases and counts.
 		$where_sql = implode( ' AND ', $where );
-		$direction = 'desc' === ( $context['direction'] ?? ( 'created_at' === ( $context['sort'] ?? '' ) ? 'desc' : 'asc' ) ) ? 'DESC' : 'ASC';
-		$sort = $context['sort'] ?? 'name';
+		$sort = in_array( $context['sort'] ?? '', array( 'name', 'buyer', 'code', 'room', 'created_at' ), true ) ? $context['sort'] : 'created_at';
+		$direction = 'desc' === ( $context['direction'] ?? ( 'created_at' === $sort ? 'desc' : 'asc' ) ) ? 'DESC' : 'ASC';
 		if ( $individual ) {
 			$order = array(
 				'created_at' => "r.created_at {$direction},r.id {$direction},p.id ASC",
@@ -400,8 +401,11 @@ final class MI_Management_Service {
 	}
 	/** Usa il contatto personale quando il modulo lo prevede; altrimenti conserva il recapito del referente. */
 	private static function participant_contact( $fields, $definitions, $kind, $fallback ) {
-		$aliases = 'email' === $kind ? array( 'email', 'participant_email' ) : array( 'phone', 'participant_phone', 'mobile' );
+		$aliases = 'email' === $kind ? array( 'participant_email', 'email' ) : array( 'participant_phone', 'phone', 'mobile' );
 		$type = 'email' === $kind ? 'email' : 'tel';
+		$present = false;
+		foreach ( $aliases as $key ) if ( array_key_exists( $key, $fields ) ) { $present = true; if ( '' !== trim( (string) $fields[$key] ) ) return trim( (string) $fields[$key] ); }
+		if ( $present ) return '';
 		foreach ( $definitions as $definition ) {
 			$key = (string) ( $definition['key'] ?? '' );
 			if ( $type !== ( $definition['type'] ?? '' ) && ! in_array( $key, $aliases, true ) ) continue;
@@ -683,7 +687,6 @@ final class MI_Management_Service {
 		$definitions = array_values( array_filter( (array) ( $snapshot['event']['options'] ?? array() ), static function ( $definition ) use ( $is_accommodation ) { return ! $is_accommodation( (array) $definition ); } ) );
 		$accommodation_codes = array_map( static function ( $definition ) { return sanitize_key( $definition['code'] ?? '' ); }, array_filter( (array) ( $snapshot['event']['options'] ?? array() ), $is_accommodation ) );
 		if ( $person ) foreach ( array_keys( $data['options'] ) as $option_code ) if ( in_array( sanitize_key( $option_code ), $accommodation_codes, true ) ) throw new InvalidArgumentException( 'Per cambiare alloggio o camera usa Cambia sistemazione.' );
-		if ( $person ) foreach ( $data['options'] as $quantity ) if ( ! in_array( $quantity, array( 0, 1 ), true ) ) throw new InvalidArgumentException( 'Ogni servizio individuale può essere selezionato una sola volta.' );
 		$options = MI_Registration_Service::validate_options( $data['options'], $definitions, $person ? 'TICKET' : 'ORDER' );
 		if ( is_wp_error( $options ) ) throw new InvalidArgumentException( $options->get_error_message() );
 		$current_options = $person ? $person['options'] : self::decode( $locked['order_options_json'] );
@@ -713,7 +716,7 @@ final class MI_Management_Service {
 		$paid = 0; foreach ( $history as $movement ) $paid += ( 'REFUND' === $movement['transaction_kind'] ? -1 : 1 ) * (int) $movement['amount_cents'];
 		$changes = array( 'total_cents' => $total, 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial );
 		if ( ! $person ) $changes['common_allocations_json'] = wp_json_encode( $after );
-		if ( in_array( $locked['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) { $covered = self::covered_after_change( $locked, $position, $deltas, $deposits, $paid, $initial ); $deadline = $covered ? null : MI_Registration_Service::reopened_payment_deadline( $locked ); $changes += array( 'status' => $covered ? 'CONFIRMED' : 'PENDING_PAYMENT', 'expires_at' => $deadline ); if ( null !== $deadline ) $changes['payment_deadline_at'] = $deadline; }
+		if ( in_array( $locked['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) { $covered = self::covered_after_change( $locked, $position, $deltas, $deposits, $paid, $initial ); $changes += MI_Payment_People::payment_deadline_changes( $locked, $covered, (bool) array_filter( $deltas ) || $initial !== (int) $locked['initial_due_cents'] ); }
 		return array( 'assignment' => $assignment, 'participant_id' => $person ? $person['id'] : 0, 'allocations' => ! $person ? $after : null, 'person_deltas' => $deltas, 'before_options' => $current_options, 'after_options' => $options, 'reason' => sanitize_textarea_field( $data['reason'] ), 'delta' => $delta, 'before_total' => $individual && $position['quotes_known'] ? $individual['total'] : null, 'after_total' => $individual && $position['quotes_known'] ? $individual['total'] + $delta : null, 'credit' => $individual && $position['payments_known'] && $position['quotes_known'] ? max( 0, $individual['paid'] - $individual['total'] - $delta ) : null, 'changes' => $changes, 'deposits' => $position['quotes_known'] ? $deposits : array() );
 	}
 
@@ -841,10 +844,7 @@ final class MI_Management_Service {
 				if ( in_array( $locked['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ) {
 					$paid = 0; foreach ( $history as $movement ) $paid += ( 'REFUND' === $movement['transaction_kind'] ? -1 : 1 ) * (int) $movement['amount_cents'];
 					$covered = self::covered_after_change( $locked, $position, $deltas, $deposits, $paid, $initial );
-					$changes['status'] = $covered ? 'CONFIRMED' : 'PENDING_PAYMENT';
-					$deadline = $covered ? null : MI_Registration_Service::reopened_payment_deadline( $locked );
-					$changes['expires_at'] = $deadline;
-					if ( null !== $deadline ) $changes['payment_deadline_at'] = $deadline;
+					$changes += MI_Payment_People::payment_deadline_changes( $locked, $covered, 0 !== $delta || $initial !== (int) $locked['initial_due_cents'] );
 				}
 				foreach ( $deposits as $pid => $deposit ) if ( false === $wpdb->update( $wpdb->prefix . 'mi_participants', array( 'deposit_due_cents' => $deposit ), array( 'id' => $pid, 'registration_id' => $id ) ) ) throw new RuntimeException( 'Caparra non aggiornata.' );
 				$adjustment['participant_id'] = $person_id; $adjustment['person_delta'] = $delta;
@@ -934,12 +934,17 @@ final class MI_Management_Service {
 					$seen[$identity] = true;
 					$current = in_array( $key, array( 'first_name','last_name','room' ), true ) ? $p[$key] : ( $p['fields'][$key] ?? '' );
 					$displayed = $current;
-					if ( '' === (string) $current && in_array( $patch['key'], array( 'email', 'phone' ), true ) ) $displayed = $booking['buyer'][$patch['key']] ?? '';
+					if ( ! array_key_exists( $key, $p['fields'] ) && in_array( $patch['key'], array( 'email', 'phone' ), true ) ) $displayed = $booking['buyer'][$patch['key']] ?? '';
 					$accepted = 'room' === $key ? $patch['after'] : ( in_array( $key, array( 'first_name', 'last_name' ), true ) ? sanitize_text_field( $patch['after'] ) : sanitize_textarea_field( $patch['after'] ) );
+					if ( 'phone' === $patch['key'] && '' !== $accepted ) $accepted = MI_Field_Schema::normalize_phone( $accepted );
 					if ( (string) $current !== $patch['before'] && (string) $current !== (string) $accepted && (string) $displayed !== $patch['before'] ) throw new InvalidArgumentException( 'Conflitto in ' . $code . ', partecipante ' . $p['number'] . ', campo ' . $patch['key'] . '. Nessuna modifica applicata.' );
 					if ( ! isset( $updates[$p['number']] ) ) $updates[$p['number']] = array( 'number' => $p['number'], 'first_name' => $p['first_name'], 'last_name' => $p['last_name'], 'room' => $p['room'], 'fields' => array() );
 					if ( in_array( $key, array( 'first_name','last_name','room' ), true ) ) $updates[$p['number']][$key] = $patch['after'];
 					else $updates[$p['number']]['fields'][$key] = $patch['after'];
+					if ( '' === $patch['after'] && in_array( $patch['key'], array( 'email', 'phone' ), true ) ) {
+						$aliases = 'email' === $patch['key'] ? array( 'participant_email', 'email' ) : array( 'participant_phone', 'phone', 'mobile' );
+						foreach ( $aliases as $alias ) if ( array_key_exists( $alias, $p['fields'] ) ) $updates[$p['number']]['fields'][$alias] = '';
+					}
 				}
 				foreach ( $updates as $update ) self::save_participant( $booking, $update, true );
 				$ids[] = (int) $row['id'];
@@ -980,6 +985,7 @@ final class MI_Management_Service {
 				if ( ! $person ) continue;
 				$key = self::sheet_field_key( $change['key'], $booking, $person );
 				$expected = 'room' === $key ? $change['after'] : ( in_array( $key, array( 'first_name', 'last_name' ), true ) ? sanitize_text_field( $change['after'] ) : sanitize_textarea_field( $change['after'] ) );
+				if ( 'phone' === $change['key'] && '' !== $expected ) $expected = MI_Field_Schema::normalize_phone( $expected );
 				$current = in_array( $key, array( 'first_name', 'last_name', 'room' ), true ) ? $person[$key] : ( $person['fields'][$key] ?? '' );
 				if ( (string) $current === (string) $expected ) $receipts[] = array_replace( $change, array( 'accepted' => (string) $current, 'workspace_revision' => $revisions[$code] ) );
 			}
@@ -1012,15 +1018,19 @@ final class MI_Management_Service {
 		}
 		$allowed = array_column( $booking['fields'], null, 'key' );
 		foreach ( $person['fields'] as $key => $value ) if ( ! isset( $allowed[$key] ) ) $allowed[$key] = array( 'type' => 'text' );
+		foreach ( array( 'phone', 'participant_phone', 'mobile' ) as $key ) if ( isset( $allowed[$key] ) ) $allowed[$key]['type'] = 'tel';
+		foreach ( array( 'email', 'participant_email' ) as $key ) if ( isset( $allowed[$key] ) ) $allowed[$key]['type'] = 'email';
 		$fields = $person['fields'];
 		if ( ! is_array( $data['fields'] ?? null ) ) throw new InvalidArgumentException( 'Campi non validi.' );
 		foreach ( $data['fields'] as $key => $value ) {
 			if ( ! isset( $allowed[$key] ) || ! is_string( $value ) || mb_strlen( $value ) > 1000 ) throw new InvalidArgumentException( 'Campo non modificabile o troppo lungo.' );
 			$value = sanitize_textarea_field( $value ); $type = $allowed[$key]['type'] ?? 'text';
 			if ( $value && 'email' === $type && ! is_email( $value ) ) throw new InvalidArgumentException( 'Email non valida.' );
-			if ( $value && 'date' === $type ) {
-				$date = DateTimeImmutable::createFromFormat( '!Y-m-d', $value );
-				if ( ! $date || $date->format( 'Y-m-d' ) !== $value ) throw new InvalidArgumentException( 'Data non valida.' );
+			if ( '' !== $value && $value !== (string) ( $fields[$key] ?? '' ) && in_array( $type, array( 'tel', 'date' ), true ) ) {
+				$definition = $allowed[$key] + array( 'key' => $key );
+				$validated = MI_Field_Schema::validate_answers( array( $key => $value ), array( $definition ) );
+				if ( is_wp_error( $validated ) ) throw new InvalidArgumentException( $validated->get_error_message() );
+				$value = $validated[$key];
 			}
 			if ( $value && in_array( $type, array( 'select','yesno' ), true ) && ! in_array( $value, $allowed[$key]['options'] ?? array(), true ) && $value !== ( $fields[$key] ?? '' ) ) throw new InvalidArgumentException( 'Scegli uno dei valori disponibili.' );
 			$fields[$key] = $value;

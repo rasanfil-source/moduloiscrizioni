@@ -917,7 +917,7 @@ final class MI_Portal {
 		if ( 'delete_group' !== $action ) {
 			$sender_email = trim( (string) wp_unslash( $_POST['group_email_sender'] ?? '' ) );
 			if ( '' !== $sender_email && ! is_email( $sender_email ) ) return self::redirect_group_result( 'Indica un indirizzo mittente email valido.', true, $group_id );
-			try { $attendance_period = MI_Attendance_Report::period( wp_date( 'Y' ), sanitize_text_field( wp_unslash( $_POST['mi_attendance_from_month'] ?? '' ) ), sanitize_text_field( wp_unslash( $_POST['mi_attendance_to_month'] ?? '' ) ) ); }
+			try { $attendance_period = MI_Attendance_Report::submitted_period( $group_id, wp_unslash( $_POST ) ); }
 			catch ( InvalidArgumentException $e ) { return self::redirect_group_result( $e->getMessage(), true, $group_id ); }
 		}
 		if ( 'create_group' === $action ) {

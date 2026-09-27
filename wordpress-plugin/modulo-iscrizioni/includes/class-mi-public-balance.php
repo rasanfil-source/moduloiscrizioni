@@ -115,7 +115,7 @@ final class MI_Public_Balance {
 		$managed = in_array( $r['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 		$individual = array_column( $b['individual']['people'], null, 'id' )[$id] ?? null;
 		if ( $managed && ( ! $individual || empty( $b['individual']['quotes_known'] ) || empty( $b['individual']['payments_known'] ) ) ) throw new InvalidArgumentException( $b['individual']['message'] ?: 'La posizione individuale deve essere verificata dalla segreteria prima di modificare i servizi.' );
-		foreach ( $definitions as $code => $o ) if ( $can_edit && $managed && 'TICKET' === ( $o['scope'] ?? '' ) && MI_Option_Rules::is_bus( $o ) ) {
+		foreach ( $definitions as $code => $o ) if ( $can_edit && $managed && 'TICKET' === ( $o['scope'] ?? '' ) && MI_Option_Rules::is_bus( $o ) && (int) ( $o['max_quantity'] ?? 1 ) <= 1 && (int) ( $selected[$code]['quantity'] ?? 0 ) <= 1 ) {
 			$direction = preg_match( '/ritorno|fiumicino.{0,5}roma|santiago.{0,5}a coru/i', $o['name'] ) ? 'Al ritorno' : ( preg_match( '/andata|roma.{0,5}fiumicino|porto.{0,5}tui/i', $o['name'] ) ? 'All’andata' : 'Trasferimenti' );
 			$editable[] = array( 'code' => $code, 'name' => $o['name'], 'price' => isset( $selected[$code] ) ? (int) $selected[$code]['unit_price_cents'] : (int) $o['price_cents'], 'selected' => ! empty( $selected[$code]['quantity'] ), 'group' => MI_Option_Rules::choice_group( $o ), 'direction' => $direction );
 		}
@@ -219,6 +219,11 @@ final class MI_Public_Balance {
 				$original = self::decode( array_column( $b['people'], null, 'id' )[$id]['options_json'] );
 				$options = array_values( array_filter( $original, static function ( $o ) use ( $allowed ) { return ! isset( $allowed[$o['code']] ); } ) );
 				$lines = $view['locked']; $sum = $view['fixed']; $groups = array();
+				$definitions = self::definitions( $b );
+				foreach ( $options as $option ) {
+					$group = MI_Option_Rules::choice_group( $definitions[$option['code']] ?? $option );
+					if ( ! empty( $option['quantity'] ) && $group ) $groups[$group] = true;
+				}
 				$base = $sum - array_sum( array_column( $lines, 'price' ) );
 				if ( $base ) array_unshift( $lines, array( 'name' => 'Quota base e rettifiche', 'price' => $base ) );
 				foreach ( $allowed as $code => $service ) if ( ! empty( $input[$code] ) ) {
@@ -277,10 +282,8 @@ final class MI_Public_Balance {
 				$initial = 'FULL_PAYMENT' === $r['economic_mode'] ? $total : array_sum( $deposits ?: array() );
 				$covered = MI_Payment_People::covered( $b['individual'], $r['economic_mode'], $person_deltas[$rid] ?? array(), $deposits ?: array() );
 				if ( null === $covered ) $covered = $b['paid'] >= $initial;
-				$status = in_array( $r['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ? ( $covered ? 'CONFIRMED' : 'PENDING_PAYMENT' ) : $r['status'];
-				$deadline = 'CONFIRMED' === $status ? null : MI_Registration_Service::reopened_payment_deadline( $r );
-				$registration_changes = array( 'total_cents' => $total, 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial, 'status' => $status, 'expires_at' => $deadline );
-				if ( null !== $deadline ) $registration_changes['payment_deadline_at'] = $deadline;
+				$economic_change = (bool) array_filter( $person_deltas[$rid] ?? array() ) || $initial !== (int) $r['initial_due_cents'];
+				$registration_changes = array( 'total_cents' => $total, 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial ) + MI_Payment_People::payment_deadline_changes( $r, $covered, $economic_change );
 				if ( false === $wpdb->update( $wpdb->prefix . 'mi_registrations', $registration_changes, array( 'id' => $rid ) ) ) throw new RuntimeException( 'Importi non salvati.' );
 				foreach ( $deposits ?: array() as $participant_id => $deposit_due ) if ( false === $wpdb->update( $wpdb->prefix . 'mi_participants', array( 'deposit_due_cents' => (int) $deposit_due ), array( 'id' => (int) $participant_id, 'registration_id' => $rid ), array( '%d' ), array( '%d', '%d' ) ) ) throw new RuntimeException( 'Caparre individuali non salvate.' );
 				MI_Registration_Service::mark_workspace_changed_locked( $rid );

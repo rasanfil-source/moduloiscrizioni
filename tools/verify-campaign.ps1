@@ -6,7 +6,7 @@ try {
     $campaignArgs = @()
     if ($IsWindows) { $campaignArgs = @('-d', ('extension_dir=' + (Join-Path (Split-Path $campaignPhp) 'ext')), '-d', 'extension=mbstring', '-d', 'extension=mysqli') }
     # Existing fixtures use only localhost:33317 and the synthetic mi_ledger_test database.
-    $campaignTests = @('payment-ledger-innodb.php','management-innodb.php','payment-people-innodb.php',
+    $campaignTests = @('audit-confirmed-innodb.php','payment-ledger-innodb.php','management-innodb.php','payment-people-innodb.php',
         'individual-management-innodb.php','combined-services-innodb.php','attendance-inline-innodb.php',
         'accommodation-change-innodb.php','percentage-deposit-unit.php','sheet-receipts-innodb.php',
         'economic-attribution-innodb.php','room-postcommit-innodb.php')
@@ -21,5 +21,5 @@ try {
         node (Join-Path 'tools' "test-$campaignBrowser-browser.cjs")
         if ($LASTEXITCODE -ne 0) { throw "Fallito browser: $campaignBrowser" }
     }
-    Write-Output 'Campagna: 11 suite PHP/InnoDB e 6 suite browser completate.'
+    Write-Output 'Campagna: 12 suite PHP/InnoDB e 6 suite browser completate.'
 } finally { Pop-Location }

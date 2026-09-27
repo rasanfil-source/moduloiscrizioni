@@ -6,9 +6,14 @@ final class MI_Attendance_Report {
 	public static function group_period( $group_id ) {
 		return self::period( wp_date( 'Y' ), (string) get_post_meta( $group_id, '_mi_attendance_from_month', true ), (string) get_post_meta( $group_id, '_mi_attendance_to_month', true ) );
 	}
+	public static function submitted_period( $group_id, array $input ) {
+		if ( '1' === ( $input['mi_annual_attendance_report'] ?? '' ) ) return self::period( wp_date( 'Y' ), sanitize_text_field( $input['mi_attendance_from_month'] ?? '' ), sanitize_text_field( $input['mi_attendance_to_month'] ?? '' ) );
+		try { return self::group_period( $group_id ); } catch ( InvalidArgumentException $e ) { return self::period( wp_date( 'Y' ) ); }
+	}
 	public static function period_fields( $group_id = 0 ) {
+		$enabled = '1' === get_post_meta( $group_id, '_mi_annual_attendance_report', true );
 		try { list( $from, $to ) = self::group_period( $group_id ); } catch ( InvalidArgumentException $e ) { $from = ''; $to = ''; }
-		?><div class="mi-group-form-grid"><label>Presenze dal mese<input name="mi_attendance_from_month" type="month" min="2000-01" max="2200-12" required value="<?php echo esc_attr( $from ); ?>"></label><label>Al mese (incluso)<input name="mi_attendance_to_month" type="month" min="2000-01" max="2200-12" required value="<?php echo esc_attr( $to ); ?>"></label></div><p class="mi-portal-muted">Il periodo vale per il rapporto di tutti gli eventi del gruppo e può comprendere due anni, per esempio settembre–giugno. Salva il gruppo per applicarlo.</p><?php
+		?><div class="mi-group-form-grid" data-mi-attendance-period><label>Presenze dal mese<input name="mi_attendance_from_month" type="month" min="2000-01" max="2200-12" <?php echo $enabled ? 'required' : 'disabled'; ?> value="<?php echo esc_attr( $from ); ?>"></label><label>Al mese (incluso)<input name="mi_attendance_to_month" type="month" min="2000-01" max="2200-12" <?php echo $enabled ? 'required' : 'disabled'; ?> value="<?php echo esc_attr( $to ); ?>"></label></div><p class="mi-portal-muted">Il periodo vale per il rapporto di tutti gli eventi del gruppo e può comprendere due anni, per esempio settembre–giugno. Salva il gruppo per applicarlo.</p><?php
 	}
 	public static function render_group( $group_id ) {
 		if ( '1' !== get_post_meta( $group_id, '_mi_annual_attendance_report', true ) || ! MI_Portal_Management::allowed() || ! MI_Access::can_access_activity( $group_id ) ) return;

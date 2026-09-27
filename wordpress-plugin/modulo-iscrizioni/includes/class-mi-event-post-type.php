@@ -1,6 +1,7 @@
 <?php
 
 defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/class-mi-amount.php';
 
 final class MI_Event_Post_Type {
 	const EVENT_TYPE = 'mi_event';
@@ -9,8 +10,7 @@ final class MI_Event_Post_Type {
 	const GROUP_TYPE = 'mi_activity';
 
 	private static function price_cents( $raw ) {
-		$raw = is_scalar( $raw ) ? trim( sanitize_text_field( (string) $raw ) ) : '';
-		return preg_match( '/^\d+(?:[.,]\d{1,2})?$/D', $raw ) ? max( 0, (int) round( (float) str_replace( ',', '.', $raw ) * 100 ) ) : 0;
+		return MI_Amount::cents( $raw ) ?? 0;
 	}
 
 	public static function boot() {
@@ -265,7 +265,7 @@ final class MI_Event_Post_Type {
 	public static function save_activity( $post_id, $post ) {
 		if ( ! isset( $_POST['mi_activity_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['mi_activity_nonce'] ) ), 'mi_save_activity' ) ) return;
 		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) || ! current_user_can( 'manage_options' ) ) return;
-		try { $period = MI_Attendance_Report::period( wp_date( 'Y' ), sanitize_text_field( wp_unslash( $_POST['mi_attendance_from_month'] ?? '' ) ), sanitize_text_field( wp_unslash( $_POST['mi_attendance_to_month'] ?? '' ) ) ); }
+		try { $period = MI_Attendance_Report::submitted_period( $post_id, wp_unslash( $_POST ) ); }
 		catch ( InvalidArgumentException $e ) { wp_die( esc_html( $e->getMessage() ) ); }
 		update_post_meta( $post_id, '_mi_attendance_from_month', $period[0] );
 		update_post_meta( $post_id, '_mi_attendance_to_month', $period[1] );
@@ -424,6 +424,7 @@ final class MI_Event_Post_Type {
 		$option_maximums = isset( $_POST['mi_option_max'] ) ? (array) wp_unslash( $_POST['mi_option_max'] ) : array();
 		$options = array();
 		$seen_options = array();
+		$previous_options = array_column( (array) get_post_meta( $post_id, '_mi_options', true ), null, 'code' );
 		foreach ( array_slice( $option_codes, 0, 50, true ) as $index => $raw_code ) {
 			$code = sanitize_title( $raw_code );
 			$name = sanitize_text_field( $option_names[ $index ] ?? '' );
@@ -440,6 +441,11 @@ final class MI_Event_Post_Type {
 				'max_quantity' => min( 20, max( 1, absint( $option_maximums[ $index ] ?? 1 ) ) ),
 			);
 		}
+		foreach ( $options as &$option ) foreach ( array( 'category', 'choice_group' ) as $key ) {
+			$previous = $previous_options[$option['code']] ?? array();
+			if ( array_key_exists( $key, $previous ) ) $option[$key] = $previous[$key];
+		}
+		unset( $option );
 		update_post_meta( $post_id, '_mi_options', $options );
 	}
 

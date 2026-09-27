@@ -119,6 +119,8 @@ function riprendiScritturaProiezione_(sheet) {
   SpreadsheetApp.flush();
   props.setProperty(key,'COMMITTED');
   }
+  // Restore monetary formatting after text-safe block writes, including journal recovery.
+  plan.columns.forEach((column,i)=>{if(plan.target_rows&&['total','paid','balance','paid_cash','paid_transfer','paid_card'].includes(column.key))sheet.getRange(2,i+1,plan.target_rows,1).setNumberFormat('#,##0.00');});
   const editable=[];
   plan.columns.forEach((column,i)=>{
     if(((!plan.read_only&&campoModificabileFoglio_(column.key))||campoLocaleFoglio_(column.key))&&plan.target_rows){
@@ -131,6 +133,7 @@ function riprendiScritturaProiezione_(sheet) {
   // Keep the marker until reopening the editable ranges also succeeds.
   proteggiProiezione_(sheet,editable);SpreadsheetApp.flush();
   props.setProperty('MI_READ_ONLY_'+book.getId(),String(plan.read_only));
+  props.setProperty('MI_MONEY_FORMAT_'+book.getId(),'1');
   props.deleteProperty(key);
   // Journal contents are no longer needed and may contain removed participants.
   journal.clearContents();
@@ -146,7 +149,7 @@ function scriviVistaIncrementale_(sheet,vista) {
   if(props.getProperty(modeKey)!==String(plan.read_only))plan.structural=true;
   if(plan.structural){plan.blocks=blocchiRigheProiezione_([],plan.rows,2);plan.header_changed=true;}
   const changed=plan.blocks.reduce((sum,block)=>sum+block.values.length,0);
-  const written=!!(changed||plan.structural||plan.header_changed||plan.old_rows!==plan.rows.length);
+  const written=!!(changed||plan.structural||plan.header_changed||plan.old_rows!==plan.rows.length||props.getProperty('MI_MONEY_FORMAT_'+sheet.getParent().getId())!=='1');
   if(written){
     preparaScritturaProiezione_(sheet,plan);
     riprendiScritturaProiezione_(sheet);

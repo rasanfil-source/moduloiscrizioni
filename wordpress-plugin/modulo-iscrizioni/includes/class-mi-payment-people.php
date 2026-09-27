@@ -3,6 +3,18 @@ defined( 'ABSPATH' ) || exit;
 
 /** Quote individuali e attribuzioni: nessuna ripartizione implicita dei versamenti storici. */
 final class MI_Payment_People {
+	/** Preserve deadlines for logistical edits and unchanged economic positions. */
+	public static function payment_deadline_changes( array $registration, $covered, $economic_change ) {
+		if ( ! in_array( $registration['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) return array();
+		$changes = array( 'status' => $covered ? 'CONFIRMED' : 'PENDING_PAYMENT' );
+		if ( $covered ) $changes['expires_at'] = null;
+		elseif ( $economic_change || 'PENDING_PAYMENT' !== $registration['status'] ) {
+			$deadline = MI_Registration_Service::reopened_payment_deadline( $registration );
+			$changes['expires_at'] = $deadline;
+			$changes['payment_deadline_at'] = $deadline;
+		}
+		return $changes;
+	}
 	/** Shared service fees are split equally in participant ID order; cents are never lost. */
 	public static function common_shares( array $registration, array $people ) {
 		$cost = 0;

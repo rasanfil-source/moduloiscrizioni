@@ -78,7 +78,7 @@ final class MI_Management_List {
 
 	/** One comparator for complete lists and bounded, cross-chunk page selection. */
 	private static function sort_rows( array $rows, array $context ) {
-		$sort = in_array( $context['sort'] ?? '', array( 'name', 'buyer', 'code', 'room', 'created_at' ), true ) ? $context['sort'] : 'name';
+		$sort = in_array( $context['sort'] ?? '', array( 'name', 'buyer', 'code', 'room', 'created_at' ), true ) ? $context['sort'] : 'created_at';
 		$direction = 'desc' === ( $context['direction'] ?? ( 'created_at' === $sort ? 'desc' : 'asc' ) ) ? -1 : 1;
 		$rows = array_map( static function ( $row ) use ( $sort ) { return array( 'row' => $row, 'sort_key' => remove_accents( $row[$sort] ?? '' ) ); }, $rows );
 		usort( $rows, static function ( $left, $right ) use ( $direction, $sort ) {

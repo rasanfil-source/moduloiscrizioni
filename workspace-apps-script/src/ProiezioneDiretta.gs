@@ -92,7 +92,7 @@ function aggiornaPagamentiDaProiezione_(book, projection, readOnly) {
   const created=!sheet;
   sheet=sheet||book.insertSheet('Pagamenti');if(sheet.isSheetHidden())sheet.showSheet();
   const headers=['Movimento','Prenotazione','Data','Tipo','Importo (€)','Metodo','Riferimento','Operatore','Nota'];
-  const rows=payments.map(row=>[row.id_pagamento,row.codice_ordine,row.data_effettiva,row.tipo_movimento,(Number(row.importo_centesimi)||0)/100,row.fonte_pagamento,row.riferimento_esterno,row.etichetta_operatore,row.nota_amministrativa].map(value=>typeof value==='string'?neutralizzaFormula_(value,5000):value));
+  const rows=payments.map(row=>[row.id_pagamento,row.codice_ordine,row.data_effettiva,row.tipo_movimento,(['RIMBORSO','STORNO','REFUND'].includes(String(row.tipo_movimento).toUpperCase())?-1:1)*Math.abs(Number(row.importo_centesimi)||0)/100,row.fonte_pagamento,row.riferimento_esterno,row.etichetta_operatore,row.nota_amministrativa].map(value=>typeof value==='string'?neutralizzaFormula_(value,5000):value));
   estendiGrigliaProiezione_(sheet,rows.length+1,headers.length);
   const oldCount=Math.max(0,sheet.getLastRow()-1),old=oldCount?sheet.getRange(2,1,oldCount,headers.length).getValues():[];
   if(!righeProiezioneUguali_(sheet.getRange(1,1,1,headers.length).getValues()[0],headers))sheet.getRange(1,1,1,headers.length).setValues([headers]).setFontWeight('bold');
@@ -116,10 +116,10 @@ function proiettaEventoDaWordPress_(payload) {
     let receipt;try{receipt=JSON.parse(properties.getProperty(key)||'null');}catch(error){receipt=null;}
     if(typeof riprendiScritturaProiezione_==='function')riprendiScritturaProiezione_(opened.sheet);
     abilitaLetturaFoglioEventoConLink_(opened.book.getId());
-    if((!receipt||receipt.layout_version!==2)&&typeof riparaProgressivoSuIdentitaLegacy_==='function')riparaProgressivoSuIdentitaLegacy_(opened.sheet);
+    if((!receipt||receipt.layout_version!==3)&&typeof riparaProgressivoSuIdentitaLegacy_==='function')riparaProgressivoSuIdentitaLegacy_(opened.sheet);
     const pending=modificheCorrentiFoglio_(opened.sheet);
     let result={aggiunte:0,manuali:pending.changes.length,conflitti:pending.errors.length};
-    const changed=!receipt||receipt.fingerprint!==fingerprint||receipt.layout_version!==2||typeof receipt.read_only!=='boolean'||pending.changes.length||pending.errors.length;
+    const changed=!receipt||receipt.fingerprint!==fingerprint||receipt.layout_version!==3||typeof receipt.read_only!=='boolean'||pending.changes.length||pending.errors.length;
     timings.inspect_ms=Date.now()-lockedAt;
     const viewStarted=Date.now(),view=changed?generaVistaDaProiezioneDiretta_(projection):null;
     const readOnly=view?view.sola_lettura===true:receipt.read_only;
@@ -133,7 +133,7 @@ function proiettaEventoDaWordPress_(payload) {
     }
     SpreadsheetApp.flush();
     const complete=!result.manuali&&!result.conflitti;
-    if(changed&&complete)properties.setProperty(key,JSON.stringify({fingerprint:fingerprint,read_only:readOnly,layout_version:2}));
+    if(changed&&complete)properties.setProperty(key,JSON.stringify({fingerprint:fingerprint,read_only:readOnly,layout_version:3}));
     timings.write_ms=Date.now()-writeStarted;timings.lock_ms=Date.now()-lockedAt;timings.total_ms=Date.now()-started;
     const response={ok:true,ready:complete,event_sheet_complete:complete,read_only:readOnly,id_foglio:opened.book.getId(),url_foglio:complete?opened.book.getUrl():undefined,creato:opened.created,projection_hash:String(payload.projection_hash||''),fingerprint:fingerprint,event_schema:decodificaOggetto_(projection.event.schema_vista_json),operational_profile:String(projection.event.profilo_operativo||''),esito:result};
     if((payload||{}).measure_performance===true)response.performance=Object.assign(timings,{view_built:Boolean(changed),registrations:projection.registrations.length,participants:projection.participants.length,payments:projection.payments.length});

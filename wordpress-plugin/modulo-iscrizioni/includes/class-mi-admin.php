@@ -1,6 +1,7 @@
 <?php
 
 defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/class-mi-amount.php';
 
 final class MI_Admin {
 	public static function boot() {
@@ -709,18 +710,8 @@ final class MI_Admin {
 	}
 
 	private static function parse_importo_centesimi( $raw ) {
-		$value = preg_replace( '/\s+/', '', trim( sanitize_text_field( (string) $raw ) ) );
-		if ( preg_match( '/^(?:\d{1,3})(?:\.\d{3})+(?:,\d{1,2})?$/', $value ) ) {
-			$normalized = str_replace( array( '.', ',' ), array( '', '.' ), $value );
-		} elseif ( preg_match( '/^(?:\d{1,3})(?:,\d{3})+(?:\.\d{1,2})?$/', $value ) ) {
-			$normalized = str_replace( ',', '', $value );
-		} elseif ( preg_match( '/^(?:0|[1-9]\d{0,6})(?:[.,]\d{1,2})?$/', $value ) ) {
-			$normalized = str_replace( ',', '.', $value );
-		} else {
-			return null;
-		}
-		$amount = (float) $normalized;
-		return $amount > 0 && $amount <= 1000000 ? (int) round( $amount * 100 ) : null;
+		$cents = MI_Amount::cents( $raw );
+		return null !== $cents && $cents > 0 ? $cents : null;
 	}
 
 	private static function payment_where( $event_id, $source, $transaction, $from, $to ) {
