@@ -12,6 +12,22 @@ La parrocchia è l'ente base. Ogni gruppo può avere logo, immagine, colori e co
 
 ## Stato
 
+Versione **[3.26.206](docs/rilascio-3.26.206.md)**: riepilogo aggregato senza elenco completo; dati di camere, presenze e posti proposti recuperati solo all’apertura del pannello.
+
+Versione **[3.26.205](docs/rilascio-3.26.205.md)**: script per schermata, pannelli camere e presenze differiti, saldo senza attesa preliminare, controllo Google su richiesta ed email in background.
+
+Versione **[3.26.204](docs/rilascio-3.26.204.md)**: nella scheda Gruppi, la scelta del gruppo per l’app si applica automaticamente dal menu a tendina. Eliminato il pulsante «Scegli gruppo»; resta il salvataggio esplicito delle immagini.
+
+Versione **[3.26.203](docs/rilascio-3.26.203.md)**: sezione «App sul telefono» spostata nella sola scheda Gruppi. I gestori assegnati vedono i controlli dell’app per i propri gruppi; gestione generale riservata a Gestore iscrizioni e Amministratore.
+
+Versione **[3.26.202](docs/rilascio-3.26.202.md)**: aggiunta la versione agli indirizzi del manifest e delle icone generali PWA per distinguere gli aggiornamenti nelle cache. Le icone già installate sul telefono possono richiedere rimozione e reinstallazione.
+
+Versione **[3.26.201](docs/rilascio-3.26.201.md)**: icona generale senza blocco note, sostituito dal blu dello sfondo; angoli trasparenti nei formati PWA, browser e desktop. Solo aggiornamento WordPress; Apps Script invariato.
+
+Versione **[3.26.200](docs/rilascio-3.26.200.md)**: PWA e icone per gruppo conservate; rimossi la registrazione dei tempi Google e il relativo pannello. Aggiornamento solo WordPress; Apps Script invariato. Utilizzare lo ZIP 3.26.200 al posto della 3.26.199. Installazione sul sito da completare.
+
+Versione **[3.26.199](docs/rilascio-3.26.199.md)**: portale installabile come PWA online, icona personalizzabile per gruppo e opzione per tornare alla sola pagina web. Aggiunte misure dei tempi delle chiamate di sincronizzazione Google. Aggiornamento solo WordPress; Apps Script invariato. Pacchetto preparato localmente; installazione sul sito e prova sui telefoni da completare.
+
 Versione **[3.26.198](docs/rilascio-3.26.198.md)**: correzioni comprovate degli audit su scadenze, servizi, prezzi, recapiti, presenze e proiezione Google. Richiede aggiornamento WordPress e Apps Script.
 
 Versione **[3.26.197](docs/rilascio-3.26.197.md)**: elenco partecipanti ordinato per data di iscrizione come impostazione predefinita, in entrambe le viste. Aggiornamento solo WordPress; GAS invariato rispetto alla 3.26.196.

@@ -652,7 +652,8 @@ test('la Segreteria eventi usa una favicon propria anche nei collegamenti salvat
   assert.match(portal, /! empty\( \$_GET\['mi_status'\] \).*?! empty\( \$_GET\['mi_waitlist_offer'\] \)/);
   assert.match(portal, /has_shortcode\( \$post->post_content, self::SHORTCODE \)/);
   assert.match(portal, /rel="icon" type="image\/png"/);
-  assert.match(portal, /assets\/segreteria-eventi\.png/);
+  assert.match(portal, /assets\/portal-icon-32\.png/);
+  assert.match(portal, /assets\/portal-icon-180\.png/);
   assert.match(portal, /rel="apple-touch-icon"/);
   assert.match(portal, /<title>[\s\S]*?self::portal_icon_links\(\);[\s\S]*?<link rel="stylesheet"/);
 
@@ -928,7 +929,7 @@ test('il prezzo supporta una quota di partecipazione uguale per tutti', async ()
 	assert.match(publicScript, /revealInvalidField\(invalid\)/);
 	assert.match(publicScript, /scrollIntoView\(\{ behavior:[^}]*block: 'center'/);
 	assert.match(publicScript, /successHeading\.textContent = 'Iscrizione confermata'/);
-	assert.match(publicScript, /Abbiamo inviato l’email di conferma a/);
+	assert.match(publicScript, /Riceverai l’email di conferma a/);
 	assert.match(publicScript, /L’iscrizione di \$\{confirmationName\} è stata registrata\./);
 	assert.doesNotMatch(publicScript, /Iscrizione confermata\. Codice:/);
 	assert.match(portal, /'_mi_privacy_policy_version'.*wp_date\( 'Y-m' \)/);
@@ -2028,7 +2029,7 @@ test('l avviso conclusivo distingue titolo messaggio email e conto alla rovescia
   const publicScript = await read('assets/public.js');
   const publicCss = await read('assets/public.css');
   assert.match(publicScript, /successHeading\.textContent = 'Iscrizione confermata'/);
-  assert.match(publicScript, /successMessage\.append\('Abbiamo inviato l’email di conferma a '\)/);
+  assert.match(publicScript, /successMessage\.append\('Riceverai l’email di conferma a '\)/);
   assert.match(publicScript, /emailAddress\.textContent = confirmationEmail/);
   assert.match(publicScript, /countdown\.className = 'mi-registration__countdown'/);
   assert.match(publicScript, /La pagina successiva si aprirà automaticamente tra/);
@@ -2547,7 +2548,7 @@ test('Sincronizza resta disponibile nel riepilogo anche per i fogli in sola lett
   const script = await read('assets/portal-management.js');
   assert.match(portal, /data-sheet-sync hidden>Sincronizza<\/button>/);
   assert.match(script, /sheetSyncButton\.addEventListener\('click',syncSheet\)/);
-  assert.match(script, /request\('sheet_changes'\)[\s\S]*sheetSyncButton\.hidden=!\(\(result\.changes\|\|\[\]\)\.length\|\|\(result\.errors\|\|\[\]\)\.length\)/);
+  assert.match(script, /sheetSyncButton\.hidden=!sheetButton\|\|sheetButton\.hidden/);
   assert.match(script, /updateSheetSyncVisibility\(ticket,event\)/);
 });
 

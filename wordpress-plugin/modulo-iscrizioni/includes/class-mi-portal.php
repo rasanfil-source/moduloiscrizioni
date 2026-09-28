@@ -94,15 +94,23 @@ final class MI_Portal {
 		header( 'X-Robots-Tag: noindex, nofollow, noarchive', true );
 	}
 
+	private static function needs_management_script() {
+		return is_user_logged_in() && empty( $_GET['mi_status'] ) && empty( $_GET['mi_waitlist_offer'] ) && in_array( sanitize_key( wp_unslash( $_GET['mi_portal_view'] ?? 'manage' ) ), array( 'management', 'registrations', 'groups' ), true );
+	}
+
+	private static function needs_payment_assets() {
+		return is_user_logged_in() && empty( $_GET['mi_status'] ) && empty( $_GET['mi_waitlist_offer'] ) && in_array( sanitize_key( wp_unslash( $_GET['mi_portal_view'] ?? 'manage' ) ), array( 'payments', 'payment-report' ), true ) && MI_Portal_Payments::allowed();
+	}
+
 	public static function assets() {
 		if ( ! is_singular() && empty( $_GET['mi_portal'] ) && empty( $_GET['mi_status'] ) && empty( $_GET['mi_waitlist_offer'] ) ) return;
 		$post = get_post();
 		if ( empty( $_GET['mi_portal'] ) && empty( $_GET['mi_status'] ) && empty( $_GET['mi_waitlist_offer'] ) && ( ! $post || ! has_shortcode( $post->post_content, self::SHORTCODE ) ) ) return;
 		wp_enqueue_style( 'mi-portal', MI_PLUGIN_URL . 'assets/portal.css', array(), MI_VERSION );
 		wp_enqueue_script( 'mi-portal', MI_PLUGIN_URL . 'assets/portal.js', array(), MI_VERSION, true );
-		wp_enqueue_script( 'mi-portal-management', MI_PLUGIN_URL . 'assets/portal-management.js', array(), MI_VERSION, true );
+		if ( self::needs_management_script() ) wp_enqueue_script( 'mi-portal-management', MI_PLUGIN_URL . 'assets/portal-management.js', array(), MI_VERSION, true );
 		wp_enqueue_style( 'mi-portal-management', MI_PLUGIN_URL . 'assets/portal-management.css', array( 'mi-portal' ), MI_VERSION );
-		if ( MI_Portal_Payments::allowed() ) {
+		if ( self::needs_payment_assets() ) {
 			wp_enqueue_style( 'mi-portal-payments', MI_PLUGIN_URL . 'assets/portal-payments.css', array( 'mi-portal' ), MI_VERSION );
 			wp_enqueue_script( 'mi-portal-payments', MI_PLUGIN_URL . 'assets/portal-payments.js', array(), MI_VERSION, true );
 		}
@@ -117,13 +125,15 @@ final class MI_Portal {
 			$post = get_post();
 			if ( ! $post || ! has_shortcode( $post->post_content, self::SHORTCODE ) ) return;
 		}
-		$icon = 'assets/segreteria-eventi.png';
+		$icon = 'assets/portal-icon-32.png';
 		$asset_url = MI_PLUGIN_URL . $icon . '?ver=' . rawurlencode( MI_VERSION );
 		$ico = 'assets/segreteria-eventi.ico';
 		$ico_url = MI_PLUGIN_URL . $ico . '?ver=' . rawurlencode( MI_VERSION );
 		echo '<link rel="shortcut icon" type="image/x-icon" href="' . esc_url( $ico_url ) . '">';
 		echo '<link rel="icon" type="image/png" href="' . esc_url( $asset_url ) . '">';
-		echo '<link rel="apple-touch-icon" href="' . esc_url( $asset_url ) . '">';
+		$apple_icon = class_exists( 'MI_Portal_PWA' ) ? MI_Portal_PWA::apple_icon() : '';
+		echo '<link rel="apple-touch-icon" sizes="' . ( $apple_icon ? '192x192' : '180x180' ) . '" href="' . esc_url( $apple_icon ?: MI_PLUGIN_URL . 'assets/portal-icon-180.png?ver=' . rawurlencode( MI_VERSION ) ) . '">';
+		if ( class_exists( 'MI_Portal_PWA' ) ) MI_Portal_PWA::render_head();
 	}
 
 	public static function handle_actions() {
@@ -823,7 +833,7 @@ final class MI_Portal {
 		// Ricarica anche le correzioni distribuite con lo stesso numero di versione.
 		$asset_version = rawurlencode( MI_VERSION );
 		$page_title = ! empty( $_GET['mi_status'] ) ? 'Stato della prenotazione' : ( ! empty( $_GET['mi_waitlist_offer'] ) ? 'Posto disponibile' : 'Segreteria eventi' );
-		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><title><?php echo esc_html( get_bloginfo( 'name' ) . ' — ' . $page_title ); ?></title><?php self::portal_icon_links(); ?><link rel="stylesheet" href="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal.css?ver=' . $asset_version ) ); ?>"></head><body class="mi-portal-standalone"><?php echo self::render(); ?><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal.js?ver=' . $asset_version ) ); ?>"></script><?php if ( MI_Portal_Payments::allowed() ) : ?><link rel="stylesheet" href="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-payments.css?ver=' . $asset_version ) ); ?>"><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-payments.js?ver=' . $asset_version ) ); ?>"></script><?php endif; ?><link rel="stylesheet" href="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-management.css?ver=' . $asset_version ) ); ?>"><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-management.js?ver=' . $asset_version ) ); ?>"></script></body></html><?php
+		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><title><?php echo esc_html( get_bloginfo( 'name' ) . ' — ' . $page_title ); ?></title><?php self::portal_icon_links(); ?><link rel="stylesheet" href="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal.css?ver=' . $asset_version ) ); ?>"></head><body class="mi-portal-standalone"><?php echo self::render(); ?><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal.js?ver=' . $asset_version ) ); ?>"></script><?php if ( self::needs_payment_assets() ) : ?><link rel="stylesheet" href="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-payments.css?ver=' . $asset_version ) ); ?>"><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-payments.js?ver=' . $asset_version ) ); ?>"></script><?php endif; ?><link rel="stylesheet" href="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-management.css?ver=' . $asset_version ) ); ?>"><?php if ( self::needs_management_script() ) : ?><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-management.js?ver=' . $asset_version ) ); ?>"></script><?php endif; ?></body></html><?php
 		exit;
 	}
 
@@ -1013,14 +1023,16 @@ final class MI_Portal {
 		if ( MI_Access::is_suspended() ) return '<div class="mi-portal-empty"><h2>Accesso sospeso</h2><p>Questo account non può accedere alla Segreteria eventi. Contatta un amministratore.</p></div>';
 		if ( ! current_user_can( 'mi_portal_access' ) && ! current_user_can( 'manage_options' ) ) return '<div class="mi-portal-empty"><h2>C’è qualcuno qui…?</h2><p>Il tuo account non è abilitato al servizio iscrizioni.</p></div>';
 		$view = sanitize_key( wp_unslash( $_GET['mi_portal_view'] ?? 'manage' ) );
+		$can_view_groups = self::can_manage_groups() || ( class_exists( 'MI_Portal_PWA' ) && MI_Portal_PWA::enabled() && MI_Portal_PWA::allowed_groups() );
 		$can_create = current_user_can( 'mi_create_events' ) || current_user_can( 'manage_options' );
 		$requested_edit_id = absint( $_GET['mi_portal_edit'] ?? $_GET['mi_portal_draft'] ?? 0 );
 		$can_edit_requested = $requested_edit_id && ( current_user_can( 'mi_manage_events' ) || current_user_can( 'manage_options' ) ) && MI_Access::can_access_event( $requested_edit_id );
 		ob_start();
 		?><main class="mi-portal" data-mi-portal-scope="reserved"><header class="mi-portal-header"><div><span class="mi-portal-eyebrow">Area riservata</span><h1>Segreteria eventi</h1></div><a class="mi-portal-logout" href="<?php echo esc_url( wp_logout_url( self::base_url() ) ); ?>"><span aria-hidden="true">↗</span> Esci</a></header>
-		<nav class="mi-portal-switcher" aria-label="Segreteria eventi"><a class="<?php echo in_array( $view, array( 'management', 'registrations' ), true ) ? 'is-active' : ''; ?>" <?php if ( in_array( $view, array( 'management', 'registrations' ), true ) ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( ( isset( $_GET['mi_portal_event'] ) ? MI_Portal_Management::url( absint( $_GET['mi_portal_event'] ) ) : add_query_arg( 'mi_portal_view', 'management', self::base_url() ) ) ); ?>">Iscrizioni</a><a class="<?php echo 'manage' === $view ? 'is-active' : ''; ?>" <?php if ( 'manage' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'manage', self::base_url() ) ); ?>">Eventi</a><?php if ( $can_create ) : ?><a class="<?php echo 'create' === $view ? 'is-active' : ''; ?>" <?php if ( 'create' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'create', self::base_url() ) ); ?>">+ Crea evento</a><?php endif; ?><?php if ( MI_Portal_Payments::allowed() ) : ?><a class="<?php echo in_array( $view, array( 'payments', 'payment-report' ), true ) ? 'is-active' : ''; ?>" <?php if ( in_array( $view, array( 'payments', 'payment-report' ), true ) ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( array( 'mi_portal_view' => 'payments', 'mi_portal_event' => absint( $_GET['mi_portal_event'] ?? 0 ) ), self::base_url() ) ); ?>">Pagamenti</a><?php endif; ?><a class="<?php echo 'communications' === $view ? 'is-active' : ''; ?>" <?php if ( 'communications' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'communications', self::base_url() ) ); ?>">Messaggi</a><?php if ( self::can_manage_groups() ) : ?><a class="<?php echo 'groups' === $view ? 'is-active' : ''; ?>" <?php if ( 'groups' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'groups', self::base_url() ) ); ?>">Gruppi</a><?php endif; ?><?php if ( self::can_manage_module_users() ) : ?><a class="<?php echo 'operators' === $view ? 'is-active' : ''; ?>" <?php if ( 'operators' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'operators', self::base_url() ) ); ?>">Operatori</a><?php endif; ?></nav>
+		<nav class="mi-portal-switcher" aria-label="Segreteria eventi"><a class="<?php echo in_array( $view, array( 'management', 'registrations' ), true ) ? 'is-active' : ''; ?>" <?php if ( in_array( $view, array( 'management', 'registrations' ), true ) ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( ( isset( $_GET['mi_portal_event'] ) ? MI_Portal_Management::url( absint( $_GET['mi_portal_event'] ) ) : add_query_arg( 'mi_portal_view', 'management', self::base_url() ) ) ); ?>">Iscrizioni</a><a class="<?php echo 'manage' === $view ? 'is-active' : ''; ?>" <?php if ( 'manage' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'manage', self::base_url() ) ); ?>">Eventi</a><?php if ( $can_create ) : ?><a class="<?php echo 'create' === $view ? 'is-active' : ''; ?>" <?php if ( 'create' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'create', self::base_url() ) ); ?>">+ Crea evento</a><?php endif; ?><?php if ( MI_Portal_Payments::allowed() ) : ?><a class="<?php echo in_array( $view, array( 'payments', 'payment-report' ), true ) ? 'is-active' : ''; ?>" <?php if ( in_array( $view, array( 'payments', 'payment-report' ), true ) ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( array( 'mi_portal_view' => 'payments', 'mi_portal_event' => absint( $_GET['mi_portal_event'] ?? 0 ) ), self::base_url() ) ); ?>">Pagamenti</a><?php endif; ?><a class="<?php echo 'communications' === $view ? 'is-active' : ''; ?>" <?php if ( 'communications' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'communications', self::base_url() ) ); ?>">Messaggi</a><?php if ( $can_view_groups ) : ?><a class="<?php echo 'groups' === $view ? 'is-active' : ''; ?>" <?php if ( 'groups' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'groups', self::base_url() ) ); ?>">Gruppi</a><?php endif; ?><?php if ( self::can_manage_module_users() ) : ?><a class="<?php echo 'operators' === $view ? 'is-active' : ''; ?>" <?php if ( 'operators' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'operators', self::base_url() ) ); ?>">Operatori</a><?php endif; ?></nav>
+
 		<?php $notice_near_outputs = 'manage' === $view && ! empty( $_GET['mi_portal_event'] ) && ! empty( $_GET['mi_portal_outputs'] ); if ( ! $notice_near_outputs ) self::notice(); ?>
-		<?php if ( 'delete' === $view ) MI_Event_Deletion::render(); elseif ( 'create' === $view && ( $can_create || $can_edit_requested ) ) self::create_view( $requested_edit_id ); elseif ( 'management' === $view ) MI_Portal_Management::render(); elseif ( 'registrations' === $view ) MI_Portal_Management::render( absint( $_GET['mi_portal_booking'] ?? 0 ) ); elseif ( 'payments' === $view ) MI_Portal_Payments::render(); elseif ( 'payment-report' === $view ) MI_Portal_Payments::render_report(); elseif ( 'communications' === $view ) self::communications_view(); elseif ( 'groups' === $view && self::can_manage_groups() ) self::groups_view(); elseif ( 'operators' === $view && self::can_manage_module_users() ) self::operators_view(); else self::manage_view(); ?>
+		<?php if ( 'delete' === $view ) MI_Event_Deletion::render(); elseif ( 'create' === $view && ( $can_create || $can_edit_requested ) ) self::create_view( $requested_edit_id ); elseif ( 'management' === $view ) MI_Portal_Management::render(); elseif ( 'registrations' === $view ) MI_Portal_Management::render( absint( $_GET['mi_portal_booking'] ?? 0 ) ); elseif ( 'payments' === $view ) MI_Portal_Payments::render(); elseif ( 'payment-report' === $view ) MI_Portal_Payments::render_report(); elseif ( 'communications' === $view ) self::communications_view(); elseif ( 'groups' === $view && $can_view_groups ) self::groups_tab(); elseif ( 'operators' === $view && self::can_manage_module_users() ) self::operators_view(); else self::manage_view(); ?>
 		</main><?php
 		return ob_get_clean();
 	}
@@ -1205,6 +1217,12 @@ final class MI_Portal {
 			echo '<p class="mi-portal-muted"><small>I tipi di sistema non possono essere eliminati.</small></p></div></details>';
 		}
 		echo '</section>';
+	}
+
+	private static function groups_tab() {
+		if ( ! self::can_manage_groups() ) echo '<h2>Gruppi</h2>';
+		if ( class_exists( 'MI_Portal_PWA' ) ) MI_Portal_PWA::render_install_help();
+		if ( self::can_manage_groups() ) self::groups_view();
 	}
 
 	private static function groups_view() {
@@ -1762,7 +1780,10 @@ final class MI_Portal {
 		}
 		echo '</section>';
 	}
-	private static function base_url() { return ! empty( $_GET['mi_portal'] ) ? add_query_arg( 'mi_portal', '1', home_url( '/' ) ) : get_permalink(); }
+	private static function base_url() {
+		$url = ! empty( $_GET['mi_portal'] ) ? add_query_arg( 'mi_portal', '1', home_url( '/' ) ) : get_permalink();
+		return class_exists( 'MI_Portal_PWA' ) ? MI_Portal_PWA::with_group_url( $url ) : $url;
+	}
 	private static function notice() {
 		if ( empty( $_GET['mi_portal_message'] ) ) return;
 		$error = ! empty( $_GET['mi_portal_error'] );

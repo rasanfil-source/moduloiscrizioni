@@ -175,10 +175,9 @@
     const sheetButton=root.querySelector('[data-open-sheet]');
     const sheetSyncButton=root.querySelector('[data-sheet-sync]');
     if(sheetSyncButton)sheetSyncButton.addEventListener('click',syncSheet);
-    async function updateSheetSyncVisibility(ticket,eventId){
-      if(!sheetSyncButton||!sheetButton||sheetButton.hidden){if(sheetSyncButton)sheetSyncButton.hidden=true;return;}
-      try{const result=await request('sheet_changes');if(ticket!==generation||String(event)!==String(eventId))return;sheetSyncButton.hidden=!((result.changes||[]).length||(result.errors||[]).length);}
-      catch(error){if(ticket===generation&&String(event)===String(eventId))sheetSyncButton.hidden=true;}
+    function updateSheetSyncVisibility(ticket,eventId){
+      if(ticket!==generation||String(event)!==String(eventId))return;
+      if(sheetSyncButton)sheetSyncButton.hidden=!sheetButton||sheetButton.hidden;
     }
     if(sheetButton)sheetButton.addEventListener('click',async e=>{
       e.preventDefault();
@@ -258,15 +257,35 @@
       if(!await canLeave())return;const ticket=++generation;order='';booking=null;printList=null;parkPanels();content.replaceChildren();const sheetLink=root.querySelector('[data-open-sheet]'),sheetSync=root.querySelector('[data-sheet-sync]');if(sheetLink){sheetLink.hidden=true;sheetLink.removeAttribute('href');}if(sheetSync)sheetSync.hidden=true;if(!event){await allPeople();return;}say('Caricamento riepilogo…');
       if(printButton){printButton.hidden=false;printButton.textContent='Stampa riepilogo iscritti';}returnEvent=event;currentPerson=null;
       try{const data=await request('summary');if(ticket!==generation)return;
+        data.items=data.items||[];data.people=data.people||[];
+        const metrics=data.metrics;
+        const loadPanel=async(panel)=>{
+          if(!data.lazy_panels)return panel==='offers'?{offers:data.items.filter(x=>x.status==='WAITLIST_OFFERED')}:panel==='attendance'?{people:data.people.filter(p=>['CONFIRMED','PENDING_PAYMENT'].includes(p.status))}:data;
+          const result=await request('summary_panel',{panel});
+          if(ticket!==generation)throw new Error('La selezione è cambiata.');
+          return result;
+        };
+        const lazyPanel=(element,load)=>{
+          let loaded=false,loading=false;
+          const message=document.createElement('p');message.setAttribute('role','status');element.append(message);
+          const run=async()=>{
+            if(!element.open||loaded||loading||ticket!==generation)return;
+            loading=true;message.textContent='Caricamento…';
+            try{await load();if(ticket!==generation)return;loaded=true;message.remove();}
+            catch(error){if(ticket!==generation)return;message.textContent='Caricamento non disponibile. '+error.message+' ';const retry=document.createElement('button');retry.type='button';retry.textContent='Riprova';retry.onclick=run;message.append(retry);}
+            finally{loading=false;}
+          };
+          element.addEventListener('toggle',run);
+        };
         const attendanceWindow=data.attendance_availability;
         if(attendanceWindow?.enabled&&!attendanceWindow.available&&attendanceWindow.starts_at>attendanceWindow.server_now){
           const activate=()=>{if(ticket!==generation)return;if(busy||dirty){setTimeout(activate,1000);return;}summary();};
           setTimeout(activate,Math.min(2147483647,Math.max(1000,(attendanceWindow.starts_at-attendanceWindow.server_now)*1000)));
         }
-        const active=data.items.filter(x=>x.active),sum=k=>active.reduce((n,x)=>n+Number(x[k]||0),0);
-        const people=state=>data.items.filter(x=>x.status===state).reduce((n,x)=>n+x.participants,0);
-        const receivable=data.items.filter(x=>x.collectible??['CONFIRMED','PENDING_PAYMENT'].includes(x.status)).reduce((n,x)=>n+x.balance,0);
-        const netPaid=data.items.reduce((n,x)=>n+x.paid,0);
+        const active=data.items.filter(x=>x.active),sum=k=>metrics?Number(metrics[k]||0):active.reduce((n,x)=>n+Number(x[k]||0),0);
+        const people=state=>metrics?Number(metrics.states[state]||0):data.items.filter(x=>x.status===state).reduce((n,x)=>n+x.participants,0);
+        const receivable=metrics?metrics.receivable:data.items.filter(x=>x.collectible??['CONFIRMED','PENDING_PAYMENT'].includes(x.status)).reduce((n,x)=>n+x.balance,0);
+        const netPaid=metrics?metrics.paid:data.items.reduce((n,x)=>n+x.paid,0);
         const features=data.features||{rooms:true,payments:true,deposit:true};
 
         const summaryRow=(label,value,attention=false)=>'<tr'+(attention?' class="mi-summary-attention"':'')+'><th scope="row">'+label+'</th><td>'+value+'</td></tr>';
@@ -314,8 +333,8 @@
         const requestFilter=content.querySelector('[data-request-filter]'),deadlineFilter=content.querySelector('[data-deadline-filter]'),serviceFilter=content.querySelector('[data-service-filter]');
         content.querySelector('[data-deposit-filter]').closest('label').hidden=!features.payments;
         listContext.room='';
-        requestFilter.closest('label').hidden=!data.items.some(x=>String(x.requests||'').trim());
-        deadlineFilter.closest('label').hidden=!data.items.some(x=>x.status==='WAITLIST_OFFERED');
+        requestFilter.closest('label').hidden=!(metrics?metrics.has_requests:data.items.some(x=>String(x.requests||'').trim()));
+        deadlineFilter.closest('label').hidden=!(metrics?metrics.offers:data.items.some(x=>x.status==='WAITLIST_OFFERED'));
         if(!features.rooms){listContext.room='';if(listContext.filter==='unassigned')listContext.filter='all';}
         if(!features.payments&&listContext.filter==='balance')listContext.filter='all';
         if(!features.payments)listContext.deposit='';
@@ -323,9 +342,10 @@
         const requestMatch=x=>!listContext.requests||(String(x.requests||'').trim()&&(listContext.requests==='yes'||(listContext.requests==='reviewed'?x.requests_reviewed:!x.requests_reviewed)));
         const deadlineMatch=x=>{if(!listContext.deadline)return true;if(x.status!=='WAITLIST_OFFERED')return false;const deadline=utc(x.offer_expires_at);if(!deadline)return false;const remaining=deadline.getTime()-Date.now();return listContext.deadline==='expired'?remaining<=0:remaining>0&&remaining<=86400000;};
         const personLogistics=p=>(!listContext.room||(listContext.room==='unassigned'?!p.room:p.room===listContext.room.slice(5)))&&(!listContext.service||(p.options||[]).some(o=>(o.code||o.name)===listContext.service&&Number(o.quantity)>0));
-        const admitted=(data.people||[]).filter(p=>['CONFIRMED','PENDING_PAYMENT'].includes(p.status));
-        const rooms=data.rooms||[];
+        let roomPeople=data.people,admitted=roomPeople.filter(p=>['CONFIRMED','PENDING_PAYMENT'].includes(p.status));
+        let rooms=data.rooms||[];
         booking={version:data.rooms_version||''};
+        const renderRoomPanels=()=>{
         if(features.rooms&&Object.keys(data.room_types||{}).length){
           const types=data.room_types,planner=document.createElement('section');planner.className='mi-room-planner';planner.dataset.roomPlanner='';
           planner.innerHTML='<h3>Assegnazione camere</h3><label><select data-room-type aria-label="Tipo di sistemazione"><option value="">Tutte le sistemazioni</option>'+Object.entries(types).map(([code,type])=>'<option value="'+esc(code)+'">'+esc(type.name)+' ('+esc(type.prefix)+')</option>').join('')+'</select></label><div data-room-assignments></div>';
@@ -431,7 +451,7 @@
         content.querySelector('[data-room-inventory]').hidden=!features.rooms||!features.room_inventory;
         content.querySelectorAll('[data-edit-inventory]').forEach(button=>button.onclick=()=>{if(dirty||pending||busy){say('Completa o scarta prima la modifica in corso.');return;}const room=rooms.find(r=>r.code===button.dataset.editInventory),form=content.querySelector('[data-room]');for(const key of ['code','name','capacity'])form.elements.namedItem(key).value=room[key];form.elements.namedItem('name').focus();});
         if(features.rooms&&rooms.length){
-          const occupants=(data.people||[]).filter(p=>!['CANCELLED','EXPIRED'].includes(p.status));
+          const occupants=roomPeople.filter(p=>!['CANCELLED','EXPIRED'].includes(p.status));
           const choices='<option value="">Scegli una persona</option>'+occupants.map(p=>'<option value="'+p.id+'">'+esc(p.name)+' · '+esc(p.code)+' · '+esc(p.room||'senza camera')+'</option>').join('');
           content.querySelector('[data-list]').insertAdjacentHTML('beforebegin','<details data-room-occupants><summary>Camere e occupanti</summary>'+rooms.map(r=>'<h3>'+esc(r.name)+' · '+r.occupied+'/'+r.capacity+' posti</h3><ul>'+occupants.filter(p=>p.room===r.code).map(p=>'<li>'+esc(p.name)+' · '+esc(p.code)+'</li>').join('')+'</ul>').join('')+'<p>'+admitted.filter(p=>!p.room).length+' persone ammesse senza camera.</p><label>Prima persona<select data-swap-first>'+choices+'</select></label><label>Seconda persona<select data-swap-second>'+choices+'</select></label><button data-swap>Scambia le camere</button></details>');
           const swap=content.querySelector('[data-swap]');swap.onclick=async()=>{
@@ -442,22 +462,26 @@
             try{const result=await request('room_swap',pending);if(result.saved===false){if(result.rejected){pending=null;say(result.message);return;}throw new Error(result.message);}pending=null;busy=false;await summary();say('Camere scambiate. Aggiornamento del foglio accodato.');}catch(error){say('Scambio non confermato. '+error.message);swap.textContent='Riprova lo stesso scambio';}finally{busy=false;swap.disabled=false;}
           };
         }
+        };
         const optionDefinitions=new Map((data.option_definitions||[]).map(option=>[option.code,option]));
-        const services=new Map();for(const p of admitted)for(const option of p.options||[]){const key=option.code||option.name;if(String(key).startsWith('alloggio-'))continue;const definition=optionDefinitions.get(key)||{};const category=participantOptionCategory(option,definition);const grouped=category+'|'+key,item=services.get(grouped)||{name:option.name||key,quantity:0,people:0,category};item.quantity+=Number(option.quantity||0);if(Number(option.quantity)>0)item.people++;services.set(grouped,item);}
+        const services=new Map();for(const option of data.service_totals||admitted.flatMap(p=>p.options||[])){const key=option.code||option.name;if(String(key).startsWith('alloggio-'))continue;const definition=optionDefinitions.get(key)||{};const category=participantOptionCategory(option,definition);const grouped=category+'|'+key,item=services.get(grouped)||{name:option.name||key,quantity:0,people:0,category};item.quantity+=Number(option.quantity||0);item.people+=option.people??(Number(option.quantity)>0?1:0);services.set(grouped,item);}
         if(services.size){const labels=Object.fromEntries(participantOptionGroups);const grouped=[...services.values()].reduce((all,service)=>{(all[service.category]??=[]).push(service);return all;},{});content.querySelector('[data-list]').insertAdjacentHTML('beforebegin','<div data-person-services>'+participantOptionGroups.filter(([category])=>grouped[category]?.length).map(([category])=>'<h4>'+esc(labels[category])+'</h4><ul>'+grouped[category].map(service=>'<li>'+esc(service.name)+': '+service.people+' '+(service.people===1?'persona':'persone')+'</li>').join('')+'</ul>').join('')+'</div>');}
-        const orderServices=new Map();for(const order of data.items.filter(x=>['CONFIRMED','PENDING_PAYMENT'].includes(x.status)))for(const option of order.order_options||[]){const key=option.code||option.name;const item=orderServices.get(key)||{name:option.name||key,quantity:0,orders:0};item.quantity+=Number(option.quantity||0);if(Number(option.quantity)>0)item.orders++;orderServices.set(key,item);}
+        const orderServices=new Map();for(const option of data.order_service_totals||data.items.filter(x=>['CONFIRMED','PENDING_PAYMENT'].includes(x.status)).flatMap(order=>order.order_options||[])){const key=option.code||option.name;const item=orderServices.get(key)||{name:option.name||key,quantity:0,orders:0};item.quantity+=Number(option.quantity||0);item.orders+=option.orders??(Number(option.quantity)>0?1:0);orderServices.set(key,item);}
         if(orderServices.size)content.querySelector('[data-list]').insertAdjacentHTML('beforebegin','<details data-order-services><summary>Servizi acquistati per prenotazione</summary><ul>'+[...orderServices].map(([key,service])=>'<li>'+esc(service.name)+': '+service.quantity+' unità</li>').join('')+'</ul><p>Le quantità sono conteggiate una volta per prenotazione e non attribuite ai singoli partecipanti.</p></details>');
-        const allServices=new Map();for(const person of data.people||[])for(const option of person.options||[])allServices.set(option.code||option.name,{name:option.name||option.code});
+        const allServices=new Map();for(const option of data.service_filters||data.people.flatMap(person=>person.options||[]))allServices.set(option.code||option.name,{name:option.name||option.code});
         serviceFilter.closest('label').hidden=allServices.size===0;
         for(const [key,service] of [...allServices].sort((a,b)=>String(a[1].name).localeCompare(String(b[1].name),'it',{sensitivity:'base'}))){const option=document.createElement('option');option.value=key;option.textContent=service.name;serviceFilter.append(option);}serviceFilter.value=listContext.service;
-        const offers=data.items.filter(x=>x.status==='WAITLIST_OFFERED');
-        if(offers.length)content.querySelector('[data-list]').insertAdjacentHTML('beforebegin','<details><summary>Posti proposti e scadenze ('+offers.length+' prenotazioni)</summary><p>Il termine trascorso non equivale a un annullamento già eseguito: lo stato viene aggiornato dal processo automatico.</p><ul>'+offers.map(x=>'<li>'+esc(x.name)+' · '+esc(x.code)+' · '+esc(deadlineLabel(x.offer_expires_at))+' <button data-open="'+esc(x.code)+'">Apri prenotazione</button></li>').join('')+'</ul></details>');
+        const offersCount=metrics?metrics.offers:data.items.filter(x=>x.status==='WAITLIST_OFFERED').length;
+        if(offersCount){
+          const offerPanel=document.createElement('details');offerPanel.dataset.offerPanel='';offerPanel.innerHTML='<summary>Posti proposti e scadenze ('+offersCount+' prenotazioni)</summary><p>Il termine trascorso non equivale a un annullamento già eseguito: lo stato viene aggiornato dal processo automatico.</p>';content.querySelector('[data-list]').before(offerPanel);
+          lazyPanel(offerPanel,async()=>{const result=await loadPanel('offers');if(ticket!==generation)return;offerPanel.insertAdjacentHTML('beforeend','<ul>'+result.offers.map(x=>'<li>'+esc(x.name)+' · '+esc(x.code)+' · '+esc(deadlineLabel(x.offer_expires_at))+' <button data-open="'+esc(x.code)+'">Apri prenotazione</button></li>').join('')+'</ul>');});
+        }
         const columns=[['name','Partecipante'],['status','Stato'],['email','Email'],['phone','Telefono']];
         if(features.rooms)columns.push(['room','Camera']);
-        if(data.items.some(row=>Number(row.missing)>0))columns.push(['missing','Dati mancanti']);
-        if(data.items.some(row=>String(row.requests||'').trim()))columns.push(['requests','Richieste particolari']);
-        if(offers.length)columns.push(['offer_expires_at','Scadenza posto proposto (ora locale)']);
-        if((data.people||[]).some(row=>['PRESENT','ABSENT'].includes(row.attendance?.state)))columns.push(['attendance','Presenza effettiva']);
+        if(metrics?metrics.has_missing:data.items.some(row=>Number(row.missing)>0))columns.push(['missing','Dati mancanti']);
+        if(metrics?metrics.has_requests:data.items.some(row=>String(row.requests||'').trim()))columns.push(['requests','Richieste particolari']);
+        if(offersCount)columns.push(['offer_expires_at','Scadenza posto proposto (ora locale)']);
+        if(metrics?metrics.has_attendance:(data.people||[]).some(row=>['PRESENT','ABSENT'].includes(row.attendance?.state||row.attendance)))columns.push(['attendance','Presenza effettiva']);
         const extraKeys=new Set(data.field_keys||(data.people||[]).flatMap(p=>Object.keys(p.fields||{})));for(const key of extraKeys){const label=data.field_labels?.[key]||'',contactField=/\b(e-?mail|posta elettronica|telefono|cellulare|cell\.)\b/i.test(label)||/^(participant_)?(e?mail|phone|mobile|telefono|cellulare)/i.test(key);if(/^[a-z][a-z0-9_]{0,79}$/.test(key)&&label&&(!contactField||key.startsWith('custom_')))columns.push(['field:'+key,label]);}
         const questionLabels=new Map(columns.filter(([key])=>key.startsWith('field:custom_')).map(([key],index)=>[key,'D'+(index+1)]));
         const reportLabel=(key,label)=>questionLabels.get(key)||label;
@@ -481,8 +505,7 @@
         advancedFilters.open=false;
         closedToggle.onchange=()=>{listContext.includeClosed=closedToggle.checked;listContext.shown=30;draw();};
         if(data.attendance_availability?.available){
-          const attendancePeople=(data.people||[]).filter(person=>['CONFIRMED','PENDING_PAYMENT'].includes(person.status));
-          if(attendancePeople.length){const attendancePanel=document.createElement('details');attendancePanel.dataset.attendancePanel='';attendancePanel.innerHTML='<summary>Registra presenze</summary><p>Seleziona le persone da aggiornare, imposta lo stato e salva tutte le modifiche insieme.</p><div class="mi-attendance-actions"><button type="button" data-attendance-select-all>Seleziona tutti</button><button type="button" data-attendance-clear-all>Deseleziona tutti</button></div><form data-attendance-bulk><div class="mi-attendance-table" role="region" aria-label="Registrazione presenze"><table><thead><tr><th scope="col">Seleziona</th><th scope="col">Partecipante</th><th scope="col">Presenza</th></tr></thead><tbody>'+attendancePeople.map(person=>'<tr><td><input type="checkbox" data-attendance-person="'+person.id+'" aria-label="Seleziona '+esc(person.name)+'"></td><td>'+esc(person.name)+'</td><td><select data-attendance-state aria-label="Presenza di '+esc(person.name)+'">'+[['UNRECORDED','Non rilevata'],['PRESENT','Presente'],['ABSENT','Assente']].map(([value,label])=>'<option value="'+value+'" '+((person.attendance?.state||person.attendance||'UNRECORDED')===value?'selected':'')+'>'+label+'</option>').join('')+'</select></td></tr>').join('')+'</tbody></table></div><button type="submit" class="mi-primary">Salva presenze selezionate</button></form>';listHost.after(attendancePanel);attendancePanel.querySelector('[data-attendance-select-all]').onclick=()=>attendancePanel.querySelectorAll('[data-attendance-person]').forEach(input=>input.checked=true);attendancePanel.querySelector('[data-attendance-clear-all]').onclick=()=>attendancePanel.querySelectorAll('[data-attendance-person]').forEach(input=>input.checked=false);attendancePanel.querySelector('form').onsubmit=async e=>{e.preventDefault();const changes=[...attendancePanel.querySelectorAll('[data-attendance-person]:checked')].map(input=>({id:Number(input.dataset.attendancePerson),attendance:input.closest('tr').querySelector('[data-attendance-state]').value}));if(!changes.length){say('Seleziona almeno una persona.');return;}busy=true;attendancePanel.querySelectorAll('button,input,select').forEach(control=>control.disabled=true);say('Salvataggio presenze…');try{const result=await request('attendance_bulk',{data:JSON.stringify(changes)});busy=false;dirty=false;dirtyForm=null;await summary();say(result.message);}catch(error){say('Presenze non salvate. '+error.message);}finally{busy=false;attendancePanel.querySelectorAll('button,input,select').forEach(control=>control.disabled=false);}};}
+          if(metrics?metrics.admitted:data.people.some(person=>['CONFIRMED','PENDING_PAYMENT'].includes(person.status))){const attendancePanel=document.createElement('details');attendancePanel.dataset.attendancePanel='';attendancePanel.innerHTML='<summary>Registra presenze</summary>';listHost.after(attendancePanel);lazyPanel(attendancePanel,async()=>{const result=await loadPanel('attendance');if(ticket!==generation)return;const attendancePeople=result.people;attendancePanel.innerHTML='<summary>Registra presenze</summary><p>Seleziona le persone da aggiornare, imposta lo stato e salva tutte le modifiche insieme.</p><div class="mi-attendance-actions"><button type="button" data-attendance-select-all>Seleziona tutti</button><button type="button" data-attendance-clear-all>Deseleziona tutti</button></div><form data-attendance-bulk><div class="mi-attendance-table" role="region" aria-label="Registrazione presenze"><table><thead><tr><th scope="col">Seleziona</th><th scope="col">Partecipante</th><th scope="col">Presenza</th></tr></thead><tbody>'+attendancePeople.map(person=>'<tr><td><input type="checkbox" data-attendance-person="'+person.id+'" aria-label="Seleziona '+esc(person.name)+'"></td><td>'+esc(person.name)+'</td><td><select data-attendance-state aria-label="Presenza di '+esc(person.name)+'">'+[['UNRECORDED','Non rilevata'],['PRESENT','Presente'],['ABSENT','Assente']].map(([value,label])=>'<option value="'+value+'" '+((person.attendance?.state||person.attendance||'UNRECORDED')===value?'selected':'')+'>'+label+'</option>').join('')+'</select></td></tr>').join('')+'</tbody></table></div><button type="submit" class="mi-primary">Salva presenze selezionate</button></form>';listHost.after(attendancePanel);attendancePanel.querySelector('[data-attendance-select-all]').onclick=()=>attendancePanel.querySelectorAll('[data-attendance-person]').forEach(input=>input.checked=true);attendancePanel.querySelector('[data-attendance-clear-all]').onclick=()=>attendancePanel.querySelectorAll('[data-attendance-person]').forEach(input=>input.checked=false);attendancePanel.querySelector('form').onsubmit=async e=>{e.preventDefault();const changes=[...attendancePanel.querySelectorAll('[data-attendance-person]:checked')].map(input=>({id:Number(input.dataset.attendancePerson),attendance:input.closest('tr').querySelector('[data-attendance-state]').value}));if(!changes.length){say('Seleziona almeno una persona.');return;}busy=true;attendancePanel.querySelectorAll('button,input,select').forEach(control=>control.disabled=true);say('Salvataggio presenze…');try{const result=await request('attendance_bulk',{data:JSON.stringify(changes)});busy=false;dirty=false;dirtyForm=null;await summary();say(result.message);}catch(error){say('Presenze non salvate. '+error.message);}finally{busy=false;attendancePanel.querySelectorAll('button,input,select').forEach(control=>control.disabled=false);}};});}
         }
         search.closest('label').firstChild.textContent='Cerca nome ';serviceFilter.closest('label').firstChild.textContent='Servizio scelto';
         const searchButton=document.createElement('button');searchButton.type='button';searchButton.dataset.runQuery='';searchButton.textContent='Cerca';searchBar.append(searchButton);
@@ -498,8 +521,13 @@
         const searchStatus=document.createElement('span');searchStatus.setAttribute('role','status');searchStatus.setAttribute('aria-live','polite');filterSection.querySelector('header').append(searchStatus);
         if(features.rooms){
           const roomSection=document.createElement('details');roomSection.dataset.roomSection='';roomSection.innerHTML='<summary><span class="mi-room-section-icon" aria-hidden="true">🛏️</span><span class="mi-room-section-copy"><strong>Gestione camere</strong><small>Assegna o modifica le camere</small></span><span class="mi-room-section-chevron" aria-hidden="true">⌄</span></summary>';const attendancePanel=content.querySelector('[data-attendance-panel]');(attendancePanel||listHost).after(roomSection);
+          lazyPanel(roomSection,async()=>{
+            const result=await loadPanel('rooms');if(ticket!==generation)return;
+            roomPeople=result.people;admitted=roomPeople.filter(p=>['CONFIRMED','PENDING_PAYMENT'].includes(p.status));rooms=result.rooms||[];data.room_types=result.room_types||{};booking={version:result.rooms_version||''};
+            renderRoomPanels();
           const planner=content.querySelector('[data-room-planner]');if(planner){planner.querySelector('h3')?.remove();roomSection.append(planner);}
           for(const selector of ['[data-room-inventory]','[data-room-occupants]']){const panel=content.querySelector(selector);if(panel&&!panel.hidden)roomSection.append(panel);}
+          });
         }
         const servicePanels=[...content.querySelectorAll('[data-person-services],[data-order-services]')];
         if(servicePanels.length){const serviceSection=document.createElement('details');serviceSection.dataset.serviceSummary='';serviceSection.innerHTML='<summary>Riepilogo servizi richiesti</summary><p>Per modificare i servizi (colazione, assicurazione, pullman…), vai su <strong>Gestisci → Varia servizi e sistemazione</strong>; per l’alloggio, su <strong>Gestione camere → Cambia tipo di abitazione</strong>.</p>';content.querySelector('[data-participant-reports]').append(serviceSection);servicePanels.forEach(panel=>serviceSection.append(panel));}
@@ -598,7 +626,7 @@
               const input=document.createElement('input');input.type='checkbox';input.dataset.attendanceToggle=person.id;input.setAttribute('aria-label','Presente: '+person.name);
               input.checked=(person.attendance?.state||person.attendance)==='PRESENT';cell.append(input);
               input.onchange=async()=>{const previous=!input.checked,state=input.checked?'PRESENT':'ABSENT';input.disabled=true;
-                try{await request('attendance_bulk',{data:JSON.stringify([{id:person.id,attendance:state}])});person.attendance=state;const compact=(data.people||[]).find(p=>p.id===person.id);if(compact)compact.attendance=state;pageFingerprint='';say('Presenza salvata. Il foglio verrà aggiornato.');}
+                try{await request('attendance_bulk',{data:JSON.stringify([{id:person.id,attendance:state}])});person.attendance=state;const compact=(data.people||[]).find(p=>p.id===person.id);if(compact)compact.attendance=state;const bulk=content.querySelector('[data-attendance-person="'+person.id+'"]');if(bulk&&!bulk.checked)bulk.closest('tr').querySelector('[data-attendance-state]').value=state;pageFingerprint='';say('Presenza salvata. Il foglio verrà aggiornato.');}
                 catch(error){input.checked=previous;say('Presenza non salvata. '+error.message);}finally{input.disabled=false;}
               };
             });

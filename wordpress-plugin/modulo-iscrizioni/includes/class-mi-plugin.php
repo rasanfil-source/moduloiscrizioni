@@ -29,6 +29,7 @@ final class MI_Plugin {
 		MI_REST_Controller::boot();
 		MI_Shortcode::boot();
 		MI_Portal::boot();
+		MI_Portal_PWA::boot();
 		MI_Portal_Payments::boot();
 		MI_Portal_Management::boot();
 		MI_Sheet_Open::boot();

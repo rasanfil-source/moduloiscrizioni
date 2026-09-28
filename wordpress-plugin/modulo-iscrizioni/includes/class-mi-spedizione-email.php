@@ -150,16 +150,16 @@ final class MI_Spedizione_Email {
 		}
 	}
 
-	/**
-	 * Prova a svuotare subito la coda dopo il commit che ha accodato il messaggio.
-	 * L'outbox resta autorevole: il cron continua a recuperare timeout, errori e
-	 * richieste concorrenti. Il confronto atomico sullo stato impedisce duplicati.
-	 */
+	/** Accoda un worker immediato: il trasporto email non blocca la risposta pubblica. */
 	public static function tenta_spedizione_immediata() {
 		if ( self::$invio_immediato_in_corso ) return;
+		$abilitata = ( 'PROVA' === self::modalita() && self::destinatario_prova() ) || ( 'OPERATIVO' === self::modalita() && self::prova_verificata() );
+		if ( ! $abilitata ) return;
+		$now = time();
+		$next = wp_next_scheduled( 'mi_spedisci_email_in_coda' );
+		if ( ! $next ) wp_schedule_single_event( $now, 'mi_spedisci_email_in_coda' );
 		self::$invio_immediato_in_corso = true;
-		try { self::spedisci_coda(); } catch ( Throwable $error ) { /* La coda e il cron ritenteranno. */ }
-		self::$invio_immediato_in_corso = false;
+		if ( ! wp_doing_cron() ) add_action( 'shutdown', static function () { spawn_cron(); } );
 	}
 
 	public static function email_da_spedire( $status ) {

@@ -6,6 +6,8 @@ function remove_accents( $value ) { return strtr( $value, array( 'à'=>'a', 'è'
 require __DIR__ . '/../modulo-iscrizioni/includes/class-mi-management-list.php';
 if ( in_array( '--json', $argv, true ) ) {
 	$input = json_decode( stream_get_contents( STDIN ), true );
+	if ( 'overview' === ( $input['operation'] ?? '' ) ) { echo json_encode( MI_Management_List::overview( $input['summary'] ) ); exit; }
+	if ( 'panel' === ( $input['operation'] ?? '' ) ) { echo json_encode( MI_Management_List::panel( $input['summary'], $input['panel'] ) ); exit; }
 	echo json_encode( 'compact' === ( $input['operation'] ?? '' ) ? MI_Management_List::compact( $input['summary'] ) : MI_Management_List::page( $input['summary'], $input['context'] ?? array(), $input['offset'] ?? 0, $input['limit'] ?? 30 ) );
 	exit;
 }

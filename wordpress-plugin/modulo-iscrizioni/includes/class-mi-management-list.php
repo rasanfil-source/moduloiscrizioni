@@ -100,6 +100,65 @@ final class MI_Management_List {
 		return array_slice( self::sort_rows( array_merge( $retained, $incoming ), $context ), 0, max( 0, (int) $keep ) );
 	}
 
+	/** Aggregates only: payload size depends on schema/services, not participant count. */
+	public static function overview( array $summary ) {
+		$result = array_intersect_key( $summary, array_flip( array( 'ok', 'features', 'updated_at', 'registration_url', 'field_labels', 'payment_counts', 'room_types' ) ) );
+		$metrics = array( 'states' => array(), 'missing' => 0, 'unassigned' => 0, 'receivable' => 0, 'paid' => 0, 'admitted' => 0, 'offers' => 0, 'has_requests' => false, 'has_missing' => false, 'has_attendance' => false );
+		$order_services = array(); $services = array(); $filters = array();
+		$keys = array_fill_keys( array_keys( $summary['field_labels'] ?? array() ), true );
+		foreach ( $summary['items'] as $item ) {
+			$status = $item['status'];
+			$metrics['states'][$status] = ( $metrics['states'][$status] ?? 0 ) + (int) ( $item['participants'] ?? 0 );
+			if ( ! empty( $item['active'] ) ) foreach ( array( 'missing', 'unassigned' ) as $key ) $metrics[$key] += (int) ( $item[$key] ?? 0 );
+			if ( $item['collectible'] ?? in_array( $status, array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ) $metrics['receivable'] += (int) ( $item['balance'] ?? 0 );
+			$metrics['paid'] += (int) ( $item['paid'] ?? 0 );
+			$metrics['has_requests'] = $metrics['has_requests'] || '' !== trim( (string) ( $item['requests'] ?? '' ) );
+			$metrics['has_missing'] = $metrics['has_missing'] || (int) ( $item['missing'] ?? 0 ) > 0;
+			if ( 'WAITLIST_OFFERED' === $status ) $metrics['offers']++;
+			if ( in_array( $status, array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ) foreach ( $item['order_options'] ?? array() as $option ) {
+				$key = $option['code'] ?? $option['name'];
+				if ( ! isset( $order_services[$key] ) ) $order_services[$key] = array( 'code' => $key, 'name' => $option['name'] ?? $key, 'quantity' => 0, 'orders' => 0 );
+				$order_services[$key]['quantity'] += (float) ( $option['quantity'] ?? 0 );
+				if ( (float) ( $option['quantity'] ?? 0 ) > 0 ) $order_services[$key]['orders']++;
+			}
+		}
+		foreach ( $summary['people'] as $person ) {
+			foreach ( array_keys( $person['fields'] ?? array() ) as $key ) $keys[$key] = true;
+			$attendance = $person['attendance'] ?? '';
+			$metrics['has_attendance'] = $metrics['has_attendance'] || in_array( is_array( $attendance ) ? ( $attendance['state'] ?? '' ) : $attendance, array( 'PRESENT', 'ABSENT' ), true );
+			$admitted = in_array( $person['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true );
+			if ( $admitted ) $metrics['admitted']++;
+			foreach ( $person['options'] ?? array() as $option ) {
+				$key = $option['code'] ?? $option['name'];
+				$filters[$key] = array( 'code' => $key, 'name' => $option['name'] ?? $key );
+				if ( ! $admitted || 0 === strpos( (string) $key, 'alloggio-' ) ) continue;
+				// Name is relevant to category classification (e.g. insurance).
+				$group = wp_json_encode( array( $key, $option['name'] ?? $key ) );
+				if ( ! isset( $services[$group] ) ) $services[$group] = array( 'code' => $key, 'name' => $option['name'] ?? $key, 'quantity' => 0, 'people' => 0 );
+				$services[$group]['quantity'] += (float) ( $option['quantity'] ?? 0 );
+				if ( (float) ( $option['quantity'] ?? 0 ) > 0 ) $services[$group]['people']++;
+			}
+		}
+		$result['metrics'] = $metrics;
+		$result['service_totals'] = array_values( $services );
+		$result['order_service_totals'] = array_values( $order_services );
+		$result['service_filters'] = array_values( $filters );
+		$result['option_definitions'] = array_map( static function ( $option ) { return array_intersect_key( $option, array_flip( array( 'code', 'name', 'category' ) ) ); }, $summary['option_definitions'] ?? array() );
+		$result['field_keys'] = array_keys( $keys );
+		$result['server_paging'] = true;
+		$result['lazy_panels'] = true;
+		return $result;
+	}
+
+	/** Minimal panel-specific data, requested only after the user opens that panel. */
+	public static function panel( array $summary, $panel ) {
+		if ( 'offers' === $panel ) return array( 'offers' => array_values( array_map( static function ( $item ) { return array_intersect_key( $item, array_flip( array( 'name', 'code', 'offer_expires_at' ) ) ); }, array_filter( $summary['items'], static function ( $item ) { return 'WAITLIST_OFFERED' === $item['status']; } ) ) ) );
+		if ( 'attendance' === $panel ) return array( 'people' => array_values( array_map( static function ( $person ) { return array_intersect_key( $person, array_flip( array( 'id', 'name', 'attendance' ) ) ); }, array_filter( $summary['people'], static function ( $person ) { return in_array( $person['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ); } ) ) ) );
+		if ( 'rooms' !== $panel ) throw new InvalidArgumentException( 'Pannello non disponibile.' );
+		$people = array_values( array_filter( $summary['people'], static function ( $person ) { return ! in_array( $person['status'], array( 'CANCELLED', 'EXPIRED' ), true ); } ) );
+		return array( 'people' => array_map( static function ( $person ) { return array_intersect_key( $person, array_flip( array( 'id', 'number', 'code', 'name', 'status', 'room', 'options' ) ) ); }, $people ), 'rooms' => $summary['rooms'] ?? array(), 'room_types' => $summary['room_types'] ?? array(), 'rooms_version' => hash( 'sha256', wp_json_encode( $summary['rooms'] ?? array() ) ) );
+	}
+
 	/** Keep only the names and assignments needed by the inventory and service counters. */
 	public static function compact( $summary ) {
 		$keys = array_fill_keys( array_keys( $summary['field_labels'] ?? array() ), true );

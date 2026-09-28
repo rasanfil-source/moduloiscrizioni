@@ -835,7 +835,7 @@
           const successMessage = document.createElement('p');
           successMessage.className = 'mi-registration__success-message';
           if (confirmationEmail) {
-            successMessage.append('Abbiamo inviato l’email di conferma a ');
+            successMessage.append('Riceverai l’email di conferma a ');
             const emailAddress = document.createElement('strong');
             emailAddress.textContent = confirmationEmail;
             successMessage.append(emailAddress, '.');

@@ -119,7 +119,8 @@ final class MI_Management_Service {
 	}
 	public static function detail( $id ) {
 		try {
-			$booking = self::booking( self::registration( $id ) );
+			$saved_registration = self::registration( $id );
+			$booking = self::booking( $saved_registration );
 			$booking['bus_assignment_enabled'] = '1' === get_post_meta( $booking['event_id'], '_mi_bus_assignment_enabled', true );
 			$booking['room_types'] = self::room_types();
 			$economic = MI_Payment_Ledger::detail( $id );
@@ -131,11 +132,8 @@ final class MI_Management_Service {
 			$booking['individual'] = $economic['saldo']['individual'];
 			foreach ( array( 'deposit_plan', 'deposit_due', 'deposit_missing', 'deposit_covered' ) as $key ) $booking[$key] = $economic['saldo'][$key];
             global $wpdb;
-            $booking['adjustments'] = $wpdb->get_results( $wpdb->prepare( "SELECT detail_json,actor_label,created_at FROM {$wpdb->prefix}mi_registration_events WHERE registration_id=%d AND event_type='MANAGEMENT_adjust_due' ORDER BY id DESC", $id ), ARRAY_A );
-            self::check_database();
-            foreach ( $booking['adjustments'] as &$adjustment_row ) $adjustment_row['change'] = self::decode( $adjustment_row['detail_json'] );
-			$booking['can_adjust_due'] = MI_Portal_Payments::allowed() && in_array( self::registration( $id )['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
-			$saved_registration = self::registration( $id ); $saved_snapshot = self::decode( $saved_registration['snapshot_json'] );
+			$booking['can_adjust_due'] = MI_Portal_Payments::allowed() && in_array( $saved_registration['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
+			$saved_snapshot = self::decode( $saved_registration['snapshot_json'] );
 			$booking['is_free_event'] = 'ZERO' === strtoupper( (string) ( $saved_snapshot['event']['pricing_mode'] ?? get_post_meta( $booking['event_id'], '_mi_pricing_mode', true ) ) );
 			$booking['can_change_options'] = MI_Portal_Payments::allowed() && ! $booking['is_free_event'];
 			if ( $booking['is_free_event'] ) $booking['can_adjust_due'] = false;
@@ -145,11 +143,8 @@ final class MI_Management_Service {
 			$booking['attendance_enabled'] = $group_id && '1' === get_post_meta( $group_id, '_mi_annual_attendance_report', true );
             $booking['option_changes'] = $wpdb->get_results( $wpdb->prepare( "SELECT detail_json,actor_label,created_at FROM {$wpdb->prefix}mi_registration_events WHERE registration_id=%d AND event_type='MANAGEMENT_change_options' ORDER BY id DESC", $id ), ARRAY_A ); self::check_database();
             foreach ( $booking['option_changes'] as &$option_row ) $option_row['change'] = self::decode( $option_row['detail_json'] );
-			$booking['accommodation_changes'] = $wpdb->get_results( $wpdb->prepare( "SELECT detail_json,actor_label,created_at FROM {$wpdb->prefix}mi_registration_events WHERE registration_id=%d AND event_type='CHANGE_ACCOMMODATION' ORDER BY id DESC", $id ), ARRAY_A ); self::check_database();
-			foreach ( $booking['accommodation_changes'] as &$change_row ) $change_row['change'] = self::decode( $change_row['detail_json'] );
             $booking['event_title'] = self::event_title( $booking['event_id'] );
 			$booking['payment_url'] = ! $booking['is_free_event'] && MI_Portal_Payments::allowed() ? add_query_arg( array( 'mi_portal_view' => 'payments', 'mi_order' => $booking['order_code'] ), MI_Portal::url() ) : '';
-			if ( ! $booking['is_free_event'] && MI_Portal_Payments::allowed() ) { ob_start(); MI_Portal_Payments::render(); $booking['payment_html'] = ob_get_clean(); }
 			return $booking;
 		} catch ( Throwable $error ) { return new WP_Error( 'mi_management_read', $error->getMessage() ); }
 	}

@@ -1,5 +1,13 @@
 # Contratto della gestione web
 
+## PWA online — 27 settembre 2026
+
+La PWA aggiunge l'installazione del portale esistente. Browser e app condividono dati, login, permessi e servizi; consultazione e salvataggi richiedono Internet. Nessun service worker o archivio locale dei dati. L'installazione non promette accelerazioni dei salvataggi o della sincronizzazione Google.
+
+«App sul telefono» compare soltanto nella scheda Gruppi del portale e consente di scegliere il gruppo dell'icona. Ogni gruppo pubblicato ha un'identità di installazione distinta, con avvio sul portale privo di parametri personali o riferimenti a prenotazioni. La scelta grafica non filtra né autorizza l'accesso ai dati. Il gestore gruppo modifica soltanto l'icona dei gruppi assegnati; amministratori e gestori iscrizioni possono configurarle. I gestori di singoli eventi non ottengono tale permesso. Le icone sono PNG quadrati validati e ridimensionati a 192 e 512 pixel dal server; un caricamento fallito conserva l'icona precedente.
+
+Disattivare «App sul telefono» nel pannello WordPress rimuove manifest, promozione e metadati di installazione. L'indirizzo web continua a funzionare. Le installazioni già presenti sul telefono si rimuovono manualmente; non esiste disinstallazione remota. Anche dopo un cambio dell'icona il telefono può richiedere una reinstallazione.
+
 ## Revisione grafica del 24 settembre 2026 — vincolo di conservazione
 
 La revisione approvata riguarda esclusivamente presentazione, gerarchia visiva e disposizione responsive. Tutte le funzioni esistenti devono rimanere disponibili in ogni scheda: permessi, campi, validazioni, filtri, ordinamenti, rapporti, collegamenti, presenze, camere e operazioni economiche non vengono semplificati né sostituiti dai facsimile.
@@ -90,3 +98,11 @@ Senza evento specifico viene mostrata la ricerca Tutti gli eventi, con risultati
 
 ## Iscrizione e prenotazione — 3.26.110
 L’iscrizione è individuale; la prenotazione raccoglie gli iscritti insieme. Gestione iscrizioni comprende Tutti gli eventi e sostituisce l’accesso separato. La scheda mostra importi personali e conserva la persona dopo ogni salvataggio. Vedi tutta la prenotazione espone servizi, sistemazioni e importi individuali e complessivi. Crediti e debiti di persone diverse restano separati. Modifiche servizi hanno anteprima e aggiornano atomicamente le quote, preservando i versamenti. Nessuna attribuzione inventata per lo storico.
+
+## Caricamento operativo — 3.26.205
+
+Gli script di iscrizioni e pagamenti si caricano solo nelle schermate che li utilizzano. Camere e presenze costruiscono i controlli alla prima apertura del pannello. Sincronizza verifica il foglio su richiesta, senza interrogazioni automatiche durante la lettura del riepilogo. La ricerca saldo è subito disponibile senza ping preliminare. Dopo il salvataggio, la conferma indica che l’email sarà ricevuta: la spedizione usa la coda e il worker WordPress.
+
+## Trasferimento riepilogo — 3.26.206
+
+Il riepilogo invia contatori e servizi aggregati, metadati dei filtri e definizioni dei rapporti, senza partecipanti o prenotazioni completi. L’elenco resta paginato a 30 righe. Camere, presenze e posti proposti richiedono i soli dati necessari alla prima apertura; la riapertura conserva il pannello e le selezioni. Un errore consente di riprovare; risposte di un riepilogo precedente vengono ignorate. Aggiorna riepilogo rilegge anche i pannelli alla successiva apertura. Stampa ed Excel continuano a leggere tutte le pagine filtrate controllando la coerenza dei dati.

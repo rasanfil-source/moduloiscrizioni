@@ -143,7 +143,7 @@ let recalcNeeded   = false;
 let _lastSavedHash = null;
 let _calcInProgress= false;
 let _calcButtonsHideTimer = null;
-let gasWarmupInProgress = false;
+
 
 const lookupTimers      = {};
 const lookupControllers = {};
@@ -211,60 +211,6 @@ function mountCalcBtn() {
 
 mountCalcBtn();
 window.addEventListener('resize', mountCalcBtn);
-
-function setSearchButtonsDisabled(disabled) {
-  document.querySelectorAll('.btn-search-person').forEach(b => { b.disabled = !!disabled; });
-}
-
-
-// ─── WARM-UP GAS ─────────────────────────────────────────────────────────────
-async function warmupGas() {
-  const badge = document.getElementById('warmupBadge');
-  if (badge) {
-    badge.style.display = 'block';
-    badge.textContent = '⏳ Connessione in corso…';
-    badge.classList.remove('ready');
-  }
-  gasWarmupInProgress = true;
-  setSearchButtonsDisabled(true);
-
-  const MAX_ATTEMPTS = 3;
-  const RETRY_DELAY_MS = 4000;
-  let success = false;
-
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      await gasPost({ action: '__ping__' });
-      success = true;
-      break;
-    } catch (_) {
-      if (attempt < MAX_ATTEMPTS) {
-        if (badge) badge.textContent = `⏳ Tentativo ${attempt + 1}/${MAX_ATTEMPTS}…`;
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
-      }
-    }
-  }
-
-  if (badge) {
-    if (success) {
-      badge.textContent = '✅ Siamo pronti!';
-      badge.classList.add('ready');
-      setTimeout(() => {
-        badge.style.display = 'none';
-        if (desktopShortcut) desktopShortcut.style.display = '';
-      }, 2500);
-    } else {
-      badge.style.display = 'none';
-      if (desktopShortcut) desktopShortcut.style.display = '';
-    }
-  } else if (desktopShortcut) {
-    desktopShortcut.style.display = '';
-  }
-
-  gasWarmupInProgress = false;
-  setSearchButtonsDisabled(false);
-}
-
 
 // ─── STEPPER ─────────────────────────────────────────────────────────────────
 function updateStepper() {
@@ -676,7 +622,7 @@ function addPersonCard() {
   bindLookupEvents(card, index);
   container.appendChild(card);
 
-  if (gasWarmupInProgress) setSearchButtonsDisabled(true);
+
 
   persone.push({
     index, nome: '', cognome: '', row: null,
@@ -960,4 +906,4 @@ document.getElementById('ibanCloseBtn')?.addEventListener('click', closeModal);
 document.addEventListener('keydown', onGlobalEnterShortcut);
 
 // Warm-up dopo che la prima card è stata creata e i bottoni esistono nel DOM
-warmupGas();
+if (desktopShortcut) desktopShortcut.style.display = '';

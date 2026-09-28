@@ -21,8 +21,8 @@
   },
   "portal-management.js": {
     "file": "min/portal-management.js",
-    "source": "71ba931ee5000ddcb03c4c5fe73a3785f957166eea24d7e82f6c2bd0e251c4ad",
-    "hash": "5ba88b96d248432d4d1cf0edce4c3d6e0541fb7e90b58d3f3a6f9e7c61f0ed59"
+    "source": "b3fcfb548fbe4b0b045bbac82871c8541d0a94a944063f8d6de255fa465767cd",
+    "hash": "35062f434484877fa55dab561af0af43e5872f5520ebc38920038fbeb0a31ee7"
   },
   "portal-payments.css": {
     "file": "min/portal-payments.css",
@@ -34,10 +34,15 @@
     "source": "bfe8e4416fe44c7e6cc64f5f02cd6916e3dae4420f9896e30d2df35c0186d9f3",
     "hash": "8af1d9f268963adf831ebca8c7a52583d172f6f396b6532e524de2a44b5b3f85"
   },
+  "portal-pwa.js": {
+    "file": "min/portal-pwa.js",
+    "source": "29a6628ad1f4856382c2addbd325765ca650c489fcddee4d44bba99e18511cd4",
+    "hash": "816109ce2659b37badfeb173c921966114de86e6c0506a25d961408ec392cb88"
+  },
   "portal.css": {
     "file": "min/portal.css",
-    "source": "a8c4ae2af6c2cc973b752b27e48676bfd1f9126085a5c1ca15d9b2768c1c9f15",
-    "hash": "04470e6c22d63aa9d9a8612fb03b4038777d50cc55c26d8ba98a6364cc303d85"
+    "source": "6125cb99a67e3f4207d466424677aaf7da183bf2a7f20a0e0a0b8c814d999454",
+    "hash": "f06a46d80ebd484f70318aabd023b275b8f4643e16524db4fd30463d333096e1"
   },
   "portal.js": {
     "file": "min/portal.js",
@@ -51,8 +56,8 @@
   },
   "public-balance.js": {
     "file": "min/public-balance.js",
-    "source": "bb21f1843d2986365184c6ce006bd94d06ca2638601bb9a0486accc0b5302634",
-    "hash": "901fc1f36a6171dc9137ac60c38f8dd1800d6e0deaa49c22229efb54b52ec9ea"
+    "source": "daf04e0954b4706517f7b6e375c8893e0a8f76c505a2e4c62a9c11e8dbb1497e",
+    "hash": "22958d7979bb27a38717ad85220111d5eabe64703caf9988ec426e14f673deca"
   },
   "public.css": {
     "file": "min/public.css",
@@ -61,8 +66,8 @@
   },
   "public.js": {
     "file": "min/public.js",
-    "source": "2c50a56b4d5bf761a195187299efc86f4f7e51cacbc468b2af8bbb0f1ca129e4",
-    "hash": "8eb181804dd0a7ee06d51f0bf09b62a11409f392384361aa93c7bc6d1c8a2242"
+    "source": "92ddfbd5f1e6667c8f2a2989def1674a6ad0971dbf0e3007a17fc124ada813e4",
+    "hash": "9709336e715b313d503327f07ba061090011241f610f7cf704f315148ec1e86b"
   },
   "qrcode-generator-2.0.4.js": {
     "file": "min/qrcode-generator-2.0.4.js",

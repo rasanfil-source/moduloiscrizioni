@@ -37,15 +37,18 @@ final class MI_Portal_Management {
 			if ( is_wp_error( $result ) ) wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
 			wp_send_json_success( $result );
 		}
-		if ( in_array( $operation, array( 'summary', 'list_page' ), true ) ) {
+		if ( in_array( $operation, array( 'summary', 'list_page', 'summary_panel' ), true ) ) {
+			$panel = sanitize_key( wp_unslash( $_POST['panel'] ?? '' ) );
+			if ( 'summary_panel' === $operation && ! in_array( $panel, array( 'rooms', 'attendance', 'offers' ), true ) ) wp_send_json_error( array( 'message' => 'Pannello non disponibile.' ), 400 );
 			$context = json_decode( wp_unslash( $_POST['context'] ?? '{}' ), true );
 			$result = 'list_page' === $operation ? MI_Management_Service::page( $event_id, $context, absint( $_POST['offset'] ?? 0 ), absint( $_POST['limit'] ?? 30 ) ) : null;
 			if ( null === $result ) $result = MI_Management_Service::summary( $event_id );
 			if ( ! is_wp_error( $result ) && isset( $result['rooms'] ) ) $result['rooms_version'] = hash( 'sha256', wp_json_encode( $result['rooms'] ) );
 			if ( ! is_wp_error( $result ) ) {
 				if ( 'list_page' === $operation && ! isset( $result['rows'] ) ) $result = MI_Management_List::page( $result, $context, absint( $_POST['offset'] ?? 0 ), absint( $_POST['limit'] ?? 30 ) );
-				else {
-					$result = MI_Management_List::compact( $result );
+				elseif ( 'summary_panel' === $operation ) $result = MI_Management_List::panel( $result, $panel );
+				elseif ( 'summary' === $operation ) {
+					$result = MI_Management_List::overview( $result );
 					$result['attendance_availability'] = MI_Management_Service::attendance_availability( $event_id );
 				}
 			}

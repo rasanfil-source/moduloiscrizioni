@@ -32,10 +32,13 @@ rooms=[{code:'DS1',name:'Camera doppia con accesso facilitato',capacity:2,occupi
   });
   await page.goto('http://127.0.0.1:'+server.address().port);await page.locator('[data-more]').waitFor();
   assert.equal(await page.locator('.mi-summary-card').count(),4);
+  assert.equal(await page.locator('[data-room-planner]').count(),0);
+  assert.equal(await page.locator('[data-attendance-person]').count(),0);
   assert.match(await page.locator('.mi-row-attention').first().innerText(),/Cellulare/);
   await page.screenshot({path:'.tmp/evento-completo-desktop.png'});
   await page.locator('[data-room-section]>summary').click();
   await page.getByLabel('Tipo di sistemazione',{exact:true}).selectOption('alloggio-doppia-separati');
+  assert.equal(await page.locator('[data-room-planner]').count(),1);
   await page.locator('[data-room-section]').screenshot({path:'.tmp/evento-camere-desktop.png'});
   await page.locator('[data-attendance-panel]>summary').click();
   await page.locator('[data-attendance-panel]').scrollIntoViewIfNeeded();
