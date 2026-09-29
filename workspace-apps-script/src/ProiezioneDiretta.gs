@@ -67,7 +67,15 @@ function apriFoglioEventoFirmato_(payload, create, title) {
   let requested=String(explicit||properties.getProperty(registryKey)||'');
   if(!/^[1-9][0-9]*$/.test(eventId)|| (requested && !/^[A-Za-z0-9_-]{20,}$/.test(requested)))throw new Error('INVALID_EVENT_SHEET');
   let book,created=false;
-  if(requested){try{const file=DriveApp.getFileById(requested);if(file.isTrashed())throw new Error('EVENT_SHEET_MISSING');book=SpreadsheetApp.openById(requested);}catch(error){if(explicit||!create)throw error;properties.deleteProperty(registryKey);requested='';}}
+  if(requested){
+    // A service/permission error is not proof that the registered file is gone.
+    // Preserve the durable reference so a retry cannot create an orphan copy.
+    const file=DriveApp.getFileById(requested);
+    if(file.isTrashed()){
+      if(explicit||!create)throw new Error('EVENT_SHEET_MISSING');
+      properties.deleteProperty(registryKey);requested='';
+    }else book=SpreadsheetApp.openById(requested);
+  }
   if(!book){if(!create)throw new Error('EVENT_SHEET_MISSING');book=SpreadsheetApp.create('Evento '+eventId+' - '+String(title||eventId).replace(/[\\/:*?"<>|#%{}]/g,' ').replace(/\s+/g,' ').trim().slice(0,140));properties.setProperty(registryKey,book.getId());spostaFoglioAccantoAlDatabase_(book.getId());created=true;}
   let sheet=book.getSheetByName('Dati operativi');
   if(!sheet){sheet=book.getSheets()[0];sheet.setName('Dati operativi');}

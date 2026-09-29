@@ -30,6 +30,10 @@ jobs:
           node tools/asset-build/verify.cjs
       - name: Verify public balance workflow and actual payments
         run: |
+          php wordpress-plugin/tests/option-key-duplicates.php
+          php wordpress-plugin/tests/public-balance-deadline-receipt.php
+          php wordpress-plugin/tests/management-deposit-totals.php
+          php wordpress-plugin/tests/email-queue-fairness.php
           php wordpress-plugin/tests/public-balance.php
           php wordpress-plugin/tests/public-balance-model.php
           php wordpress-plugin/tests/operational-profile.php

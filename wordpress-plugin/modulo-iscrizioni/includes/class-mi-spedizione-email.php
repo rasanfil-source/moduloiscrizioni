@@ -407,13 +407,30 @@ final class MI_Spedizione_Email {
 		// La modalità selezionata decide il canale: un invio di prova non può
 		// raggiungere la casella di test dopo il passaggio in Operativo.
 		$stati = 'OPERATIVO' === $modalita ? array( "'PENDING'" ) : array( "'TEST_PENDING'" );
-		$righe = $wpdb->get_results( "SELECT id, registration_id, recipient, template_type, payload_json, attempts, status FROM {$table} WHERE status IN (" . implode( ',', $stati ) . ") AND attempts < 5 ORDER BY id ASC LIMIT 10", ARRAY_A );
+		// Scan past blocked events without consuming the ten-delivery budget.
+		// Persist progress across bounded scans so a large paused deletion cannot
+		// indefinitely starve later events. The next empty page wraps to the start.
+		$cursor_key = 'mi_email_scan_cursor_' . strtolower( $modalita );
+		$cursor = absint( get_option( $cursor_key, 0 ) ); $processed = 0; $blocked_events = array();
+		for ( $batch = 0; $batch < 10 && $processed < 10; $batch++ ) {
+		$after = $cursor ? $wpdb->prepare( ' AND id > %d', $cursor ) : '';
+		$righe = $wpdb->get_results( "SELECT id, registration_id, recipient, template_type, payload_json, attempts, status FROM {$table} WHERE status IN (" . implode( ',', $stati ) . ") AND attempts < 5{$after} ORDER BY id ASC LIMIT 10", ARRAY_A );
+		if ( $wpdb->last_error ) break;
+		if ( ! $righe ) { $cursor = 0; break; }
 		foreach ( $righe as $riga ) {
+			if ( $processed >= 10 ) break;
+			$cursor = absint( $riga['id'] );
 			$event_payload = json_decode( (string) $riga['payload_json'], true );
 			$event_id = ! empty( $riga['registration_id'] ) ? MI_Event_Deletion::registration_event( $riga['registration_id'] ) : absint( $event_payload['event_id'] ?? 0 );
+			if ( isset( $blocked_events[$event_id] ) ) continue;
 			if ( in_array( $riga['template_type'], array( 'EVENT_DELETED_NOTICE', 'EVENT_DELETED_SECRETARIAT' ), true ) ) {
 				if ( ! $event_id || 'done' !== ( MI_Event_Deletion::job( $event_id )['stage'] ?? '' ) ) continue;
-			} elseif ( ! $event_id || is_wp_error( MI_Event_Deletion::enter( $event_id ) ) ) continue;
+			} elseif ( ! $event_id || is_wp_error( MI_Event_Deletion::enter( $event_id ) ) ) {
+				$blocked_events[$event_id] = true;
+				MI_Event_Deletion::release( $event_id );
+				continue;
+			}
+			$processed++;
 			try {
 			$id = absint( $riga['id'] );
 			$invio_prova = 'TEST_PENDING' === $riga['status'];
@@ -465,6 +482,8 @@ final class MI_Spedizione_Email {
 			// la cancellazione; gli eventi già elaborati non restano bloccati.
 			} finally { MI_Event_Deletion::release( $event_id ); }
 		}
+		}
+		update_option( $cursor_key, $cursor, false );
 		if ( (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status IN ('PENDING','TEST_PENDING') AND attempts < 5" ) > 0 ) {
 			self::pianifica_spedizione();
 		}

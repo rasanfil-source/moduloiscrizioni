@@ -2546,7 +2546,7 @@ test('il riepilogo servizi indica dove effettuare le variazioni', async () => {
 test('Sincronizza resta disponibile nel riepilogo anche per i fogli in sola lettura', async () => {
   const portal = await read('includes/class-mi-portal-management.php');
   const script = await read('assets/portal-management.js');
-  assert.match(portal, /data-sheet-sync hidden>Sincronizza<\/button>/);
+  assert.match(portal, /data-sheet-sync hidden>Importa modifiche dal foglio<\/button>/);
   assert.match(script, /sheetSyncButton\.addEventListener\('click',syncSheet\)/);
   assert.match(script, /sheetSyncButton\.hidden=!sheetButton\|\|sheetButton\.hidden/);
   assert.match(script, /updateSheetSyncVisibility\(ticket,event\)/);

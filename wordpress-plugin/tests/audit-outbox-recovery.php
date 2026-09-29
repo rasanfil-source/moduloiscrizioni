@@ -26,6 +26,7 @@ function get_option($key, $default = null) {
     ][$key] ?? $default;
 }
 function wp_next_scheduled(...$args) { return false; }
+function update_option(...$args) { return true; }
 function wp_schedule_single_event(...$args) { $GLOBALS['scheduled']++; }
 function current_time(...$args) { return gmdate('Y-m-d H:i:s'); }
 class MI_Event_Deletion {

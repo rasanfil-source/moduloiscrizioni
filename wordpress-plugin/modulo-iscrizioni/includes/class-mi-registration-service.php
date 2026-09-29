@@ -1492,8 +1492,11 @@ final class MI_Registration_Service {
 		}
 		$result = array();
 		$choice_groups = array();
+		$seen_codes = array();
 		foreach ( (array) $raw as $raw_code => $raw_quantity ) {
 			$code = sanitize_key( $raw_code );
+			if ( isset( $seen_codes[$code] ) ) return new WP_Error( 'mi_option_duplicate', 'Servizio ripetuto nella richiesta.', array( 'status' => 400 ) );
+			$seen_codes[$code] = true;
 			if ( ! isset( $allowed[ $code ] ) ) {
 				return new WP_Error( 'mi_option_invalid', 'Opzione non valida.', array( 'status' => 400 ) );
 			}

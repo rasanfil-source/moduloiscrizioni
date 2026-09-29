@@ -576,6 +576,7 @@
   [data-mi-portal-scope="reserved"] .mi-management .mi-event-toolbar :is(button,a) { flex:0 0 auto; width:auto; min-height:44px; height:44px; margin:0; }
   [data-mi-portal-scope="reserved"] .mi-management .mi-event-toolbar [data-refresh] { width:44px; padding:0; }
   [data-mi-portal-scope="reserved"] .mi-management .mi-event-toolbar .mi-refresh-label { display:none; }
+  .mi-management .mi-event-toolbar [data-sheet-sync] { display:none!important; }
   [data-mi-portal-scope="reserved"] .mi-management .mi-event-toolbar .mi-refresh-icon { display:inline; font-size:1.45rem; line-height:1; }
   [data-mi-portal-scope="reserved"] .mi-management .mi-management-search { display:grid; grid-template-columns:minmax(0,1fr) auto; width:100%; }
   [data-mi-portal-scope="reserved"] .mi-management .mi-management-search label { width:auto; min-width:0; }

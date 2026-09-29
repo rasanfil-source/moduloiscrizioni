@@ -1,5 +1,9 @@
 # Modulo iscrizioni multi-evento
 
+Versione **[3.26.209](docs/rilascio-3.26.209.md)**: corretti gli otto difetti dell’audit del 29 settembre su sincronizzazione Google, riepiloghi economici, rettifiche, coda email, scadenze e quantità dei servizi. Richiede aggiornamento WordPress e Apps Script. Pacchetti locali; installazione da completare.
+
+Versione **[3.26.208](docs/rilascio-3.26.208.md)**: su desktop il comando «Importa modifiche dal foglio» compare a destra di «Apri»; su mobile è nascosto. Apps Script invariato rispetto alla 3.26.207.
+
 Versione **[3.26.207](docs/rilascio-3.26.207.md)**: filtri dei pagamenti per giorno locale, caparre incoerenti indicate come da verificare e protocollo 2 per le firme Apps Script → WordPress. Aggiornare prima WordPress e poi Apps Script.
 
 Progetto di un modulo WordPress riutilizzabile per iscrizioni a eventi, configurazione dei dati richiesti e gestione economica facoltativa tramite Google Apps Script e Google Sheets.

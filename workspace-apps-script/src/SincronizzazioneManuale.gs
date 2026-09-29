@@ -86,11 +86,23 @@ function modificheCorrentiFoglio_(sheet) {
   const columns = mappaColonneEvento_(sheet);
   if (!columns._ordine || !columns._numero) return {changes:[],errors:['Identificativi del foglio mancanti.'],initialized:true};
   const rows = sheet.getLastRow() > 1 ? sheet.getRange(2,1,sheet.getLastRow()-1,sheet.getLastColumn()).getDisplayValues() : [];
-  const current = rows.filter(r => r.some(v=>String(v)!=='')).map(row => {
+  let raw = null;
+  const current = rows.map((row,index) => {
+    if (!row.some(v=>String(v)!=='')) return null;
     const values = {};
     Object.keys(columns).filter(key=>!['_ordine','_numero'].includes(key)).forEach(key=>values[key]=row[columns[key]-1]);
+    // Older baselines recorded an unformatted decimal before setting the money
+    // format. Accept only the same underlying number, never a changed amount.
+    const original=base[JSON.stringify([String(row[columns._ordine-1]),Number(row[columns._numero-1])])];
+    if(original)['total','paid','balance','paid_cash','paid_transfer','paid_card'].forEach(key=>{
+      const before=String(original[key]??'');
+      if(!Object.prototype.hasOwnProperty.call(values,key)||before===values[key]||! /^-?\d+(?:[.,]\d{1,2})?$/.test(before))return;
+      if(!raw)raw=sheet.getRange(2,1,rows.length,sheet.getLastColumn()).getValues();
+      const value=raw[index][columns[key]-1];
+      if(typeof value==='number'&&Number.isFinite(value)&&Number(before.replace(',','.'))===value)values[key]=before;
+    });
     return {order:String(row[columns._ordine-1]),number:Number(row[columns._numero-1]),values:values};
-  });
+  }).filter(Boolean);
   return Object.assign({initialized:true},confrontaModificheFoglio_(base,current));
 }
 function salvaBaseFoglio_(sheet) {

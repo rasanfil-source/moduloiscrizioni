@@ -242,20 +242,28 @@ final class MI_Public_Balance {
 				if ( 'ALL' === ( $snapshot['event']['participant_extra_scope'] ?? 'ONE' ) || (int) ( $active_people[0]['id'] ?? 0 ) === $id ) foreach ( $snapshot['event']['participant_fields'] ?? array() as $field ) {
 					if ( ! empty( $field['required'] ) && '' === trim( (string) ( $fields[$field['key']] ?? '' ) ) ) $missing[] = $field['label'] ?? $field['key'];
 				}
-				$deadline = (string) ( $r['payment_deadline_at'] ?? '' );
-				if ( $deadline && function_exists( 'get_date_from_gmt' ) ) $deadline = get_date_from_gmt( $deadline, 'd/m/Y H:i' );
-				$receipt['people'][] = array( 'row' => $id, 'registration_id' => $rid, 'name' => $view['cognome'] . ' ' . $view['nome'], 'lines' => $lines, 'total' => $sum, 'paid' => $view['paid'], 'deposit' => $view['deposit'], 'missing' => $missing, 'deadline' => $deadline );
+				$receipt['people'][] = array( 'row' => $id, 'registration_id' => $rid, 'name' => $view['cognome'] . ' ' . $view['nome'], 'lines' => $lines, 'total' => $sum, 'paid' => $view['paid'], 'deposit' => $view['deposit'], 'missing' => $missing, 'deadline' => '' );
 				$receipt['total'] += $sum; $receipt['paid'] += $view['paid'];
 			}
-			$projected_by_registration = array();
+			$projected_by_registration = array(); $registration_updates = array();
 			foreach ( $bundles as $rid => $bundle ) {
 				$new_total = (int) $bundle['registration']['total_cents'] + (int) ( $deltas[$rid] ?? 0 );
+				if ( $new_total < 0 ) throw new InvalidArgumentException( 'La rettifica presente richiede una verifica della segreteria.' );
 				$projected = MI_Payment_People::projected_deposits( $bundle['registration'], $bundle['individual'], $person_deltas[$rid] ?? array(), $new_total );
 				if ( null === $projected && 'DEPOSIT_BALANCE' === $bundle['registration']['economic_mode'] ) $projected = MI_Payment_People::retained_deposits( $bundle['individual']['people'], $person_deltas[$rid] ?? array() );
 				$projected_by_registration[$rid] = $projected ?: array();
+				$r = $bundle['registration'];
+				$initial = 'FULL_PAYMENT' === $r['economic_mode'] ? $new_total : array_sum( $projected ?: array() );
+				$covered = MI_Payment_People::covered( $bundle['individual'], $r['economic_mode'], $person_deltas[$rid] ?? array(), $projected ?: array() );
+				if ( null === $covered ) $covered = $bundle['paid'] >= $initial;
+				$economic_change = (bool) array_filter( $person_deltas[$rid] ?? array() ) || $initial !== (int) $r['initial_due_cents'];
+				$registration_updates[$rid] = array( 'total_cents' => $new_total, 'initial_due_cents' => $initial, 'balance_cents' => $new_total - $initial ) + MI_Payment_People::payment_deadline_changes( $r, $covered, $economic_change );
 			}
 			foreach ( array( 'deposit', 'depositPaid', 'depositDue', 'saldoDue', 'balance' ) as $field ) $receipt[$field] = 0;
 			foreach ( $receipt['people'] as &$receipt_person ) {
+				$rid = (int) $receipt_person['registration_id'];
+				$deadline = (string) ( $registration_updates[$rid]['payment_deadline_at'] ?? $bundles[$rid]['registration']['payment_deadline_at'] ?? '' );
+				$receipt_person['deadline'] = $deadline && function_exists( 'get_date_from_gmt' ) ? get_date_from_gmt( $deadline, 'd/m/Y H:i' ) : $deadline;
 				$deposit = (int) ( $projected_by_registration[(int) $receipt_person['registration_id']][(int) $receipt_person['row']] ?? $receipt_person['deposit'] );
 				$receipt_person['deposit'] = $deposit;
 				foreach ( self::payment_position( $receipt_person['total'], $deposit, $receipt_person['paid'] ) as $field => $amount ) $receipt[$field] += $amount;
@@ -271,19 +279,19 @@ final class MI_Public_Balance {
 				$receipt['email'] = $email;
 			}
 			$receipt['causale'] = 'Saldo ' . get_the_title( $event ) . ' — ' . implode( ', ', array_column( $receipt['people'], 'name' ) );
-			$receipt['fingerprint'] = hash( 'sha256', wp_json_encode( $receipt ) );
+			// A reopened deadline is relative to confirmation time. Do not invalidate
+			// the financial preview merely because a second elapsed before confirming.
+			// Keep the stored deadline in the fingerprint to detect staff changes.
+			$fingerprint_receipt = $receipt;
+			foreach ( $fingerprint_receipt['people'] as &$fingerprint_person ) $fingerprint_person['deadline'] = (string) ( $bundles[(int) $fingerprint_person['registration_id']]['registration']['payment_deadline_at'] ?? '' );
+			unset( $fingerprint_person );
+			$receipt['fingerprint'] = hash( 'sha256', wp_json_encode( $fingerprint_receipt ) );
 			if ( $preview ) { $wpdb->query( 'ROLLBACK' ); return self::public_receipt( $receipt ); }
 			if ( ! hash_equals( $receipt['fingerprint'], (string) ( $data['fingerprint'] ?? '' ) ) ) throw new InvalidArgumentException( 'Il riepilogo è cambiato. Controlla di nuovo gli importi prima di confermare.' );
 			foreach ( $changes as $id => $change ) if ( $change['before'] !== $change['after'] && false === $wpdb->update( $wpdb->prefix . 'mi_participants', array( 'options_json' => wp_json_encode( $change['after'] ) ), array( 'id' => $id ) ) ) throw new RuntimeException( 'Servizi non salvati.' );
 			foreach ( $bundles as $rid => $b ) {
-				$r = $b['registration']; $total = (int) $r['total_cents'] + $deltas[$rid]; if ( $total < 0 ) throw new InvalidArgumentException( 'La rettifica presente richiede una verifica della segreteria.' );
-				$deposits = MI_Payment_People::projected_deposits( $r, $b['individual'], $person_deltas[$rid] ?? array(), $total );
-				if ( null === $deposits && 'DEPOSIT_BALANCE' === $r['economic_mode'] ) $deposits = MI_Payment_People::retained_deposits( $b['individual']['people'], $person_deltas[$rid] ?? array() );
-				$initial = 'FULL_PAYMENT' === $r['economic_mode'] ? $total : array_sum( $deposits ?: array() );
-				$covered = MI_Payment_People::covered( $b['individual'], $r['economic_mode'], $person_deltas[$rid] ?? array(), $deposits ?: array() );
-				if ( null === $covered ) $covered = $b['paid'] >= $initial;
-				$economic_change = (bool) array_filter( $person_deltas[$rid] ?? array() ) || $initial !== (int) $r['initial_due_cents'];
-				$registration_changes = array( 'total_cents' => $total, 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial ) + MI_Payment_People::payment_deadline_changes( $r, $covered, $economic_change );
+				$deposits = $projected_by_registration[$rid];
+				$registration_changes = $registration_updates[$rid];
 				if ( false === $wpdb->update( $wpdb->prefix . 'mi_registrations', $registration_changes, array( 'id' => $rid ) ) ) throw new RuntimeException( 'Importi non salvati.' );
 				foreach ( $deposits ?: array() as $participant_id => $deposit_due ) if ( false === $wpdb->update( $wpdb->prefix . 'mi_participants', array( 'deposit_due_cents' => (int) $deposit_due ), array( 'id' => (int) $participant_id, 'registration_id' => $rid ), array( '%d' ), array( '%d', '%d' ) ) ) throw new RuntimeException( 'Caparre individuali non salvate.' );
 				MI_Registration_Service::mark_workspace_changed_locked( $rid );
