@@ -42,6 +42,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Sintassi PHP non valida: $file" }
     }
     $phpTests = @(
+        'payment-date-filter.php', 'deposit-consistency.php', 'workspace-command-envelope.php',
         'audit-confirmed-admin.php', 'public-balance-audit-regressions.php', 'admin-economics.php', 'email-group-identity.php',
         'portal-payment-report.php', 'communication-confirmation.php', 'portal-pwa.php', 'portal-loading.php', 'email-background.php', 'management-overview.php', 'management-overview-access.php',
         'public-balance.php', 'public-balance-model.php', 'operational-profile.php', 'workspace-deployment-preflight.php',

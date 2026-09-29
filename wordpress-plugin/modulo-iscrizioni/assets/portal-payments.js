@@ -104,7 +104,7 @@ function init(root) {
   }
   function showDeposit(r) {
       let deposit=el('[data-deposit-summary]');if(!deposit){deposit=document.createElement('p');deposit.dataset.depositSummary='1';el('[data-balance]').closest('.mi-payment-summary').append(deposit);}
-      deposit.hidden=!r.deposit_plan;deposit.textContent=r.deposit_plan?'Caparra prevista '+money(r.deposit_due)+' · Ancora da coprire '+money(r.deposit_missing)+(r.deposit_covered&&r.residuo>0?' · Caparra coperta, saldo da completare':r.deposit_due===0?' · Nessuna caparra richiesta':''):'';
+      deposit.hidden=!r.deposit_plan;deposit.textContent=r.deposit_plan?(r.deposit_due===null?'Caparre individuali da verificare':'Caparra prevista '+money(r.deposit_due)+' · Ancora da coprire '+money(r.deposit_missing)+(r.deposit_covered&&r.residuo>0?' · Caparra coperta, saldo da completare':r.deposit_due===0?' · Nessuna caparra richiesta':'')):'';
   }
   function showHistory(movements) {
     const host=el('[data-payment-history]');host.replaceChildren();

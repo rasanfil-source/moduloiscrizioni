@@ -47,7 +47,7 @@ final class MI_REST_Controller {
 		$verified = self::verify_workspace_envelope( $envelope );
 		if ( is_wp_error( $verified ) ) return $verified;
 		$action = strtoupper( sanitize_key( (string) ( $envelope['action'] ?? '' ) ) );
-		$payload = (array) ( $envelope['payload'] ?? array() );
+		$payload = $verified;
 		if ( 'GET_EVENT_PROJECTION' === $action ) return self::event_projection_for_workspace( $payload );
 		if ( 'CREATE_EVENT_DRAFT' === $action ) return self::create_event_draft_from_workspace( $payload );
 		if ( 'CREATE_GROUP' === $action ) return self::create_group_from_workspace( $payload );
@@ -141,9 +141,22 @@ final class MI_REST_Controller {
 		$action = strtoupper( sanitize_key( (string) ( $envelope['action'] ?? '' ) ) );
 		$signature = (string) ( $envelope['signature'] ?? '' );
 		$payload = (array) ( $envelope['payload'] ?? array() );
+		$protocol = $envelope['protocollo'] ?? 1;
+		if ( ! in_array( $protocol, array( 1, 2 ), true ) ) return new WP_Error( 'mi_workspace_protocol_invalid', 'Protocollo Workspace non valido.', array( 'status' => 400 ) );
+		$content = MI_Workspace_Client::stable_json( $payload );
+		if ( 2 === $protocol ) {
+			$raw = $envelope['payload_firmato'] ?? null;
+			$hash = $envelope['payload_hash'] ?? null;
+			if ( ! is_string( $raw ) || strlen( $raw ) > 2000000 || ! is_string( $hash ) || ! preg_match( '/^[a-f0-9]{64}$/D', $hash ) || ! hash_equals( hash( 'sha256', $raw ), $hash ) ) return new WP_Error( 'mi_workspace_payload_invalid', 'Contenuto Workspace non valido.', array( 'status' => 401 ) );
+			// The command consumes only the authenticated JSON, never a second payload.
+			$decoded = json_decode( $raw );
+			if ( JSON_ERROR_NONE !== json_last_error() || ! is_object( $decoded ) ) return new WP_Error( 'mi_workspace_payload_invalid', 'Contenuto Workspace non valido.', array( 'status' => 400 ) );
+			$payload = json_decode( $raw, true );
+			$content = $hash;
+		}
 		$secret = defined( 'MI_WORKSPACE_SHARED_SECRET' ) ? (string) MI_WORKSPACE_SHARED_SECRET : (string) get_option( 'mi_workspace_shared_secret', '' );
 		if ( strlen( $secret ) < 32 || strlen( $nonce ) < 32 || abs( (int) floor( microtime( true ) * 1000 ) - $timestamp ) > 120000 ) return new WP_Error( 'mi_workspace_signature_invalid', 'Firma Workspace non valida.', array( 'status' => 401 ) );
-		$message = $timestamp . "\n" . $nonce . "\n" . $action . "\n" . MI_Workspace_Client::stable_json( $payload );
+		$message = $timestamp . "\n" . $nonce . "\n" . $action . "\n" . $content;
 		$expected = rtrim( strtr( base64_encode( hash_hmac( 'sha256', $message, $secret, true ) ), '+/', '-_' ), '=' );
 		if ( ! hash_equals( $expected, $signature ) ) return new WP_Error( 'mi_workspace_signature_invalid', 'Firma Workspace non valida.', array( 'status' => 401 ) );
 		$nonce_key = 'mi_workspace_command_nonce_' . hash( 'sha256', $nonce );
@@ -156,7 +169,7 @@ final class MI_REST_Controller {
 		} finally {
 			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
 		}
-		return true;
+		return $payload;
 	}
 
 	private static function create_event_draft_from_workspace( array $payload ) {

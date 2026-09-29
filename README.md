@@ -1,5 +1,7 @@
 # Modulo iscrizioni multi-evento
 
+Versione **[3.26.207](docs/rilascio-3.26.207.md)**: filtri dei pagamenti per giorno locale, caparre incoerenti indicate come da verificare e protocollo 2 per le firme Apps Script → WordPress. Aggiornare prima WordPress e poi Apps Script.
+
 Progetto di un modulo WordPress riutilizzabile per iscrizioni a eventi, configurazione dei dati richiesti e gestione economica facoltativa tramite Google Apps Script e Google Sheets.
 
 Il modello distingue:

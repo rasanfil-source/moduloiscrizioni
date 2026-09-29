@@ -45,8 +45,8 @@
   const requestId = () => globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
   const personName = person => [person?.last_name,person?.first_name].filter(Boolean).join(' ');
   const downloadExcel=(filename,rows)=>{const url=URL.createObjectURL(reportWorkbook(rows));const link=document.createElement('a');link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
-  const depositText=b=>b.deposit_plan?'Caparra prevista '+money(b.deposit_due)+' · Ancora da coprire '+money(b.deposit_missing)+(b.deposit_covered&&(b.balance??b.balance_cents)>0?' · Caparra coperta, saldo da completare':b.deposit_due===0?' · Nessuna caparra richiesta':''):'';
-  const depositDetailText=b=>b.deposit_plan?'Caparra prevista '+money(b.deposit_due)+(b.deposit_covered&&(b.balance??b.balance_cents)>0?' · Caparra coperta, saldo da completare':b.deposit_due===0?' · Nessuna caparra richiesta':''):'';
+  const depositText=b=>b.deposit_plan?(b.deposit_due===null?'Caparre individuali da verificare':'Caparra prevista '+money(b.deposit_due)+' · Ancora da coprire '+money(b.deposit_missing)+(b.deposit_covered&&(b.balance??b.balance_cents)>0?' · Caparra coperta, saldo da completare':b.deposit_due===0?' · Nessuna caparra richiesta':'')):'';
+  const depositDetailText=b=>b.deposit_plan?(b.deposit_due===null?'Caparre individuali da verificare':'Caparra prevista '+money(b.deposit_due)+(b.deposit_covered&&(b.balance??b.balance_cents)>0?' · Caparra coperta, saldo da completare':b.deposit_due===0?' · Nessuna caparra richiesta':'')):'';
   const money = n => (Number(n || 0)/100).toLocaleString('it-IT',{style:'currency',currency:'EUR'});
   const emailContact = email => email ? '<a class="mi-contact-icon" href="mailto:'+esc(email)+'" title="Scrivi a '+esc(email)+'" aria-label="Scrivi a '+esc(email)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 5.5h17v13h-17zM4 6l8 6 8-6"/></svg></a>' : '';
   const phoneContact = phone => phone ? '<a class="mi-contact-icon" href="tel:'+esc(phone).replace(/[^+0-9]/g,'')+'" title="Chiama '+esc(phone)+'" aria-label="Chiama '+esc(phone)+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5 4.7 5.8c-.7.7-.9 1.8-.5 2.7 2.1 5 5.9 8.8 10.9 10.9.9.4 2 .2 2.7-.5l2.3-2.3-3.5-3.5-2.2 1.5c-1.5-.8-2.8-2.1-3.6-3.6l1.5-2.2z"/></svg></a>' : '';
@@ -312,6 +312,7 @@
         const states={CONFIRMED:'Partecipante',PENDING_PAYMENT:'Pagamento atteso',WAITLISTED:'Lista d’attesa',WAITLIST_OFFERED:'Posto proposto',CANCELLED:'Annullata',EXPIRED:'Scaduta'};
         const stateLabel=row=>{
           if(!features.payments||!['CONFIRMED','PENDING_PAYMENT'].includes(row.status))return states[row.status]||row.status;
+          if(row.deposit_plan&&row.deposit_due===null)return 'Caparre da verificare';
           if(row.balance<=0)return 'Saldato';
           if(row.deposit_plan??features.deposit)return row.deposit_missing>0?'Caparra attesa':'Saldo atteso';
           return 'Pagamento atteso';

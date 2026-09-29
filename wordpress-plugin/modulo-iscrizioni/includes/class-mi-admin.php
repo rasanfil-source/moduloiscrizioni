@@ -727,8 +727,15 @@ final class MI_Admin {
 		}
 		if ( $source ) { $conditions[] = 'p.payment_source = %s'; $parameters[] = $source; }
 		if ( $transaction ) { $conditions[] = 'p.transaction_kind = %s'; $parameters[] = $transaction; }
-		if ( $from ) { $conditions[] = 'p.effective_at >= %s'; $parameters[] = $from . ' 00:00:00'; }
-		if ( $to ) { $conditions[] = 'p.effective_at <= %s'; $parameters[] = $to . ' 23:59:59'; }
+		// Form dates are local calendar days; ledger timestamps are UTC.
+		foreach ( array( 'from' => $from, 'to' => $to ) as $boundary => $input ) {
+			if ( ! $input ) continue;
+			$date = DateTimeImmutable::createFromFormat( '!Y-m-d', $input, wp_timezone() );
+			if ( ! $date || $date->format( 'Y-m-d' ) !== $input ) return array( 'WHERE 1 = 0', array() );
+			if ( 'to' === $boundary ) $date = $date->modify( '+1 day' );
+			$conditions[] = 'from' === $boundary ? 'p.effective_at >= %s' : 'p.effective_at < %s';
+			$parameters[] = $date->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
+		}
 		return array( $conditions ? 'WHERE ' . implode( ' AND ', $conditions ) : '', $parameters );
 	}
 

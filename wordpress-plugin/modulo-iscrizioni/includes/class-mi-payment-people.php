@@ -78,6 +78,7 @@ final class MI_Payment_People {
 	/** True/false when person coverage is knowable, null for legacy or aggregate-only histories. */
 	public static function covered( array $position, $economic_mode, array $total_deltas = array(), array $projected_deposits = array() ) {
 		if ( empty( $position['quotes_known'] ) || empty( $position['payments_known'] ) ) return null;
+		if ( 'DEPOSIT_BALANCE' === $economic_mode && false === ( $position['deposits_known'] ?? true ) && ! $projected_deposits ) return null;
 		$field = 'DEPOSIT_BALANCE' === $economic_mode ? 'deposit' : 'total';
 		foreach ( $position['people'] as $person ) {
 			if ( empty( $person['active'] ) ) continue;
@@ -89,18 +90,21 @@ final class MI_Payment_People {
 	}
 	/** Totali operativi delle sole persone attive. I crediti individuali non compensano i debiti altrui. */
 	public static function summary( array $position ) {
-		$known = ! empty( $position['quotes_known'] ) && ! empty( $position['payments_known'] );
-		$summary = array( 'known' => $known, 'people_count' => count( $position['people'] ?? array() ), 'active_count' => 0, 'total' => 0, 'paid' => 0, 'balance' => 0, 'credit' => 0, 'deposit_due' => 0, 'deposit_missing' => 0 );
+		$totals_known = ! empty( $position['quotes_known'] ) && ! empty( $position['payments_known'] );
+		$deposits_known = $totals_known && false !== ( $position['deposits_known'] ?? true );
+		$summary = array( 'known' => $totals_known && $deposits_known, 'totals_known' => $totals_known, 'deposits_known' => $deposits_known, 'people_count' => count( $position['people'] ?? array() ), 'active_count' => 0, 'total' => 0, 'paid' => 0, 'balance' => 0, 'credit' => 0, 'deposit_due' => $deposits_known ? 0 : null, 'deposit_missing' => $deposits_known ? 0 : null );
 		foreach ( $position['people'] as $person ) {
 			if ( empty( $person['active'] ) ) continue;
 			$summary['active_count']++;
-			if ( ! $known ) continue;
+			if ( ! $totals_known ) continue;
 			$summary['total'] += max( 0, (int) $person['total'] );
 			$summary['paid'] += (int) $person['paid'];
 			$summary['balance'] += max( 0, (int) $person['balance'] );
 			$summary['credit'] += max( 0, (int) $person['credit'] );
-			$summary['deposit_due'] += max( 0, (int) $person['deposit'] );
-			$summary['deposit_missing'] += max( 0, (int) $person['deposit_missing'] );
+			if ( $deposits_known ) {
+				$summary['deposit_due'] += max( 0, (int) $person['deposit'] );
+				$summary['deposit_missing'] += max( 0, (int) $person['deposit_missing'] );
+			}
 		}
 		$summary['paid'] = max( 0, $summary['paid'] );
 		return $summary;
@@ -130,6 +134,7 @@ final class MI_Payment_People {
 		if ( ! $rows ) $issue = 'Partecipanti non disponibili.';
 		if ( $sum !== (int) $registration['total_cents'] ) $issue = 'Il totale comprende quote comuni o rettifiche non attribuite alle persone. Verifica le quote individuali prima di registrare il pagamento.';
 		$quotes_known = '' === $issue;
+		$deposits_known = $quotes_known;
 		// La stessa formula della creazione: quota fissa per persona oppure percentuale.
 		$deposit_total = min( $sum, max( 0, (int) ( $registration['initial_due_cents'] ?? 0 ) ) );
 		$event = $snapshot['event'] ?? array(); $remainders = array(); $assigned = 0;
@@ -147,7 +152,10 @@ final class MI_Payment_People {
 				$assigned += $row['deposit'];
 			} unset( $row );
 			if ( $remainders ) { arsort( $remainders, SORT_NUMERIC ); foreach ( $remainders as $id => $remainder ) { if ( $assigned >= $deposit_total ) break; $rows[$id]['deposit']++; $assigned++; } }
-			if ( $assigned !== $deposit_total ) $issue = 'La caparra complessiva non coincide con le quote individuali. Verifica la prenotazione.';
+			if ( $assigned !== $deposit_total ) {
+				$deposits_known = false;
+				$issue = 'La caparra complessiva non coincide con le quote individuali. Verifica la prenotazione.';
+			}
 		}
 		$payments_known = true;
 		$has_allocated_payments = false;
@@ -176,7 +184,7 @@ final class MI_Payment_People {
 			$row['credit'] = max( 0, $row['paid'] - $row['total'] );
 			if ( $row['paid'] < 0 ) $issue = 'La posizione individuale richiede una verifica prima di un nuovo versamento.';
 		} unset( $row );
-		return array( 'ready' => '' === $issue, 'quotes_known' => $quotes_known, 'payments_known' => $payments_known && ( ! $unassigned || count( $rows ) === 1 ), 'requires_refund_allocation' => $has_allocated_payments, 'message' => $issue, 'deposit_plan' => $deposit_plan, 'people' => array_values( $rows ) );
+		return array( 'ready' => '' === $issue, 'quotes_known' => $quotes_known, 'deposits_known' => $deposits_known, 'payments_known' => $payments_known && ( ! $unassigned || count( $rows ) === 1 ), 'requires_refund_allocation' => $has_allocated_payments, 'message' => $issue, 'deposit_plan' => $deposit_plan, 'people' => array_values( $rows ) );
 	}
 	/** Solo lettura gestionale: isola una prenotazione incoerente senza inventare
 	 * quote personali. Le operazioni di scrittura continuano a usare calculate,
@@ -185,7 +193,7 @@ final class MI_Payment_People {
 	public static function calculate_for_display( array $registration, array $people, array $items, array $payments ) {
 		try { return self::calculate( $registration, $people, $items, $payments ); }
 		catch ( InvalidArgumentException $error ) {
-			return array( 'ready' => false, 'quotes_known' => false, 'payments_known' => false, 'requires_refund_allocation' => true, 'message' => $error->getMessage(), 'deposit_plan' => 'DEPOSIT_BALANCE' === ( $registration['economic_mode'] ?? '' ), 'people' => array() );
+			return array( 'ready' => false, 'quotes_known' => false, 'deposits_known' => false, 'payments_known' => false, 'requires_refund_allocation' => true, 'message' => $error->getMessage(), 'deposit_plan' => 'DEPOSIT_BALANCE' === ( $registration['economic_mode'] ?? '' ), 'people' => array() );
 		}
 	}
 	public static function plan( array $position, array $ids, $installment, $amount ) {

@@ -105,6 +105,8 @@ final class MI_Payment_Ledger {
 		try { $individual = MI_Payment_People::read( $r, $rows ); $summary = MI_Payment_People::summary( $individual ); }
 		catch ( Throwable $error ) { return new WP_Error( 'mi_payment_read', 'Attribuzioni dei pagamenti non disponibili. Richiedi una verifica alla segreteria.' ); }
 		if ( $summary['known'] ) { foreach ( array( 'total', 'paid', 'balance', 'deposit_due', 'deposit_missing' ) as $field ) $position[$field] = $summary[$field]; $position['deposit_covered'] = $position['deposit_plan'] && $summary['deposit_due'] > 0 && $summary['deposit_missing'] === 0; }
+		if ( $summary['totals_known'] ) foreach ( array( 'total', 'paid', 'balance' ) as $field ) $position[$field] = $summary[$field];
+		if ( false === $individual['deposits_known'] ) { $position['deposit_due'] = null; $position['deposit_missing'] = null; $position['deposit_covered'] = false; }
 		return array( 'ok' => true, 'data' => wp_date( 'Y-m-d' ), 'saldo' => array( 'codice' => $r['order_code'], 'referente' => trim( $r['buyer_first_name'] . ' ' . $r['buyer_last_name'] ), 'evento' => html_entity_decode( get_the_title( (int) $r['event_id'] ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ), 'totale' => $position['total'], 'versato' => $position['paid'], 'residuo' => $position['balance'], 'deposit_plan' => $position['deposit_plan'], 'deposit_due' => $position['deposit_due'], 'deposit_missing' => $position['deposit_missing'], 'deposit_covered' => $position['deposit_covered'], 'individual' => $individual, 'movimenti' => $movements ) );
 	}
 	public static function save( $id, array $input ) {

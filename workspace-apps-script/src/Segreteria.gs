@@ -173,8 +173,12 @@ function destinatariComunicazioneOperativa_(eventId, templateType) {
 
 function inviaComandoWordPress_(action, payload) {
   const properties = PropertiesService.getScriptProperties(); const url = String(properties.getProperty('MI_WORDPRESS_COMMAND_URL') || '').trim(); if (!/^https:\/\//.test(url)) throw new Error('Configura prima il collegamento WordPress dal menu Modulo iscrizioni.');
-  const timestamp = Date.now(); const nonce = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, ''); const message = timestamp + '\n' + nonce + '\n' + action + '\n' + serializzaInModoStabile_(payload || {}); const signature = Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(message, ottieniSegretoScript_())).replace(/=+$/, '');
-  const response = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ timestamp: timestamp, nonce: nonce, action: action, payload: payload || {}, signature: signature }), muteHttpExceptions: true }); const status = response.getResponseCode(); let body = {}; try { body = JSON.parse(response.getContentText() || '{}'); } catch (error) {}
+  const timestamp = Date.now(); const nonce = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+  const payloadFirmato = serializzaInModoStabile_(payload || {});
+  const payloadHash = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, payloadFirmato, Utilities.Charset.UTF_8).map(value => ('0' + (value & 255).toString(16)).slice(-2)).join('');
+  const message = timestamp + '\n' + nonce + '\n' + action + '\n' + payloadHash;
+  const signature = Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(message, ottieniSegretoScript_())).replace(/=+$/, '');
+  const response = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify({ protocollo: 2, timestamp: timestamp, nonce: nonce, action: action, payload_firmato: payloadFirmato, payload_hash: payloadHash, signature: signature }), muteHttpExceptions: true }); const status = response.getResponseCode(); let body = {}; try { body = JSON.parse(response.getContentText() || '{}'); } catch (error) {}
   if (status < 200 || status >= 300 || body.ok === false) throw new Error(String(body.message || body.error || 'WordPress non ha accettato la richiesta.')); return body;
 }
 
