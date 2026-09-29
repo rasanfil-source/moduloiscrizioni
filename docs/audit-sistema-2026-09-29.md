@@ -8,7 +8,7 @@ I sorgenti applicativi sono rimasti invariati. Sono stati aggiunti soltanto ques
 
 ## 1. P1 — La formattazione degli importi blocca la sincronizzazione successiva
 
-Riferimento: [ProiezioneIncrementale.gs, riga 118](<C:/Users/romolo/OneDrive/Documenti/SCRIPT/MODULO ISCRIZIONI/workspace-apps-script/src/ProiezioneIncrementale.gs:118>), con applicazione del formato monetario alla riga 123.
+Riferimento: [ProiezioneIncrementale.gs, riga 118](../workspace-apps-script/src/ProiezioneIncrementale.gs#L118), con applicazione del formato monetario alla riga 123.
 
 La scrittura applica prima il formato testo ai blocchi, salva in `_MI_BASE` i valori visualizzati e solo dopo ripristina il formato a due decimali delle colonne economiche. Il confronto successivo legge nuovamente i valori visualizzati: la formattazione effettuata dal programma viene interpretata come una modifica manuale di una colonna protetta.
 
@@ -20,7 +20,7 @@ Correzione proposta: rendere coerenti formattazione finale e salvataggio della b
 
 ## 2. P2 — Il riepilogo può nascondere un debito individuale
 
-Riferimento: [class-mi-management-service.php, riga 344](<C:/Users/romolo/OneDrive/Documenti/SCRIPT/MODULO ISCRIZIONI/wordpress-plugin/modulo-iscrizioni/includes/class-mi-management-service.php:344>), con ulteriore uso di `known` alla riga 361.
+Riferimento: [class-mi-management-service.php, riga 344](../wordpress-plugin/modulo-iscrizioni/includes/class-mi-management-service.php#L344), con ulteriore uso di `known` alla riga 361.
 
 La 3.26.207 distingue la certezza di quote e pagamenti (`totals_known`) dalla coerenza delle caparre. Il riepilogo gestione usa ancora `known` per scegliere il saldo individuale: se le sole caparre sono incoerenti, torna al saldo netto dell'intera prenotazione e compensa crediti e debiti di persone diverse.
 
@@ -30,7 +30,7 @@ Correzione proposta: usare `totals_known` per importi e residui, e `deposits_kno
 
 ## 3. P2 — Un'eliminazione interrotta può fermare le email degli altri eventi
 
-Riferimento: [class-mi-spedizione-email.php, riga 410](<C:/Users/romolo/OneDrive/Documenti/SCRIPT/MODULO ISCRIZIONI/wordpress-plugin/modulo-iscrizioni/includes/class-mi-spedizione-email.php:410>), con esclusione dell'evento alla riga 416.
+Riferimento: [class-mi-spedizione-email.php, riga 410](../wordpress-plugin/modulo-iscrizioni/includes/class-mi-spedizione-email.php#L410), con esclusione dell'evento alla riga 416.
 
 Ogni esecuzione seleziona le prime dieci email pendenti ordinate per ID. Le righe appartenenti a un evento in eliminazione vengono saltate senza cambiare stato, priorità o data del prossimo tentativo. Se occupano tutto il blocco, le email successive non vengono mai raggiunte finché l'eliminazione resta sospesa.
 
@@ -40,7 +40,7 @@ Correzione proposta: scorrere oltre le righe non elaborabili o differirle esplic
 
 ## 4. P2 — La rettifica del dovuto scompare quando serve
 
-Riferimento: [portal-management.js, riga 747](<C:/Users/romolo/OneDrive/Documenti/SCRIPT/MODULO ISCRIZIONI/wordpress-plugin/modulo-iscrizioni/assets/portal-management.js:747>).
+Riferimento: [portal-management.js, riga 747](../wordpress-plugin/modulo-iscrizioni/assets/portal-management.js#L747).
 
 Il modulo «Rettifica il dovuto della prenotazione» è contenuto nel blocco dei servizi, che richiede opzioni configurate e stato `CONFIRMED` oppure `PENDING_PAYMENT`. Il permesso `can_adjust_due` non basta a renderlo disponibile.
 
@@ -56,7 +56,7 @@ Correzione proposta: separare la visualizzazione della rettifica da quella dei s
 
 ## 5. P2 — Il saldo comunica la scadenza precedente alla modifica
 
-Riferimento: [class-mi-public-balance.php, riga 245](<C:/Users/romolo/OneDrive/Documenti/SCRIPT/MODULO ISCRIZIONI/wordpress-plugin/modulo-iscrizioni/includes/class-mi-public-balance.php:245>), con aggiornamento della scadenza alla riga 286 e accodamento email alla riga 291.
+Riferimento: [class-mi-public-balance.php, riga 245](../wordpress-plugin/modulo-iscrizioni/includes/class-mi-public-balance.php#L245), con aggiornamento della scadenza alla riga 286 e accodamento email alla riga 291.
 
 Il riepilogo viene costruito prima di calcolare e salvare l'eventuale nuova scadenza. Se una modifica economica riapre il pagamento, risposta ed email conservano il termine precedente, anche se assente.
 
@@ -66,7 +66,7 @@ Correzione proposta: calcolare prima la posizione futura completa e usare la ste
 
 ## 6. P2 — Il limite di quantità dei servizi è aggirabile
 
-Riferimento: [class-mi-registration-service.php, riga 1495](<C:/Users/romolo/OneDrive/Documenti/SCRIPT/MODULO ISCRIZIONI/wordpress-plugin/modulo-iscrizioni/includes/class-mi-registration-service.php:1495>).
+Riferimento: [class-mi-registration-service.php, riga 1495](../wordpress-plugin/modulo-iscrizioni/includes/class-mi-registration-service.php#L1495).
 
 Il validatore normalizza il codice di ciascuna opzione, ma non rifiuta duplicati dopo la normalizzazione. Il limite viene applicato alla singola chiave ricevuta, non al totale dello stesso servizio.
 
@@ -76,7 +76,7 @@ Correzione proposta: rifiutare codici duplicati normalizzati o aggregarne le qua
 
 ## 7. P2 — Un errore temporaneo Google può duplicare il foglio appena creato
 
-Riferimento: [ProiezioneDiretta.gs, riga 70](<C:/Users/romolo/OneDrive/Documenti/SCRIPT/MODULO ISCRIZIONI/workspace-apps-script/src/ProiezioneDiretta.gs:70>).
+Riferimento: [ProiezioneDiretta.gs, riga 70](../workspace-apps-script/src/ProiezioneDiretta.gs#L70).
 
 Quando WordPress non conosce ancora `sheet_id`, Apps Script recupera il foglio dal proprio registro. Se Drive o `openById` sollevano un errore, il `catch` cancella il riferimento e crea un nuovo foglio, anche quando il problema è temporaneo.
 
@@ -86,7 +86,7 @@ Correzione proposta: conservare il riferimento e riprovare gli errori temporanei
 
 ## 8. P2 — Il contatore delle caparre considera lo stato dell'intera prenotazione
 
-Riferimento: [portal-management.js, riga 302](<C:/Users/romolo/OneDrive/Documenti/SCRIPT/MODULO ISCRIZIONI/wordpress-plugin/modulo-iscrizioni/assets/portal-management.js:302>).
+Riferimento: [portal-management.js, riga 302](../wordpress-plugin/modulo-iscrizioni/assets/portal-management.js#L302).
 
 La tessera «Iscritti» mostra «Caparra versata» contando le persone in prenotazioni `CONFIRMED`. È già disponibile il contatore individuale `payment_counts.deposit_covered`, ma la tessera non lo usa.
 
@@ -96,7 +96,7 @@ Correzione proposta: usare il contatore individuale già calcolato, con gli stes
 
 ## Verifica automatica da aggiornare
 
-[structure.test.mjs, riga 2549](<C:/Users/romolo/OneDrive/Documenti/SCRIPT/MODULO ISCRIZIONI/wordpress-plugin/tests/structure.test.mjs:2549>) cerca ancora il testo esatto `Sincronizza`; la 3.26.208 lo ha sostituito intenzionalmente con `Importa modifiche dal foglio`.
+[structure.test.mjs, riga 2549](../wordpress-plugin/tests/structure.test.mjs#L2549) cerca ancora il testo esatto `Sincronizza`; la 3.26.208 lo ha sostituito intenzionalmente con `Importa modifiche dal foglio`.
 
 Questo è l'unico fallimento della suite Node: **375 superati su 376**. Interrompe `tools/verify.ps1` prima dei controlli successivi. È una verifica obsoleta, distinta dagli otto difetti applicativi. Anche il workflow GitHub esegue quella suite.
 
