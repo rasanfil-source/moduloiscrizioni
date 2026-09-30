@@ -1,5 +1,7 @@
 # Modulo iscrizioni multi-evento
 
+Versione **[3.26.210](docs/rilascio-3.26.210.md)**: coda email di test limitata e protetta dai reinvii dopo esiti incerti; eliminate quattro query con sintassi MySQL deprecata. Include la 3.26.209. ZIP WordPress e sorgenti Apps Script disponibili nel rilascio; installazione WordPress a cura dell'utente.
+
 Versione **[3.26.209](docs/rilascio-3.26.209.md)**: corretti gli otto difetti dell’audit del 29 settembre su sincronizzazione Google, riepiloghi economici, rettifiche, coda email, scadenze e quantità dei servizi. Richiede aggiornamento WordPress e Apps Script. Pacchetti locali; installazione da completare.
 
 Versione **[3.26.208](docs/rilascio-3.26.208.md)**: su desktop il comando «Importa modifiche dal foglio» compare a destra di «Apri»; su mobile è nascosto. Apps Script invariato rispetto alla 3.26.207.

@@ -549,7 +549,7 @@ final class MI_Management_Service {
 	/** First lock in registration and room-allocation transactions. */
 	public static function lock_room_event( $event_id ) {
 		global $wpdb;
-		if ( $event_id < 1 || false === $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->prefix}mi_management_state (event_id) VALUES (%d) ON DUPLICATE KEY UPDATE event_id=VALUES(event_id)", $event_id ) ) ) throw new RuntimeException( 'Evento non disponibile per le assegnazioni.' );
+		if ( $event_id < 1 || false === $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->prefix}mi_management_state (event_id) VALUES (%d) ON DUPLICATE KEY UPDATE event_id=%d", $event_id, $event_id ) ) ) throw new RuntimeException( 'Evento non disponibile per le assegnazioni.' );
 	}
 	/** Internal to registration transactions; the caller holds the event room lock. */
 	public static function auto_assign_rooms_locked( $registration_id ) {
@@ -600,7 +600,7 @@ final class MI_Management_Service {
 		$hash = hash( 'sha256', wp_json_encode( array( 'event_room', $event_id, $operation, $data, $version ) ) );
 		if ( false === $wpdb->query( 'START TRANSACTION' ) ) return new WP_Error( 'mi_room_busy', 'Registro non disponibile.' );
 		try {
-			if ( false === $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->prefix}mi_management_state (event_id) VALUES (%d) ON DUPLICATE KEY UPDATE event_id=VALUES(event_id)", $event_id ) ) ) throw new RuntimeException();
+			if ( false === $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->prefix}mi_management_state (event_id) VALUES (%d) ON DUPLICATE KEY UPDATE event_id=%d", $event_id, $event_id ) ) ) throw new RuntimeException();
 			$previous = $wpdb->get_row( $wpdb->prepare( "SELECT request_hash FROM {$wpdb->prefix}mi_management_requests WHERE request_id=%s", $request_id ), ARRAY_A ); self::check_database();
 			if ( $previous ) {
 				if ( ! hash_equals( $previous['request_hash'], $hash ) ) throw new InvalidArgumentException( 'Identificativo già utilizzato con dati diversi.' );
@@ -782,7 +782,7 @@ final class MI_Management_Service {
 		if ( false === $wpdb->query( 'START TRANSACTION' ) ) return new WP_Error( 'mi_management_busy', 'Registro non disponibile.' );
 		try {
 			// Serialize room allocations for this event; other events remain independent.
-			if ( false === $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->prefix}mi_management_state (event_id) VALUES (%d) ON DUPLICATE KEY UPDATE event_id=VALUES(event_id)", $event_id ) ) ) throw new RuntimeException( 'Evento non disponibile.' );
+			if ( false === $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->prefix}mi_management_state (event_id) VALUES (%d) ON DUPLICATE KEY UPDATE event_id=%d", $event_id, $event_id ) ) ) throw new RuntimeException( 'Evento non disponibile.' );
 			$locked = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_registrations WHERE id=%d FOR UPDATE", $id ), ARRAY_A );
 			self::check_database();
 			if ( ! $locked || (int) $locked['event_id'] !== $event_id ) throw new InvalidArgumentException( 'Prenotazione non disponibile.' );
@@ -893,7 +893,7 @@ final class MI_Management_Service {
 		if ( false === $wpdb->query( 'START TRANSACTION' ) ) return new WP_Error( 'mi_sheet_busy', 'Registro non disponibile.' );
 		$ids = array();
 		try {
-			if ( false === $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->prefix}mi_management_state (event_id) VALUES (%d) ON DUPLICATE KEY UPDATE event_id=VALUES(event_id)", $event_id ) ) ) throw new RuntimeException( 'Evento non disponibile.' );
+			if ( false === $wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->prefix}mi_management_state (event_id) VALUES (%d) ON DUPLICATE KEY UPDATE event_id=%d", $event_id, $event_id ) ) ) throw new RuntimeException( 'Evento non disponibile.' );
 			$previous = $wpdb->get_row( $wpdb->prepare( "SELECT request_hash FROM {$wpdb->prefix}mi_management_requests WHERE request_id=%s", $request_id ), ARRAY_A );
 			self::check_database();
 			if ( $previous ) {

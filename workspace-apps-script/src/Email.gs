@@ -112,23 +112,49 @@ function inviaCodaEmailDiTest() {
   const recipient = String(PropertiesService.getScriptProperties().getProperty(MI_TEST_EMAIL_PROPERTY) || '').trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) throw new Error('Configura prima il destinatario email di test dal menu Modulo iscrizioni.');
 
-  const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.EMAIL_OUTBOX);
-  const index = creaIndiceIntestazioni_(sheet);
-  const rows = convertiRigheInOggetti_(sheet).filter(function (row) { return String(row.stato).toUpperCase() === 'PREVIEW'; });
+  const startedAt = Date.now();
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) throw new Error('Invio occupato. Riprova tra poco.');
   let sent = 0;
-  rows.forEach(function (row) {
-    const payload = JSON.parse(String(row.contenuto_json || '{}'));
-    const orderCode = normalizzaTesto_(row.codice_ordine, 64);
-    MailApp.sendEmail({
-      to: recipient,
-      subject: '[TEST] Iscrizione ' + orderCode,
-      body: 'Questa è una prova protetta.\n\nCodice ordine: ' + orderCode + '\nStato: ' + normalizzaTesto_(payload.status, 30) + '\nModello: ' + normalizzaTesto_(row.tipo_modello, 80) + '\n\nNessun messaggio è stato inviato al destinatario originale.',
-      name: 'Modulo iscrizioni — TEST'
-    });
-    sheet.getRange(row._row, index.stato + 1).setValue('TEST_INVIATA');
-    aggiungiControllo_('SEND_TEST_EMAIL', 'EMAIL', row.id_messaggio, 'SUCCESS', Session.getActiveUser().getEmail(), 'TEST_RECIPIENT_ONLY', 'WORKSPACE_UI');
-    sent += 1;
-  });
-  SpreadsheetApp.flush();
-  SpreadsheetApp.getUi().alert(sent ? 'Email di test inviate: ' + sent + '. Tutte esclusivamente al destinatario privato configurato.' : 'Nessuna email PREVIEW da inviare.');
+  let remaining = 0;
+  let uncertain = 0;
+  try {
+    const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.EMAIL_OUTBOX);
+    const index = creaIndiceIntestazioni_(sheet);
+    const allRows = convertiRigheInOggetti_(sheet);
+    const rows = allRows.filter(function (row) { return String(row.stato).toUpperCase() === 'PREVIEW'; });
+    if (!Number.isInteger(index.stato)) throw new Error('Colonna stato mancante nella coda email.');
+    uncertain = allRows.filter(row => String(row.stato).toUpperCase() === 'TEST_IN_CORSO').length;
+    const actor = Session.getActiveUser().getEmail();
+    remaining = rows.length;
+    // Small resumable runs. Persist each intent before contacting the mail service:
+    // a timeout or ambiguous failure must never turn into an automatic resend.
+    for (const row of rows) {
+      if (sent >= 25 || Date.now() - startedAt >= 240000 || MailApp.getRemainingDailyQuota() < 1) break;
+      const payload = JSON.parse(String(row.contenuto_json || '{}'));
+      const orderCode = normalizzaTesto_(row.codice_ordine, 64);
+      sheet.getRange(row._row, index.stato + 1).setValue('TEST_IN_CORSO');
+      SpreadsheetApp.flush();
+      try {
+        MailApp.sendEmail({
+          to: recipient,
+          subject: '[TEST] Iscrizione ' + orderCode,
+          body: 'Questa è una prova protetta.\n\nCodice ordine: ' + orderCode + '\nStato: ' + normalizzaTesto_(payload.status, 30) + '\nModello: ' + normalizzaTesto_(row.tipo_modello, 80) + '\n\nNessun messaggio è stato inviato al destinatario originale.',
+          name: 'Modulo iscrizioni — TEST'
+        });
+        sheet.getRange(row._row, index.stato + 1).setValue('TEST_INVIATA');
+        SpreadsheetApp.flush();
+      } catch (error) {
+        throw new Error('Invio di test interrotto: verifica la riga ' + row._row + ' prima di riprovare. Le righe TEST_IN_CORSO non vengono reinviate automaticamente.');
+      }
+      aggiungiControllo_('SEND_TEST_EMAIL', 'EMAIL', row.id_messaggio, 'SUCCESS', actor, 'TEST_RECIPIENT_ONLY', 'WORKSPACE_UI');
+      sent += 1;
+      remaining -= 1;
+    }
+    SpreadsheetApp.flush();
+  } finally { lock.releaseLock(); }
+  // UI alerts suspend execution: never show them while holding the lock.
+  SpreadsheetApp.getUi().alert('Email di test inviate: ' + sent + '. Tutte esclusivamente al destinatario privato configurato.' +
+    (remaining ? ' Restano ' + remaining + ' email PREVIEW: ripeti il comando quando la quota è disponibile.' : ' Nessuna email PREVIEW rimanente.') +
+    (uncertain ? ' Sono presenti ' + uncertain + ' righe TEST_IN_CORSO: verifica la consegna prima di modificarne lo stato.' : ''));
 }
