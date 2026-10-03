@@ -19,6 +19,7 @@ define( 'MI_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 require_once MI_PLUGIN_DIR . 'includes/class-mi-assets.php';
 add_filter( 'script_loader_src', array( 'MI_Assets', 'filter_url' ) );
 add_filter( 'style_loader_src', array( 'MI_Assets', 'filter_url' ) );
+add_filter( 'script_loader_tag', array( 'MI_Assets', 'defer_script' ), 10, 2 );
 
 require_once MI_PLUGIN_DIR . 'includes/class-mi-activator.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-field-schema.php';
