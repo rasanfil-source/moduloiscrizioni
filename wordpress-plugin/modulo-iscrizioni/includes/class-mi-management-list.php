@@ -24,6 +24,7 @@ final class MI_Management_List {
 			if ( $state && $row['status'] !== $state ) return false;
 			$deposit = $context['deposit'] ?? '';
 			if ( $deposit ) {
+				if ( false === ( $row['totals_known'] ?? $row['economics_known'] ?? true ) ) return false;
 				if ( ! in_array( $row['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ) return false;
 				$balance = (int) ( $row['balance'] ?? 0 ); $paid = (int) ( $row['paid'] ?? 0 );
 				$payment_matches = array(
@@ -69,11 +70,17 @@ final class MI_Management_List {
 		}
 		$rows = self::sort_rows( $rows, $context );
 		$offset = max( 0, (int) $offset ); $limit = max( 1, min( 200, (int) $limit ) );
-		$fingerprint_context = $context; unset( $fingerprint_context['shown'] );
-		// The canonical token covers row contents. IDs retain detection of timed
-		// deadline-filter changes even when the number of matches stays the same.
-		$fingerprint = null === $source_version ? $rows : array( $source_version, $fingerprint_context, array_column( $rows, 'id' ), array_column( $rows, 'code' ) );
-		return array( 'rows' => array_slice( $rows, $offset, $limit ), 'total' => count( $rows ), 'offset' => $offset, 'limit' => $limit, 'fingerprint' => hash( 'sha256', wp_json_encode( $fingerprint ) ) );
+		$deadline_ids = empty( $context['deadline'] ) ? array() : array_column( $rows, $individual ? 'id' : 'code' );
+		$fingerprint = null === $source_version ? hash( 'sha256', wp_json_encode( $rows ) ) : self::fingerprint( $source_version, $context, count( $rows ), $deadline_ids );
+		return array( 'rows' => array_slice( $rows, $offset, $limit ), 'total' => count( $rows ), 'offset' => $offset, 'limit' => $limit, 'fingerprint' => $fingerprint );
+	}
+
+	/** Cache-independent selection version; only timed filters can change without a canonical write. */
+	public static function fingerprint( $source_version, array $context, $total, array $deadline_ids = array() ) {
+		unset( $context['shown'] );
+		$deadline_ids = array_map( 'strval', $deadline_ids );
+		sort( $deadline_ids, SORT_STRING );
+		return hash( 'sha256', wp_json_encode( array( $source_version, $context, (int) $total, $deadline_ids ) ) );
 	}
 
 	/** One comparator for complete lists and bounded, cross-chunk page selection. */

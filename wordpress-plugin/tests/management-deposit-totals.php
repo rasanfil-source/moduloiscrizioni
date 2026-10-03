@@ -56,3 +56,14 @@ $partialOverview=MI_Management_List::overview($partial);
 if(!in_array('--json',$argv,true))echo json_encode(['case'=>'partial-family-deposit','payment_counts'=>$partialOverview['payment_counts'],'states'=>$partialOverview['metrics']['states']]).PHP_EOL;
 
 if(in_array('--json',$argv,true))echo json_encode(['overview'=>$partialOverview,'page'=>MI_Management_List::page($partial,[])]);
+
+// Known balances remain filterable even if only the deposit is inconsistent.
+$settled = MI_Management_List::page($management, ['deposit'=>'settled']);
+if ($settled['total'] !== 1 || !$settled['rows'][0]['totals_known']) throw new RuntimeException('Known settled balance hidden by deposit inconsistency');
+// Missing historical quote data must never become a settled individual position.
+$wpdb->order['snapshot_json'] = '{}'; $wpdb->items = []; $wpdb->payments = [];
+$unknown = MI_Management_Service::summary(42, [1], []);
+if (is_wp_error($unknown)) throw new RuntimeException($unknown->message);
+if (array_column($unknown['people'], 'totals_known') !== [false, false]) throw new RuntimeException('Unknown totals not preserved');
+if (MI_Management_List::page($unknown, ['deposit'=>'settled'])['total'] !== 0) throw new RuntimeException('Unknown positions classified as settled');
+if (MI_Management_List::page($unknown, [])['total'] !== 2) throw new RuntimeException('Unknown positions missing from unfiltered list');

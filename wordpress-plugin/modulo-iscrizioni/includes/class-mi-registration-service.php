@@ -872,11 +872,11 @@ final class MI_Registration_Service {
 		try { $coverage = self::payment_coverage( $registration ); }
 		catch ( Throwable $error ) { return new WP_Error( 'mi_status_unavailable', 'Saldo momentaneamente non disponibile. Riprova più tardi.' ); }
 		$individual = MI_Payment_People::summary( $coverage['position'] );
-		$paid = $individual['known'] ? $individual['paid'] : (int) $coverage['paid'];
-		$total = $individual['known'] ? $individual['total'] : max( 0, (int) $registration['total_cents'] );
-		$balance = $individual['known'] ? $individual['balance'] : max( 0, $total - $paid );
-		$deposit_due = $individual['known'] ? $individual['deposit_due'] : max( 0, (int) $registration['initial_due_cents'] );
-		$deposit_missing = $individual['known'] ? $individual['deposit_missing'] : max( 0, $deposit_due - $paid );
+		$paid = $individual['totals_known'] ? $individual['paid'] : (int) $coverage['paid'];
+		$total = $individual['totals_known'] ? $individual['total'] : max( 0, (int) $registration['total_cents'] );
+		$balance = $individual['totals_known'] ? $individual['balance'] : max( 0, $total - $paid );
+		$deposit_due = $individual['deposit_due'];
+		$deposit_missing = $individual['deposit_missing'];
 		$managed = in_array( $registration['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 		$collectible = $managed && in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true );
 		$status_labels = array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'Da pagare', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto', 'CANCELLED' => 'Annullata', 'EXPIRED' => 'Scaduta' );
@@ -886,6 +886,7 @@ final class MI_Registration_Service {
 		elseif ( ! $managed ) $payment_label = 'Pagamento non gestito da questo portale';
 		elseif ( 0 === $total ) $payment_label = 'Nessun pagamento previsto';
 		elseif ( 0 === $balance ) $payment_label = 'Saldo completato';
+		elseif ( 'DEPOSIT_BALANCE' === $registration['economic_mode'] && ! $individual['deposits_known'] ) $payment_label = 'Caparra da verificare con la segreteria';
 		elseif ( 'DEPOSIT_BALANCE' === $registration['economic_mode'] && $deposit_due > 0 && 0 === $deposit_missing ) $payment_label = 'Caparra ricevuta, saldo ancora dovuto';
 		elseif ( $paid > 0 ) $payment_label = 'Versamento parziale ricevuto';
 		else $payment_label = 'DEPOSIT_BALANCE' === $registration['economic_mode'] && $deposit_due > 0 ? 'Caparra ancora da versare' : 'Pagamento ancora da completare';

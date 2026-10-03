@@ -576,7 +576,7 @@
   [data-mi-portal-scope="reserved"] .mi-management .mi-event-toolbar :is(button,a) { flex:0 0 auto; width:auto; min-height:44px; height:44px; margin:0; }
   [data-mi-portal-scope="reserved"] .mi-management .mi-event-toolbar [data-refresh] { width:44px; padding:0; }
   [data-mi-portal-scope="reserved"] .mi-management .mi-event-toolbar .mi-refresh-label { display:none; }
-  .mi-management .mi-event-toolbar [data-sheet-sync] { display:none!important; }
+
   [data-mi-portal-scope="reserved"] .mi-management .mi-event-toolbar .mi-refresh-icon { display:inline; font-size:1.45rem; line-height:1; }
   [data-mi-portal-scope="reserved"] .mi-management .mi-management-search { display:grid; grid-template-columns:minmax(0,1fr) auto; width:100%; }
   [data-mi-portal-scope="reserved"] .mi-management .mi-management-search label { width:auto; min-width:0; }
@@ -629,3 +629,15 @@
 @media screen and (min-width:761px) {
   /* Navigation typography is shared in portal.css. */
 }
+.mi-management .mi-event-toolbar .mi-sheet-menu{position:relative;margin:0 0 0 auto}
+.mi-management .mi-sheet-menu>summary{list-style:none;cursor:pointer;margin:0}
+.mi-management .mi-sheet-menu>summary::-webkit-details-marker{display:none}
+.mi-management .mi-sheet-menu[open] .mi-sheet-chevron{transform:rotate(180deg)}
+.mi-management .mi-sheet-menu__panel{position:absolute;top:calc(100% + 8px);right:0;z-index:30;display:flex;gap:8px;padding:10px;width:max-content;max-width:calc(100vw - 48px);box-sizing:border-box;background:var(--surface,#fff);border:1px solid var(--line,#d7dde6);border-radius:12px;box-shadow:0 8px 24px #17203326}
+.mi-management .mi-sheet-menu__panel .mi-sheet-button{margin:0}
+.mi-management .mi-sheet-menu__panel :is(a,button){white-space:nowrap}
+@media(max-width:480px){.mi-management .mi-sheet-menu__panel{flex-direction:column;width:260px}.mi-management .mi-event-toolbar .mi-sheet-menu__panel :is(a,button){width:100%;height:auto;white-space:normal}}
+@media print{.mi-management .mi-sheet-menu{display:none}}
+
+@media screen{[data-mi-portal-scope="reserved"] .mi-management .mi-event-toolbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}[data-mi-portal-scope="reserved"] .mi-management .mi-event-toolbar>[data-refresh],[data-mi-portal-scope="reserved"] .mi-management .mi-event-toolbar>.mi-sheet-menu{width:100%;min-width:0;margin:0}}
+@media screen{[data-mi-portal-scope="reserved"] .mi-management .mi-event-toolbar>.mi-sheet-menu{padding:0;border:0}[data-mi-portal-scope="reserved"] .mi-management .mi-sheet-menu>summary{width:100%}}

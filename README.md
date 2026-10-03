@@ -1,5 +1,15 @@
 # Modulo iscrizioni multi-evento
 
+Versione **[3.26.217](docs/rilascio-3.26.217.md)**: esclude i saldi individuali sconosciuti dal filtro Saldato, rileva le modifiche durante la lettura delle pagine e interrompe le richieste se fallisce il conteggio. Aggiornamento solo WordPress; installazione sul sito da completare.
+
+Versione **[3.26.216](docs/rilascio-3.26.216.md)**: corregge saldi individuali con caparre incoerenti, scorrimento della lista d'attesa dopo annullamento, impronte della cache e ordinamento paginato; allinea date storiche, obblighi ONE e riepiloghi. Aggiornamento solo WordPress; installazione sul sito da completare.
+
+Versione **[3.26.215](docs/rilascio-3.26.215.md)**: quando si attivano le caselle delle presenze, il riepilogo iscritti passa automaticamente all'ordine alfabetico per cognome. Restano la scelta manuale dell'ordinamento e il caricamento paginato. Aggiornamento solo WordPress; installazione sul sito da completare.
+
+Versione **[3.26.214](docs/rilascio-3.26.214.md)**: apertura della webapp direttamente su Iscrizioni, anche dalla PWA. Eventi viene preparata solo aprendo la relativa scheda; mantenuti script condizionali e pannelli differiti. Aggiornamento solo WordPress; installazione sul sito da completare.
+
+Versione **[3.26.213](docs/rilascio-3.26.213.md)**: corretti i tre difetti dell'audit del 30 settembre. Il saldo pubblico blocca le caparre incoerenti; le copie di eventi annullati non ereditano il blocco delle iscrizioni; le date personalizzate ammettono valori futuri anche negli eventi già pubblicati. Aggiornamento solo WordPress; installazione sul sito da completare.
+
 Versione **[3.26.210](docs/rilascio-3.26.210.md)**: coda email di test limitata e protetta dai reinvii dopo esiti incerti; eliminate quattro query con sintassi MySQL deprecata. Include la 3.26.209. ZIP WordPress e sorgenti Apps Script disponibili nel rilascio; installazione WordPress a cura dell'utente.
 
 Versione **[3.26.209](docs/rilascio-3.26.209.md)**: corretti gli otto difetti dell’audit del 29 settembre su sincronizzazione Google, riepiloghi economici, rettifiche, coda email, scadenze e quantità dei servizi. Richiede aggiornamento WordPress e Apps Script. Pacchetti locali; installazione da completare.

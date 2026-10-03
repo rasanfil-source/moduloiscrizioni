@@ -64,7 +64,8 @@ final class MI_Management_Service {
 		foreach ( (array) ( $snapshot['event']['participant_fields'] ?? array() ) as $field ) {
 			$key = $field['key'] ?? '';
 			if ( ! preg_match( '/^[a-z][a-z0-9_-]{0,79}$/', $key ) || in_array( $key, array( 'constructor','prototype','room','camera','alloggio','first_name','last_name' ), true ) ) continue;
-			$fields[$key] = array( 'key' => $key, 'label' => $field['label'] ?? $key, 'type' => $field['type'] ?? 'text', 'date_rule' => $field['date_rule'] ?? '', 'required' => ! empty( $field['required'] ), 'options' => (array) ( $field['options'] ?? array() ) );
+			$fields[$key] = array( 'key' => $key, 'label' => $field['label'] ?? $key, 'type' => $field['type'] ?? 'text', 'required' => ! empty( $field['required'] ), 'options' => (array) ( $field['options'] ?? array() ) );
+			if ( isset( $field['date_rule'] ) ) $fields[$key]['date_rule'] = $field['date_rule'];
 		}
 		if ( '1' === get_post_meta( $registration['event_id'], '_mi_bus_assignment_enabled', true ) ) {
 			if ( ! isset( $fields['pullman'] ) ) $fields['pullman'] = array( 'key' => 'pullman', 'label' => 'Assegnato al Pullmann…', 'type' => 'text', 'required' => false );
@@ -150,17 +151,28 @@ final class MI_Management_Service {
 	}
 
 	/**
-	 * Percorso paginato per l'elenco ordinario. I filtri che dipendono da
-	 * calcoli economici o JSON complessi restano temporaneamente nel percorso
-	 * completo; apertura, ricerca anagrafica e ordinamento comune leggono invece
-	 * soltanto le prenotazioni necessarie alla pagina richiesta.
+	 * L'ordine cronologico semplice legge solo la pagina richiesta. Filtri
+	 * avanzati e ordinamenti testuali usano il selettore condiviso a blocchi,
+	 * senza dipendere dalla collation SQL o dalla disponibilità della cache.
 	 */
 	public static function page( $event_id, $context, $offset = 0, $limit = 30 ) {
-		global $wpdb;
 		if ( ! MI_Portal_Management::allowed() || ! MI_Access::can_access_event( $event_id ) ) return new WP_Error( 'mi_management_scope', 'Evento non accessibile.' );
+		try {
+			$version = class_exists( 'MI_Event_Read_Cache' ) ? MI_Event_Read_Cache::state( $event_id )['token'] : null;
+			$page = self::read_page( $event_id, $context, $offset, $limit, $version );
+			if ( is_wp_error( $page ) ) return $page;
+			if ( null !== $version && MI_Event_Read_Cache::state( $event_id )['token'] !== $version ) return new WP_Error( 'mi_management_changed', 'I dati sono cambiati durante la lettura. Riprova.' );
+			return $page;
+		} catch ( Throwable $error ) { return new WP_Error( 'mi_management_read', $error->getMessage() ); }
+	}
+
+	private static function read_page( $event_id, $context, $offset, $limit, $version ) {
+		global $wpdb;
+		$source_version = null;
 		if ( class_exists( 'MI_Event_Read_Cache' ) ) {
 			try {
-				$state = MI_Event_Read_Cache::state( $event_id );
+				$state = array( 'token' => $version );
+				$source_version = $state['token'];
 				$model = MI_Event_Read_Cache::get( $event_id, $state['token'] );
 				if ( is_array( $model ) ) {
 					$page = MI_Management_List::page( $model, $context, $offset, $limit, $state['token'] );
@@ -196,32 +208,20 @@ final class MI_Management_Service {
 		$where_sql = implode( ' AND ', $where );
 		$sort = in_array( $context['sort'] ?? '', array( 'name', 'buyer', 'code', 'room', 'created_at' ), true ) ? $context['sort'] : 'created_at';
 		$direction = 'desc' === ( $context['direction'] ?? ( 'created_at' === $sort ? 'desc' : 'asc' ) ) ? 'DESC' : 'ASC';
+		// Natural text ordering (including ties) must precede LIMIT/OFFSET.
+		if ( 'created_at' !== $sort ) $advanced = true;
 		if ( $individual ) {
-			$order = array(
-				'created_at' => "r.created_at {$direction},r.id {$direction},p.id ASC",
-				'name' => "p.last_name {$direction},p.first_name {$direction}",
-				'buyer' => "r.buyer_last_name {$direction},r.buyer_first_name {$direction}",
-				'code' => "r.order_code {$direction}",
-				'room' => "p.room_code {$direction},p.last_name {$direction},p.first_name {$direction}",
-			)[ $sort ] ?? "p.last_name {$direction},p.first_name {$direction}";
 			$from = "{$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id";
-			if ( $advanced ) return self::scan_filtered_page( $event_id, $context, $offset, $limit, true, $from, $where_sql );
+			if ( $advanced ) return self::scan_filtered_page( $event_id, $context, $offset, $limit, true, $from, $where_sql, $source_version );
 			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$from} WHERE {$where_sql}" );
-			$closed_order = 'created_at' === $sort ? '' : "(r.status IN ('CANCELLED','EXPIRED') OR p.status='CANCELLED'),";
-			$selected = $wpdb->get_results( "SELECT p.id,r.id registration_id FROM {$from} WHERE {$where_sql} ORDER BY {$closed_order}{$order},r.order_code,p.id LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
+			self::check_database();
+			$selected = $wpdb->get_results( "SELECT p.id,r.id registration_id FROM {$from} WHERE {$where_sql} ORDER BY r.created_at {$direction},r.id {$direction},p.id ASC LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
 		} else {
-			$order = array(
-				'created_at' => "r.created_at {$direction},r.id {$direction}",
-				'name' => "r.buyer_last_name {$direction},r.buyer_first_name {$direction}",
-				'buyer' => "r.buyer_last_name {$direction},r.buyer_first_name {$direction}",
-				'code' => "r.order_code {$direction}",
-				'room' => "r.order_code {$direction}",
-			)[ $sort ] ?? "r.buyer_last_name {$direction},r.buyer_first_name {$direction}";
 			$from = "{$wpdb->prefix}mi_registrations r";
-			if ( $advanced ) return self::scan_filtered_page( $event_id, $context, $offset, $limit, false, $from, $where_sql );
+			if ( $advanced ) return self::scan_filtered_page( $event_id, $context, $offset, $limit, false, $from, $where_sql, $source_version );
 			$total = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$from} WHERE {$where_sql}" );
-			$closed_order = 'created_at' === $sort ? '' : "(r.status IN ('CANCELLED','EXPIRED')),";
-			$selected = $wpdb->get_results( "SELECT r.id registration_id,r.order_code FROM {$from} WHERE {$where_sql} ORDER BY {$closed_order}{$order},r.id LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
+			self::check_database();
+			$selected = $wpdb->get_results( "SELECT r.id registration_id,r.order_code FROM {$from} WHERE {$where_sql} ORDER BY r.created_at {$direction},r.id {$direction} LIMIT {$limit} OFFSET {$offset}", ARRAY_A );
 		}
 		self::check_database();
 		$registration_ids = array_values( array_unique( array_map( 'intval', array_column( $selected, 'registration_id' ) ) ) );
@@ -235,21 +235,28 @@ final class MI_Management_Service {
 			$summary['items'] = array_values( array_filter( array_map( static function ( $row ) use ( $by_code ) { return $by_code[$row['order_code']] ?? null; }, $selected ) ) );
 		}
 		$page = MI_Management_List::page( $summary, $context, 0, $limit );
-		$state_revision = $wpdb->get_var( $wpdb->prepare( "SELECT revision FROM {$wpdb->prefix}mi_management_state WHERE event_id=%d", $event_id ) );
-		$version = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) total,COALESCE(MAX(id),0) max_id,COALESCE(SUM(workspace_revision),0) revisions FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d", $event_id ), ARRAY_A );
-		self::check_database();
 		$page['total'] = $total;
 		$page['offset'] = $offset;
-		$fingerprint_context = $context;
-		unset( $fingerprint_context['shown'] );
-		$page['fingerprint'] = hash( 'sha256', wp_json_encode( array( $version, (string) $state_revision, $total, $fingerprint_context ) ) );
+		$page['fingerprint'] = self::page_fingerprint( $event_id, $context, $total, $source_version );
 		return $page;
 	}
 
+	private static function page_fingerprint( $event_id, array $context, $total, $source_version, array $deadline_ids = array() ) {
+		if ( null === $source_version ) {
+			global $wpdb;
+			$state_revision = $wpdb->get_var( $wpdb->prepare( "SELECT revision FROM {$wpdb->prefix}mi_management_state WHERE event_id=%d", $event_id ) );
+			self::check_database();
+			$version = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) total,COALESCE(MAX(id),0) max_id,COALESCE(SUM(workspace_revision),0) revisions FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d", $event_id ), ARRAY_A );
+			self::check_database();
+			$source_version = hash( 'sha256', wp_json_encode( array( $version, (string) $state_revision ) ) );
+		}
+		return MI_Management_List::fingerprint( $source_version, $context, $total, $deadline_ids );
+	}
+
 	/** Exact advanced filtering in bounded SQL chunks: never materialize the event at once. */
-	private static function scan_filtered_page( $event_id, array $context, $offset, $limit, $individual, $from, $where_sql ) {
+	private static function scan_filtered_page( $event_id, array $context, $offset, $limit, $individual, $from, $where_sql, $source_version ) {
 		global $wpdb;
-		$cursor = 0; $matched = 0; $rows = array(); $chunk_size = 200;
+		$cursor = 0; $matched = 0; $rows = array(); $chunk_size = 200; $deadline_ids = array();
 		$rooms = null;
 		do {
 			$selected = $individual
@@ -270,14 +277,11 @@ final class MI_Management_Service {
 			}
 			$filtered = MI_Management_List::page( $summary, $context, 0, 200 );
 			$matched += (int) $filtered['total'];
+			if ( ! empty( $context['deadline'] ) ) $deadline_ids = array_merge( $deadline_ids, array_column( $filtered['rows'], $individual ? 'id' : 'code' ) );
 			$rows = MI_Management_List::sorted_prefix( $rows, $filtered['rows'], $context, $offset + $limit );
 			$cursor = (int) ( $individual ? end( $selected )['id'] : end( $selected )['registration_id'] );
 		} while ( count( $selected ) === $chunk_size );
-		$state_revision = $wpdb->get_var( $wpdb->prepare( "SELECT revision FROM {$wpdb->prefix}mi_management_state WHERE event_id=%d", $event_id ) );
-		$version = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) total,COALESCE(MAX(id),0) max_id,COALESCE(SUM(workspace_revision),0) revisions FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d", $event_id ), ARRAY_A );
-		self::check_database();
-		$fingerprint_context = $context; unset( $fingerprint_context['shown'] );
-		return array( 'rows' => array_slice( $rows, $offset, $limit ), 'total' => $matched, 'offset' => $offset, 'limit' => $limit, 'fingerprint' => hash( 'sha256', wp_json_encode( array( $version, (string) $state_revision, $matched, $fingerprint_context ) ) ) );
+		return array( 'rows' => array_slice( $rows, $offset, $limit ), 'total' => $matched, 'offset' => $offset, 'limit' => $limit, 'fingerprint' => self::page_fingerprint( $event_id, $context, $matched, $source_version, $deadline_ids ) );
 	}
 	public static function summary( $event_id, $registration_ids = null, $event_rooms = null ) {
 		global $wpdb;
@@ -327,7 +331,7 @@ final class MI_Management_Service {
 				$buyer_matches = array_values( array_filter( $all_participants, static function ( $person ) use ( $order ) { return mb_strtolower( trim( $person['first_name'] ) ) === mb_strtolower( trim( $order['buyer_first_name'] ) ) && mb_strtolower( trim( $person['last_name'] ) ) === mb_strtolower( trim( $order['buyer_last_name'] ) ); } ) );
 				$buyer_participant_id = count( $all_participants ) > 1 && 1 === count( $buyer_matches ) ? (int) $buyer_matches[0]['id'] : 0;
 				$participants = array_values( array_filter( $all_participants, static function ( $person ) { return 'ACTIVE' === $person['status']; } ) );
-				$first_person_id = (int) ( $participants[0]['id'] ?? 0 );
+				$first_person_id = (int) ( $all_participants[0]['id'] ?? 0 );
 				$definitions = self::definitions( $order ); $snapshot = self::decode( $order['snapshot_json'] );
 				foreach ( $definitions as $definition ) $field_labels[$definition['key']] = $definition['label'];
 				foreach ( $participants as $i => $person ) {
@@ -355,6 +359,7 @@ final class MI_Management_Service {
 					if ( (int) $person['id'] === $first_person_id || 'ALL' === ( $snapshot['event']['participant_extra_scope'] ?? '' ) ) foreach ( $definitions as $f ) if ( $f['required'] && '' === trim( (string) ( $fields[$f['key']] ?? '' ) ) ) $missing_fields[] = $f['label'];
 					$economic = $individual_economics[(int) $person['id']] ?? array( 'total' => 0, 'deposit' => 0, 'paid' => 0, 'balance' => 0, 'deposit_missing' => 0 );
 					$person_deposit = array( 'deposit_plan' => 'DEPOSIT_BALANCE' === ( $order['economic_mode'] ?? '' ), 'deposit_due' => (int) $economic['deposit'], 'deposit_missing' => (int) $economic['deposit_missing'], 'deposit_covered' => 'DEPOSIT_BALANCE' === ( $order['economic_mode'] ?? '' ) && (int) $economic['deposit'] > 0 && (int) $economic['deposit_missing'] <= 0, 'paid' => (int) $economic['paid'], 'balance' => (int) $economic['balance'] );
+					$person_deposit['totals_known'] = ! empty( $individual_position['quotes_known'] ) && ! empty( $individual_position['payments_known'] );
 					if ( false === $individual_position['deposits_known'] ) { $person_deposit['deposit_due'] = null; $person_deposit['deposit_missing'] = null; $person_deposit['deposit_covered'] = false; $person_deposit['economics_known'] = false; }
 					$individuals[] = $person_deposit + array( 'created_at' => $order['created_at'] ?? '', 'registration_id' => (int) $order['id'], 'economics_known' => ! empty( $individual_position['quotes_known'] ) && ! empty( $individual_position['payments_known'] ), 'is_buyer' => (int) $person['id'] === $buyer_participant_id, 'id' => (int) $person['id'], 'number' => $number + 1, 'attendance' => $attendance[$person['id']]['state'] ?? 'UNRECORDED', 'code' => $order['order_code'], 'name' => trim( ( $person['last_name'] ?? '' ) . ' ' . ( $person['first_name'] ?? '' ) ), 'buyer' => trim( $order['buyer_last_name'] . ' ' . $order['buyer_first_name'] ), 'email' => self::participant_contact( $fields, $definitions, 'email', $order['buyer_email'] ?? '' ), 'phone' => self::participant_contact( $fields, $definitions, 'phone', $order['buyer_phone'] ?? '' ), 'status' => 'CANCELLED' === $person['status'] ? 'CANCELLED' : $order['status'], 'room' => $person['room_code'], 'fields' => $fields, 'missing' => $missing_fields, 'unassigned' => $needs_room( $person ) && ! $person['room_code'], 'collectible' => $collectible && (int) $economic['balance'] > 0, 'requests' => self::visible_special_requests( $order['special_requests'] ?? '' ), 'requests_reviewed' => $request_review['reviewed'], 'offer_expires_at' => $order['waitlist_offer_expires_at'] ?? '', 'options' => self::decode( $person['options_json'] ?? '' ) );
 				}

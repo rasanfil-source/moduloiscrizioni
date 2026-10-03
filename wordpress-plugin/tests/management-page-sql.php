@@ -33,7 +33,7 @@ if ( ! str_contains( $sql, 'ORDER BY r.created_at DESC,r.id DESC,p.id ASC' ) ) t
 $GLOBALS['wpdb']->queries = array();
 MI_Management_Service::page( 42, array( 'sort' => 'name' ) );
 $sql = implode( "\n", $GLOBALS['wpdb']->queries );
-if ( ! str_contains( $sql, 'p.last_name ASC,p.first_name ASC' ) ) throw new RuntimeException( 'Explicit surname sorting remains available.' );
+if ( ! str_contains( $sql, 'AND p.id>0 ORDER BY p.id LIMIT 200' ) || str_contains( $sql, 'OFFSET' ) ) throw new RuntimeException( 'Natural surname sorting must select across bounded batches.' );
 $GLOBALS['wpdb']->queries = array();
 MI_Management_Service::page( 42, array( 'sort' => 'created_at', 'includeClosed' => true ), 30 );
 $sql = implode( "\n", $GLOBALS['wpdb']->queries );
@@ -46,5 +46,5 @@ if ( ! str_contains( $sql, 'AND r.id>0 ORDER BY r.id LIMIT 200' ) || str_contain
 $GLOBALS['wpdb']->queries = array();
 MI_Management_Service::page( 42, array( 'view' => 'orders', 'sort' => 'room' ) );
 $sql = implode( "\n", $GLOBALS['wpdb']->queries );
-if ( ! str_contains( $sql, 'ORDER BY (r.status IN (\'CANCELLED\',\'EXPIRED\')),r.order_code ASC,r.id' ) ) throw new RuntimeException( 'Order room sorting did not follow the shared selector tie-breaker.' );
+if ( ! str_contains( $sql, 'AND r.id>0 ORDER BY r.id LIMIT 200' ) ) throw new RuntimeException( 'Order room sorting must use the shared natural comparator.' );
 echo "PASS: stati dei partecipanti e ricerca avanzata SQL senza falsi negativi.\n";

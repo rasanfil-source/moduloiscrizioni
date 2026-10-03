@@ -115,6 +115,7 @@ final class MI_Public_Balance {
 		$managed = in_array( $r['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 		$individual = array_column( $b['individual']['people'], null, 'id' )[$id] ?? null;
 		if ( $managed && ( ! $individual || empty( $b['individual']['quotes_known'] ) || empty( $b['individual']['payments_known'] ) ) ) throw new InvalidArgumentException( $b['individual']['message'] ?: 'La posizione individuale deve essere verificata dalla segreteria prima di modificare i servizi.' );
+		if ( 'DEPOSIT_BALANCE' === $r['economic_mode'] && empty( $b['individual']['deposits_known'] ) ) throw new InvalidArgumentException( 'La caparra deve essere verificata dalla segreteria prima di confermare il riepilogo.' );
 		foreach ( $definitions as $code => $o ) if ( $can_edit && $managed && 'TICKET' === ( $o['scope'] ?? '' ) && MI_Option_Rules::is_bus( $o ) && (int) ( $o['max_quantity'] ?? 1 ) <= 1 && (int) ( $selected[$code]['quantity'] ?? 0 ) <= 1 ) {
 			$direction = preg_match( '/ritorno|fiumicino.{0,5}roma|santiago.{0,5}a coru/i', $o['name'] ) ? 'Al ritorno' : ( preg_match( '/andata|roma.{0,5}fiumicino|porto.{0,5}tui/i', $o['name'] ) ? 'All’andata' : 'Trasferimenti' );
 			$editable[] = array( 'code' => $code, 'name' => $o['name'], 'price' => isset( $selected[$code] ) ? (int) $selected[$code]['unit_price_cents'] : (int) $o['price_cents'], 'selected' => ! empty( $selected[$code]['quantity'] ), 'group' => MI_Option_Rules::choice_group( $o ), 'direction' => $direction );
@@ -238,8 +239,7 @@ final class MI_Public_Balance {
 				$person_deltas[$rid][$id] = $delta;
 				$changes[$id] = array( 'before' => $original, 'after' => $options );
 				$person_row = array_column( $b['people'], null, 'id' )[$id]; $fields = self::decode( $person_row['extra_json'] ); $snapshot = self::decode( $r['snapshot_json'] ); $missing = array();
-				$active_people = array_values( array_filter( $b['people'], static function ( $person ) { return 'ACTIVE' === ( $person['status'] ?? '' ); } ) );
-				if ( 'ALL' === ( $snapshot['event']['participant_extra_scope'] ?? 'ONE' ) || (int) ( $active_people[0]['id'] ?? 0 ) === $id ) foreach ( $snapshot['event']['participant_fields'] ?? array() as $field ) {
+				if ( 'ALL' === ( $snapshot['event']['participant_extra_scope'] ?? 'ONE' ) || (int) ( $b['people'][0]['id'] ?? 0 ) === $id ) foreach ( $snapshot['event']['participant_fields'] ?? array() as $field ) {
 					if ( ! empty( $field['required'] ) && '' === trim( (string) ( $fields[$field['key']] ?? '' ) ) ) $missing[] = $field['label'] ?? $field['key'];
 				}
 				$receipt['people'][] = array( 'row' => $id, 'registration_id' => $rid, 'name' => $view['cognome'] . ' ' . $view['nome'], 'lines' => $lines, 'total' => $sum, 'paid' => $view['paid'], 'deposit' => $view['deposit'], 'missing' => $missing, 'deadline' => '' );

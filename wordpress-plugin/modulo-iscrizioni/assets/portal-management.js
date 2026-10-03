@@ -3,6 +3,15 @@
   const registrationSortStorageKey='mi-registration-sort';
   const readRegistrationSort=()=>{try{const value=localStorage.getItem(registrationSortStorageKey);return registrationSortOptions.some(option=>option[0]===value)?value:'created_at';}catch(error){return 'created_at';}};
   const saveRegistrationSort=value=>{try{localStorage.setItem(registrationSortStorageKey,value);}catch(error){/* La scelta resta valida per la sessione corrente. */}};
+  function applyAttendanceSort(context,available){
+    const enabled=!!available;
+    if(context.attendanceAvailable!==enabled&&(enabled||context.attendanceAvailable===true)){
+      context.sort=enabled?'name':readRegistrationSort();
+      context.direction=context.sort==='created_at'?'desc':'asc';
+      context.shown=30;
+    }
+    context.attendanceAvailable=enabled;
+  }
   function registrationSortMenu(current,onChange){
     const menu=document.createElement('details');menu.className='mi-registration-sort';menu.dataset.orderMenu='';
     menu.innerHTML='<summary>Ordina <span aria-hidden="true">▾</span></summary><div class="mi-registration-sort-options">'+registrationSortOptions.map(([key,label,hint])=>'<button type="button" data-order-choice="'+key+'" aria-pressed="false"><span>'+label+'</span><small>'+hint+'</small></button>').join('')+'</div>';
@@ -174,10 +183,17 @@
     }
     const sheetButton=root.querySelector('[data-open-sheet]');
     const sheetSyncButton=root.querySelector('[data-sheet-sync]');
+    const sheetMenu=root.querySelector('[data-sheet-menu]');
+    if(sheetMenu){
+      document.addEventListener('click',e=>{if(!sheetMenu.contains(e.target))sheetMenu.open=false;});
+      sheetMenu.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();sheetMenu.open=false;sheetMenu.querySelector('summary').focus();}});
+      sheetMenu.querySelector('.mi-sheet-menu__panel').addEventListener('click',e=>{if(e.target.closest('a,button')){sheetMenu.open=false;sheetMenu.querySelector('summary').focus();}});
+    }
     if(sheetSyncButton)sheetSyncButton.addEventListener('click',syncSheet);
     function updateSheetSyncVisibility(ticket,eventId){
       if(ticket!==generation||String(event)!==String(eventId))return;
       if(sheetSyncButton)sheetSyncButton.hidden=!sheetButton||sheetButton.hidden;
+      if(sheetMenu){sheetMenu.hidden=!sheetButton||sheetButton.hidden;if(sheetMenu.hidden)sheetMenu.open=false;}
     }
     if(sheetButton)sheetButton.addEventListener('click',async e=>{
       e.preventDefault();
@@ -254,7 +270,7 @@
     }
     async function summary(){
       updateEventContext();
-      if(!await canLeave())return;const ticket=++generation;order='';booking=null;printList=null;parkPanels();content.replaceChildren();const sheetLink=root.querySelector('[data-open-sheet]'),sheetSync=root.querySelector('[data-sheet-sync]');if(sheetLink){sheetLink.hidden=true;sheetLink.removeAttribute('href');}if(sheetSync)sheetSync.hidden=true;if(!event){await allPeople();return;}say('Caricamento riepilogo…');
+      if(!await canLeave())return;const ticket=++generation;order='';booking=null;printList=null;parkPanels();content.replaceChildren();const sheetLink=root.querySelector('[data-open-sheet]'),sheetSync=root.querySelector('[data-sheet-sync]');if(sheetLink){sheetLink.hidden=true;sheetLink.removeAttribute('href');}if(sheetSync)sheetSync.hidden=true;if(sheetMenu){sheetMenu.open=false;sheetMenu.hidden=true;}if(!event){await allPeople();return;}say('Caricamento riepilogo…');
       if(printButton){printButton.hidden=false;printButton.textContent='Stampa riepilogo iscritti';}returnEvent=event;currentPerson=null;
       try{const data=await request('summary');if(ticket!==generation)return;
         data.items=data.items||[];data.people=data.people||[];
@@ -309,6 +325,7 @@
 
         if(listEvent!==event){listContext={query:'',filter:'all',state:'',requests:'',deadline:'',room:'',service:'',sort:readRegistrationSort(),view:'people',shown:30};listEvent=event;}
         listContext.view='people';listContext.orderService='';
+        applyAttendanceSort(listContext,data.attendance_availability?.available);
         const states={CONFIRMED:'Partecipante',PENDING_PAYMENT:'Pagamento atteso',WAITLISTED:'Lista d’attesa',WAITLIST_OFFERED:'Posto proposto',CANCELLED:'Annullata',EXPIRED:'Scaduta'};
         const stateLabel=row=>{
           if(!features.payments||!['CONFIRMED','PENDING_PAYMENT'].includes(row.status))return states[row.status]||row.status;
@@ -577,7 +594,7 @@
           const query=listContext.query.trim().toLocaleLowerCase('it'),filter=listContext.filter;
           const matches=p=>(p.name+' '+p.buyer+' '+p.code+' '+p.email+' '+p.phone).toLocaleLowerCase('it').includes(query);
           const open=p=>!['CANCELLED','EXPIRED'].includes(p.status);
-          const depositMatch=x=>!listContext.deposit||(['CONFIRMED','PENDING_PAYMENT'].includes(x.status)&&(listContext.deposit==='none'?x.paid<=0&&x.balance>0:listContext.deposit==='partial'?x.paid>0&&x.deposit_missing>0&&x.balance>0:listContext.deposit==='covered'?x.deposit_covered&&x.balance>0:listContext.deposit==='settled'?x.balance<=0:x.balance>0));
+          const depositMatch=x=>!listContext.deposit||((x.totals_known??x.economics_known??true)!==false&&['CONFIRMED','PENDING_PAYMENT'].includes(x.status)&&(listContext.deposit==='none'?x.paid<=0&&x.balance>0:listContext.deposit==='partial'?x.paid>0&&x.deposit_missing>0&&x.balance>0:listContext.deposit==='covered'?x.deposit_covered&&x.balance>0:listContext.deposit==='settled'?x.balance<=0:x.balance>0));
           const people=(data.people||[]).filter(p=>(listContext.includeClosed||open(p))&&depositMatch(p)&&personLogistics(p)&&deadlineMatch(p)&&requestMatch(p)&&(!listContext.state||p.status===listContext.state)&&matches(p)&&(filter==='all'||(open(p)&&(filter==='balance'?p.collectible:filter==='missing'?(p.missing||[]).length>0:p.unassigned))));
           const orders=data.items.filter(x=>(listContext.includeClosed||open(x))&&depositMatch(x)&&(!listContext.orderService||(x.order_options||[]).some(o=>(o.code||o.name)===listContext.orderService&&Number(o.quantity)>0))&&deadlineMatch(x)&&requestMatch(x)&&(!(listContext.room||listContext.service)||(data.people||[]).some(p=>p.code===x.code&&personLogistics(p)))&&(!listContext.state||x.status===listContext.state)&&(filter==='all'||(x.active&&x[filter]>0&&(filter!=='balance'||(x.collectible??['CONFIRMED','PENDING_PAYMENT'].includes(x.status)))))&&((x.name+' '+x.code).toLocaleLowerCase('it').includes(query)||(data.people||[]).some(p=>p.code===x.code&&matches(p))));
           const individual=listContext.view==='people',all=data.server_paging?pageRows:(individual?people:orders).sort((a,b)=>listContext.sort==='created_at'?((listContext.direction==='asc'?1:-1)*(String(a.created_at||'').localeCompare(String(b.created_at||''))||(Number(a.registration_id||0)-Number(b.registration_id||0)))||(Number(a.id||0)-Number(b.id||0))):((Number(!open(a))-Number(!open(b)))||(listContext.direction==='desc'?-1:1)*String(a[listContext.sort]||'').localeCompare(String(b[listContext.sort]||''),'it',{numeric:true,sensitivity:'base'}))),list=data.server_paging?all:all.slice(0,listContext.shown),total=data.server_paging?pageTotal:all.length;

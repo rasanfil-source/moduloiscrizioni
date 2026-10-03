@@ -216,6 +216,7 @@ final class MI_Field_Schema {
 			$seen[ $key ] = true;
 			$retention = 'SHEETS_ONLY' === strtoupper( sanitize_key( $raw['retention'] ?? '' ) ) ? 'SHEETS_ONLY' : 'STANDARD';
 			$field = array( 'key' => $key, 'label' => $label, 'type' => $type, 'required' => ! empty( $raw['required'] ), 'max_length' => 'textarea' === $type ? 1000 : ( 'email' === $type ? 254 : 180 ), 'help' => '', 'retention' => $retention );
+			if ( 'date' === $type ) $field['date_rule'] = 'any';
 			if ( 'yesno' === $type ) {
 				$field['options'] = array( 'Sì', 'No' );
 				$field['help'] = 'Scegli la risposta appropriata.';
@@ -267,8 +268,10 @@ final class MI_Field_Schema {
 				$date = DateTimeImmutable::createFromFormat( '!Y-m-d', $value, wp_timezone() );
 				$today = new DateTimeImmutable( 'today', wp_timezone() );
 				$oldest = $today->modify( '-120 years' );
-				$future_rule = 'future' === ( $field['date_rule'] ?? '' );
-				$invalid_date = ! $date || $date->format( 'Y-m-d' ) !== $value || ( $future_rule ? $date < $today || $date > $today->modify( '+20 years' ) : $date > $today || $date < $oldest );
+				// Older published custom fields have no explicit rule yet.
+				$date_rule = $field['date_rule'] ?? ( str_starts_with( $key, 'custom_' ) ? 'any' : 'past' );
+				$future_rule = 'future' === $date_rule;
+				$invalid_date = ! $date || $date->format( 'Y-m-d' ) !== $value || ( 'any' !== $date_rule && ( $future_rule ? $date < $today || $date > $today->modify( '+20 years' ) : $date > $today || $date < $oldest ) );
 				if ( $invalid_date ) {
 					return new WP_Error( 'mi_participant_date_invalid', 'Controlla le date dei partecipanti.', array( 'status' => 400 ) );
 				}

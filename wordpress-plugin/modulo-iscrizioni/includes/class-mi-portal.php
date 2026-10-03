@@ -95,11 +95,16 @@ final class MI_Portal {
 	}
 
 	private static function needs_management_script() {
-		return is_user_logged_in() && empty( $_GET['mi_status'] ) && empty( $_GET['mi_waitlist_offer'] ) && in_array( sanitize_key( wp_unslash( $_GET['mi_portal_view'] ?? 'manage' ) ), array( 'management', 'registrations', 'groups' ), true );
+		return is_user_logged_in() && empty( $_GET['mi_status'] ) && empty( $_GET['mi_waitlist_offer'] ) && in_array( self::current_view(), array( 'management', 'registrations', 'groups' ), true );
 	}
 
 	private static function needs_payment_assets() {
-		return is_user_logged_in() && empty( $_GET['mi_status'] ) && empty( $_GET['mi_waitlist_offer'] ) && in_array( sanitize_key( wp_unslash( $_GET['mi_portal_view'] ?? 'manage' ) ), array( 'payments', 'payment-report' ), true ) && MI_Portal_Payments::allowed();
+		return is_user_logged_in() && empty( $_GET['mi_status'] ) && empty( $_GET['mi_waitlist_offer'] ) && in_array( self::current_view(), array( 'payments', 'payment-report' ), true ) && MI_Portal_Payments::allowed();
+	}
+
+	private static function current_view() {
+		// Keep the initial screen and its conditional assets aligned, including PWA launches.
+		return sanitize_key( wp_unslash( $_GET['mi_portal_view'] ?? 'management' ) );
 	}
 
 	public static function assets() {
@@ -1022,7 +1027,7 @@ final class MI_Portal {
 		if ( ! is_user_logged_in() ) return self::login_view();
 		if ( MI_Access::is_suspended() ) return '<div class="mi-portal-empty"><h2>Accesso sospeso</h2><p>Questo account non può accedere alla Segreteria eventi. Contatta un amministratore.</p></div>';
 		if ( ! current_user_can( 'mi_portal_access' ) && ! current_user_can( 'manage_options' ) ) return '<div class="mi-portal-empty"><h2>C’è qualcuno qui…?</h2><p>Il tuo account non è abilitato al servizio iscrizioni.</p></div>';
-		$view = sanitize_key( wp_unslash( $_GET['mi_portal_view'] ?? 'manage' ) );
+		$view = self::current_view();
 		$can_view_groups = self::can_manage_groups() || ( class_exists( 'MI_Portal_PWA' ) && MI_Portal_PWA::enabled() && MI_Portal_PWA::allowed_groups() );
 		$can_create = current_user_can( 'mi_create_events' ) || current_user_can( 'manage_options' );
 		$requested_edit_id = absint( $_GET['mi_portal_edit'] ?? $_GET['mi_portal_draft'] ?? 0 );

@@ -72,8 +72,16 @@ check_list( $GLOBALS['last_encoded_bytes'] < $full_bytes / 5, 'Versioned fingerp
 check_list( $full['rows'] === $versioned['rows'] && $full['total'] === $versioned['total'], 'Versioning changed selection' );
 check_list( $versioned['fingerprint'] === MI_Management_List::page( $summary, array( 'shown' => 60 ), 30, 30, 'canonical-v1' )['fingerprint'], 'Fingerprint depends on pagination' );
 check_list( $versioned['fingerprint'] !== MI_Management_List::page( $summary, array(), 0, 30, 'canonical-v2' )['fingerprint'], 'Canonical changes not detected' );
-$different = $summary; $different['people'][0]['id'] = 999;
-check_list( $versioned['fingerprint'] !== MI_Management_List::page( $different, array(), 0, 30, 'canonical-v1' )['fingerprint'], 'Different equal-count membership not detected' );
+// Simulate the selection one hour later without a canonical write: an offer
+// expires while another enters the next-24-hours window, preserving the count.
+$timed = $summary;
+foreach ($timed['people'] as &$person) { $person['status'] = 'WAITLIST_OFFERED'; $person['offer_expires_at'] = gmdate('Y-m-d H:i:s', time()+172800); } unset($person);
+$timed['people'][0]['offer_expires_at'] = gmdate('Y-m-d H:i:s', time()+1800);
+$timed['people'][1]['offer_expires_at'] = gmdate('Y-m-d H:i:s', time()+86400+1800);
+$timed_before = MI_Management_List::page($timed, ['deadline'=>'soon'], 0, 30, 'canonical-v1');
+foreach ($timed['people'] as &$person) $person['offer_expires_at'] = gmdate('Y-m-d H:i:s', strtotime($person['offer_expires_at'].' UTC')-3600); unset($person);
+$timed_after = MI_Management_List::page($timed, ['deadline'=>'soon'], 0, 30, 'canonical-v1');
+check_list($timed_before['total'] === $timed_after['total'] && $timed_before['fingerprint'] !== $timed_after['fingerprint'], 'Equal-count timed membership change not detected');
 
 // Compare every sort mode to the previous comparator, including ties and accents.
 $sorting=$summary;

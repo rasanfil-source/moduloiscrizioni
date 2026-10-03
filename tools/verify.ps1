@@ -42,6 +42,8 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Sintassi PHP non valida: $file" }
     }
     $phpTests = @(
+        'economic-read-consistency.php', 'portal-waitlist-cancellation.php', 'management-page-consistency.php', 'public-balance-one-scope.php', 'management-one-scope.php',
+        'public-balance-deposit-consistency.php', 'event-duplication-cancellation.php', 'custom-date-fields.php',
         'option-key-duplicates.php', 'public-balance-deadline-receipt.php', 'management-deposit-totals.php', 'email-queue-fairness.php',
         'payment-date-filter.php', 'deposit-consistency.php', 'workspace-command-envelope.php',
         'audit-confirmed-admin.php', 'public-balance-audit-regressions.php', 'admin-economics.php', 'email-group-identity.php',

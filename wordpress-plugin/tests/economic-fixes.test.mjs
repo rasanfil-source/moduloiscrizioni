@@ -67,11 +67,11 @@ test('una posizione riaperta non riusa una scadenza già trascorsa', () => {
   assert.match(people, /MI_Registration_Service::reopened_payment_deadline\( \$registration \)/);
 });
 
-test('i dati condivisi passano al primo partecipante ancora attivo', () => {
-  assert.match(management, /\$participants = array_values[\s\S]*?\$first_person_id = \(int\) \( \$participants\[0\]\['id'\]/);
-  assert.doesNotMatch(management, /\$first_person_id = \(int\) \( \$all_participants\[0\]/);
+test('gli obblighi ONE restano originari e i servizi condivisi sono gestibili dal primo attivo', () => {
+  assert.match(management, /\$first_person_id = \(int\) \( \$all_participants\[0\]\['id'\]/);
+  assert.doesNotMatch(management, /\$first_person_id = \(int\) \( \$participants\[0\]/);
   assert.match(publicBalance, /\(int\) \( \$active\[0\]\['id'\] \?\? 0 \) === \$id/);
-  assert.doesNotMatch(publicBalance, /\$b\['people'\]\[0\]\['id'\]/);
+  assert.match(publicBalance, /\$b\['people'\]\[0\]\['id'\]/);
 });
 
 test('NONE azzera la quota base residua nel client ma conserva i servizi', () => {

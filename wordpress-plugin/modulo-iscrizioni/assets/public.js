@@ -519,9 +519,12 @@
       if (field.max_length) input.maxLength = field.max_length;
       if (field.autocomplete) input.autocomplete = `section-participant-${index + 1} ${field.autocomplete}`;
 	  if (field.type === 'date') {
-		const futureDate = field.date_rule === 'future';
-		input.min = localDateWithYearOffset(futureDate ? 0 : -120);
-		input.max = localDateWithYearOffset(futureDate ? 20 : 0);
+		const dateRule = field.date_rule ?? (field.key.startsWith('custom_') ? 'any' : 'past');
+		if (dateRule !== 'any') {
+			const futureDate = dateRule === 'future';
+			input.min = localDateWithYearOffset(futureDate ? 0 : -120);
+			input.max = localDateWithYearOffset(futureDate ? 20 : 0);
+		}
 	  }
       label.append(input);
 	  if (field.type === 'tel') preparePhoneField(input);

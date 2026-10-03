@@ -89,10 +89,10 @@ final class MI_Event_Projection {
 				'nome_referente' => $registration['buyer_first_name'], 'cognome_referente' => $registration['buyer_last_name'],
 				'email_referente' => $registration['buyer_email'], 'telefono_referente' => $registration['buyer_phone'],
 				'richieste_particolari' => (string) ( $registration['special_requests'] ?? '' ),
-				'numero_partecipanti' => (int) $registration['total_qty'], 'totale_centesimi' => $summary['known'] ? $summary['total'] : (int) $registration['total_cents'],
+				'numero_partecipanti' => (int) $registration['total_qty'], 'totale_centesimi' => $summary['totals_known'] ? $summary['total'] : (int) $registration['total_cents'],
 				'modalita_economica' => $registration['economic_mode'], 'primo_versamento_centesimi' => (int) $registration['initial_due_cents'],
-				'saldo_centesimi' => $summary['known'] ? $summary['balance'] : max( 0, (int) $registration['total_cents'] - $net_paid ),
-				'versato_centesimi' => $summary['known'] ? $summary['paid'] : max( 0, $net_paid ),
+				'saldo_centesimi' => $summary['totals_known'] ? $summary['balance'] : max( 0, (int) $registration['total_cents'] - $net_paid ),
+				'versato_centesimi' => $summary['totals_known'] ? $summary['paid'] : max( 0, $net_paid ),
 				'opzioni_ordine_json' => (string) ( $registration['order_options_json'] ?? '[]' ),
 				'snapshot_json' => (string) ( $registration['snapshot_json'] ?? '{}' ),
 				'workspace_revision' => (string) $registration['workspace_revision'], 'replica_completa_revision' => (string) $registration['workspace_revision'],
@@ -107,9 +107,9 @@ final class MI_Event_Projection {
 					'tipo_biglietto' => $person['ticket_type_code'], 'indice_biglietto' => (int) $person['ticket_index'],
 					'nome' => $person['first_name'], 'cognome' => $person['last_name'], 'dati_aggiuntivi_json' => wp_json_encode( $fields ),
 					'opzioni_json' => (string) ( $person['options_json'] ?? '[]' ), 'stato_partecipante' => $person['status'] ?: 'ACTIVE',
-					'totale_centesimi' => $summary['known'] ? max( 0, (int) ( $economic['total'] ?? 0 ) ) : '',
-					'versato_centesimi' => $summary['known'] ? max( 0, (int) ( $economic['paid'] ?? 0 ) ) : '',
-					'saldo_centesimi' => $summary['known'] ? max( 0, (int) ( $economic['balance'] ?? 0 ) ) : '',
+					'totale_centesimi' => $summary['totals_known'] ? max( 0, (int) ( $economic['total'] ?? 0 ) ) : '',
+					'versato_centesimi' => $summary['totals_known'] ? max( 0, (int) ( $economic['paid'] ?? 0 ) ) : '',
+					'saldo_centesimi' => $summary['totals_known'] ? max( 0, (int) ( $economic['balance'] ?? 0 ) ) : '',
 				);
 			}
 			foreach ( $registration_payments as $payment ) {
