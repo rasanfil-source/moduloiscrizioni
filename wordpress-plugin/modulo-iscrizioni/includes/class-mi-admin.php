@@ -792,6 +792,16 @@ final class MI_Admin {
 		}
 		?>
 		<div class="wrap"><h1>Coda email</h1><p>Lo stato <code>PREVIEW</code> non viene spedito; <code>TEST_PENDING</code> indica un’email destinata esclusivamente alla casella di prova; <code>PENDING</code> indica un invio operativo al destinatario reale.</p>
+		<?php
+		$retry_result = sanitize_key( wp_unslash( $_GET['mi_esito'] ?? '' ) );
+		$retry_messages = array(
+			'riaccodata' => 'Email rimessa in coda. La consegna verrà elaborata in background.',
+			'riaccoda_non_disponibile' => 'Email non riaccodata: non è più in stato fallito oppure non è disponibile. Aggiorna la pagina per verificarne lo stato.',
+			'riaccoda_errore' => 'Errore durante la riaccodatura. Nessuna riaccodatura confermata: riprova dopo aver verificato lo stato.',
+		);
+		if ( isset( $retry_messages[$retry_result] ) ) : ?>
+		<div class="notice <?php echo 'riaccodata' === $retry_result ? 'notice-success' : 'notice-warning'; ?>"><p><?php echo esc_html( $retry_messages[$retry_result] ); ?></p></div>
+		<?php endif; ?>
 		<?php if ( current_user_can( 'manage_options' ) ) : ?>
 		<?php $recovery_message = get_transient( 'mi_recupero_pubblicazione_' . get_current_user_id() ); if ( $recovery_message ) : ?><div class="notice notice-info"><p><?php echo esc_html( $recovery_message ); ?></p></div><?php delete_transient( 'mi_recupero_pubblicazione_' . get_current_user_id() ); endif; ?>
 		<details><summary>Recupera notifica di pubblicazione</summary><p>Prepara l’email di congratulazioni al recapito del gruppo e alla segreteria per l’evento selezionato, con lo stile stabilito e la modalità email attuale. Le notifiche già presenti non vengono duplicate.</p>
@@ -801,7 +811,7 @@ final class MI_Admin {
 		<?php endif; ?>
 		<div class="mi-responsive-table" tabindex="0" role="region" aria-label="Coda email"><table class="widefat striped"><thead><tr><th>ID</th><th>Iscrizione</th><th>Destinatario</th><th>Modello</th><th>Stato</th><th>Tentativi</th><th>Ultimo errore</th><th>Inviata il</th><th>Data UTC</th><th></th></tr></thead><tbody>
 		<?php if ( ! $rows ) : ?><tr><td colspan="10">Coda vuota.</td></tr><?php endif; ?>
-		<?php foreach ( $rows as $row ) : ?><?php $preview_url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox', 'email_id' => (int) $row['id'] ), admin_url( 'edit.php' ) ); ?><tr><td><?php echo esc_html( $row['id'] ); ?></td><td><?php echo esc_html( $row['registration_id'] ); ?></td><td><?php echo esc_html( $row['recipient'] ); ?></td><td><?php echo esc_html( $row['template_type'] ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['attempts'] ); ?></td><td><?php echo esc_html( $row['last_error'] ?: 'Nessuno' ); ?></td><td><?php echo esc_html( $row['sent_at'] ?: 'Non inviata' ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $preview_url ); ?>">Apri dettaglio</a><?php if ( in_array( $row['status'], array( 'FAILED', 'SENDING', 'TEST_FAILED', 'TEST_SENDING' ), true ) ) : ?><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;margin-left:8px"><input type="hidden" name="action" value="mi_riaccoda_email"><input type="hidden" name="email_id" value="<?php echo esc_attr( $row['id'] ); ?>"><?php wp_nonce_field( 'mi_riaccoda_email' ); ?><button class="button-link">Riaccoda</button></form><?php endif; ?></td></tr><?php endforeach; ?>
+		<?php foreach ( $rows as $row ) : ?><?php $preview_url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox', 'email_id' => (int) $row['id'] ), admin_url( 'edit.php' ) ); ?><tr><td><?php echo esc_html( $row['id'] ); ?></td><td><?php echo esc_html( $row['registration_id'] ); ?></td><td><?php echo esc_html( $row['recipient'] ); ?></td><td><?php echo esc_html( $row['template_type'] ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['attempts'] ); ?></td><td><?php echo esc_html( $row['last_error'] ?: 'Nessuno' ); ?></td><td><?php echo esc_html( $row['sent_at'] ?: 'Non inviata' ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $preview_url ); ?>">Apri dettaglio</a><?php if ( in_array( $row['status'], array( 'FAILED', 'TEST_FAILED' ), true ) ) : ?><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;margin-left:8px"><input type="hidden" name="action" value="mi_riaccoda_email"><input type="hidden" name="email_id" value="<?php echo esc_attr( $row['id'] ); ?>"><?php wp_nonce_field( 'mi_riaccoda_email' ); ?><button class="button-link">Riaccoda</button></form><?php endif; ?></td></tr><?php endforeach; ?>
 		</tbody></table></div>
 		<?php if ( $detail ) : ?><?php $payload = json_decode( (string) $detail['payload_json'], true ); $preview = is_array( $payload ) && isset( $payload['email_preview'] ) && is_array( $payload['email_preview'] ) ? $payload['email_preview'] : array(); ?>
 		<hr><h2>Anteprima email conservata</h2>

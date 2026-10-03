@@ -28,7 +28,7 @@ $old = implode('\\n', explode("\n", $text));
 update_post_meta(99, '_mi_email_template', ['text' => $old]);
 expect(str_contains(get_post_meta(99, '_mi_email_template')['text'], "Sant'EugenionStato"), 'riproduzione della causa');
 
-foreach (['ZERO', 'CALCULATED'] as $mode) {
+foreach (['ZERO', 'NONE', 'CALCULATED'] as $mode) {
     foreach (["\n", "\r\n", "\r", '\\n', '\\r\\n'] as $separator) {
         $GLOBALS['email_meta'][42] = ['_mi_pricing_mode' => $mode];
         $input = str_replace("\n", $separator, $text . $payment);

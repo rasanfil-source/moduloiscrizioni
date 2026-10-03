@@ -705,6 +705,9 @@ test('le email fallite possono essere riaccodate con protezione amministrativa',
   const admin = await read('includes/class-mi-admin.php');
   assert.match(sender, /admin_post_mi_riaccoda_email/);
   assert.match(sender, /WHERE id = %d AND status IN \('FAILED', 'TEST_FAILED'\)/);
+  assert.match(sender, /status = CASE WHEN status = 'TEST_FAILED' THEN 'TEST_PENDING' ELSE 'PENDING' END/);
+  assert.match(admin, /array\( 'FAILED', 'TEST_FAILED' \)/);
+  assert.doesNotMatch(admin, /array\( 'FAILED', 'SENDING', 'TEST_FAILED', 'TEST_SENDING' \)/);
   assert.match(sender, /attempts = 0/);
   assert.match(sender, /check_admin_referer/);
   assert.match(admin, /mi_riaccoda_email/);

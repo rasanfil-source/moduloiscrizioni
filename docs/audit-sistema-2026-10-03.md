@@ -1,5 +1,7 @@
 # Analisi corrente — 3 ottobre 2026
 
+Aggiornamento 3.26.220: i due difetti P1/P2 descritti sotto sono corretti nei sorgenti del [nuovo rilascio](rilascio-3.26.220.md). La descrizione conserva la riproduzione precedente. Le correzioni non rettificano retroattivamente i dati e non attestano lo stato del sito installato; restano aperte le altre questioni elencate.
+
 Analizzati i sorgenti locali dichiarati 3.26.217, incluse le modifiche preesistenti non committate. Nessuna correzione applicativa o distribuzione eseguita in questa analisi. Questo rapporto sostituisce gli audit storici rimossi; non certifica l'assenza di altri difetti né lo stato dei deployment.
 
 ## P1 — I servizi a pagamento della modalità NONE vengono trattati come gratuiti

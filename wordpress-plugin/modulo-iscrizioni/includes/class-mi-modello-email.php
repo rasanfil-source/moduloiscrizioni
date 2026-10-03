@@ -219,7 +219,7 @@ final class MI_Modello_Email {
 
 	public static function crea_istantanea( $event_id, $values ) {
 		$settings = self::impostazioni( $event_id );
-		if ( in_array( strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ), array( 'NONE', 'ZERO' ), true ) ) {
+		if ( 'ZERO' === strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ) ) {
 			$settings['html'] = self::rimuovi_riferimenti_pagamento_gratuito( $settings['html'], true );
 			$settings['text'] = self::rimuovi_riferimenti_pagamento_gratuito( $settings['text'] );
 		}
@@ -801,7 +801,7 @@ final class MI_Modello_Email {
 		$settings['subject'] = self::pulisci_riga( $subject, 180 );
 		$settings['text'] = mb_substr( sanitize_textarea_field( wp_unslash( $text ) ), 0, 5000 );
 		$settings['text'] = self::ripara_interruzioni_testo( $settings['text'] );
-		if ( in_array( strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ), array( 'NONE', 'ZERO' ), true ) ) $settings['text'] = self::rimuovi_riferimenti_pagamento_gratuito( $settings['text'] );
+		if ( 'ZERO' === strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ) ) $settings['text'] = self::rimuovi_riferimenti_pagamento_gratuito( $settings['text'] );
 		$settings['html'] = self::uniforma_grafica_corpo( self::testo_email_in_html( $settings['text'] ) );
 		if ( ! $settings['subject'] || ! $settings['text'] ) return new WP_Error( 'mi_email_vuota', 'Oggetto e testo dell’email non possono essere vuoti.' );
 		$settings = self::aggiorna_segnaposto( $settings );

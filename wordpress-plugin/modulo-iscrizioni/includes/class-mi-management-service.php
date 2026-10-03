@@ -139,7 +139,7 @@ final class MI_Management_Service {
             global $wpdb;
 			$booking['can_adjust_due'] = MI_Portal_Payments::allowed() && in_array( $saved_registration['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 			$saved_snapshot = self::decode( $saved_registration['snapshot_json'] );
-			$booking['is_free_event'] = in_array( strtoupper( (string) ( $saved_snapshot['event']['pricing_mode'] ?? get_post_meta( $booking['event_id'], '_mi_pricing_mode', true ) ) ), array( 'NONE', 'ZERO' ), true );
+			$booking['is_free_event'] = 'ZERO' === strtoupper( (string) ( $saved_snapshot['event']['pricing_mode'] ?? get_post_meta( $booking['event_id'], '_mi_pricing_mode', true ) ) );
 			$booking['can_change_options'] = MI_Portal_Payments::allowed();
 			if ( $booking['is_free_event'] ) $booking['can_adjust_due'] = false;
             $booking['option_definitions'] = $saved_snapshot['event']['options'] ?? array();
@@ -479,7 +479,7 @@ final class MI_Management_Service {
 				}
 				$pricing = $snapshot['event']['pricing_mode'] ?? '';
 				if ( ! in_array( $pricing, array( 'FIXED', 'CALCULATED', 'ZERO', 'NONE' ), true ) ) throw new InvalidArgumentException( 'Modalità tariffaria non disponibile per ' . $code . '. Verifica l’iscrizione prima del cambio.' );
-				$change = in_array( $pricing, array( 'NONE', 'ZERO' ), true ) ? 0 : (int) $target['price_cents'] - (int) $old[0]['unit_price_cents']; $delta += $change;
+				$change = 'ZERO' === $pricing ? 0 : (int) $target['price_cents'] - (int) $old[0]['unit_price_cents']; $delta += $change;
 				$new_room = '' === $number ? $type['prefix'] . ( $next + intdiv( $automatic_index++, $type['capacity'] ) ) : $shared;
 				if ( ! preg_match( '/^' . $type['prefix'] . '[1-9][0-9]{0,5}$/', $new_room ) ) throw new InvalidArgumentException( 'Numerazione esaurita.' );
 				if ( isset( $inventory[$new_room] ) && $inventory[$new_room]['capacity'] !== $type['capacity'] ) throw new InvalidArgumentException( 'Capienza incompatibile per ' . $new_room );
@@ -705,7 +705,7 @@ final class MI_Management_Service {
 		if ( is_wp_error( $validated ) ) throw new InvalidArgumentException( $validated->get_error_message() );
 		if ( ! $person && ( isset( $data['accommodation_type'] ) || isset( $data['room'] ) || isset( $data['bus'] ) ) ) throw new InvalidArgumentException( 'Le assegnazioni richiedono una persona.' );
 		$cost = static function ( $values ) { $sum = 0; foreach ( $values as $value ) $sum += (int) $value['quantity'] * (int) $value['unit_price_cents']; return $sum; };
-		$free = in_array( $snapshot['event']['pricing_mode'] ?? '', array( 'NONE', 'ZERO' ), true );
+		$free = 'ZERO' === ( $snapshot['event']['pricing_mode'] ?? '' );
 		if ( $free ) foreach ( $options as &$option ) $option['unit_price_cents'] = 0;
 		unset( $option );
 		$delta = $free ? 0 : $cost( $options ) - $cost( $current_options );

@@ -382,11 +382,14 @@ final class MI_Spedizione_Email {
 		$id = absint( $_POST['email_id'] ?? 0 );
 		global $wpdb;
 		$table = $wpdb->prefix . 'mi_email_outbox';
-		$status_corrente = (string) $wpdb->get_var( $wpdb->prepare( "SELECT status FROM {$table} WHERE id = %d", $id ) );
-		$nuovo_status = in_array( $status_corrente, array( 'TEST_FAILED', 'TEST_SENDING' ), true ) ? 'TEST_PENDING' : 'PENDING';
-		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = %s, attempts = 0, last_error = NULL, sent_at = NULL WHERE id = %d AND status IN ('FAILED', 'TEST_FAILED')", $nuovo_status, $id ) );
-		self::pianifica_spedizione();
-		wp_safe_redirect( add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox', 'email_id' => $id, 'mi_esito' => 'riaccodata' ), admin_url( 'edit.php' ) ) );
+		// Un'unica scrittura preserva la modalita anche con richieste concorrenti.
+		// La chiave di consegna resta invariata: non aggirare le ricevute remote.
+		$updated = $id ? $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = CASE WHEN status = 'TEST_FAILED' THEN 'TEST_PENDING' ELSE 'PENDING' END, attempts = 0, last_error = NULL, sent_at = NULL, processing_started_at = NULL WHERE id = %d AND status IN ('FAILED', 'TEST_FAILED')", $id ) ) : 0;
+		$esito = false === $updated ? 'riaccoda_errore' : ( 1 === $updated ? 'riaccodata' : 'riaccoda_non_disponibile' );
+		if ( 1 === $updated ) {
+			try { self::pianifica_spedizione(); } catch ( Throwable $error ) { /* La coda persistente viene recuperata dal cron. */ }
+		}
+		wp_safe_redirect( add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox', 'email_id' => $id, 'mi_esito' => $esito ), admin_url( 'edit.php' ) ) );
 		exit;
 	}
 
