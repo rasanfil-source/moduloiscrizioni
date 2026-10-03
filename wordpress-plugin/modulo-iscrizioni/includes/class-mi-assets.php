@@ -26,4 +26,9 @@ final class MI_Assets {
 		$result = self::url( $parts[0] );
 		return isset( $parts[1] ) ? $result . ( false === strpos( $result, '?' ) ? '?' : '&' ) . $parts[1] : $result;
 	}
+
+	public static function defer_script( $tag, $handle ) {
+		if ( 0 !== strpos( $handle, 'mi-' ) || false !== strpos( $tag, 'defer' ) ) return $tag;
+		return str_replace( '<script ', '<script defer ', $tag );
+	}
 }

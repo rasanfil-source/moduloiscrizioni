@@ -13,4 +13,9 @@ verify_asset( MI_Assets::filter_url( 'https://other.test/main.js' ) === 'https:/
 verify_asset( MI_Assets::url( 'missing.js' ) === MI_PLUGIN_URL . 'assets/missing.js' );
 define( 'SCRIPT_DEBUG', true );
 verify_asset( MI_Assets::url( 'core.js' ) === MI_PLUGIN_URL . 'assets/core.js' );
-echo "Asset URLs, cache keys, missing-file fallback and debug mode OK\n";
+
+verify_asset( MI_Assets::defer_script( '<script src="something"></script>', 'mi-core' ) === '<script defer src="something"></script>' );
+verify_asset( MI_Assets::defer_script( '<script defer src="something"></script>', 'mi-core' ) === '<script defer src="something"></script>' );
+verify_asset( MI_Assets::defer_script( '<script src="something"></script>', 'other-script' ) === '<script src="something"></script>' );
+verify_asset( MI_Assets::defer_script( "<script type='text/javascript' src='something'></script>", 'mi-core' ) === "<script defer type='text/javascript' src='something'></script>" );
+echo "Asset URLs, cache keys, missing-file fallback, script deferring and debug mode OK\n";
