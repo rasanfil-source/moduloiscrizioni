@@ -280,7 +280,7 @@ final class MI_Event_Post_Type {
 		update_post_meta( $post_id, '_mi_secondary_color', $secondary_color );
 		update_post_meta( $post_id, '_mi_accent_color', $primary_color );
 		if ( $cover_id ) update_post_meta( $post_id, '_mi_group_cover_image_id', $cover_id ); else delete_post_meta( $post_id, '_mi_group_cover_image_id' );
-		$dependent_events = get_posts( array( 'post_type' => self::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => -1, 'fields' => 'ids', 'meta_key' => '_mi_activity_id', 'meta_value' => $post_id ) );
+		$dependent_events = get_posts( array( 'post_type' => self::EVENT_TYPE, 'post_status' => array( 'publish', 'private', 'mi_archived' ), 'numberposts' => -1, 'fields' => 'ids', 'meta_key' => '_mi_activity_id', 'meta_value' => $post_id ) );
 		foreach ( $dependent_events as $event_id ) update_post_meta( $event_id, '_mi_needs_republish', '1' );
 	}
 
@@ -447,6 +447,7 @@ final class MI_Event_Post_Type {
 		}
 		unset( $option );
 		update_post_meta( $post_id, '_mi_options', $options );
+		update_post_meta( $post_id, '_mi_overnight_enabled', array_filter( $options, static function ( $option ) { return 0 === strpos( $option['code'], 'alloggio-' ); } ) ? '1' : '0' );
 	}
 
 	public static function publish_revision( $post_id, $post ) {

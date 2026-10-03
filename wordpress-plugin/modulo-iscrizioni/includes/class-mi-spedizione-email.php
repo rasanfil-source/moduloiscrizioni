@@ -519,6 +519,7 @@ final class MI_Spedizione_Email {
 					// without logging the payload or sending a truncated identifier.
 					return new WP_Error( 'mi_email_qr_too_long', 'Email non inviata: il contenuto del QR supera 106 byte. Correggi l’identificativo prima di riprovare.' );
 				}
+				catch ( InvalidArgumentException $error ) { return new WP_Error( 'mi_email_barcode_invalid', $error->getMessage() ); }
 				$codice_html = '<p><img src="cid:mi-registration-code" alt="Codice grafico dell’iscrizione" style="display:block;max-width:280px;height:auto;border:0;"></p>';
 		}
 		$corpo = MI_Modello_Email::componi_html( $istantanea, $codice_html );

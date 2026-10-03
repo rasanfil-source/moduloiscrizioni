@@ -15,7 +15,7 @@ final class MI_Management_Service {
 		$where = 'r.event_id IN (' . implode( ',', $event_ids ) . ')';
 		$allowed_statuses = array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'WAITLIST_OFFERED', 'CANCELLED', 'EXPIRED' );
 		if ( in_array( $status, $allowed_statuses, true ) ) {
-			$where .= $wpdb->prepare( ' AND r.status=%s', $status );
+			$where .= 'CANCELLED' === $status ? " AND (p.status='CANCELLED' OR r.status='CANCELLED')" : $wpdb->prepare( ' AND r.status=%s', $status );
 			if ( ! in_array( $status, array( 'CANCELLED', 'EXPIRED' ), true ) ) $where .= " AND p.status='ACTIVE'";
 		} elseif ( ! $include_closed ) $where .= " AND p.status='ACTIVE' AND r.status NOT IN ('CANCELLED','EXPIRED')";
 		foreach ( MI_Booking_Search::words( $query ) as $word ) $where .= $wpdb->prepare( " AND CONCAT_WS(' ',p.first_name,p.last_name,r.buyer_first_name,r.buyer_last_name,r.order_code,r.buyer_email,r.buyer_phone,IF(JSON_VALID(p.extra_json),JSON_UNQUOTE(JSON_EXTRACT(p.extra_json,'$.email')),''),IF(JSON_VALID(p.extra_json),JSON_UNQUOTE(JSON_EXTRACT(p.extra_json,'$.phone')),''),IF(JSON_VALID(p.extra_json),JSON_UNQUOTE(JSON_EXTRACT(p.extra_json,'$.participant_email')),''),IF(JSON_VALID(p.extra_json),JSON_UNQUOTE(JSON_EXTRACT(p.extra_json,'$.participant_phone')),''),IF(JSON_VALID(p.extra_json),JSON_UNQUOTE(JSON_EXTRACT(p.extra_json,'$.mobile')),'')) LIKE %s", '%' . $wpdb->esc_like( $word ) . '%' );
@@ -61,7 +61,11 @@ final class MI_Management_Service {
 	private static function definitions( $registration ) {
 		$snapshot = self::decode( $registration['snapshot_json'] );
 		$fields = array();
-		foreach ( (array) ( $snapshot['event']['participant_fields'] ?? array() ) as $field ) {
+		$historical = (array) ( $snapshot['event']['participant_fields'] ?? array() );
+		$current = function_exists( 'sanitize_key' ) ? array_merge( MI_Field_Schema::public_fields( MI_Field_Schema::event_configuration( $registration['event_id'] ) ), MI_Field_Schema::sanitize_custom_fields( get_post_meta( $registration['event_id'], '_mi_custom_participant_fields', true ) ) ) : array();
+		$known = array_column( $historical, null, 'key' );
+		foreach ( $current as $field ) if ( ! isset( $known[$field['key']] ) ) { $field['required'] = false; $historical[] = $field; }
+		foreach ( $historical as $field ) {
 			$key = $field['key'] ?? '';
 			if ( ! preg_match( '/^[a-z][a-z0-9_-]{0,79}$/', $key ) || in_array( $key, array( 'constructor','prototype','room','camera','alloggio','first_name','last_name' ), true ) ) continue;
 			$fields[$key] = array( 'key' => $key, 'label' => $field['label'] ?? $key, 'type' => $field['type'] ?? 'text', 'required' => ! empty( $field['required'] ), 'options' => (array) ( $field['options'] ?? array() ) );
@@ -135,8 +139,8 @@ final class MI_Management_Service {
             global $wpdb;
 			$booking['can_adjust_due'] = MI_Portal_Payments::allowed() && in_array( $saved_registration['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 			$saved_snapshot = self::decode( $saved_registration['snapshot_json'] );
-			$booking['is_free_event'] = 'ZERO' === strtoupper( (string) ( $saved_snapshot['event']['pricing_mode'] ?? get_post_meta( $booking['event_id'], '_mi_pricing_mode', true ) ) );
-			$booking['can_change_options'] = MI_Portal_Payments::allowed() && ! $booking['is_free_event'];
+			$booking['is_free_event'] = in_array( strtoupper( (string) ( $saved_snapshot['event']['pricing_mode'] ?? get_post_meta( $booking['event_id'], '_mi_pricing_mode', true ) ) ), array( 'NONE', 'ZERO' ), true );
+			$booking['can_change_options'] = MI_Portal_Payments::allowed();
 			if ( $booking['is_free_event'] ) $booking['can_adjust_due'] = false;
             $booking['option_definitions'] = $saved_snapshot['event']['options'] ?? array();
 			$booking['option_scope'] = $saved_snapshot['event']['participant_extra_scope'] ?? 'ONE';
@@ -191,7 +195,7 @@ final class MI_Management_Service {
 		$offset = max( 0, (int) $offset );
 		$limit = max( 1, min( 200, (int) $limit ) );
 		$where = array( $wpdb->prepare( 'r.event_id=%d', $event_id ) );
-		if ( empty( $context['includeClosed'] ) ) {
+		if ( empty( $context['includeClosed'] ) && ! in_array( strtoupper( (string) ( $context['state'] ?? '' ) ), array( 'CANCELLED', 'EXPIRED' ), true ) ) {
 			$where[] = "r.status NOT IN ('CANCELLED','EXPIRED')";
 			if ( $individual ) $where[] = "p.status<>'CANCELLED'";
 		}
@@ -320,7 +324,7 @@ final class MI_Management_Service {
 			$has_rooms = count( $event_rooms ) > 0;
 			$requested_rooms = array();
 			foreach ( $people as $person ) foreach ( self::decode( $person['options_json'] ?? '' ) as $option ) if ( isset( self::room_types()[$option['code'] ?? ''] ) && (int) ( $option['quantity'] ?? 0 ) > 0 ) $requested_rooms[(int) $person['id']] = true;
-			$needs_room = static function ( $person ) use ( $requested_rooms, $has_rooms ) { return $requested_rooms ? isset( $requested_rooms[(int) $person['id']] ) : $has_rooms; };
+			$needs_room = static function ( $person ) use ( $requested_rooms ) { return isset( $requested_rooms[(int) $person['id']] ); };
 			$items = array(); $individuals = array(); $field_labels = array();
 			foreach ( (array) get_post_meta( $event_id, '_mi_custom_participant_fields', true ) as $question ) {
 				if ( is_array( $question ) && ! empty( $question['key'] ) && ! empty( $question['label'] ) ) $field_labels[$question['key']] = $question['label'];
@@ -443,6 +447,7 @@ final class MI_Management_Service {
 		ksort( $grouped ); $rooms = self::rooms( $event_id ); $inventory = array_column( $rooms, null, 'code' ); $next = 1;
 		foreach ( $rooms as $room ) if ( preg_match( '/^' . $type['prefix'] . '([1-9][0-9]*)$/', $room['code'], $match ) ) $next = max( $next, (int) $match[1] + 1 );
 		$shared = '' !== $number ? $type['prefix'] . $number : $type['prefix'] . $next;
+		$automatic_index = 0;
 		$plan = array( 'reason' => sanitize_textarea_field( $data['reason'] ?? '' ), 'people' => array(), 'orders' => array(), 'new_rooms' => array() );
 		$fingerprint = array( $data, $rooms ); $occupancy = array_column( $rooms, 'occupied', 'code' );
 		foreach ( $grouped as $code => $numbers ) {
@@ -474,8 +479,8 @@ final class MI_Management_Service {
 				}
 				$pricing = $snapshot['event']['pricing_mode'] ?? '';
 				if ( ! in_array( $pricing, array( 'FIXED', 'CALCULATED', 'ZERO', 'NONE' ), true ) ) throw new InvalidArgumentException( 'Modalità tariffaria non disponibile per ' . $code . '. Verifica l’iscrizione prima del cambio.' );
-				$change = 'ZERO' === $pricing ? 0 : (int) $target['price_cents'] - (int) $old[0]['unit_price_cents']; $delta += $change;
-				$new_room = 1 === $type['capacity'] && '' === $number ? $type['prefix'] . $next++ : $shared;
+				$change = in_array( $pricing, array( 'NONE', 'ZERO' ), true ) ? 0 : (int) $target['price_cents'] - (int) $old[0]['unit_price_cents']; $delta += $change;
+				$new_room = '' === $number ? $type['prefix'] . ( $next + intdiv( $automatic_index++, $type['capacity'] ) ) : $shared;
 				if ( ! preg_match( '/^' . $type['prefix'] . '[1-9][0-9]{0,5}$/', $new_room ) ) throw new InvalidArgumentException( 'Numerazione esaurita.' );
 				if ( isset( $inventory[$new_room] ) && $inventory[$new_room]['capacity'] !== $type['capacity'] ) throw new InvalidArgumentException( 'Capienza incompatibile per ' . $new_room );
 				if ( ! isset( $inventory[$new_room] ) ) $plan['new_rooms'][$new_room] = array( 'code' => $new_room, 'name' => $new_room, 'capacity' => $type['capacity'] );
@@ -549,6 +554,7 @@ final class MI_Management_Service {
 			return new WP_Error( 'mi_room_change_save', 'Operazione non confermata. Riprova la stessa richiesta.' );
 		}
 		foreach ( $plan['orders'] as $order ) try { MI_Registration_Service::accoda_iscrizione_workspace( $order['id'] ); } catch ( Throwable $error ) { /* Persistent queue retries. */ }
+		if ( class_exists( 'MI_Booking_Update_Email' ) ) try { MI_Spedizione_Email::pianifica_spedizione(); } catch ( Throwable $error ) {}
 		return array( 'saved' => true, 'message' => 'Sistemazione, camera e dovuto aggiornati. Eventuali rimborsi vanno registrati separatamente.', 'orders' => $plan['orders'] );
 	}
 	/** First lock in registration and room-allocation transactions. */
@@ -699,7 +705,10 @@ final class MI_Management_Service {
 		if ( is_wp_error( $validated ) ) throw new InvalidArgumentException( $validated->get_error_message() );
 		if ( ! $person && ( isset( $data['accommodation_type'] ) || isset( $data['room'] ) || isset( $data['bus'] ) ) ) throw new InvalidArgumentException( 'Le assegnazioni richiedono una persona.' );
 		$cost = static function ( $values ) { $sum = 0; foreach ( $values as $value ) $sum += (int) $value['quantity'] * (int) $value['unit_price_cents']; return $sum; };
-		$delta = $cost( $options ) - $cost( $current_options );
+		$free = in_array( $snapshot['event']['pricing_mode'] ?? '', array( 'NONE', 'ZERO' ), true );
+		if ( $free ) foreach ( $options as &$option ) $option['unit_price_cents'] = 0;
+		unset( $option );
+		$delta = $free ? 0 : $cost( $options ) - $cost( $current_options );
 		$total = (int) $locked['total_cents'] + $delta;
 		if ( $total < 0 || $total > 100000000 ) throw new InvalidArgumentException( 'Totale non valido dopo la variazione.' );
 		$history = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d ORDER BY id", $locked['id'] ), ARRAY_A ); self::check_database();
@@ -937,9 +946,8 @@ final class MI_Management_Service {
 					$current = in_array( $key, array( 'first_name','last_name','room' ), true ) ? $p[$key] : ( $p['fields'][$key] ?? '' );
 					$displayed = $current;
 					if ( ! array_key_exists( $key, $p['fields'] ) && in_array( $patch['key'], array( 'email', 'phone' ), true ) ) $displayed = $booking['buyer'][$patch['key']] ?? '';
-					$accepted = 'room' === $key ? $patch['after'] : ( in_array( $key, array( 'first_name', 'last_name' ), true ) ? sanitize_text_field( $patch['after'] ) : sanitize_textarea_field( $patch['after'] ) );
-					if ( 'phone' === $patch['key'] && '' !== $accepted ) $accepted = MI_Field_Schema::normalize_phone( $accepted );
-					if ( (string) $current !== $patch['before'] && (string) $current !== (string) $accepted && (string) $displayed !== $patch['before'] ) throw new InvalidArgumentException( 'Conflitto in ' . $code . ', partecipante ' . $p['number'] . ', campo ' . $patch['key'] . '. Nessuna modifica applicata.' );
+					$accepted = self::sheet_accepted_value( $key, $patch['after'], $booking );
+					if ( (string) $current !== $patch['before'] && (string) $current !== (string) $accepted && (string) $displayed !== $patch['before'] && ! ( 'SHEET_SYNC' === $source && self::sheet_display_value( $displayed ) === $patch['before'] ) ) throw new InvalidArgumentException( 'Conflitto in ' . $code . ', partecipante ' . $p['number'] . ', campo ' . $patch['key'] . '. Nessuna modifica applicata.' );
 					if ( ! isset( $updates[$p['number']] ) ) $updates[$p['number']] = array( 'number' => $p['number'], 'first_name' => $p['first_name'], 'last_name' => $p['last_name'], 'room' => $p['room'], 'fields' => array() );
 					if ( in_array( $key, array( 'first_name','last_name','room' ), true ) ) $updates[$p['number']][$key] = $patch['after'];
 					else $updates[$p['number']]['fields'][$key] = $patch['after'];
@@ -963,6 +971,7 @@ final class MI_Management_Service {
 			return new WP_Error( 'mi_sheet_save', 'Sincronizzazione non confermata. Riprova la stessa richiesta.' );
 		}
 		foreach ( $ids as $id ) try { MI_Registration_Service::accoda_iscrizione_workspace( $id ); } catch ( Throwable $error ) { /* Persistent queue retains the committed change. */ }
+		if ( class_exists( 'MI_Booking_Update_Email' ) ) try { MI_Spedizione_Email::pianifica_spedizione(); } catch ( Throwable $error ) {}
 		return array( 'ok' => true, 'saved' => true, 'confirmations' => 'SHEET_SYNC' === $source ? self::sheet_confirmations( $event_id, $changes ) : array(), 'message' => 'ROOM_ASSIGN' === $source ? 'Assegnazioni camere salvate. Aggiornamento del foglio accodato.' : count( $changes ) . ' celle sincronizzate.' );
 	}
 	/** A receipt is emitted only while MySQL still contains this request's accepted value. */
@@ -986,13 +995,24 @@ final class MI_Management_Service {
 				$booking = $bookings[$code]; $person = array_column( $booking['participants'], null, 'number' )[$change['number']] ?? null;
 				if ( ! $person ) continue;
 				$key = self::sheet_field_key( $change['key'], $booking, $person );
-				$expected = 'room' === $key ? $change['after'] : ( in_array( $key, array( 'first_name', 'last_name' ), true ) ? sanitize_text_field( $change['after'] ) : sanitize_textarea_field( $change['after'] ) );
-				if ( 'phone' === $change['key'] && '' !== $expected ) $expected = MI_Field_Schema::normalize_phone( $expected );
+				$expected = self::sheet_accepted_value( $key, $change['after'], $booking );
 				$current = in_array( $key, array( 'first_name', 'last_name', 'room' ), true ) ? $person[$key] : ( $person['fields'][$key] ?? '' );
 				if ( (string) $current === (string) $expected ) $receipts[] = array_replace( $change, array( 'accepted' => (string) $current, 'workspace_revision' => $revisions[$code] ) );
 			}
 		} catch ( Throwable $error ) { return array(); }
 		return $receipts;
+	}
+	private static function sheet_accepted_value( $key, $value, $booking ) {
+		if ( 'room' === $key ) return $value;
+		$value = in_array( $key, array( 'first_name', 'last_name' ), true ) ? sanitize_text_field( $value ) : sanitize_textarea_field( $value );
+		$definitions = array_column( $booking['fields'], null, 'key' );
+		if ( '' !== $value && ( in_array( $key, array( 'phone', 'participant_phone', 'mobile' ), true ) || 'tel' === ( $definitions[$key]['type'] ?? '' ) ) ) $value = MI_Field_Schema::normalize_phone( $value );
+		return $value;
+	}
+	/** Sheets baseline contains displayed, whitespace-normalized text (formula escape excluded). */
+	private static function sheet_display_value( $value ) {
+		$value = preg_replace( '/[\x00-\x1f\x7f]/u', ' ', (string) $value );
+		return mb_substr( trim( preg_replace( '/[\s\x{FEFF}]+/u', ' ', $value ) ), 0, 5000 );
 	}
 	private static function sheet_field_key( $key, $booking, $person ) {
 		if ( in_array( $key, array( 'first_name','last_name','room' ), true ) ) return $key;

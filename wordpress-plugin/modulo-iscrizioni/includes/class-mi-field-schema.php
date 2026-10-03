@@ -119,7 +119,8 @@ final class MI_Field_Schema {
 		return array(
 			'fields' => array_merge( self::public_fields( self::event_configuration( $event_id ) ), self::sanitize_custom_fields( get_post_meta( $event_id, '_mi_custom_participant_fields', true ) ) ),
 			'options' => array_values( (array) get_post_meta( $event_id, '_mi_options', true ) ),
-			'room' => '1' === get_post_meta( $event_id, '_mi_overnight_enabled', true ),
+			'room' => '1' === get_post_meta( $event_id, '_mi_overnight_enabled', true ) || (bool) array_filter( (array) get_post_meta( $event_id, '_mi_options', true ), static function ( $option ) { return 0 === strpos( (string) ( $option['code'] ?? '' ), 'alloggio-' ); } ),
+			'transport' => '1' === get_post_meta( $event_id, '_mi_bus_assignment_enabled', true ),
 			'special_requests' => '1' === get_post_meta( $event_id, '_mi_special_requests_enabled', true ),
 			'pricing' => strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ),
 		);

@@ -70,7 +70,7 @@ final class MI_Access {
 		if ( ! is_array( $groups ) || ! $groups ) return array();
 		return array_values( array_map( 'absint', get_posts( array(
 			'post_type'              => MI_Event_Post_Type::EVENT_TYPE,
-			'post_status'            => array( 'publish', 'draft', 'private' ),
+			'post_status'            => array( 'publish', 'draft', 'private', 'mi_archived' ),
 			'numberposts'            => -1,
 			'fields'                 => 'ids',
 			'update_post_meta_cache' => false,

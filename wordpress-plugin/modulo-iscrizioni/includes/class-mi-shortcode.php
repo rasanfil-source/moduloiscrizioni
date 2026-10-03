@@ -122,8 +122,9 @@ final class MI_Shortcode {
 
 	private static function enqueue_assets() {
 		wp_enqueue_style( 'mi-public', MI_PLUGIN_URL . 'assets/public.css', array(), MI_VERSION );
-		wp_enqueue_script( 'mi-core', MI_PLUGIN_URL . 'assets/core.js', array(), MI_VERSION, true );
-		wp_enqueue_script( 'mi-public', MI_PLUGIN_URL . 'assets/public.js', array( 'mi-core' ), MI_VERSION, true );
+		// WordPress mantiene l'ordine delle dipendenze e valuta gli eventuali script inline.
+		wp_enqueue_script( 'mi-core', MI_PLUGIN_URL . 'assets/core.js', array(), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
+		wp_enqueue_script( 'mi-public', MI_PLUGIN_URL . 'assets/public.js', array( 'mi-core' ), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
 	}
 
 	public static function render( $attributes ) {

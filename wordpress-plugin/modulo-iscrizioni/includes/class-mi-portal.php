@@ -112,12 +112,12 @@ final class MI_Portal {
 		$post = get_post();
 		if ( empty( $_GET['mi_portal'] ) && empty( $_GET['mi_status'] ) && empty( $_GET['mi_waitlist_offer'] ) && ( ! $post || ! has_shortcode( $post->post_content, self::SHORTCODE ) ) ) return;
 		wp_enqueue_style( 'mi-portal', MI_PLUGIN_URL . 'assets/portal.css', array(), MI_VERSION );
-		wp_enqueue_script( 'mi-portal', MI_PLUGIN_URL . 'assets/portal.js', array(), MI_VERSION, true );
-		if ( self::needs_management_script() ) wp_enqueue_script( 'mi-portal-management', MI_PLUGIN_URL . 'assets/portal-management.js', array(), MI_VERSION, true );
+		wp_enqueue_script( 'mi-portal', MI_PLUGIN_URL . 'assets/portal.js', array(), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
+		if ( self::needs_management_script() ) wp_enqueue_script( 'mi-portal-management', MI_PLUGIN_URL . 'assets/portal-management.js', array(), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
 		wp_enqueue_style( 'mi-portal-management', MI_PLUGIN_URL . 'assets/portal-management.css', array( 'mi-portal' ), MI_VERSION );
 		if ( self::needs_payment_assets() ) {
 			wp_enqueue_style( 'mi-portal-payments', MI_PLUGIN_URL . 'assets/portal-payments.css', array( 'mi-portal' ), MI_VERSION );
-			wp_enqueue_script( 'mi-portal-payments', MI_PLUGIN_URL . 'assets/portal-payments.js', array(), MI_VERSION, true );
+			wp_enqueue_script( 'mi-portal-payments', MI_PLUGIN_URL . 'assets/portal-payments.js', array(), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
 		}
 	}
 

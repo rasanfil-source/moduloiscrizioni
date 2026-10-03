@@ -27,7 +27,8 @@ final class MI_Code_Image {
 			$data[] = $value;
 		}
 		$pad = array( 0xec, 0x11 );
-		while ( count( $data ) < 108 ) $data[] = $pad[ count( $data ) % 2 ];
+		$padding_index = 0;
+		while ( count( $data ) < 108 ) $data[] = $pad[ $padding_index++ % 2 ];
 		$codewords = array_merge( $data, self::reed_solomon( $data, 26 ) );
 		$size = 37;
 		$matrix = array_fill( 0, $size, array_fill( 0, $size, null ) );
@@ -124,7 +125,8 @@ final class MI_Code_Image {
 
 	private static function barcode_svg( $payload ) {
 		$patterns = array( '0'=>'nnnwwnwnn','1'=>'wnnwnnnnw','2'=>'nnwwnnnnw','3'=>'wnwwnnnnn','4'=>'nnnwwnnnw','5'=>'wnnwwnnnn','6'=>'nnwwwnnnn','7'=>'nnnwnnwnw','8'=>'wnnwnnwnn','9'=>'nnwwnnwnn','A'=>'wnnnnwnnw','B'=>'nnwnnwnnw','C'=>'wnwnnwnnn','D'=>'nnnnwwnnw','E'=>'wnnnwwnnn','F'=>'nnwnwwnnn','G'=>'nnnnnwwnw','H'=>'wnnnnwwnn','I'=>'nnwnnwwnn','J'=>'nnnnwwwnn','K'=>'wnnnnnnww','L'=>'nnwnnnnww','M'=>'wnwnnnnwn','N'=>'nnnnwnnww','O'=>'wnnnwnnwn','P'=>'nnwnwnnwn','Q'=>'nnnnnnwww','R'=>'wnnnnnwwn','S'=>'nnwnnnwwn','T'=>'nnnnwnwwn','U'=>'wwnnnnnnw','V'=>'nwwnnnnnw','W'=>'wwwnnnnnn','X'=>'nwnnwnnnw','Y'=>'wwnnwnnnn','Z'=>'nwwnwnnnn','-'=>'nwnnnnwnw','.'=>'wwnnnnwnn',' '=>'nwwnnnwnn','*'=>'nwnnwnwnn' );
-		$text = preg_replace( '/[^0-9A-Z. -]/', '', strtoupper( $payload ) ); $encoded = '*' . $text . '*'; $x = 10; $bars = '';
+		$text = strtoupper( $payload );
+		if ( ! preg_match( '/^[0-9A-Z. -]+$/D', $text ) ) throw new InvalidArgumentException( 'Il codice contiene caratteri non supportati dal codice a barre. Usa il QR.' ); $encoded = '*' . $text . '*'; $x = 10; $bars = '';
 		foreach ( str_split( $encoded ) as $character ) {
 			$pattern = $patterns[ $character ] ?? $patterns['-'];
 			foreach ( str_split( $pattern ) as $index => $width ) { $units = 'w' === $width ? 3 : 1; if ( 0 === $index % 2 ) $bars .= '<rect x="' . $x . '" y="5" width="' . $units . '" height="60"/>'; $x += $units; }

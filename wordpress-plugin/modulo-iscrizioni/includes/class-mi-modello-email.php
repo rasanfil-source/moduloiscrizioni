@@ -53,6 +53,10 @@ final class MI_Modello_Email {
 		$event_id = absint( $event_id );
 		$group_id = $event_id ? absint( get_post_meta( $event_id, '_mi_activity_id', true ) ) : 0;
 		$group = $group_id ? self::sanitizza_stile( get_post_meta( $group_id, '_mi_email_style', true ) ) : array();
+		foreach ( array( 'primary_color', 'secondary_color' ) as $color ) {
+			$fallback = sanitize_hex_color( get_post_meta( $group_id, '_mi_' . $color, true ) );
+			if ( ! isset( $group[$color] ) && $fallback ) $group[$color] = $fallback;
+		}
 		$event = $event_id ? self::sanitizza_stile( get_post_meta( $event_id, '_mi_email_style', true ) ) : array();
 		// L’indirizzo per gli iscritti appartiene al gruppo e non può essere sostituito dal gestore del singolo evento.
 		unset( $event['contact_email'], $event['sender_email'] );
@@ -215,7 +219,7 @@ final class MI_Modello_Email {
 
 	public static function crea_istantanea( $event_id, $values ) {
 		$settings = self::impostazioni( $event_id );
-		if ( 'ZERO' === strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ) ) {
+		if ( in_array( strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ), array( 'NONE', 'ZERO' ), true ) ) {
 			$settings['html'] = self::rimuovi_riferimenti_pagamento_gratuito( $settings['html'], true );
 			$settings['text'] = self::rimuovi_riferimenti_pagamento_gratuito( $settings['text'] );
 		}
@@ -797,7 +801,7 @@ final class MI_Modello_Email {
 		$settings['subject'] = self::pulisci_riga( $subject, 180 );
 		$settings['text'] = mb_substr( sanitize_textarea_field( wp_unslash( $text ) ), 0, 5000 );
 		$settings['text'] = self::ripara_interruzioni_testo( $settings['text'] );
-		if ( 'ZERO' === strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ) ) $settings['text'] = self::rimuovi_riferimenti_pagamento_gratuito( $settings['text'] );
+		if ( in_array( strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ), array( 'NONE', 'ZERO' ), true ) ) $settings['text'] = self::rimuovi_riferimenti_pagamento_gratuito( $settings['text'] );
 		$settings['html'] = self::uniforma_grafica_corpo( self::testo_email_in_html( $settings['text'] ) );
 		if ( ! $settings['subject'] || ! $settings['text'] ) return new WP_Error( 'mi_email_vuota', 'Oggetto e testo dell’email non possono essere vuoti.' );
 		$settings = self::aggiorna_segnaposto( $settings );

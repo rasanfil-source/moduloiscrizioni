@@ -207,7 +207,7 @@ final class MI_Activator {
 			config_hash varchar(64) NOT NULL,
 			config_json longtext NOT NULL,
 			created_at datetime NOT NULL,
-			PRIMARY KEY (id),
+			PRIMARY KEY  (id),
 			UNIQUE KEY event_revision (event_id,revision_number),
 			UNIQUE KEY event_hash (event_id,config_hash)
 		) ENGINE=InnoDB {$charset};" );
@@ -221,7 +221,7 @@ final class MI_Activator {
 			actor_label varchar(120) NULL,
 			detail_json longtext NULL,
 			created_at datetime NOT NULL,
-			PRIMARY KEY (id),
+			PRIMARY KEY  (id),
 			KEY registration_id (registration_id),
 			KEY reg_type (registration_id,event_type),
 			KEY type_actor (event_type,actor_label)
@@ -264,7 +264,7 @@ final class MI_Activator {
 			origin_channel varchar(24) NOT NULL DEFAULT 'WORDPRESS',
 			origin_id varchar(120) NULL,
 			created_at datetime NOT NULL,
-			PRIMARY KEY (id),
+			PRIMARY KEY  (id),
 			KEY registration_id (registration_id),
 			KEY effective_at (effective_at),
 			UNIQUE KEY origin_payment (origin_channel,origin_id)
@@ -309,10 +309,6 @@ final class MI_Activator {
 
 	private static function backfill_ticket_counters( $ticket_counters, $registrations, $items ) {
 		global $wpdb;
-		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$ticket_counters}" );
-		if ( $count > 0 ) {
-			return;
-		}
 		$now = current_time( 'mysql', true );
 		$wpdb->query(
 			$wpdb->prepare(
@@ -321,7 +317,8 @@ final class MI_Activator {
 				 SUM(CASE WHEN r.status IN ('CONFIRMED','PENDING_PAYMENT','WAITLIST_OFFERED') AND r.capacity_released_at IS NULL THEN i.quantity ELSE 0 END),
 				 SUM(CASE WHEN r.status = 'WAITLISTED' AND r.capacity_released_at IS NULL THEN i.quantity ELSE 0 END), %s
 				 FROM {$items} i INNER JOIN {$registrations} r ON r.id = i.registration_id
-				 GROUP BY r.event_id, i.ticket_type_code",
+				 GROUP BY r.event_id, i.ticket_type_code
+				 ON DUPLICATE KEY UPDATE event_id={$ticket_counters}.event_id",
 				$now
 			)
 		);

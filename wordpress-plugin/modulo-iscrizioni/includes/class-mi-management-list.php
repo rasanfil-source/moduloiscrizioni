@@ -54,10 +54,10 @@ final class MI_Management_List {
 		foreach ( $individual ? $summary['people'] : $summary['items'] as $row ) {
 			if ( ! $common( $row ) ) continue;
 			$open = ! in_array( $row['status'], array( 'CANCELLED', 'EXPIRED' ), true );
-			if ( ! $open && empty( $context['includeClosed'] ) ) continue;
+			if ( ! $open && empty( $context['includeClosed'] ) && ! in_array( $state, array( 'CANCELLED', 'EXPIRED' ), true ) ) continue;
 			if ( $individual ) {
 				if ( ! $logistics( $row ) || ! $matches( $row ) ) continue;
-				$excluded = 'balance' === $filter ? empty( $row['collectible'] ) : ( 'missing' === $filter ? empty( $row['missing'] ) : empty( $row['unassigned'] ) );
+				$excluded = 'balance' === $filter ? empty( $row['collectible'] ) : ( 'missing' === $filter ? empty( $row['missing'] ) : ( 'requests' === $filter ? ! trim( $row['requests'] ?? '' ) : empty( $row['unassigned'] ) ) );
 				if ( 'all' !== $filter && ( ! $open || $excluded ) ) continue;
 			} else {
 				if ( ! empty( $context['orderService'] ) && ! $option_matches( $row['order_options'] ?? array(), $context['orderService'] ) ) continue;
@@ -119,7 +119,7 @@ final class MI_Management_List {
 			if ( ! empty( $item['active'] ) ) foreach ( array( 'missing', 'unassigned' ) as $key ) $metrics[$key] += (int) ( $item[$key] ?? 0 );
 			if ( $item['collectible'] ?? in_array( $status, array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ) $metrics['receivable'] += (int) ( $item['balance'] ?? 0 );
 			$metrics['paid'] += (int) ( $item['paid'] ?? 0 );
-			$metrics['has_requests'] = $metrics['has_requests'] || '' !== trim( (string) ( $item['requests'] ?? '' ) );
+			$metrics['has_requests'] = $metrics['has_requests'] || ( ! empty( $item['active'] ) && '' !== trim( (string) ( $item['requests'] ?? '' ) ) );
 			$metrics['has_missing'] = $metrics['has_missing'] || (int) ( $item['missing'] ?? 0 ) > 0;
 			if ( 'WAITLIST_OFFERED' === $status ) $metrics['offers']++;
 			if ( in_array( $status, array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ) foreach ( $item['order_options'] ?? array() as $option ) {

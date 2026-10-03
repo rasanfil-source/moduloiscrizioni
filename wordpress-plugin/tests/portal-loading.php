@@ -8,7 +8,10 @@ function is_user_logged_in(){return $GLOBALS['logged'];}
 function sanitize_key($v){return $v;}
 function wp_unslash($v){return $v;}
 function wp_enqueue_style($h,...$args){$GLOBALS['assets'][]=$h;}
-function wp_enqueue_script($h,...$args){$GLOBALS['assets'][]=$h;}
+function wp_enqueue_script($h,$src,$deps,$version,$args){
+    $GLOBALS['assets'][]=$h;
+    if (($args['strategy']??null)!=='defer' || ($args['in_footer']??null)!==true) throw new Exception('Portal script must request native deferred loading: '.$h);
+}
 class MI_Portal_Payments {static function allowed(){return true;}}
 require __DIR__.'/../modulo-iscrizioni/includes/class-mi-portal.php';
 foreach ([null,'manage','management','registrations','groups','payments','payment-report','communications','create','operators'] as $view) {

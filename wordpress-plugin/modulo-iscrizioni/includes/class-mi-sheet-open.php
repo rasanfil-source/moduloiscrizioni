@@ -116,7 +116,8 @@ final class MI_Sheet_Open {
 				set_transient( $key, $session, 600 );
 				return array( 'ready' => false, 'token' => $token, 'retry_after' => 3, 'message' => 'Google sta completando un aggiornamento. Nuovo tentativo automatico tra pochi secondi…' );
 			}
-			if ( empty( $result['ready'] ) || empty( $result['event_sheet_complete'] ) ) throw new RuntimeException( 'Il foglio non è aggiornato. Conferma prima le modifiche pendenti tramite Sincronizza nel portale, poi riprova.' );
+			$pending_edits = ! empty( $result['pending_changes'] ) && ( ! empty( $result['esito']['manuali'] ) || ! empty( $result['esito']['conflitti'] ) );
+			if ( ! $pending_edits && ( empty( $result['ready'] ) || empty( $result['event_sheet_complete'] ) ) ) throw new RuntimeException( 'Il foglio non è aggiornato. Conferma prima le modifiche pendenti tramite Sincronizza nel portale, poi riprova.' );
 			if ( ! preg_match( '~^https://docs\.google\.com/spreadsheets/d/([A-Za-z0-9_-]{20,})(?:/|$)~D', (string) ( $result['url_foglio'] ?? '' ), $sheet_match ) || (string) ( $result['id_foglio'] ?? '' ) !== $sheet_match[1] ) throw new RuntimeException( 'Workspace ha restituito un’identità del foglio non coerente.' );
 			$expected_sheet_id = (string) get_post_meta( $event_id, '_mi_operational_sheet_id', true );
 			if ( $expected_sheet_id && ! hash_equals( $expected_sheet_id, $sheet_match[1] ) ) throw new RuntimeException( 'Il foglio collegato all’evento è cambiato durante l’aggiornamento. Verifica il collegamento prima di riprovare.' );
@@ -124,6 +125,10 @@ final class MI_Sheet_Open {
 			if ( MI_Workspace_Client::stable_json( $result['event_schema'] ?? null ) !== MI_Workspace_Client::stable_json( $current['schema'] ) ) throw new RuntimeException( 'Workspace non conferma i campi dell’evento. Aggiorna Apps Script e la distribuzione Web App, poi riprova.' );
 			if ( ! hash_equals( (string) $request['payload']['projection_hash'], (string) ( $result['projection_hash'] ?? '' ) ) ) throw new RuntimeException( 'Workspace non conferma l’istantanea ricevuta.' );
 			if ( class_exists( 'MI_Event_Deletion' ) && is_wp_error( MI_Event_Deletion::enter( $event_id ) ) ) throw new RuntimeException( 'Evento non disponibile.' );
+			if ( $pending_edits ) {
+				delete_transient( $key );
+				return array( 'ready' => true, 'pending_changes' => true, 'url' => $result['url_foglio'], 'message' => 'Foglio aperto con modifiche da sincronizzare.' );
+			}
 			self::confirm_projection( $event_id, $current['versions'] );
 			update_post_meta( $event_id, '_mi_operational_sheet_id', sanitize_text_field( (string) ( $result['id_foglio'] ?? '' ) ) );
 			update_post_meta( $event_id, '_mi_operational_sheet_url', esc_url_raw( (string) $result['url_foglio'] ) );

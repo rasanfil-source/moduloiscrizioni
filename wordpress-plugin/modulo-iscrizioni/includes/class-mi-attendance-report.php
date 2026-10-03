@@ -7,7 +7,7 @@ final class MI_Attendance_Report {
 		return self::period( wp_date( 'Y' ), (string) get_post_meta( $group_id, '_mi_attendance_from_month', true ), (string) get_post_meta( $group_id, '_mi_attendance_to_month', true ) );
 	}
 	public static function submitted_period( $group_id, array $input ) {
-		if ( '1' === ( $input['mi_annual_attendance_report'] ?? '' ) ) return self::period( wp_date( 'Y' ), sanitize_text_field( $input['mi_attendance_from_month'] ?? '' ), sanitize_text_field( $input['mi_attendance_to_month'] ?? '' ) );
+		if ( '1' === ( $input['mi_annual_attendance_report'] ?? '' ) ) return self::period( wp_date( 'Y' ), sanitize_text_field( $input['mi_attendance_from_month'] ?? get_post_meta( $group_id, '_mi_attendance_from_month', true ) ), sanitize_text_field( $input['mi_attendance_to_month'] ?? get_post_meta( $group_id, '_mi_attendance_to_month', true ) ) );
 		try { return self::group_period( $group_id ); } catch ( InvalidArgumentException $e ) { return self::period( wp_date( 'Y' ) ); }
 	}
 	public static function period_fields( $group_id = 0 ) {
@@ -63,8 +63,8 @@ final class MI_Attendance_Report {
 			if ( ! $mobile ) continue;
 			if ( isset( $by_mobile[$mobile] ) ) $parents[$id] = $root( $by_mobile[$mobile] ); else $by_mobile[$mobile] = $id;
 		}
-		// Retain historical confirmed links only where neither record has a personal mobile.
-		foreach ( $links as $id => $target ) if ( $target && isset( $parents[$target] ) && empty( $mobiles[$id] ) && empty( $mobiles[$target] ) ) { $left = $root( $id ); $right = $root( $target ); if ( $left !== $right ) $parents[max( $left, $right )] = min( $left, $right ); }
+		// Explicit, audited identity links also connect records with missing or changed mobiles.
+		foreach ( $links as $id => $target ) if ( $target && isset( $parents[$target] ) ) { $left = $root( $id ); $right = $root( $target ); if ( $left !== $right ) $parents[max( $left, $right )] = min( $left, $right ); }
 		$groups = array(); $unrecorded = 0;
 		foreach ( $people as $person ) {
 			$event = $events[(int) $person['event_id']] ?? null; if ( ! $event || substr( $event['date'], 0, 7 ) < $from_month || substr( $event['date'], 0, 7 ) > $to_month ) continue;
@@ -85,7 +85,7 @@ final class MI_Attendance_Report {
 		global $wpdb;
 		if ( ! MI_Portal_Management::allowed() || ! MI_Access::can_access_activity( $group_id ) || $minimum < 1 || $minimum > 1000 ) return new WP_Error( 'mi_report_scope', 'Gruppo o criteri non accessibili.' );
 		try { list( $from_month, $to_month ) = self::period( $year, $from_month, $to_month ); } catch ( InvalidArgumentException $e ) { return new WP_Error( 'mi_report_period', $e->getMessage() ); }
-		$posts = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'private', 'draft' ), 'numberposts' => -1, 'meta_key' => '_mi_activity_id', 'meta_value' => $group_id ) );
+		$posts = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'private', 'mi_archived' ), 'numberposts' => -1, 'meta_key' => '_mi_activity_id', 'meta_value' => $group_id ) );
 		$events = array(); foreach ( $posts as $post ) if ( MI_Access::can_access_event( $post->ID ) ) $events[$post->ID] = array( 'title' => $post->post_title, 'date' => (string) get_post_meta( $post->ID, '_mi_event_starts_at', true ) );
 		if ( ! $events ) return self::aggregate( array(), array(), array(), $year, $minimum, $from_month, $to_month );
 		$ids = implode( ',', array_map( 'intval', array_keys( $events ) ) );
