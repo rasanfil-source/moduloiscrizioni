@@ -43,6 +43,24 @@ Questo piano è la checklist di rilascio, non un'autorizzazione a cancellare dat
 
 ## Stato corrente
 
+### Chiusura operativa del 7 ottobre 2026
+
+- Dismissione operativa autorizzata e applicata: `DB_MODULI` bloccato tramite Google Drive. Verificati il messaggio «File bloccato», la modalità «Bloccato» in Sheets e i comandi di modifica disabilitati. Il blocco è reversibile dagli editor; non è un archivio immutabile.
+- Il progetto vincolato al workbook è stato rinominato `MODULI - ARCHIVIO ROLLBACK - DISMESSO 2026-10-07`. Confermati zero trigger e ultima esecuzione il 2 ottobre. Il codice e le distribuzioni storiche sono conservati: il proprietario può ancora modificarli o eseguirli manualmente. Il blocco del workbook non certifica un blocco separato dell'editor Apps Script e le vecchie Web App non sono state revocate.
+- Ricontrollata la presenza delle tre copie in `BACKUP DISMISSIONE MODULI 2026-10-02`: DB_MODULI, evento 8039 ed evento 8083. Il dump locale pre-cutover è ancora presente (1.286.249 byte); SHA-256 ricalcolato e identico al valore riportato sotto. Nessun ripristino distruttivo eseguito.
+- Nel progetto autonomo le 50 esecuzioni visibili fino al 7 ottobre alle 06:36:45 sono tutte completate; ultima durata 3,621 secondi. L'episodio HTTP 504 del 6 ottobre non ha lasciato un arresto persistente. Questi controlli sono campioni, non una certificazione di assenza di errori nell'intero periodo.
+- Eseguiti i tre test `workspace-apps-script/tests/standalone-bundle.test.mjs`: tutti superati, compreso il rifiuto dell'accesso centrale prima di invocare Google.
+- La finestra di osservazione di 48 ore è trascorsa. Le prove di carico e prestazioni ancora elencate sotto restano attività distinte aperte; non vengono dichiarate completate con questa archiviazione reversibile.
+
+### Ripristino controllato
+
+1. Prima di qualsiasi rollback, acquisire un backup aggiornato di MySQL e dei fogli evento: il dump del 2 ottobre non contiene le operazioni successive.
+2. Per sola consultazione aprire DB_MODULI mantenendolo bloccato. Solo se serve ripristinare le scritture, usare Drive → Informazioni sul file → Sblocca.
+3. Per riattivare il sistema storico, verificare prima la compatibilità dei dati e del plugin corrente con il vecchio deployment; riconciliare le operazioni successive al cutover. Non importare il dump storico sopra la produzione corrente senza un piano di recupero delle differenze.
+4. Se occorre trasferire il cron, disattivare prima quello autonomo e verificare che rimanga un unico `avviaCronWordPress`; non riattivare automaticamente `sincronizzaFogliEventi`. Verificare code e sincronizzazioni dopo il cambio.
+
+Le annotazioni seguenti conservano le evidenze storiche del rilascio e del cutover; i numeri di versione non attestano la versione installata oggi.
+
 - Verifica locale completa ripetuta il 21 settembre 2026 con PHP 8.3.33 portabile e `mbstring`: 333 test Node principali, 7 test cache, lint e test PHP, asset e sanitizzazione superati.
 - Il plugin 3.26.216 e il progetto `MODULI AUTONOMO 3.26.149` sono installati in produzione. Il 2 ottobre 2026 il collegamento firmato e la verifica delle capacità autonome sono riusciti: il deployment dichiara proiezione diretta e prelievo firmato, e rifiuta il workbook centrale.
 - Endpoint WordPress, mittente e segreto condiviso sono configurati nelle proprietà del nuovo progetto. Il progetto storico, il vecchio deployment e `DB_MODULI` restano disponibili come rollback.
@@ -52,7 +70,7 @@ Questo piano è la checklist di rilascio, non un'autorizzazione a cancellare dat
 - Il collaudo funzionale in produzione è concluso su due eventi esclusivamente fittizi: gratuito, pagamento e rimborso simulati, proiezione e ricostruzione, modifica Sheet → MySQL, retry ed email in modalità Prova. Le notifiche finali risultano `SENT`, gli eventi e i dati di prova sono stati eliminati, i fogli spostati nel cestino e la modalità email ripristinata a `OPERATIVO`.
 - Il 2 ottobre 2026 è stata creata in Google Drive la cartella `BACKUP DISMISSIONE MODULI 2026-10-02`. Contiene copie verificate di `DB_MODULI` e dei fogli evento referenziati 8039 e 8083. Gli originali non sono stati spostati o modificati.
 - Il backup MySQL pre-cutover è `parrocch19749_2026-10-02_pre-cutover.sql.gz`, conservato localmente fuori dal repository. Il gzip è integro; il dump phpMyAdmin contiene struttura e dati (73 `CREATE TABLE`, 236 `INSERT INTO`) e tutte le tabelle operative `wp_mi_*` richieste. Dimensione compressa 1.286.249 byte, non compressa 12.538.588 byte; SHA-256 `4D07D8C54EB432782C9C531E9B910EA906593C4DC439988F406DBC4F1067B8C7`.
-- È attivo il monitoraggio `Sorveglia cutover MODULI`, ogni 6 ore fino al completamento della finestra di 48 ore. Deve restare silenzioso in assenza di anomalie e segnalare errori, azioni richieste o l'esito finale prima della sola lettura del rollback.
+- Il monitoraggio `Sorveglia cutover MODULI` era previsto ogni 6 ore per la finestra di 48 ore, ora trascorsa. Automazione rimossa il 7 ottobre alla chiusura della dismissione operativa; le notifiche di errore Apps Script restano disponibili.
 
 ## Punto di ripresa
 
@@ -63,6 +81,6 @@ La prossima sessione deve partire da questa sequenza, senza ripetere il collaudo
 3. Eseguire e documentare un periodo di confronto MySQL ↔ fogli evento, registrando differenze e tempi.
 4. **Completato il 2 ottobre 2026:** creato e verificato il backup MySQL; le copie dei fogli evento 8039 e 8083 e di `DB_MODULI` sono raccolte in `BACKUP DISMISSIONE MODULI 2026-10-02`. Il progetto storico, il vecchio deployment e il dump MySQL restano utilizzabili per il rollback.
 5. **Completato il 2 ottobre 2026:** il trigger autonomo `avviaCronWordPress` ogni 5 minuti è attivo e ha completato due esecuzioni consecutive verificate; i due trigger storici sono stati eliminati nell'ordine previsto e `MODULI` mostra zero trigger. Osservare per 24–48 ore log, coda email e sincronizzazioni prima di rendere il rollback di sola lettura.
-6. Rendere `DB_MODULI` e il progetto storico di sola lettura e conservarli come rollback. Non svuotare il cestino dei fogli di prova e non eliminare automaticamente il workbook centrale.
+6. **Archiviazione operativa eseguita il 7 ottobre 2026:** DB_MODULI bloccato; progetto storico identificato come archivio e senza trigger. Il proprietario mantiene accesso al codice e facoltà di sblocco, come precisato sopra. Conservare entrambi e i backup; non svuotare il cestino dei fogli di prova.
 
 Fino al completamento dei punti precedenti non sono autorizzati la cancellazione di `DB_MODULI`, la rimozione del progetto storico o la disattivazione anticipata dei suoi trigger. Alla ripresa non occorre caricare un nuovo plugin né distribuire nuovamente Apps Script, salvo che le prove di carico evidenzino una correzione ulteriore.
