@@ -1407,7 +1407,7 @@ final class MI_Portal {
 			$capacity = max( 1, absint( $published['capacity'] ?? get_post_meta( $event->ID, '_mi_capacity', true ) ) );
 			$starts_at = (string) ( $published['event_starts_at'] ?? get_post_meta( $event->ID, '_mi_event_starts_at', true ) );
 			$closes_at = (string) ( $published['closes_at'] ?? get_post_meta( $event->ID, '_mi_registration_closes_at', true ) );
-			$is_expired = self::is_past_event( $closes_at );
+			$is_expired = self::registration_deadline_passed( $closes_at );
 			$opens_at = (string) ( $published['opens_at'] ?? get_post_meta( $event->ID, '_mi_registration_opens_at', true ) );
 			$registration_opens_later = ! $is_expired && ! $is_cancelled && 'publish' === $event->post_status && $opens_at && $opens_at > current_time( 'Y-m-d\TH:i' );
 			$registration_label = '';
@@ -1509,7 +1509,7 @@ final class MI_Portal {
 		$location = (string) get_post_meta( $event_id, '_mi_event_location', true );
 		$capacity = max( 1, absint( get_post_meta( $event_id, '_mi_capacity', true ) ) );
 		$cancelled = (string) get_post_meta( $event_id, '_mi_event_cancelled_at', true );
-		$expired = self::is_past_event( $closes_at );
+		$expired = self::registration_deadline_passed( $closes_at );
 		$registration_url = 'publish' === $event->post_status ? esc_url( MI_Shortcode::url_iscrizione( $event_id ) ) : '';
 		if ( null === $active_count || null === $registration_count ) {
 			global $wpdb;
@@ -1696,6 +1696,12 @@ final class MI_Portal {
 		return $date instanceof DateTimeImmutable ? $date->getTimestamp() : 0;
 	}
 	public static function is_past_event( $value ) {
+		$timestamp = self::date_timestamp( $value );
+		if ( $timestamp <= 0 ) return false;
+		$today = ( new DateTimeImmutable( '@' . current_time( 'timestamp', true ) ) )->setTimezone( wp_timezone() )->setTime( 0, 0 );
+		return $timestamp < $today->getTimestamp();
+	}
+	private static function registration_deadline_passed( $value ) {
 		$timestamp = self::date_timestamp( $value );
 		return $timestamp > 0 && $timestamp < current_time( 'timestamp', true );
 	}

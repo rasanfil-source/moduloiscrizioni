@@ -2330,7 +2330,7 @@ test('la coerenza temporale impedisce nuove scadenze passate e segnala quelle gi
 	const portalScript = await read('assets/portal.js');
   assert.match(portal, /La chiusura delle iscrizioni non può essere precedente a questo momento\./);
 	assert.match(portal, /La chiusura delle iscrizioni non può essere successiva all.inizio dell.evento\./);
-  assert.match(portal, /\$is_expired = self::is_past_event\( \$closes_at \)/);
+  assert.match(portal, /\$is_expired = self::registration_deadline_passed\( \$closes_at \)/);
   assert.match(portal, /dal /);
   assert.match(portal, /current_time\( 'Y-m-d\\TH:i' \)/);
 	assert.match(portalScript, /validateWizardRelations = updateDateLimits/);
