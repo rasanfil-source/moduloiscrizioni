@@ -128,14 +128,26 @@
     const eventSelectors=root.querySelector('.mi-management-event-selectors');
     let eventContext=null;
     if(eventSelectors&&!eventSelectors.hidden){
-      eventContext=document.createElement('details');eventContext.className='mi-management-event-context';
-      const heading=document.createElement('summary');heading.setAttribute('aria-label','Mostra o cambia evento');
-      eventSelectors.before(eventContext);eventContext.append(heading,eventSelectors);
+      eventContext=document.createElement('div');eventContext.className='mi-management-event-context';
+      eventSelectors.before(eventContext);eventContext.append(eventSelectors);
+      const eventLabel=select.closest('label');
+      if(eventLabel){
+        eventLabel.classList.add('mi-management-event-label');
+        for(const node of [...eventLabel.childNodes])if(node.nodeType===Node.TEXT_NODE&&node.textContent.trim()){
+          const caption=document.createElement('span');caption.className='mi-management-event-caption';node.replaceWith(caption);caption.append(node);
+        }
+      }
+      select.setAttribute('aria-label','Evento');
     }
-    const updateEventContext=()=>{if(eventContext){const heading=eventContext.querySelector('summary');heading.textContent=select.selectedOptions[0]?.textContent||'Tutti gli eventi';heading.setAttribute('aria-label','Evento: '+heading.textContent+'. Mostra o cambia evento');}};
+    const updateEventContext=()=>{if(eventContext)select.title=select.selectedOptions[0]?.textContent||'Tutti gli eventi';};
     const arrangeManagement=()=>{
       const focused=document.activeElement;
-      if(eventContext){eventContext.open=!mobileLayout.matches;updateEventContext();if(mobileLayout.matches&&eventSelectors.contains(focused))eventContext.querySelector('summary').focus();}
+      if(eventContext){
+        const eventLabel=select.closest('label'),periodLabel=periodSelect?.closest('label');
+        if(eventLabel&&periodLabel){if(mobileLayout.matches)eventSelectors.prepend(eventLabel);else eventSelectors.prepend(periodLabel);}
+        updateEventContext();
+        if(eventSelectors.contains(focused))focused.focus();
+      }
       const summaryPanel=content.querySelector('.mi-management-summary');
       const primary=content.querySelector('[data-new-registration]'),bar=content.querySelector('.mi-management-actionbar');
       if(primary&&summaryPanel&&bar){const restoreFocus=primary.contains(focused);if(mobileLayout.matches)summaryPanel.before(primary);else bar.append(primary);if(restoreFocus)focused.focus();}

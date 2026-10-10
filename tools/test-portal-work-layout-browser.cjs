@@ -14,6 +14,32 @@ function sheetXml(buffer){for(let offset=0;buffer.readUInt32LE(offset)===0x04034
 try{
 await page.route('**/*',async route=>{const url=new URL(route.request().url()),file=path.basename(url.pathname);if(url.hostname!=='layout.invalid')return route.abort();if(url.pathname==='/ajax'){const operation=new URLSearchParams(route.request().postData()).get('operation');assert.ok(['summary','open_sheet','sheet_changes'].includes(operation),'Unexpected operation '+operation);return route.fulfill({json:{success:true,data:operation==='summary'?summary():{url:''}}});}if(css.includes(file)||['portal.js','portal-management.js'].includes(file))return route.fulfill({body:fs.readFileSync(path.join(assets,file)),contentType:file.endsWith('.css')?'text/css; charset=utf-8':'text/javascript; charset=utf-8'});return route.fulfill({body:shell(body),contentType:'text/html'});});
 await page.goto('https://layout.invalid/');await page.locator('.mi-participant-row').first().waitFor();
+if(process.argv.includes('--event-selector-only')){
+ for(const width of [390,320,760,1280,390]){
+  await page.setViewportSize({width,height:844});
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  const eventSelect=page.locator('[data-event-select]'),periodSelect=page.locator('[data-period-select]');
+  assert.equal(await eventSelect.isVisible(),true);assert.equal(await periodSelect.isVisible(),true);
+  assert.equal(await page.locator('.mi-management-event-context>summary').count(),0);
+  assert.equal(await eventSelect.inputValue(),'42');
+  const e=await eventSelect.boundingBox(),p=await periodSelect.boundingBox();
+  if(width<=760)assert.ok(p.y>=e.y+e.height);else assert.ok(p.x<e.x);
+  assert.equal(await eventSelect.evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(255, 255, 255)');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await eventSelect.focus();assert.equal(await eventSelect.evaluate(e=>e===document.activeElement),true);
+ }
+ await page.screenshot({path:path.join(out,'mobile-event-selector.png'),fullPage:true});
+ await page.route('**/ajax',route=>{const params=new URLSearchParams(route.request().postData());return route.fulfill({json:{success:true,data:params.get('operation')==='all_people'?{items:[],more:false}:summary()}});});
+ await page.locator('[data-event-select]').selectOption('');
+ await page.locator('[data-all-query]').waitFor();assert.ok(new URL(page.url()).searchParams.get('mi_portal_event')==='');
+ await page.locator('[data-period-select]').selectOption('past');
+ await page.waitForFunction(()=>new URL(location.href).searchParams.get('mi_portal_period')==='past');
+ assert.equal(await page.locator('[data-event-select] option').count(),1);
+ await page.locator('[data-period-select]').selectOption('current');
+ await page.locator('[data-event-select]').selectOption('42');await page.locator('.mi-participant-row').first().waitFor();
+ assert.equal(new URL(page.url()).searchParams.get('mi_portal_event'),'42');
+ assert.deepEqual(errors,[]);console.log('PASS: direct event selector, all events, period filtering, white fields, mobile order, desktop layout and 320px overflow.');return;
+}
 assert.equal(await page.locator('[data-query]').evaluate(input=>{input.setAttribute('aria-invalid','true');const color=getComputedStyle(input).borderTopColor;input.removeAttribute('aria-invalid');return color;}),'rgb(180, 35, 24)');
 const columns=await page.locator('[data-export-column]').evaluateAll(nodes=>nodes.map(n=>n.dataset.exportColumn));assert.ok(columns.length>=5);
 const fits=async()=>{await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));const overflow=await page.evaluate(()=>({url:location.pathname,width:innerWidth,total:document.documentElement.scrollWidth,scrollX,body:document.body.getBoundingClientRect().toJSON(),nodes:[...document.querySelectorAll('main *')].filter(e=>{const r=e.getBoundingClientRect();return r.width&&(r.right+scrollX>innerWidth+1||e.scrollWidth>e.clientWidth+1);}).slice(0,8).map(e=>({tag:e.tagName,cls:e.className,rect:e.getBoundingClientRect().toJSON(),scroll:e.scrollWidth,client:e.clientWidth}))}));assert.ok(overflow.total<=overflow.width,JSON.stringify(overflow));};
@@ -44,8 +70,13 @@ for(const width of [760,600,390,360,320]){
  const scroll=page.locator('.mi-participant-scroll');
  assert.equal(await scroll.evaluate(e=>{e.scrollTop=100;return e.scrollTop>0&&e.clientHeight<=innerHeight*.56;}),true);
  await scroll.evaluate(e=>e.scrollTop=0);
- assert.equal(await page.locator('.mi-management-event-context').evaluate(e=>e.open),false);
- assert.equal(await page.locator('.mi-management-event-context>summary').innerText(),title);
+ assert.equal(await page.locator('.mi-management-event-context>summary').count(),0);
+ assert.equal(await page.locator('[data-event-select]').isVisible(),true);
+ assert.equal(await page.locator('[data-period-select]').isVisible(),true);
+ assert.equal(await page.locator('[data-event-select]').getAttribute('title'),title);
+ const eventBox=await page.locator('[data-event-select]').boundingBox(),periodBox=await page.locator('[data-period-select]').boundingBox();
+ assert.ok(periodBox.y>=eventBox.y+eventBox.height);
+ assert.equal(await page.locator('[data-event-select]').evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(255, 255, 255)');
  assert.equal(await page.evaluate(()=>Boolean(document.querySelector('[data-new-registration]').compareDocumentPosition(document.querySelector('.mi-management-summary-cards'))&Node.DOCUMENT_POSITION_FOLLOWING)),true);
  for(const cell of await page.locator('.mi-participant-contacts-cell').all())assert.equal(await cell.evaluate(e=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth;}),true);
  for(const icon of await page.locator('.mi-contact-icon').all())assert.deepEqual(await icon.evaluate(e=>{const r=e.getBoundingClientRect();return [r.width,r.height];}),[44,44]);

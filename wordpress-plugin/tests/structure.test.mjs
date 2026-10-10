@@ -1415,7 +1415,7 @@ test('gli eventi passati sono separati dalla vista operativa ordinaria', async (
 test('l’elenco iscrizioni indica l’evento selezionato', async () => {
   const script = await read('assets/portal-management.js');
   assert.match(script, /select\.selectedOptions\[0\]/);
-  assert.match(script, /Evento: /);
+  assert.match(script, /select\.setAttribute\('aria-label','Evento'\)/);
 });
 
 test('la ricerca iscrizioni usa la gestione corrente senza viste PHP orfane', async () => {
