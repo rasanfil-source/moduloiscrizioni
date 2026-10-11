@@ -25,7 +25,7 @@ final class MI_Event_Read_Cache {
 		return array( 'token' => $token, 'pending' => $pending );
 	}
 	public static function get( $event_id, $token ) {
-		$cached = get_transient( 'mi_read_151_' . absint( $event_id ) );
+		$cached = get_transient( 'mi_read_226_' . absint( $event_id ) );
 		if ( ! is_array( $cached ) || ( $cached['token'] ?? '' ) !== $token ) return null;
 		$json = gzuncompress( base64_decode( $cached['data'], true ), 32000000 );
 		$result = is_string( $json ) ? json_decode( $json, true ) : null;
@@ -35,6 +35,6 @@ final class MI_Event_Read_Cache {
 		$json = wp_json_encode( $model );
 		if ( ! is_string( $json ) || strlen( $json ) > 32000000 ) return;
 		$data = gzcompress( $json, 1 );
-		if ( false !== $data && strlen( $data ) < 4000000 ) set_transient( 'mi_read_151_' . absint( $event_id ), array( 'token' => $token, 'data' => base64_encode( $data ) ), 300 );
+		if ( false !== $data && strlen( $data ) < 4000000 ) set_transient( 'mi_read_226_' . absint( $event_id ), array( 'token' => $token, 'data' => base64_encode( $data ) ), 300 );
 	}
 }

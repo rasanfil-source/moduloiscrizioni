@@ -84,7 +84,12 @@ for ($id=1; $id<=241; $id++) {
     $wpdb->orders[$id] = ['id'=>$id, 'event_id'=>42, 'order_code'=>'T'.$id, 'status'=>$id%37 ? 'CONFIRMED' : 'CANCELLED', 'buyer_first_name'=>'Persona', 'buyer_last_name'=>'Èva '.($id%12), 'buyer_email'=>'', 'buyer_phone'=>'', 'created_at'=>sprintf('2026-09-%02d 10:00:00', $id%28+1), 'total_cents'=>0, 'initial_due_cents'=>0, 'economic_mode'=>'REGISTRATION_ONLY', 'snapshot_json'=>'{}', 'order_options_json'=>'[]', 'workspace_revision'=>1];
     $wpdb->people[] = ['id'=>$id, 'registration_id'=>$id, 'ticket_type_code'=>'base', 'first_name'=>'Persona', 'last_name'=>($id%2 ? 'René ' : 'Rene ').($id%15), 'status'=>$id%41 ? 'ACTIVE' : 'CANCELLED', 'room_code'=>'S'.$id, 'extra_json'=>'{}', 'options_json'=>'[]', 'deposit_due_cents'=>null];
 }
+$wpdb->orders[1]['marketing_consent_id'] = 'marketing-42';
+$wpdb->orders[2]['snapshot_json'] = json_encode(['event'=>['marketing_enabled'=>true]]);
+$wpdb->orders[3]['snapshot_json'] = json_encode(['event'=>['marketing_enabled'=>false]]);
 $model = MI_Management_Service::summary(42);
+$future = array_column($model['people'], 'future_events', 'id');
+if ($future[1] !== 'Sì' || $future[2] !== 'No' || $future[3] !== 'Non richiesto') throw new RuntimeException('Preferenze future assenti nel riepilogo.');
 check_page(!is_wp_error($model), 'Fixture summary failed');
 $token = MI_Event_Read_Cache::state(42)['token'];
 // Every text comparator, direction and view must agree across cache/SQL pages and chunks.
