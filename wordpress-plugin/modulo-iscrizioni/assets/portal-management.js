@@ -506,7 +506,7 @@
           const offerPanel=document.createElement('details');offerPanel.dataset.offerPanel='';offerPanel.innerHTML='<summary>Posti proposti e scadenze ('+offersCount+' prenotazioni)</summary><p>Il termine trascorso non equivale a un annullamento già eseguito: lo stato viene aggiornato dal processo automatico.</p>';content.querySelector('[data-list]').before(offerPanel);
           lazyPanel(offerPanel,async()=>{const result=await loadPanel('offers');if(ticket!==generation)return;offerPanel.insertAdjacentHTML('beforeend','<ul>'+result.offers.map(x=>'<li>'+esc(x.name)+' · '+esc(x.code)+' · '+esc(deadlineLabel(x.offer_expires_at))+' <button data-open="'+esc(x.code)+'">Apri prenotazione</button></li>').join('')+'</ul>');});
         }
-        const columns=[['name','Partecipante'],['status','Stato'],['email','Email'],['phone','Telefono'],['future_events','richiesta info eventi futuri']];
+        const columns=[['name','Partecipante'],['status','Stato'],['email','Email'],['phone','Telefono'],['future_events','eventi futuri']];
         if(features.rooms)columns.push(['room','Camera']);
         if(metrics?metrics.has_missing:data.items.some(row=>Number(row.missing)>0))columns.push(['missing','Dati mancanti']);
         if(metrics?metrics.has_requests:data.items.some(row=>String(row.requests||'').trim()))columns.push(['requests','Richieste particolari']);

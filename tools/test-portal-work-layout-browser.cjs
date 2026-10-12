@@ -16,7 +16,7 @@ await page.route('**/*',async route=>{const url=new URL(route.request().url()),f
 await page.goto('https://layout.invalid/');await page.locator('.mi-participant-row').first().waitFor();
 if(process.argv.includes('--future-report-only')){
  await page.locator('[data-export-settings]>summary').click();
- assert.match(await page.locator('[data-export-settings]').innerText(),/richiesta info eventi futuri/);
+ assert.equal(await page.locator('label').filter({has:page.locator('[data-export-column="future_events"]')}).innerText(),'eventi futuri');
  for(const checkbox of await page.locator('[data-export-column]').all())await checkbox.uncheck();
  await page.locator('[data-export-column="future_events"]').check();
  await page.evaluate(()=>{window.print=()=>{window.printed=document.querySelector('[data-print-list]').innerHTML;window.dispatchEvent(new Event('afterprint'));};});
