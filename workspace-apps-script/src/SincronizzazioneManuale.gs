@@ -109,16 +109,21 @@ function salvaBaseFoglio_(sheet) {
   const foglio = sheet.getParent();
   const base = foglio.getSheetByName('_MI_BASE') || foglio.insertSheet('_MI_BASE');
   const columns = mappaColonneEvento_(sheet);
+  const receipts=new Map();
+  if(base.getLastRow()>1&&base.getMaxColumns()>=4)base.getRange(2,1,base.getLastRow()-1,4).getValues().forEach(row=>receipts.set(JSON.stringify([String(row[0]),Number(row[1])]),{values:row[2],receipts:row[3]}));
+  if(base.getMaxColumns()<4)base.insertColumnsAfter(base.getMaxColumns(),4-base.getMaxColumns());
   const rows = sheet.getLastRow()>1 ? sheet.getRange(2,1,sheet.getLastRow()-1,sheet.getLastColumn()).getDisplayValues() : [];
   const values = rows.map(row => {
     const fields = {};
     Object.keys(columns).filter(key=>!['_ordine','_numero'].includes(key)).forEach(key=>fields[key]=row[columns[key]-1]);
-    return [row[columns._ordine-1],Number(row[columns._numero-1]),JSON.stringify(fields)];
+    const previous=receipts.get(JSON.stringify([String(row[columns._ordine-1]),Number(row[columns._numero-1])]));
+    const pending=previous&&JSON.parse(String(previous.receipts||'{}'));
+    return [row[columns._ordine-1],Number(row[columns._numero-1]),pending&&Object.keys(pending).length?previous.values:JSON.stringify(fields),previous?previous.receipts||'{}':'{}'];
   });
   base.clearContents();
-  base.getRange(1,1,1,3).setValues([['Prenotazione','Partecipante','Valori confermati']]);
+  base.getRange(1,1,1,4).setValues([['Prenotazione','Partecipante','Valori confermati','Ricevute']]);
   if (base.getMaxRows()<values.length+1) base.insertRowsAfter(base.getMaxRows(),values.length+1-base.getMaxRows());
-  if (values.length) base.getRange(2,1,values.length,3).setValues(values);
+  if (values.length) base.getRange(2,1,values.length,4).setValues(values);
   proteggiProiezione_(base);
   base.hideSheet();
 }
@@ -128,6 +133,7 @@ function salvaBaseFoglio_(sheet) {
  * Until that revision arrives, leave the base intact to prevent stale overwrites.
  */
 function allineaBaseConVista_(sheet, vista) {
+  pulisciRicevuteInvariate_(sheet);
   const pending = modificheCorrentiFoglio_(sheet);
   if (!pending.changes.length || pending.errors.length) return;
   const incoming = Object.create(null);
@@ -160,6 +166,23 @@ function allineaBaseConVista_(sheet, vista) {
       base.getRange(index+2,3).setValue(JSON.stringify(Object.assign(JSON.parse(String(row[2])),changes)));
       base.getRange(index+2,4).setValue(JSON.stringify(receipts[id]));
     }
+  });
+}
+
+/** Remove only receipts which acknowledge a value already present in the base. */
+function pulisciRicevuteInvariate_(sheet) {
+  const base=sheet.getParent().getSheetByName('_MI_BASE');
+  if (!base || base.getLastRow()<2) return;
+  base.getRange(2,1,base.getLastRow()-1,4).getValues().forEach((row,index)=>{
+    let values,receipts;
+    try {values=JSON.parse(String(row[2]||'{}'));receipts=JSON.parse(String(row[3]||'{}'));} catch(e){return;}
+    if(!values||!receipts||typeof receipts!=='object'||Array.isArray(receipts))return;
+    let changed=false;
+    Object.keys(receipts).forEach(key=>{
+      const r=receipts[key];
+      if(r && typeof r.before==='string' && r.accepted===r.before && Object.prototype.hasOwnProperty.call(values,key) && String(values[key])===r.before){delete receipts[key];changed=true;}
+    });
+    if(changed)base.getRange(index+2,4).setValue(JSON.stringify(receipts));
   });
 }
 
@@ -219,7 +242,8 @@ function confermaModificheFoglio_(payload) {
       cell.setNumberFormat('@').setValue(neutralizzaFormula_(receipt.accepted,5000)); updated++;
       if (versioned) {
         const stored=JSON.parse(String(baseRows[basePosition][3]||'{}'));
-        stored[receipt.key]={before:receipt.before,accepted:receipt.accepted,revision:revision};
+        if(receipt.accepted===receipt.before)delete stored[receipt.key];
+        else stored[receipt.key]={before:receipt.before,accepted:receipt.accepted,revision:revision};
         baseRows[basePosition][3]=JSON.stringify(stored);
         baseSheet.getRange(basePosition+2,4).setValue(baseRows[basePosition][3]);
       }

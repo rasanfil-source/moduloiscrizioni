@@ -4,6 +4,7 @@ defined( 'ABSPATH' ) || exit;
 
 final class MI_Access {
 	public static function boot() {
+		add_action( 'transition_post_status', array( __CLASS__, 'initialize_event_group' ), 5, 3 );
 		add_action( 'pre_get_posts', array( __CLASS__, 'scope_event_list' ) );
 		add_action( 'admin_init', array( __CLASS__, 'guard_event_editor' ) );
 		add_action( 'show_user_profile', array( __CLASS__, 'profile_scope' ) );
@@ -14,6 +15,18 @@ final class MI_Access {
 		add_filter( 'wp_authenticate_user', array( __CLASS__, 'block_suspended_user' ), 10, 2 );
 		add_action( 'admin_menu', array( __CLASS__, 'trim_delegate_menu' ), 999 );
 		add_filter( 'map_meta_cap', array( __CLASS__, 'map_event_meta_cap' ), 10, 4 );
+	}
+
+	/** Assign the authorized group before save_post checks the event scope. */
+	public static function initialize_event_group( $new_status, $old_status, $post ) {
+		if ( 'auto-draft' !== $old_status || ! in_array( $new_status, array( 'draft', 'pending', 'publish', 'private', 'future' ), true ) || MI_Event_Post_Type::EVENT_TYPE !== $post->post_type ) return;
+		$user_id = get_current_user_id();
+		if ( ! $user_id || (int) $post->post_author !== $user_id || self::is_suspended( $user_id ) || ! current_user_can( 'mi_create_events' ) || ! current_user_can( 'mi_manage_events' ) ) return;
+		if ( wp_is_post_autosave( $post->ID ) || wp_is_post_revision( $post->ID ) || get_post_meta( $post->ID, '_mi_activity_id', true ) ) return;
+		if ( ! isset( $_POST['mi_event_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['mi_event_nonce'] ) ), 'mi_save_event' ) ) return;
+		$group_id = absint( $_POST['mi_activity_id'] ?? 0 );
+		if ( ! $group_id || MI_Event_Post_Type::ACTIVITY_TYPE !== get_post_type( $group_id ) || ! self::can_access_activity( $group_id, $user_id ) ) return;
+		update_post_meta( $post->ID, '_mi_activity_id', $group_id );
 	}
 
 	public static function block_suspended_user( $user, $password ) {

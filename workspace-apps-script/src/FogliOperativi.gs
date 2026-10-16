@@ -166,7 +166,8 @@ function verificaFoglioEventoDaWordPress_(payload) {
 		return {ok:true,esiste:true,id_evento:idEvento,id_foglio:opened.book.getId(),url_foglio:opened.book.getUrl()};
 	} catch(error) {
 		const detail=String(error&&error.message?error.message:error);
-		if (/EVENT_SHEET_MISSING|file not found|does not exist/i.test(detail)) return {ok:true,esiste:false,id_evento:idEvento};
+		// Only our own explicit missing/trashed marker proves absence; Drive errors may mean denied access.
+		if (detail==='EVENT_SHEET_MISSING') return {ok:true,esiste:false,id_evento:idEvento};
 		return {ok:false,error:'SHEET_UNAVAILABLE',id_evento:idEvento};
 	}
 }

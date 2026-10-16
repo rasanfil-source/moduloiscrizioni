@@ -406,6 +406,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const closesAt = form.querySelector('[data-mi-closes]');
     const startsAt = form.querySelector('[data-mi-starts]');
     const dateFields = [opensAt, closesAt, startsAt].filter(Boolean);
+    const lateRegistrationNotice = form.querySelector('[data-mi-late-registration-notice]');
+    if (lateRegistrationNotice) lateRegistrationNotice.hidden = true;
     const formatItalianDateInput = (field) => {
       const cursor = field.selectionStart ?? field.value.length;
       const digitsBeforeCursor = field.value.slice(0, cursor).replace(/\D/g, '').length;
@@ -454,7 +456,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const closing = parseItalianDate(closesAt?.value || '');
       const start = parseItalianDate(startsAt?.value || '');
       if (opening && closing && closing <= opening) closesAt.setCustomValidity('La chiusura deve essere successiva all’apertura delle iscrizioni.');
-      if (closing && start && start < closing) startsAt.setCustomValidity('L’inizio dell’evento non può precedere la chiusura delle iscrizioni.');
+      if (lateRegistrationNotice) lateRegistrationNotice.hidden = !(closing && start && start < closing);
     };
 	validateWizardRelations = updateDateLimits;
 	dateFields.forEach((field) => {
@@ -632,11 +634,21 @@ document.addEventListener('DOMContentLoaded', () => {
 		if (!submit) return;
 		quickForm.dataset.miQuickFormBound = '1';
 		const initialSnapshot = quickEventFormSnapshot(quickForm);
+		const lateRegistrationNotice = quickForm.querySelector('[data-mi-late-registration-notice]');
+		const startsAt = quickForm.querySelector('[name="starts_at"]');
+		const closesAt = quickForm.querySelector('[name="closes_at"]');
+		const updateLateRegistrationNotice = () => {
+			if (!lateRegistrationNotice || !startsAt?.value || !closesAt?.value) return;
+			lateRegistrationNotice.hidden = new Date(closesAt.value) <= new Date(startsAt.value);
+		};
 		const updateSubmitVisibility = () => {
 			submit.hidden = quickEventFormSnapshot(quickForm) === initialSnapshot;
 		};
 		quickForm.addEventListener('input', updateSubmitVisibility);
 		quickForm.addEventListener('change', updateSubmitVisibility);
+		quickForm.addEventListener('input', updateLateRegistrationNotice);
+		quickForm.addEventListener('change', updateLateRegistrationNotice);
+		updateLateRegistrationNotice();
 		updateSubmitVisibility();
 	});
 	bindQuickEventForms();

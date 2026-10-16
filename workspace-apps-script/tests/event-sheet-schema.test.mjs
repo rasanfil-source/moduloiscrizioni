@@ -5,17 +5,23 @@ import {readFile} from 'node:fs/promises';
 const source=(await Promise.all(['Core.gs','Segreteria.gs','DomandeEvento.gs','FogliOperativi.gs','SincronizzazioneManuale.gs'].map(f=>readFile(new URL('../src/'+f,import.meta.url),'utf8')))).join('\n');
 function fixture(schema) {
  const event={id_evento:'42',titolo:'12 ceste',profilo_operativo:'VIAGGIO_COMPLESSO',schema_vista_json:JSON.stringify(schema)};
- const rows={events:[event],orders:[],people:[],payments:[],views:[{id_evento:'42',campi_json:'["document_number","insurance","total"]'}],states:[]};
+ const rows={events:[event],orders:[],people:[],payments:[],views:[],states:[]};
  const c=vm.createContext({MI_SHEETS:{EVENTS:'events',REGISTRATIONS:'orders',PARTICIPANTS:'people',PAYMENTS:'payments',OPERATIONAL_VIEWS:'views',OPERATIONAL_STATE:'states'},ottieniSchedaObbligatoria_:s=>s});vm.runInContext(source,c);c.convertiRigheInOggetti_=s=>rows[s]||[];
  return {c,rows,event};
 }
 const free={fields:[{key:'birth_date',label:'Data di nascita'},{key:'custom_food',label:'Cosa porti?'}],options:[],room:false,pricing:'ZERO'};
-test('free event with birth date does not inherit travel columns, even empty or with a saved view',()=>{
+test('free event with birth date does not inherit travel columns without explicit choices',()=>{
  const {c}=fixture(free);
  for(const view of [c.generaVistaOperativaIniziale_('42','12 ceste','VIAGGIO_COMPLESSO'),c.generaVistaOperativaEvento_('42')]) {
   assert.deepEqual(Array.from(view.colonne,x=>x.key),['participant_number','last_name','first_name','phone','birth_date','custom_food']);
   assert.equal(view.sola_lettura,true);
  }
+});
+test('saved and approved columns keep their selection and order despite event schema',()=>{
+ const {c,rows}=fixture(free);
+ rows.views=[{id_evento:'42',campi_json:'["document_number","insurance","total"]'}];
+ assert.deepEqual(Array.from(c.generaVistaOperativaEvento_('42').colonne,x=>x.key),['participant_number','document_number','insurance','total']);
+ assert.deepEqual(Array.from(c.generaVistaOperativaEvento_('42',['phone','custom_food','first_name']).colonne,x=>x.key),['participant_number','phone','custom_food','first_name']);
 });
 test('only configured documents, services and rooms appear; questions stay present when unanswered',()=>{
  const {c}=fixture({...free,fields:[{key:'document_expiry',label:'Scadenza documento'}],options:[{code:'bus',name:'Pullman',scope:'TICKET'}],room:true,pricing:'FIXED'});

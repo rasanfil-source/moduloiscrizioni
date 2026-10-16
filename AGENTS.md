@@ -1,5 +1,12 @@
 # Istruzioni permanenti del progetto
 
+## Unico progetto Google operativo
+
+- Il progetto operativo è MODULI AUTONOMO. MODULI e DB_MODULI sono dismessi e conservati soltanto come archivio di rollback.
+- Non proporre aggiornamenti, codici o pacchetti per MODULI o DB_MODULI e non rimetterli in discussione nei normali rilasci. Un eventuale ripristino richiede una richiesta esplicita dell'utente.
+- Consegnare esclusivamente i sorgenti destinati a MODULI AUTONOMO; non fornire varianti generali/storiche che generino ambiguità.
+- Non chiedere di aggiungere Segreteria.html a MODULI AUTONOMO: le vecchie schermate non fanno parte del flusso operativo attuale. L'uso diretto dei fogli evento resta supportato.
+
 ## Comandi Windows
 
 Usare sempre PowerShell 7 (`pwsh.exe`), mai `powershell.exe`. Eseguire i comandi PowerShell nella forma `pwsh.exe -NoLogo -NoProfile -Command "<comando>"`.

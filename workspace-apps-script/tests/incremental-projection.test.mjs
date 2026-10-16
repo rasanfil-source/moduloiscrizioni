@@ -29,9 +29,10 @@ test('append, removal, empty event and manual row order keep identities and base
   assert.deepEqual(f.sheet.cells.slice(1,5).map(r=>r[4]),['ORD2','ORD1','ORD0','ORD3']);
   next.righe=next.righe.filter(r=>r.codice_ordine!=='ORD1');c.scriviProiezioneEvento_(f.sheet,next);
   assert.equal(f.sheet.getLastRow(),4);assert.equal(c.modificheCorrentiFoglio_(f.sheet).errors.length,0);
+  assert.ok(f.calls.some(x=>x.kind==='setBackground'&&x.sheet==='Dati operativi'&&x.row===5&&x.value===null),'Removed rows retain editable background');
   c.scriviProiezioneEvento_(f.sheet,view(0));assert.equal(f.sheet.getLastRow(),1);assert.equal(c.modificheCorrentiFoglio_(f.sheet).errors.length,0);
 });
-test('the visible number is local, stays editable and appends from the preceding row',()=>{
+test('the visible number is local, stays editable and appends beyond existing numbers',()=>{
   const f=fixture(),c=f.context(),v=view();
   v.colonne.unshift({key:'participant_number',label:'N.'});
   v.righe.forEach((row,index)=>row.valori.participant_number=index+1);
@@ -45,6 +46,26 @@ test('the visible number is local, stays editable and appends from the preceding
   c.scriviProiezioneEvento_(f.sheet,next);
   assert.deepEqual(f.sheet.cells.slice(1,5).map(row=>row[0]),[7,8,9,10]);
   assert.deepEqual(f.sheet.cells.slice(1,5).map(row=>row[4]),['ORD0','ORD1','ORD2','ORD3']);
+});
+test('append after sorting keeps existing numbers and assigns unique new numbers',()=>{
+  const f=fixture(),c=f.context();c.scriviProiezioneEvento_(f.sheet,view(3));
+  [f.sheet.cells[1],f.sheet.cells[3]]=[f.sheet.cells[3],f.sheet.cells[1]];
+  c.scriviProiezioneEvento_(f.sheet,view(5));
+  assert.deepEqual(f.sheet.cells.slice(1,6).map(r=>r[0]),[3,2,1,4,5]);
+  assert.equal(c.modificheCorrentiFoglio_(f.sheet).errors.length,0);
+});
+test('schema changes preserve local numbers by participant identity and reserve new numbers',()=>{
+  const f=fixture(),c=f.context();c.scriviProiezioneEvento_(f.sheet,view(3));
+  f.sheet.cells[1][0]=7;f.sheet.cells[2][0]=8;f.sheet.cells[3][0]=9;
+  [f.sheet.cells[1],f.sheet.cells[3]]=[f.sheet.cells[3],f.sheet.cells[1]];
+  const next=view(4);next.colonne.push({key:'phone',label:'Telefono'});
+  next.righe.forEach(r=>r.valori.phone='000');
+  c.scriviProiezioneEvento_(f.sheet,next);
+  assert.deepEqual(f.sheet.cells.slice(1,5).map(r=>r[0]),[7,8,9,10]);
+  assert.deepEqual(f.sheet.cells.slice(1,5).map(r=>r[5]),['ORD0','ORD1','ORD2','ORD3']);
+  assert.equal(c.modificheCorrentiFoglio_(f.sheet).errors.length,0);
+  c.scriviProiezioneEvento_(f.sheet,view(4));
+  assert.deepEqual(f.sheet.cells.slice(1,5).map(r=>r[0]),[7,8,9,10]);
 });
 for(const failure of ['clear','data','base'])test('a new execution resumes an interrupted '+failure+' write without false manual conflicts',()=>{
   const f=fixture(),v=view();let c=f.context();c.scriviProiezioneEvento_(f.sheet,v);

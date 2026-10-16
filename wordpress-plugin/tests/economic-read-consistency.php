@@ -10,6 +10,7 @@ function sanitize_key($value) { return strtolower($value); }
 function wp_salt($value) { return 'synthetic-audit-only'; }
 function get_the_title($id) { return 'Evento sintetico'; }
 function wp_date($format) { return gmdate($format); }
+function wp_timezone() { return new DateTimeZone('Europe/Rome'); }
 function wp_cache_delete(...$args) {}
 function get_post($id) { return (object)['post_type' => 'event', 'post_title' => 'Evento sintetico']; }
 function get_post_meta($id, $key, ...$args) { return $GLOBALS['audit_meta'][$key] ?? ''; }

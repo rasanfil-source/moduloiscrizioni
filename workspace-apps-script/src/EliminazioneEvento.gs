@@ -17,7 +17,13 @@ function eliminaDatiEventoDaWordPress_(payload) {
     const props = PropertiesService.getScriptProperties();
     const key = 'MI_DELETED_EVENT_' + id;
     let job = JSON.parse(props.getProperty(key) || 'null');
-    if (job && (job.request !== request || job.mode !== mode)) return {ok:false,error:'DELETION_CONFLICT'};
+    if (job && job.request !== request) return {ok:false,error:'DELETION_CONFLICT'};
+    if (job && job.mode !== mode) {
+      // Only a signed WordPress administrative decision may stop trash attempts.
+      if (job.mode!=='trash' || mode!=='keep' || payload.preserve_file!==true || String(payload.id_foglio||'')!==String(job.files[0]||'')) return {ok:false,error:'DELETION_CONFLICT'};
+      job.previous_mode=job.mode;job.mode='keep';job.preserve_file=true;
+      props.setProperty(key,JSON.stringify(job));
+    }
     if (!job) {
       const registered=String(props.getProperty('MI_DIRECT_SHEET_'+id)||''), supplied=String(payload.id_foglio||'');
       if (registered && supplied && registered!==supplied) return {ok:false,error:'EVENT_SHEET_MISMATCH'};
@@ -29,8 +35,10 @@ function eliminaDatiEventoDaWordPress_(payload) {
     if (job.complete) return {ok:true,complete:true,sheet_url:sheetUrl};
     // Do not swallow permission/not-found errors: retain the reference for an explicit retry.
     while (job.fileIndex < job.files.length) {
-      const file = DriveApp.getFileById(job.files[job.fileIndex]);
-      if (mode==='trash' && !file.isTrashed()) file.setTrashed(true);
+      if (mode==='trash') {
+        const file = DriveApp.getFileById(job.files[job.fileIndex]);
+        if (!file.isTrashed()) file.setTrashed(true);
+      }
       job.fileIndex++;
       props.setProperty(key,JSON.stringify(job));
     }

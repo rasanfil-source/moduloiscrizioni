@@ -17,7 +17,7 @@ export function fixture() {
     breakApart(){return this;}
     setFontWeight(){return this;}
     setNumberFormat(){return this;}
-    setBackground(){return this;}
+    setBackground(value){changed('setBackground',this.sheet,{row:this.row,count:this.height,col:this.col,value},()=>{});return this;}
     addDeveloperMetadata(key,value){this.sheet.metadata.push({key,value,col:this.col});return this;}
   }
   class Sheet {

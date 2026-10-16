@@ -507,7 +507,11 @@ final class MI_Management_Service {
 			if ( null === $deposits && 'DEPOSIT_BALANCE' === $row['economic_mode'] && ! empty( $position['quotes_known'] ) ) $deposits = MI_Payment_People::retained_deposits( $position['people'], $person_deltas );
 			$initial = 'FULL_PAYMENT' === $row['economic_mode'] ? $total : ( null !== $deposits ? array_sum( $deposits ) : min( (int) $row['initial_due_cents'], $total ) );
 			$changes = array( 'total_cents' => $total );
-			if ( $managed ) { $covered = self::covered_after_change( $row, $position, $person_deltas, null !== $deposits ? $deposits : array(), $paid, $initial ); $deadline = $covered ? null : MI_Registration_Service::reopened_payment_deadline( $row ); $changes += array( 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial, 'status' => $covered ? 'CONFIRMED' : 'PENDING_PAYMENT', 'expires_at' => $deadline ); if ( null !== $deadline ) $changes['payment_deadline_at'] = $deadline; }
+			if ( $managed ) {
+				$covered = self::covered_after_change( $row, $position, $person_deltas, null !== $deposits ? $deposits : array(), $paid, $initial );
+				$changes += array( 'initial_due_cents' => $initial, 'balance_cents' => $total - $initial );
+				$changes += MI_Payment_People::payment_deadline_changes( $row, $covered, (bool) array_filter( $person_deltas ) || $initial !== (int) $row['initial_due_cents'] );
+			}
 			$plan['orders'][] = array( 'id' => (int) $row['id'], 'code' => $code, 'before_total' => (int) $row['total_cents'], 'after_total' => $total, 'delta' => $delta, 'paid' => $paid, 'due' => $managed ? ( $individual_known ? $due : null ) : 0, 'refund' => $managed ? ( $individual_known ? $refund : null ) : 0, 'individual_known' => $individual_known, 'changes' => $changes, 'deposits' => null !== $deposits ? $deposits : array() );
 		}
 		foreach ( $occupancy as $code => $count ) if ( $count > ( $inventory[$code]['capacity'] ?? $plan['new_rooms'][$code]['capacity'] ?? 0 ) ) throw new InvalidArgumentException( 'Capienza superata per ' . $code . '. Scegli un’altra camera.' );
@@ -1033,6 +1037,15 @@ final class MI_Management_Service {
 		if ( 'phone' === $key ) return 'phone';
 		throw new InvalidArgumentException( 'Campo non previsto nell’iscrizione: ' . $key );
 	}
+	/** Legacy rooms without a typed entitlement retain their existing workflow. */
+	private static function validate_room_entitlement( $person, $destination ) {
+		$types = self::room_types();
+		foreach ( $person['options'] ?? array() as $option ) {
+			$type = $types[$option['code'] ?? ''] ?? null;
+			if ( ! $type || (int) ( $option['quantity'] ?? 0 ) < 1 ) continue;
+			if ( (int) $destination['capacity'] !== $type['capacity'] || ! preg_match( '/^' . $type['prefix'] . '[1-9][0-9]*$/', $destination['code'] ) ) throw new InvalidArgumentException( 'Camera incompatibile con la sistemazione acquistata. Per cambiare tipologia usa Cambia sistemazione.' );
+		}
+	}
 	private static function save_participant( $booking, $data, $defer_capacity = false ) {
 		global $wpdb;
 		if ( in_array( $booking['status'], array( 'CANCELLED','EXPIRED' ), true ) ) throw new InvalidArgumentException( 'Prenotazione non modificabile.' );
@@ -1070,6 +1083,7 @@ final class MI_Management_Service {
 		if ( '' !== $room ) {
 			$rooms = array_column( $booking['accommodations'], null, 'code' );
 			if ( ! isset( $rooms[$room] ) || ( ! $defer_capacity && $rooms[$room]['available'] < 1 && $person['room'] !== $room ) ) throw new InvalidArgumentException( 'Camera non disponibile o al completo.' );
+			if ( $room !== $person['room'] ) self::validate_room_entitlement( $person, $rooms[$room] );
 		}
 		if ( false === $wpdb->update( $wpdb->prefix . 'mi_participants', $names + array( 'extra_json' => wp_json_encode( $fields ), 'room_code' => $room ), array( 'id' => $person['id'] ) ) ) throw new RuntimeException( 'Partecipante non salvato.' );
 	}

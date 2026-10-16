@@ -247,7 +247,7 @@ final class MI_Registration_Service {
 		if ( 'MISCONFIGURED' === $state ) return new WP_Error( 'mi_event_dates', 'Inserisci una chiusura valida e successiva all’apertura. L’apertura può restare vuota per aprire subito le iscrizioni.' );
 		$starts = self::local_datetime( $event['event_starts_at'] ?? '' );
 		$closes = self::local_datetime( $event['closes_at'] ?? '' );
-		if ( ! $starts || $closes > $starts ) return new WP_Error( 'mi_event_dates', 'Inserisci una data di inizio valida, non precedente alla chiusura delle iscrizioni.' );
+		if ( ! $starts ) return new WP_Error( 'mi_event_dates', 'Inserisci una data di inizio valida.' );
 		if ( 'CLOSED' === $state ) return new WP_Error( 'mi_event_dates', 'La chiusura delle iscrizioni è già trascorsa. Aggiorna le date prima di proseguire.' );
 		return true;
 	}

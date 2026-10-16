@@ -30,6 +30,10 @@ test('interrupted formatting resumes the registered file; direct verification ne
  assert.equal(c.verificaFoglioEventoDaWordPress_({id_evento:'42',id_foglio:'abcdefghijklmnopqrst',direct_projection:true}).esiste,true);
  c.apriFoglioEventoFirmato_=()=>{throw Error('permission denied');};
  assert.deepEqual(JSON.parse(JSON.stringify(c.verificaFoglioEventoDaWordPress_({id_evento:'42',id_foglio:'abcdefghijklmnopqrst',direct_projection:true}))),{ok:false,error:'SHEET_UNAVAILABLE',id_evento:'42'});
+ for(const message of ['file not found or permission denied','does not exist','Impossibile trovare l’elemento','Nessun elemento con l’ID specificato o permesso negato']){
+  c.apriFoglioEventoFirmato_=()=>{throw Error(message);};
+  assert.equal(c.verificaFoglioEventoDaWordPress_({id_evento:'42',id_foglio:'abcdefghijklmnopqrst',direct_projection:true}).error,'SHEET_UNAVAILABLE');
+ }
  c.apriFoglioEventoFirmato_=()=>{throw Error('EVENT_SHEET_MISSING');};
  assert.deepEqual(JSON.parse(JSON.stringify(c.verificaFoglioEventoDaWordPress_({id_evento:'42',id_foglio:'abcdefghijklmnopqrst',direct_projection:true}))),{ok:true,esiste:false,id_evento:'42'});
  assert.equal(c.verificaFoglioEventoDaWordPress_({id_evento:'42'}).error,'USE_DIRECT_PROJECTION');

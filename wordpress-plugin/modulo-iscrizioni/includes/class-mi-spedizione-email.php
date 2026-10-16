@@ -238,7 +238,7 @@ final class MI_Spedizione_Email {
 			$placeholders = implode( ',', array_fill( 0, count( $order_codes ), '%s' ) );
 			$query_args = array_merge( array( $event_id ), $order_codes );
 			$status_filter = 'EVENT_CANCELLATION' === $template_type ? "status='CANCELLED'" : "status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED','WAITLIST_OFFERED') AND capacity_released_at IS NULL";
-			$registrations = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,status,economic_mode,buyer_first_name,buyer_last_name,buyer_email,total_qty,total_cents,initial_due_cents,balance_cents,payment_methods_json FROM {$registrations_table} WHERE event_id=%d AND order_code IN ({$placeholders}) AND {$status_filter} ORDER BY id LIMIT 1000", $query_args ), ARRAY_A );
+			$registrations = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,status,economic_mode,buyer_first_name,buyer_last_name,buyer_email,total_qty,total_cents,initial_due_cents,balance_cents,payment_methods_json,payment_deadline_at FROM {$registrations_table} WHERE event_id=%d AND order_code IN ({$placeholders}) AND {$status_filter} ORDER BY id LIMIT 1000", $query_args ), ARRAY_A );
 			if ( $wpdb->last_error ) return new WP_Error( 'mi_email_read', 'Prenotazioni non disponibili.' );
 			if ( 'EVENT_CANCELLATION' === $template_type && count( $registrations ) !== count( $order_codes ) ) return new WP_Error( 'mi_email_cancel_incomplete', 'Annullamento dei destinatari non completato.' );
 			try { $positions = MI_Payment_Ledger::positions( $registrations ); }
@@ -256,7 +256,16 @@ final class MI_Spedizione_Email {
 					$economic = array( 'total_cents' => (int) $position['effective_total'], 'initial_due_cents' => $position['individual_known'] ? (int) $position['individual_deposit_due'] : (int) $registration['initial_due_cents'], 'balance_cents' => $balance, 'payment_methods' => json_decode( (string) $registration['payment_methods_json'], true ) ?: array() );
 					$status_labels = array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'Da pagare', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto' );
 					$participant_count = (int) $position['individual_people_count'] > 0 ? (int) $position['individual_active_count'] : (int) $registration['total_qty'];
-					$values = MI_Modello_Email::valori_ordine( $event, $registration['order_code'], $status_labels[ $registration['status'] ] ?? $registration['status'], $participant_count, trim( $registration['buyer_first_name'] . ' ' . $registration['buyer_last_name'] ), $economic, array(), $registration['buyer_first_name'] );
+					// La scadenza della prenotazione è UTC e può differire da quella generale.
+					// Se assente/non valida, il modello invita a contattare l'organizzazione.
+					$registration_event = $event;
+					$registration_event['payment_deadline_at'] = '';
+					$deadline = (string) ( $registration['payment_deadline_at'] ?? '' );
+					$deadline_date = $deadline ? DateTimeImmutable::createFromFormat( '!Y-m-d H:i:s', $deadline, new DateTimeZone( 'UTC' ) ) : false;
+					if ( $deadline_date && $deadline_date->format( 'Y-m-d H:i:s' ) === $deadline ) {
+						$registration_event['payment_deadline_at'] = wp_date( 'Y-m-d\TH:i', $deadline_date->getTimestamp(), wp_timezone() );
+					}
+					$values = MI_Modello_Email::valori_ordine( $registration_event, $registration['order_code'], $status_labels[ $registration['status'] ] ?? $registration['status'], $participant_count, trim( $registration['buyer_first_name'] . ' ' . $registration['buyer_last_name'] ), $economic, array(), $registration['buyer_first_name'] );
 					$status_url = MI_Portal::status_url( $registration['id'], $registration['order_code'], $registration['buyer_email'] );
 					if ( 'BALANCE_REMINDER' === $template_type ) $status_url = MI_Portal::balance_url( $registration['id'], $registration['order_code'], $registration['buyer_email'] );
 					$snapshot = MI_Modello_Email::crea_istantanea_operativa( $event_id, $values, $template_type, $message, $status_url );

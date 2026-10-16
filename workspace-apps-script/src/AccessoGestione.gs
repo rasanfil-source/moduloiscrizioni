@@ -5,9 +5,24 @@ function urlGestioneWeb_(vista, evento, ordine) {
   if (base === endpoint || !/^https:\/\//.test(base)) throw new Error('Configura prima il collegamento WordPress.');
   return base + '?mi_portal=1&mi_portal_view=' + encodeURIComponent(vista || 'management') + (evento ? '&mi_portal_event=' + encodeURIComponent(evento) : '') + (ordine ? '&mi_order=' + encodeURIComponent(ordine) : '');
 }
-function apriGestioneWeb(vista) {
-  const url = urlGestioneWeb_(vista);
-  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput('<p><a target="_blank" rel="noopener" href="' + url.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '">Apri la gestione eventi</a></p><p>Accedi con le tue credenziali WordPress.</p>').setWidth(430).setHeight(160), 'Gestione web');
+function apriGestioneWeb(vista, evento, ordine) {
+  const options=vista && typeof vista==='object'?vista:{vista:vista,evento:evento,ordine:ordine};
+  evento=String(options.evento||'');ordine=String(options.ordine||'');
+  if(ordine && !evento){
+    const row=convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).find(r=>String(r.codice_ordine)===ordine);
+    if(!row)throw new Error('Prenotazione non trovata. Seleziona prima l’evento.');
+    evento=String(row.id_evento||'');
+  }
+  if(!evento){
+    const book=SpreadsheetApp.getActiveSpreadsheet();
+    if(book){const props=PropertiesService.getScriptProperties().getProperties();const key=Object.keys(props).find(k=>k.startsWith('MI_DIRECT_SHEET_')&&props[k]===book.getId());if(key)evento=key.slice('MI_DIRECT_SHEET_'.length);}
+  }
+  const url = urlGestioneWeb_(options.vista,evento,ordine);
+  if(options.client===true)return {ok:true,url:url};
+  let ui;
+  try{ui=SpreadsheetApp.getUi();}catch(error){return {ok:true,url:url};}
+  ui.showModalDialog(HtmlService.createHtmlOutput('<p><a target="_blank" rel="noopener" href="' + url.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '">Apri la gestione eventi</a></p><p>Accedi con le tue credenziali WordPress.</p>').setWidth(430).setHeight(160), 'Gestione web');
+  return {ok:true,url:url,dialog:true};
 }
 function proteggiProiezione_(scheda, modificabili) {
   const protections = scheda.getProtections(SpreadsheetApp.ProtectionType.SHEET);
@@ -30,7 +45,7 @@ function preparaAccessoGestioneEvento_(foglio, idEvento) {
     scheda.setRowHeight(8,54);
     scheda.getRange('A9').setValue('Apri il riepilogo delle modifiche e conferma con il tuo accesso al portale.');
   } catch (e) { scheda.getRange('A4').setValue(e.message); }
-  scheda.getRange('A6').setValue('Ultimo controllo automatico');
+  scheda.getRange('A6').setValue('Collegamento gestione configurato il');
   scheda.getRange('B6').setValue(new Date()).setNumberFormat('dd/mm/yyyy hh:mm');
   scheda.setColumnWidth(1, 650);
   scheda.setColumnWidth(2, 220);

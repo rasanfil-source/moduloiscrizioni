@@ -26,24 +26,39 @@ function estendiGrigliaProiezione_(sheet,rows,columns) {
 function pianoProiezioneIncrementale_(vista,mappa,correnti,intestazioni) {
   const dichiarate=vista.colonne.filter(c=>c.key!=='participant_number');
   const canoniche=[{key:'participant_number',label:'N.',gruppo:'persona',comprimibile:false}].concat(dichiarate,[{key:'_numero',label:'Partecipante interno'},{key:'_ordine',label:'Prenotazione'}]);
-  const keys=Object.keys(mappa), same=keys.length===canoniche.length && canoniche.every((c,i)=>mappa[c.key]===i+1);
+  const keys=Object.keys(mappa), same=keys.length===canoniche.length && canoniche.every(c=>Number.isInteger(mappa[c.key])&&mappa[c.key]>=1&&mappa[c.key]<=canoniche.length) && new Set(Object.values(mappa)).size===canoniche.length;
   const columns=same?canoniche.slice().sort((a,b)=>mappa[a.key]-mappa[b.key]):canoniche;
   const schemaChanged=!same;
   const order=columns.findIndex(c=>c.key==='_ordine'), number=columns.findIndex(c=>c.key==='_numero');
   const progressive=columns.findIndex(c=>c.key==='participant_number');
   const identity=row=>JSON.stringify([String(row[order]),Number(row[number])]);
   const incoming=vista.righe.map((r,i)=>columns.map(c=>c.key==='_numero'?r.numero_partecipante:c.key==='_ordine'?r.codice_ordine:c.key==='participant_number'?i+1:typeof r.valori[c.key]==='number'&&Number.isFinite(r.valori[c.key])?r.valori[c.key]:neutralizzaFormula_(r.valori[c.key],5000)));
+  const savedNumbers=new Map();
+  let maximum=0;
+  if(mappa._ordine&&mappa._numero&&mappa.participant_number)correnti.forEach(row=>{
+    const value=Number(row[mappa.participant_number-1]);
+    if(Number.isSafeInteger(value)&&value>0){
+      savedNumbers.set(JSON.stringify([String(row[mappa._ordine-1]),Number(row[mappa._numero-1])]),value);
+      maximum=Math.max(maximum,value);
+    }
+  });
+  incoming.forEach(row=>{
+    const saved=savedNumbers.get(identity(row));
+    if(saved!==undefined)row[progressive]=saved;
+    else {
+      if(maximum>=Number.MAX_SAFE_INTEGER)throw new Error('PARTICIPANT_NUMBER_EXHAUSTED');
+      row[progressive]=++maximum;
+    }
+  });
   let rows=incoming;
   if(same){
     const remaining=new Map(incoming.map(row=>[identity(row),row]));
-    rows=[];let precedente=0;
+    rows=[];
     correnti.forEach(row=>{
       const key=identity(row);if(!remaining.has(key))return;
-      const aggiornato=remaining.get(key);
-      if(progressive>=0){const corrente=Number(row[progressive]);aggiornato[progressive]=Number.isSafeInteger(corrente)&&corrente>0?corrente:precedente+1;precedente=Number(aggiornato[progressive]);}
-      rows.push(aggiornato);remaining.delete(key);
+      rows.push(remaining.get(key));remaining.delete(key);
     });
-    remaining.forEach(row=>{if(progressive>=0){row[progressive]=precedente+1;precedente=Number(row[progressive]);}rows.push(row);});
+    remaining.forEach(row=>rows.push(row));
   }
   return {columns:columns,rows:rows,structural:schemaChanged,header:columns.map(c=>c.label),
     header_changed:schemaChanged||!righeProiezioneUguali_(intestazioni,columns.map(c=>c.label)),
@@ -114,11 +129,11 @@ function riprendiScritturaProiezione_(sheet) {
     if(last&&last.row+last.values.length===position)last.values.push(row);else blocks.push({row:position,values:[row]});
   });
   blocks.forEach(block=>sheet.getRange(block.row,1,block.values.length,width).setNumberFormat('@').setValues(block.values));
-  if(!plan.structural&&plan.old_rows>plan.target_rows)sheet.getRange(plan.target_rows+2,1,plan.old_rows-plan.target_rows,width).clearContent();
+  if(!plan.structural&&plan.old_rows>plan.target_rows)sheet.getRange(plan.target_rows+2,1,plan.old_rows-plan.target_rows,width).clearContent().setBackground(null);
   }
   // The baseline must capture the final display. A COMMITTED journal may
   // already have reopened editing: never absorb later manual edits into it.
-  plan.columns.forEach((column,i)=>{if(plan.target_rows&&['total','paid','balance','paid_cash','paid_transfer','paid_card'].includes(column.key))sheet.getRange(2,i+1,plan.target_rows,1).setNumberFormat('#,##0.00');});
+  plan.columns.forEach((column,i)=>{if(!plan.target_rows)return;const format=['total','paid','balance','paid_cash','paid_transfer','paid_card'].includes(column.key)?'#,##0.00':['participant_number','_numero'].includes(column.key)?'0':column.key.startsWith('option_')?'0.########':null;if(format)sheet.getRange(2,i+1,plan.target_rows,1).setNumberFormat(format);});
   SpreadsheetApp.flush();
   if(stage!=='COMMITTED'){
     aggiornaBaseIncrementale_(sheet,plan.columns,plan.target_rows);

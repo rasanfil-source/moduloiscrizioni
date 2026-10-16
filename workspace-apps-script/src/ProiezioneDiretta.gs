@@ -14,7 +14,6 @@ function decodificaProiezioneDiretta_(payload) {
   if (!projection || typeof projection!=='object' || Array.isArray(projection)) throw new Error('INVALID_EVENT_PROJECTION');
   return projection;
 }
-
 /** Pull oversized snapshots through the separately signed Workspace → WordPress API. */
 function caricaProiezioneDiretta_(payload) {
   if ((payload||{}).projection_pull!==true) return decodificaProiezioneDiretta_(payload);
@@ -96,7 +95,7 @@ function aggiornaPagamentiDaProiezione_(book, projection, readOnly) {
     if(!management||props.getProperty(managementKey)!==managementVersion){preparaAccessoGestioneEvento_(book,String(projection.event.id_evento));props.setProperty(managementKey,managementVersion);}
   }
   let sheet=book.getSheetByName('Pagamenti');
-  if(schema.pricing==='ZERO'&&!payments.length){if(sheet&&book.getSheets().some(s=>s.getName()!=='Pagamenti'&&!s.isSheetHidden()))sheet.hideSheet();return;}
+  if(['NONE','ZERO'].includes(schema.pricing)&&!payments.length){if(sheet&&book.getSheets().some(s=>s.getName()!=='Pagamenti'&&!s.isSheetHidden()))sheet.hideSheet();return;}
   const created=!sheet;
   sheet=sheet||book.insertSheet('Pagamenti');if(sheet.isSheetHidden())sheet.showSheet();
   const headers=['Movimento','Prenotazione','Data','Tipo','Importo (€)','Metodo','Riferimento','Operatore','Nota'];
@@ -112,6 +111,7 @@ function aggiornaPagamentiDaProiezione_(book, projection, readOnly) {
 
 function proiettaEventoDaWordPress_(payload) {
   const started=Date.now(), timings={};
+  if(payload&&payload.background===true&&Number(PropertiesService.getScriptProperties().getProperty('MI_INTERACTIVE_OPEN_UNTIL')||0)>started)return {ok:true,ready:false,busy:true,retry_after:3};
   const projection=caricaProiezioneDiretta_(payload), eventId=String((payload||{}).event_id||'');validaProiezioneDiretta_(eventId,projection);
   timings.load_ms=Date.now()-started;
   const lock=LockService.getScriptLock();if((payload||{}).background===true){if(!lock.tryLock(100))return {ok:true,ready:false,busy:true,retry_after:3};}else if(!lock.tryLock(1000))return {ok:true,ready:false,busy:true,retry_after:3};
@@ -137,13 +137,13 @@ function proiettaEventoDaWordPress_(payload) {
       // Invalidate before writing so an interrupted update cannot reuse an old receipt.
       properties.deleteProperty(key);
       result=scriviProiezioneEvento_(opened.sheet,view);
-      if(!result.manuali&&!result.conflitti)aggiornaPagamentiDaProiezione_(opened.book,projection,readOnly);
+      aggiornaPagamentiDaProiezione_(opened.book,projection,readOnly);
     }
     SpreadsheetApp.flush();
     const complete=!result.manuali&&!result.conflitti;
     if(changed&&complete)properties.setProperty(key,JSON.stringify({fingerprint:fingerprint,read_only:readOnly,layout_version:3}));
     timings.write_ms=Date.now()-writeStarted;timings.lock_ms=Date.now()-lockedAt;timings.total_ms=Date.now()-started;
-    const response={ok:true,ready:complete,event_sheet_complete:complete,read_only:readOnly,id_foglio:opened.book.getId(),url_foglio:complete?opened.book.getUrl():undefined,creato:opened.created,projection_hash:String(payload.projection_hash||''),fingerprint:fingerprint,event_schema:decodificaOggetto_(projection.event.schema_vista_json),operational_profile:String(projection.event.profilo_operativo||''),esito:result};
+    const response={ok:true,ready:complete,event_sheet_complete:complete,read_only:readOnly,id_foglio:opened.book.getId(),url_foglio:opened.book.getUrl(),pending_changes:!complete,creato:opened.created,projection_hash:String(payload.projection_hash||''),fingerprint:fingerprint,event_schema:decodificaOggetto_(projection.event.schema_vista_json),operational_profile:String(projection.event.profilo_operativo||''),esito:result};
     if((payload||{}).measure_performance===true)response.performance=Object.assign(timings,{view_built:Boolean(changed),registrations:projection.registrations.length,participants:projection.participants.length,payments:projection.payments.length});
     return response;
   }finally{lock.releaseLock();}

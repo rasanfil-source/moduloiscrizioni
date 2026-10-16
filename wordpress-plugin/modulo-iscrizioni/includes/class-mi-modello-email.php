@@ -44,9 +44,16 @@ final class MI_Modello_Email {
 			$color = sanitize_hex_color( $style[ $key ] ?? '' );
 			if ( ! $overrides_only || $color ) $clean[ $key ] = $color;
 		}
-		if ( ! empty( $style['logo_enabled'] ) ) $clean['logo_enabled'] = true;
-		elseif ( ! $overrides_only ) $clean['logo_enabled'] = false;
+		if ( array_key_exists( 'logo_enabled', $style ) || ! $overrides_only ) $clean['logo_enabled'] = ! empty( $style['logo_enabled'] );
 		return $clean;
+	}
+
+	/** Missing controls (older open forms) preserve the explicit logo setting. */
+	public static function logo_override( array $style, $mode, $previous = array() ) {
+		if ( 'SHOW' === $mode || 'HIDE' === $mode ) $style['logo_enabled'] = 'SHOW' === $mode;
+		elseif ( 'INHERIT' === $mode ) unset( $style['logo_enabled'] );
+		elseif ( is_array( $previous ) && array_key_exists( 'logo_enabled', $previous ) ) $style['logo_enabled'] = ! empty( $previous['logo_enabled'] );
+		return $style;
 	}
 
 	public static function stile_risolto( $event_id ) {
@@ -192,6 +199,7 @@ final class MI_Modello_Email {
 		$synthetic_snapshot = self::crea_istantanea( $post->ID, $example );
 		?>
 		<h3>Aspetto email</h3>
+		<label>Logo nelle email<select name="mi_email_event_logo_mode"><option value="INHERIT" <?php selected( ! array_key_exists( 'logo_enabled', $email_style ) , true ); ?>>Automatico / eredita</option><option value="SHOW" <?php selected( array_key_exists( 'logo_enabled', $email_style ) && ! empty( $email_style['logo_enabled'] ) , true ); ?>>Mostra</option><option value="HIDE" <?php selected( array_key_exists( 'logo_enabled', $email_style ) && empty( $email_style['logo_enabled'] ) , true ); ?>>Nascondi</option></select></label>
 		<p><strong><?php echo $email_style ? 'Override evento attivi' : 'Usa lo stile ereditato'; ?></strong> · <?php echo esc_html( 'group' === $resolved_style['source'] ? 'Gruppo: ' . get_the_title( $resolved_style['group_id'] ) : ( 'event' === $resolved_style['source'] ? 'Evento' : 'Default parrocchia' ) ); ?></p>
 		<p class="description"><?php echo get_post_thumbnail_id( $post->ID ) ? 'Banner email: immagine dell’evento.' : 'Banner email: gruppo/default, salvo override esplicito.'; ?></p>
 		<p><label><input type="checkbox" name="mi_email_event_identity_enabled" value="1" <?php checked( $identity_override ); ?>> Personalizza identità e firma</label></p>
@@ -781,6 +789,7 @@ final class MI_Modello_Email {
 		if ( ! empty( $_POST['mi_email_event_identity_enabled'] ) ) $email_style = array( 'identity_name' => $_POST['mi_email_event_identity_name'] ?? '', 'identity_detail' => $_POST['mi_email_event_identity_detail'] ?? '', 'contact_email' => $_POST['mi_email_event_contact'] ?? '', 'signature' => $_POST['mi_email_event_signature'] ?? '' );
 		if ( ! empty( $_POST['mi_email_event_colors_enabled'] ) ) $email_style = array_merge( $email_style, array( 'primary_color' => $_POST['mi_email_event_primary'] ?? '', 'secondary_color' => $_POST['mi_email_event_secondary'] ?? '' ) );
 		if ( ! empty( $_POST['mi_email_event_banner_enabled'] ) ) $email_style['banner_url'] = $_POST['mi_email_event_banner'] ?? '';
+		$email_style = self::logo_override( $email_style, $_POST['mi_email_event_logo_mode'] ?? null, get_post_meta( $post_id, '_mi_email_style', true ) );
 		$email_style = self::sanitizza_stile( wp_unslash( $email_style ) );
 		if ( $email_style ) update_post_meta( $post_id, '_mi_email_style', $email_style ); else delete_post_meta( $post_id, '_mi_email_style' );
 		$settings = self::aggiorna_segnaposto( $settings );

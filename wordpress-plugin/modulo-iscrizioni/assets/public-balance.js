@@ -143,6 +143,42 @@ let recalcNeeded   = false;
 let _lastSavedHash = null;
 let _calcInProgress= false;
 let _calcButtonsHideTimer = null;
+let _livePreviewTimer = null;
+let _livePreviewRevision = 0;
+
+function cancelLivePreview() {
+  clearTimeout(_livePreviewTimer);
+  _livePreviewTimer = null;
+  ++_livePreviewRevision;
+}
+
+// The server owns deposit rounding and allocation across the entire booking.
+function scheduleLivePreview(loaded) {
+  const revision = _livePreviewRevision;
+  const people = loaded.map(p=>({row:p.row,token:p.model.token,version:p.model.version,services:getTransfer(p.cardEl)}));
+  for (const id of ['caparraVersata','caparraDaVersare','quotaSaldo']) setTextFlash(id,'Calcolo…');
+  _livePreviewTimer = setTimeout(async()=>{
+    _livePreviewTimer = null;
+    try {
+      const preview = await gasPost({action:'preview',persone:people,email:''});
+      if (revision !== _livePreviewRevision) return;
+      if (!preview.success) throw new Error(preview.message||preview.error);
+      showAmounts(preview);
+    } catch (error) {
+      if (revision !== _livePreviewRevision) return;
+      for (const id of ['caparraVersata','caparraDaVersare','quotaSaldo']) setTextFlash(id,'Da verificare alla conferma');
+    }
+  },600);
+}
+
+function applyConfirmedModels(loaded,result) {
+  loaded.forEach(p=>{
+    const receiptPerson = result.people.find(person=>Number(person.row)===Number(p.row));
+    p.model.version=result.versions[p.row];
+    if (receiptPerson) { p.model.deposit=receiptPerson.deposit; p.model.paid=receiptPerson.paid; }
+    p.model.services.forEach(s=>s.selected=!!getTransfer(p.cardEl)[s.code]);
+  });
+}
 
 
 const lookupTimers      = {};
@@ -291,6 +327,7 @@ function renderLoadedSummary() {
  * - viene spuntato/tolto un transfer
  */
 function updateLiveBreakdown() {
+  cancelLivePreview();
   const loaded=persone.filter(p=>p.loaded);renderLoadedSummary();
   if(!loaded.length){breakdownBox.style.display='none';totalBox.style.display='none';emailSection.style.display='none';return;}
   let total=0,paid=0,deposit=0,depositPaid=0,depositDue=0,saldoDue=0,balance=0;const lines=new Map();
@@ -302,6 +339,7 @@ function updateLiveBreakdown() {
     total+=subtotal;paid+=d.paid;deposit+=cap;depositPaid+=Math.min(cap,d.paid);depositDue+=Math.max(0,cap-d.paid);saldoDue+=Math.max(0,subtotal-Math.max(cap,d.paid));balance+=Math.max(0,subtotal-d.paid);
   });
   showAmounts({total,paid,deposit,depositPaid,depositDue,saldoDue,balance},lines);
+  scheduleLivePreview(loaded);
   emailSection.style.display='block';setBookingStatus('editing');
 }
 
@@ -762,6 +800,7 @@ async function confermaEInvia() {
   if(_calcInProgress)return;
   const loaded=persone.filter(p=>p.loaded);if(!loaded.length)return;
   const email=getValidatedEmail();if(email===null)return;
+  cancelLivePreview();
   _calcInProgress=true;setCalcButtons({disabled:true});
   const busyControls=[...document.querySelectorAll('#personsContainer input:not(:disabled),#personsContainer button:not(:disabled),#btnAddPerson,#emailInput')];
   busyControls.forEach(el=>el.disabled=true);
@@ -771,6 +810,7 @@ async function confermaEInvia() {
     if(!_pendingBalanceSave||_pendingBalanceSave.hash!==hash){
       setGlobalStatus('loading','<span class="spinner"></span>Controllo degli importi…');
       const preview=await gasPost({action:'preview',persone:people,email});if(!preview.success)throw new Error(preview.message||preview.error);
+      showAmounts(preview);
       let body='<p>Confermi la prenotazione di <strong>'+loaded.map(p=>escapeHtml(p.cognome+' '+p.nome)).join(', ')+'</strong>?</p>';
       body+='<ul>'+preview.people.flatMap(p=>p.lines.map(l=>'<li>'+escapeHtml(p.name+': '+l.name)+' — '+formatEuro(l.price/100)+'</li>')).join('')+'</ul>';
       if(preview.deposit)body+='<p>Caparra ancora da versare: <strong>'+formatEuro(preview.depositDue/100)+'</strong><br>Saldo ancora da versare: <strong>'+formatEuro(preview.saldoDue/100)+'</strong></p>';
@@ -781,7 +821,7 @@ async function confermaEInvia() {
     setGlobalStatus('loading','<span class="spinner"></span>Attendere prego…');
     const result=await gasPost(_pendingBalanceSave);if(!result.success){_pendingBalanceSave=null;throw new Error(result.message||result.error);}
     lastCalcResult=result;_pendingBalanceSave=null;
-    loaded.forEach(p=>{p.model.version=result.versions[p.row];p.model.services.forEach(s=>s.selected=!!getTransfer(p.cardEl)[s.code]);});
+    applyConfirmedModels(loaded,result);
     renderLoadedSummary();const lines=new Map();result.people.forEach(p=>p.lines.forEach(l=>lines.set(l.name,(lines.get(l.name)||0)+l.price)));
     showAmounts(result,lines);document.getElementById('totalBoxLabel').textContent='Totale da versare:';
     setBookingStatus('confirmed');setCalcButtons({text:LABELS.confirmed,disabled:true});clearCalcButtonsHideTimer();_calcButtonsHideTimer=setTimeout(()=>setCalcButtons({display:'none'}),1200);
@@ -808,6 +848,7 @@ function resetAll() {
 }
 
 function resetCalcState() {
+  cancelLivePreview();
   clearCalcButtonsHideTimer();lastCalcResult=null;_pendingBalanceSave=null;btnPay.disabled=true;actionSection.style.display='none';
   const loaded=persone.filter(p=>p.loaded);summaryBox.textContent=loaded.length?'':LABELS.lookupHint;
   if(loaded.length){setCalcButtons({text:LABELS.calc,display:'block',disabled:false});updateLiveBreakdown();setBookingStatus('editing');}
@@ -867,7 +908,7 @@ function onGlobalEnterShortcut(e) {
 
 let _pendingBalanceSave = null;
 function showAmounts(result,lines) {
-  const box=document.getElementById('costLines');box.replaceChildren();
+  const box=document.getElementById('costLines');if(lines)box.replaceChildren();
   if(lines)for(const [name,price]of lines){const line=document.createElement('div');line.className='breakdown-row';const label=document.createElement('span'),amount=document.createElement('span');label.textContent=name;amount.textContent=formatEuro(price/100);line.append(label,amount);box.appendChild(line);}
   setTextFlash('totOpzioni',formatEuro(result.total/100));setTextFlash('caparraVersata',formatEuro((result.depositPaid||0)/100));
   setTextFlash('caparraDaVersare',formatEuro((result.depositDue||0)/100));setTextFlash('quotaSaldo',formatEuro((result.saldoDue||0)/100));

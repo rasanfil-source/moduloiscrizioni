@@ -106,6 +106,8 @@ final class MI_Event_Post_Type {
 
 	public static function render_event_box( $post ) {
 		wp_nonce_field( 'mi_save_event', 'mi_event_nonce' );
+		echo '<p><label><input type="checkbox" name="mi_event_qr_enabled" value="1" ' . checked( get_post_meta( $post->ID, '_mi_event_qr_enabled', true ), '1', false ) . '> Genera il QR delle iscrizioni con il logo del gruppo</label></p><p>PNG scaricabile dopo la pubblicazione. Richiede un logo del gruppo.</p>';
+		if ( class_exists( 'MI_Event_QR' ) ) MI_Event_QR::render( $post->ID );
 		$activity_id = absint( get_post_meta( $post->ID, '_mi_activity_id', true ) );
 		$opens_at = (string) get_post_meta( $post->ID, '_mi_registration_opens_at', true );
 		$closes_at = (string) get_post_meta( $post->ID, '_mi_registration_closes_at', true );
@@ -367,6 +369,7 @@ final class MI_Event_Post_Type {
 		update_post_meta( $post_id, '_mi_operational_profile', MI_Field_Schema::sanitize_operational_profile( wp_unslash( $_POST['mi_operational_profile'] ?? 'AUTOMATICO' ) ) );
 
 		$identifier = isset( $_POST['mi_identifier_display'] ) ? strtoupper( sanitize_key( wp_unslash( $_POST['mi_identifier_display'] ) ) ) : 'TEXT';
+		update_post_meta( $post_id, '_mi_event_qr_enabled', ! empty( $_POST['mi_event_qr_enabled'] ) ? '1' : '0' );
 		update_post_meta( $post_id, '_mi_identifier_display', in_array( $identifier, array( 'NONE', 'TEXT', 'QR', 'BARCODE' ), true ) ? $identifier : 'TEXT' );
 
 		$field_configuration = MI_Field_Schema::sanitize_configuration(

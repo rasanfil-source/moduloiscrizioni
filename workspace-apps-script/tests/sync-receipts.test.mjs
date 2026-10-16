@@ -10,8 +10,19 @@ function environment(){
  const c=vm.createContext({SpreadsheetApp:{flush(){},ProtectionType:{SHEET:'sheet'}},LockService:{getScriptLock:()=>({waitLock(){locks++;},releaseLock(){locks--;}})},apriFoglioEventoFirmato_:()=>({sheet}),mappaColonneEvento_:()=>({_ordine:1,_numero:2,first_name:3}),proteggiProiezione_(){}});
  vm.runInContext(source,c);
  c.convertiRigheInOggetti_=v=>v;
- return {c,sheet,get value(){return value;},set value(v){value=v;},get base(){return base;},get locks(){return locks;}};
+ return {c,sheet,get value(){return value;},set value(v){value=v;},get base(){return base;},get stored(){return stored;},set stored(v){stored=v;},get locks(){return locks;}};
 }
+
+test('normalization back to baseline leaves no receipt and old no-op receipts are cleaned safely',()=>{
+ const e=environment();e.value='Anna ';
+ e.c.confermaModificheFoglio_({event_id:'42',direct_projection:true,confirmations:[{...receipt,after:'Anna ',accepted:'Anna',workspace_revision:'8'}]});
+ assert.equal(e.value,'Anna');assert.deepEqual(Object.keys(e.stored),[]);
+ e.stored={first_name:{before:'Anna',accepted:'Anna',revision:8},phone:{before:'1',accepted:'2',revision:8}};
+ e.c.allineaBaseConVista_(e.sheet,{righe:[]});
+ assert.equal(e.stored.first_name,undefined);assert.ok(e.stored.phone);
+ e.value='Nuova modifica';e.c.allineaBaseConVista_(e.sheet,{righe:[]});
+ assert.equal(e.value,'Nuova modifica');assert.equal(e.base.first_name,'Anna');
+});
 const receipt={order_code:'DEMO',number:1,key:'first_name',before:'Anna',after:'Anna Maria ',accepted:'Anna Maria'};
 test('ricevuta normalizzata sblocca la proiezione solo dopo la replica canonica',()=>{
  const e=environment();const vista={righe:[{codice_ordine:'DEMO',numero_partecipante:1,valori:{first_name:'Anna Maria'}}]};

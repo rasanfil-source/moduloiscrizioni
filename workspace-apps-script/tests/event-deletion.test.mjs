@@ -30,7 +30,19 @@ test('direct deletion trashes only the event sheet and is idempotent without DB_
 test('keep detaches the direct association without trashing the document',()=>{
  const x=setup();x.payload.mode='keep';x.props.MI_DIRECT_SHEET_42=x.payload.id_foglio;
  const result=x.c.eliminaDatiEventoDaWordPress_(x.payload);
- assert.equal(result.complete,true);assert.equal(x.files.has(x.payload.id_foglio),true);assert.equal(x.files.get(x.payload.id_foglio).trashed,false);
+ assert.equal(result.complete,true);assert.equal(x.accessed.length,0);assert.equal(x.files.has(x.payload.id_foglio),false);
+});
+
+test('keep succeeds even when Drive is inaccessible; explicit signed override is resumable',()=>{
+ const x=setup();x.deny(true);
+ assert.throws(()=>x.c.eliminaDatiEventoDaWordPress_(x.payload),/Access denied/);
+ assert.equal(x.c.eliminaDatiEventoDaWordPress_({...x.payload,mode:'keep'}).error,'DELETION_CONFLICT');
+ assert.equal(x.c.eliminaDatiEventoDaWordPress_({...x.payload,mode:'keep',preserve_file:true,id_foglio:'other'}).error,'DELETION_CONFLICT');
+ const result=x.c.eliminaDatiEventoDaWordPress_({...x.payload,mode:'keep',preserve_file:true});
+ assert.equal(result.complete,true);assert.equal(x.accessed.length,0);
+ assert.equal(JSON.parse(x.props.MI_DELETED_EVENT_42).previous_mode,'trash');
+ assert.equal(x.c.eliminaDatiEventoDaWordPress_({...x.payload,mode:'keep',preserve_file:true}).complete,true);
+ const fresh=setup();fresh.deny(true);assert.equal(fresh.c.eliminaDatiEventoDaWordPress_({...fresh.payload,mode:'keep'}).complete,true);
 });
 
 test('identity mismatch, changed retries and missing direct mode fail closed',()=>{

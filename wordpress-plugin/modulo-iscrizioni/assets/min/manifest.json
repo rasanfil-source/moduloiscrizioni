@@ -14,6 +14,11 @@
     "source": "fb6e08eac7b616f637139852ee681b190091bf796ef64f3c46b7b3a1d0d86969",
     "hash": "9357f935c40b372d8a04e6e5647c4103378924cd03681fb6c00a10c818cf3ca4"
   },
+  "event-qr.js": {
+    "file": "min/event-qr.js",
+    "source": "156af870b54766a4137fb7fcb0eff9e6308118bf4625c74144b3f4f6e9ddc035",
+    "hash": "db836880f5026fe242dcae0bfb75c672cae73b84801d66d599992837ade59ee9"
+  },
   "portal-management.css": {
     "file": "min/portal-management.css",
     "source": "37e5ca06ddf1ce5aec3657f9b59d7d493ecb7508769f1628e97b89a24988b8ac",
@@ -31,8 +36,8 @@
   },
   "portal-payments.js": {
     "file": "min/portal-payments.js",
-    "source": "81df48e9bc66af355a1d04c35e32f47dc2aab7a32a74f10951b05735566d1c7b",
-    "hash": "a937c39769411018ae37ec086c4a32c6bcf2b73d99d34ecdcaab0211fe83f8f9"
+    "source": "972b59847102c129b92e92c32280f88841c6c9bd5a7975bc8766eee96071aa50",
+    "hash": "7658b6b4421f1fd6121c91d7162806e98d7fd558e43ed3e2f8a368b916add1ab"
   },
   "portal-pwa.js": {
     "file": "min/portal-pwa.js",
@@ -41,13 +46,13 @@
   },
   "portal.css": {
     "file": "min/portal.css",
-    "source": "6125cb99a67e3f4207d466424677aaf7da183bf2a7f20a0e0a0b8c814d999454",
-    "hash": "f06a46d80ebd484f70318aabd023b275b8f4643e16524db4fd30463d333096e1"
+    "source": "35628ffcc80ea14dd66dcad41f85aa664979f040564ca45417cca0aa1dfb6127",
+    "hash": "fca2afe3dcf51262613d169ae6b700fe6d7f4e8a9d96e967c211d5d953c9e860"
   },
   "portal.js": {
     "file": "min/portal.js",
-    "source": "8377cf94b865e5a882aad7cd7dc2612c79f82da6712629fdd347f18a0370d1bb",
-    "hash": "565599fd27ffb011a7306111c093aef5f0b65586879697177226965ae3b8b730"
+    "source": "17767217dadfe85ffe7cf120aea188084b6c6dc8994d461e02104b283dd97ea7",
+    "hash": "ff3722b6c51c2be0ef0cd91454d89d9b872b1f7350814f2ad724c97550a15165"
   },
   "public-balance.css": {
     "file": "min/public-balance.css",
@@ -56,8 +61,8 @@
   },
   "public-balance.js": {
     "file": "min/public-balance.js",
-    "source": "daf04e0954b4706517f7b6e375c8893e0a8f76c505a2e4c62a9c11e8dbb1497e",
-    "hash": "22958d7979bb27a38717ad85220111d5eabe64703caf9988ec426e14f673deca"
+    "source": "d7695506d3e28041a7ceae0e0bd9dabdfd743d8ff495b9cbeb532e59df560c98",
+    "hash": "3c43dcc5ddee3eb2ca8c23b515ab6f0b774c8f561412935d00013b12ad31c142"
   },
   "public.css": {
     "file": "min/public.css",

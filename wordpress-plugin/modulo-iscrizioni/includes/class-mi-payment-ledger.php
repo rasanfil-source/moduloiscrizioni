@@ -99,6 +99,7 @@ final class MI_Payment_Ledger {
 		}
 		$position = self::position( $r, $paid );
 		foreach ( $rows as $index => $movement ) {
+			$movements[$index]['data_locale'] = ( new DateTimeImmutable( $movement['effective_at'], new DateTimeZone( 'UTC' ) ) )->setTimezone( wp_timezone() )->format( 'd/m/Y' );
 			$allocations = json_decode( $movement['participant_allocations_json'] ?? '[]', true ) ?: array();
 			$movements[$index]['persone'] = implode( ', ', array_column( $allocations, 'name' ) );
 		}

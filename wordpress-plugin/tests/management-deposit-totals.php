@@ -1,4 +1,5 @@
 <?php
+if(!function_exists('wp_timezone')){function wp_timezone(){return new DateTimeZone('Europe/Rome');}}
 // Read-only audit: real calculation/summary classes, synthetic WordPress/database reads.
 define('ABSPATH', __DIR__);
 define('ARRAY_A', 'ARRAY_A');

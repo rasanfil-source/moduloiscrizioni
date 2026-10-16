@@ -30,7 +30,8 @@ foreach ( array( 'invalid', '2030-02-30T10:00', '2030-01-01T25:00', '2030-1-01T1
 foreach ( array( $event['closes_at'], $date( '+4 days' ) ) as $open ) check_audit( 'MISCONFIGURED' === MI_Registration_Service::registration_time_state( array_replace( $event, array( 'opens_at' => $open ) ) ), 'Zero or negative registration window accepted' );
 check_audit( 'NOT_OPEN' === MI_Registration_Service::registration_time_state( array_replace( $event, array( 'opens_at' => $date( '+1 day' ) ) ) ), 'Future opening ignored' );
 check_audit( 'CLOSED' === MI_Registration_Service::registration_time_state( array_replace( $event, array( 'closes_at' => $date( '-1 day' ) ) ) ), 'Past closing ignored' );
-foreach ( array( array( 'closes_at' => '' ), array( 'event_starts_at' => '' ), array( 'event_starts_at' => $date( '+1 day' ) ), array( 'closes_at' => $date( '-1 day' ) ) ) as $invalid ) check_audit( MI_Registration_Service::validate_event_dates( array_replace( $event, $invalid ) ) instanceof WP_Error, 'Invalid publication dates accepted' );
+foreach ( array( array( 'closes_at' => '' ), array( 'event_starts_at' => '' ), array( 'closes_at' => $date( '-1 day' ) ) ) as $invalid ) check_audit( MI_Registration_Service::validate_event_dates( array_replace( $event, $invalid ) ) instanceof WP_Error, 'Invalid publication dates accepted' );
+check_audit( true === MI_Registration_Service::validate_event_dates( array_replace( $event, array( 'event_starts_at' => $date( '+1 day' ) ) ) ), 'Closing after event start must remain valid since 3.26.228' );
 check_audit( true === MI_Registration_Service::validate_event_dates( array_replace( $event, array( 'opens_at' => $date( '+1 day' ), 'event_starts_at' => $event['closes_at'] ) ) ), 'Future opening or closing at event start rejected' );
 
 $GLOBALS['users'] = array(

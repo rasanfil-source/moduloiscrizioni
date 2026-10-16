@@ -24,6 +24,8 @@ test('initial and saved event sheets include every question and preserve blank o
  c.aggiungiColonneServizi_=()=>{};
  const initial=c.generaVistaOperativaIniziale_('1','Evento','MINIMO');
  assert.deepEqual(Array.from(initial.colonne.slice(-3),f=>f.label),fields.map(f=>f.label));
+ assert.deepEqual(Array.from(c.generaVistaOperativaEvento_('1').colonne,f=>f.key),['participant_number','first_name']);
+ rows.views[0].campi_json=JSON.stringify(['first_name',...fields.map(f=>f.key)]);
  const view=c.generaVistaOperativaEvento_('1');
  assert.equal(view.righe.length,2);
  assert.deepEqual(Array.from(view.colonne,c=>c.key),['participant_number','first_name',...fields.map(f=>f.key)]);

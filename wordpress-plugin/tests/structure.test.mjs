@@ -1544,7 +1544,8 @@ test('il wizard crea una bozza completa e mostra collegamenti espliciti', async 
   assert.match(portal, /La data di inizio non può essere precedente a oggi/);
   assert.match(portal, /start_date->format\( 'Y-m-d' \) < current_time\( 'Y-m-d' \)/);
   assert.match(portal, /\$close_date <= \$open_date/);
-  assert.match(portal, /\$close_date > \$start_date/);
+  assert.doesNotMatch(portal, /if \( \$close_date > \$start_date \)/);
+  assert.match(script, /lateRegistrationNotice.hidden = !\(closing && start && start < closing\)/);
   assert.match(script, /data-mi-opens/);
   assert.match(script, /validateFourDigitYear/);
   assert.match(script, /enforceFourDigitYear/);
@@ -1826,7 +1827,7 @@ test('le quote accessorie usano righe compatte senza grandi spazi vuoti', async 
 test('la scelta della quota usa tre opzioni chiare nell ordine richiesto', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const start = portal.indexOf('Come sarà l’evento?');
-  const free = portal.indexOf('Evento totalmente gratuito', start);
+  const free = portal.indexOf('Iscrizione senza quote nel modulo', start);
   const fixed = portal.indexOf('Quota uguale per tutti', start);
   const services = portal.indexOf('In base ai servizi scelti', start);
   assert.ok(start >= 0 && free > start && fixed > free && services > fixed);
@@ -1858,7 +1859,7 @@ test('il wizard mostra soltanto i costi coerenti con il tipo di evento', async (
   const portal = await read('includes/class-mi-portal.php');
   const script = await read('assets/portal.js');
   assert.match(portal, /Come sarà l’evento\?/);
-  assert.match(portal, /Evento totalmente gratuito[\s\S]*Quota uguale per tutti[\s\S]*In base ai servizi scelti/);
+  assert.match(portal, /Iscrizione senza quote nel modulo[\s\S]*Quota uguale per tutti[\s\S]*In base ai servizi scelti/);
   assert.doesNotMatch(portal.match(/Modalità di pagamento richiesta<select[\s\S]*?<\/select>/)[0], /PRICE_ONLY|Prezzo solamente informativo|Nessun pagamento previsto/);
   assert.match(portal, />Unica soluzione<\/option>[\s\S]*>Caparra e saldo<\/option>/);
   assert.match(script, /servicePricingNodes\.forEach\(\(node\) => \{ node\.hidden = pricing\.value !== 'NONE'; \}\)/);
@@ -2329,7 +2330,7 @@ test('la coerenza temporale impedisce nuove scadenze passate e segnala quelle gi
   const portal = await read('includes/class-mi-portal.php');
 	const portalScript = await read('assets/portal.js');
   assert.match(portal, /La chiusura delle iscrizioni non può essere precedente a questo momento\./);
-	assert.match(portal, /La chiusura delle iscrizioni non può essere successiva all.inizio dell.evento\./);
+	assert.doesNotMatch(portal, /La chiusura delle iscrizioni non può essere successiva all.inizio dell.evento\./);
   assert.match(portal, /\$is_expired = self::registration_deadline_passed\( \$closes_at \)/);
   assert.match(portal, /dal /);
   assert.match(portal, /current_time\( 'Y-m-d\\TH:i' \)/);

@@ -61,7 +61,7 @@ test('una posizione riaperta non riusa una scadenza già trascorsa', () => {
   assert.match(registration, /function reopened_payment_deadline/);
   assert.match(registration, /\$deadline_timestamp > \$now/);
   assert.match(ledger, /MI_Registration_Service::reopened_payment_deadline\( \$r \)/);
-  assert.match(management, /MI_Registration_Service::reopened_payment_deadline\( \$row \)/);
+  assert.match(management, /MI_Payment_People::payment_deadline_changes\( \$row, \$covered,/);
   assert.match(management, /MI_Payment_People::payment_deadline_changes/);
   assert.match(publicBalance, /MI_Payment_People::payment_deadline_changes/);
   assert.match(people, /MI_Registration_Service::reopened_payment_deadline\( \$registration \)/);

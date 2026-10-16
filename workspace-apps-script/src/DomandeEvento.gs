@@ -24,7 +24,7 @@ function aggiungiColonneDomande_(colonne, evento, iscrizioni, partecipanti, cach
 /** The configured fields, not a generic travel profile, define the event sheet. */
 function vistaEventoSolaLettura_(evento, colonne) {
   const schema = decodificaOggetto_(evento.schema_vista_json);
-  return Array.isArray(schema.fields) && Array.isArray(schema.options) && schema.pricing === 'ZERO' && !colonne.some(c => c.key === 'total');
+  return Array.isArray(schema.fields) && Array.isArray(schema.options) && ['NONE','ZERO'].includes(schema.pricing) && !colonne.some(c => c.key === 'total');
 }
 
 function applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, pagamenti, cache) {
@@ -41,6 +41,8 @@ function applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, 
   schema.fields.forEach(field=>{if (field) add(field.key, field.label);});
   aggiungiColonneDomande_(result, {domande_json:'[]'}, iscrizioni, partecipanti, cache);
   if (schema.room) add('room');
+  if (schema.transport) add('transport');
+  if (iscrizioni.some(r=>['WAITLISTED','WAITLIST_OFFERED','LISTA_ATTESA','POSTO_PROPOSTO'].includes(String(r.stato).toUpperCase()))) add('status');
   aggiungiColonneServizi_(result, schema.options);
   partecipanti.forEach(person=>{
     const options=cache?cache.list(person.opzioni_json):decodificaElenco_(person.opzioni_json);
@@ -48,7 +50,7 @@ function applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, 
   });
   if (schema.special_requests) add('special_requests');
   const codes = new Set(iscrizioni.map(r=>String(r.codice_ordine)));
-  const economic = schema.pricing !== 'ZERO' || iscrizioni.some(r=>Number(r.totale_centesimi)>0 || Number(r.versato_centesimi)>0) || pagamenti.some(p=>codes.has(String(p.codice_ordine)));
+  const economic = !['NONE','ZERO'].includes(schema.pricing) || iscrizioni.some(r=>Number(r.totale_centesimi)>0 || Number(r.versato_centesimi)>0) || pagamenti.some(p=>codes.has(String(p.codice_ordine)));
   if (economic) ['total','paid','paid_cash','paid_transfer','paid_card','balance'].forEach(key=>add(key));
   if (partecipanti.some(p=>['PRESENT','ABSENT','UNRECORDED'].includes((cache?cache.object(p.dati_aggiuntivi_json):decodificaOggetto_(p.dati_aggiuntivi_json)).attendance))) add('attendance','Presenza effettiva');
   colonne.splice(0, colonne.length, ...result);
