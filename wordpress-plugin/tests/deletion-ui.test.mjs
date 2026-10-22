@@ -3,7 +3,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 const full=fs.readFileSync(new URL('../modulo-iscrizioni/assets/portal.js',import.meta.url),'utf8');
-const source=full.slice(full.indexOf('function miSetupDeletion('),full.indexOf('// Event selection'));
+const start=full.indexOf('function miSetupDeletion(');
+const marker="miSetupDeletion(document.querySelector('[data-mi-delete-form]'));";
+const end=full.indexOf(marker,start);
+assert.notEqual(start,-1,'deletion setup function exists');
+assert.notEqual(end,-1,'deletion setup invocation exists');
+const source=full.slice(start,end+marker.length);
 function setup(fetch,automatic=false){
  const button={},status={setAttribute(){}},timers=new Map();let handler,n=0,redirect='';
  const form={dataset:{miDeleteAjax:'/ajax'},querySelector:()=>button,after(){},setAttribute(){},removeAttribute(){},addEventListener(type,fn){handler=fn;},hasAttribute:()=>automatic};
