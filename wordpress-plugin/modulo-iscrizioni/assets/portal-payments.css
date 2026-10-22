@@ -7,7 +7,7 @@
 .mi-payments .mi-payment-totals strong{color:var(--ink,#172033);font-weight:var(--fw-medium,600);margin-top:4px}
 .mi-payments input.mi-amount-highlight{border-color:var(--focus,#244fc2);background:var(--info-light,#e8f0fe)}
 
-/* Keep the movement ledger readable, with scrolling confined to its region. */
+/* Mantiene leggibile il registro dei movimenti e limita lo scorrimento alla sua area. */
 .mi-payments .mi-payment-history-scroll{max-width:100%;overflow-x:auto;margin:16px 0 24px;border:1px solid var(--line,#d7dde6);border-radius:12px;background:var(--surface,#fff)}
 .mi-payments .mi-payment-history-table{display:table;width:100%;min-width:760px;margin:0;border-collapse:collapse}
 .mi-payments .mi-payment-history-table :is(th,td){padding:12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line,#d7dde6);overflow-wrap:anywhere}
@@ -35,7 +35,7 @@
 .mi-payments [data-selection-total]{font-weight:600;font-variant-numeric:tabular-nums}
 .mi-payments input[readonly]{background:var(--bg,#f5f7fa)}
 
-/* Same visual hierarchy as the other operational tabs; no payment logic changes. */
+/* La gerarchia visiva segue quella delle altre schede operative. */
 @media screen {
   .mi-payments>h2 { margin:0 0 20px; }
   .mi-payments :is(input,select,textarea):where(:not([type=checkbox]):not([type=hidden])) { border-color:var(--field-border); }

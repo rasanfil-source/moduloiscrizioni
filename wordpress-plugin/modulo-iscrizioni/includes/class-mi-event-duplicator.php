@@ -37,7 +37,7 @@ final class MI_Event_Duplicator {
 			return (int) $target;
 		} catch ( Throwable $error ) {
 			if ( $target && ! is_wp_error( $target ) ) {
-				// Only this newly created, unpublished copy can bypass the normal deletion flow.
+				// Solo la copia appena creata e non pubblicata può saltare il flusso ordinario di eliminazione.
 				$cleanup = static function ( $delete, $post ) use ( $target ) {
 					if ( (int) $target !== (int) $post->ID || 'draft' !== $post->post_status ) return $delete;
 					remove_filter( 'pre_delete_post', array( 'MI_Event_Deletion', 'guard_delete' ), 10 );

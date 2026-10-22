@@ -1,5 +1,5 @@
 <?php
-// The browser harness invokes this same production selector via stdin.
+// L'ambiente browser richiama lo stesso selettore applicativo tramite stdin.
 define( 'ABSPATH', __DIR__ );
 function wp_json_encode( $value ) { $json = json_encode( $value ); $GLOBALS['last_encoded_bytes'] = strlen( $json ); return $json; }
 function remove_accents( $value ) { return strtr( $value, array( 'à'=>'a', 'è'=>'e', 'é'=>'e', 'ì'=>'i', 'ò'=>'o', 'ù'=>'u' ) ); }
@@ -72,8 +72,8 @@ check_list( $GLOBALS['last_encoded_bytes'] < $full_bytes / 5, 'Versioned fingerp
 check_list( $full['rows'] === $versioned['rows'] && $full['total'] === $versioned['total'], 'Versioning changed selection' );
 check_list( $versioned['fingerprint'] === MI_Management_List::page( $summary, array( 'shown' => 60 ), 30, 30, 'canonical-v1' )['fingerprint'], 'Fingerprint depends on pagination' );
 check_list( $versioned['fingerprint'] !== MI_Management_List::page( $summary, array(), 0, 30, 'canonical-v2' )['fingerprint'], 'Canonical changes not detected' );
-// Simulate the selection one hour later without a canonical write: an offer
-// expires while another enters the next-24-hours window, preserving the count.
+// Simula la selezione un'ora dopo senza scritture canoniche: un'offerta
+// scade mentre un'altra entra nella finestra delle 24 ore, mantenendo il conteggio.
 $timed = $summary;
 foreach ($timed['people'] as &$person) { $person['status'] = 'WAITLIST_OFFERED'; $person['offer_expires_at'] = gmdate('Y-m-d H:i:s', time()+172800); } unset($person);
 $timed['people'][0]['offer_expires_at'] = gmdate('Y-m-d H:i:s', time()+1800);
@@ -83,7 +83,7 @@ foreach ($timed['people'] as &$person) $person['offer_expires_at'] = gmdate('Y-m
 $timed_after = MI_Management_List::page($timed, ['deadline'=>'soon'], 0, 30, 'canonical-v1');
 check_list($timed_before['total'] === $timed_after['total'] && $timed_before['fingerprint'] !== $timed_after['fingerprint'], 'Equal-count timed membership change not detected');
 
-// Compare every sort mode to the previous comparator, including ties and accents.
+// Confronta le modalità di ordinamento e l'ordine alfabetico, inclusi parità e accenti.
 $sorting=$summary;
 foreach($sorting['people'] as $i=>&$row){$row['name']=$i%2?'René 10':'Rene 2';$row['buyer']='Èva '.($i%3);$row['room']='Camera '.($i%4);$row['code']='T'.($i%5);$row['status']=$i%7?'CONFIRMED':'CANCELLED';}unset($row);
 foreach(['name','buyer','code','room'] as $sort)foreach(['asc','desc'] as $direction){

@@ -1,5 +1,5 @@
 <?php
-// Uses only temporary tables in the isolated localhost:33317 test database.
+// Usa solo tabelle temporanee nel database di prova locale sulla porta 33317.
 require __DIR__ . '/individual-management-innodb.php';
 function is_email($v) { return false !== filter_var($v, FILTER_VALIDATE_EMAIL); }
 $extra=['code'=>'extra-notte','name'=>'Notte aggiuntiva','scope'=>'TICKET','category'=>'alloggio','choice_group'=>'','price_cents'=>1000,'max_quantity'=>1];

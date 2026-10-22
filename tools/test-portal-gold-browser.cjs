@@ -1,4 +1,4 @@
-// Reserved shell: actual navigation markup, computed accents and a single plus.
+// Struttura riservata: navigazione applicativa, accenti calcolati e un solo simbolo più.
 const fs=require('fs'),assert=require('node:assert/strict');
 const {chromium}=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright');
 const root='wordpress-plugin/modulo-iscrizioni/';

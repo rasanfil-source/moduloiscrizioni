@@ -2,8 +2,6 @@
 
 ## Registro fisico corrente — 3.25.1
 
-Aggiornamento locale del 22 settembre 2026: nessuna nuova tabella o indice. L'annullamento completo accoda le notifiche nella transazione della mutazione autorevole; la ricevuta temporanea delle comunicazioni viene salvata soltanto dopo commit confermato. Dettagli e test nel [rapporto della campagna](campagna-stabilizzazione-2026-09-22.md). La versione nel titolo di questa sezione identifica la descrizione storica dello schema, non il rilascio installato.
-
 MySQL WordPress è autorevole. `mi_registrations`, `mi_participants` e `mi_payments` conservano iscrizioni, persone e movimenti; `mi_rooms`, `mi_management_state` e `mi_management_requests` gestiscono camere, revisioni e idempotenza operativa. `mi_booking_codes` assegna una sigla univoca per evento (indice UNIQUE su prefix) e un progressivo aggiornato nella transazione di iscrizione. Il codice visibile non sostituisce l'identificativo numerico interno.
 
 Google riceve repliche con revisioni e identificativi stabili. `_MI_BASE` conserva i valori di confronto del foglio operativo; le modifiche locali vengono confermate nel servizio MySQL prima dell'aggiornamento della base. Gli importi e le identità delle righe non sono modificabili nelle celle operative.
@@ -71,7 +69,7 @@ Vincoli principali:
 
 ### `Organizations`
 
-Nel primo rilascio esiste normalmente una sola organizzazione.
+Il modello operativo prevede una sola organizzazione.
 
 | Campo | Tipo | Regola |
 |---|---|---|
@@ -311,7 +309,7 @@ Gli eventi economici successivi all'ordine sono append-only e contengono almeno:
 - `reason_code`, nota protetta ed eventuale `reverses_event_id`;
 - attore, canale e timestamp.
 
-Il totale corrente è `base_total + CHARGE - CREDIT`. Un errore viene corretto da uno storno collegato e da una nuova riga; nessun evento viene aggiornato o cancellato. Se una diminuzione porta gli incassi sopra il totale, l'ordine diventa `OVERPAID` e l'eventuale rimborso viene registrato separatamente in `Payments`.
+Il totale corrente è `base_total + CHARGE - CREDIT`. Le rettifiche sono rappresentate da uno storno collegato e da una nuova riga; nessun movimento viene aggiornato o cancellato. Se una diminuzione porta gli incassi sopra il totale, l'ordine diventa `OVERPAID` e l'eventuale rimborso viene registrato separatamente in `Payments`.
 
 ### `Payments`
 
@@ -335,7 +333,7 @@ WordPress è la fonte autorevole per autenticazione e autorizzazione del pannell
 - ruoli e assegnazioni sono salvati in WordPress, non in `Organizations`, `Activities`, `EventRevisions` o Google Sheets;
 - nascondere menu non sostituisce mai i controlli lato server.
 
-Nel primo rilascio i delegati selezionano asset già approvati attraverso un endpoint del plugin limitato alle immagini consentite; l'upload di nuovi allegati rimane riservato agli amministratori WordPress, evitando di concedere capability generali sui media.
+I delegati selezionano asset già approvati attraverso un endpoint del plugin limitato alle immagini consentite; l'upload di nuovi allegati rimane riservato agli amministratori WordPress, evitando di concedere capability generali sui media.
 
 Per una richiesta amministrativa WordPress costruisce, dopo controllo di sessione, nonce e capability, un contesto server-to-server simile a questo:
 

@@ -107,7 +107,7 @@ $wpdb->query("UPDATE wp_mi_registrations SET status='CANCELLED' WHERE id=1");
 $r=save_change(1,'adjust_due',['total_cents'=>0,'reason'=>'Annullamento concordato'],'123456789af3');check(!empty($r['saved']),'Rettifica annullamento non salvata');check($wpdb->get_var('SELECT status FROM wp_mi_registrations WHERE id=1')==='CANCELLED','Rettifica ha riaperto prenotazione annullata');
 echo "Rettifiche: importi precedenti, motivazione, retry, piano coerente e assenza di movimenti automatici verificati.\n";
 
-// Load the production validator under a test alias, keeping queue fixture stubs.
+// Carica il validatore applicativo con un alias di prova e conserva le funzioni simulate della coda.
 require_once __DIR__.'/../modulo-iscrizioni/includes/class-mi-option-rules.php';
 $source=file_get_contents(__DIR__.'/../modulo-iscrizioni/includes/class-mi-registration-service.php');
 $source=str_replace("require_once __DIR__ . '/class-mi-option-rules.php';", '', $source);
@@ -144,7 +144,7 @@ check(isset($page['rows'][0]['fields'],$page['rows'][0]['attendance']),'Pagina p
 check(is_wp_error(MI_Management_Service::summary(43)),'Riepilogo fuori ambito accessibile');
 echo "MySQL → riepilogo → pagina: dati operativi e ambito verificati.\n";
 
-// Shared room codes across separate registrations; M is an individual dormitory code.
+// Sigle camere condivise tra iscrizioni distinte; M identifica un posto in camerata individuale.
 $GLOBALS['management_audit_test']=true;
 $wpdb->query("UPDATE wp_mi_registrations SET status='CONFIRMED' WHERE id IN (1,2)");
 $wpdb->query("UPDATE wp_mi_participants SET status='ACTIVE',room_code='' WHERE id IN (1,2)");

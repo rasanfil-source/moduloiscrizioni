@@ -1,4 +1,4 @@
-// Read-only presentation regression: production assets, synthetic responses, no external services.
+// Verifica in sola lettura dell'impaginato: asset applicativi, risposte sintetiche, nessun servizio esterno.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),{execFileSync}=require('node:child_process');
 const chromium=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright')[process.env.MI_BROWSER_ENGINE||'chromium'];
 const assets=path.resolve('wordpress-plugin/modulo-iscrizioni/assets'),out=path.resolve('.tmp/portal-work-layout');fs.mkdirSync(out,{recursive:true});
@@ -99,7 +99,7 @@ for(const width of [760,600,390,360,320]){
  assert.deepEqual(await page.locator('[data-export-column]').evaluateAll(nodes=>nodes.map(n=>n.dataset.exportColumn)),columns);
  if(width===390||width===320)await page.screenshot({path:path.join(out,'mobile-'+width+'.png'),fullPage:true});
 }
-// Column selection survives resize/refresh and drives both print and the actual XLSX download.
+// La selezione delle colonne si conserva durante ridimensionamento e aggiornamento e si applica a stampa ed esportazione XLSX.
 await page.locator('[data-export-settings]>summary').click();
 for(const checkbox of await page.locator('[data-export-column]').all())await checkbox.uncheck();
 await page.locator('[data-export-column="name"]').check();await page.locator('[data-export-column="phone"]').check();
@@ -119,7 +119,7 @@ await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(out
 await page.locator('[data-export-settings]>summary').click();await page.locator('[data-participant-reports]').screenshot({path:path.join(out,'report-columns-mobile.png')});
 assert.equal(await page.locator('tbody td.mi-participant-missing:visible').count(),1);
 await page.setViewportSize({width:1280,height:900});await page.waitForFunction(()=>document.querySelector('.mi-portal-header .mi-portal-logout'));assert.equal(await page.locator('.mi-portal-switcher').isVisible(),true);assert.equal(await page.locator('.mi-portal-header .mi-portal-logout').count(),1);assert.equal(await page.locator('.mi-management-summary-cards').isVisible(),true);await fits();
-// Shared tab components keep their form controls across desktop/mobile layouts.
+// I componenti condivisi delle schede conservano i controlli nelle viste desktop e mobile.
 const tabs={
  groups:'<section class="mi-groups"><header class="mi-groups__heading"><h2>Gruppi</h2><p>Gestione dei gruppi</p></header><details class="mi-group-card" open><summary>Gruppo dimostrativo</summary><form><div class="mi-group-form-grid"><label>Nome<input name="name" value="Gruppo dimostrativo"></label><label>Email<input name="email" value="gruppo@example.invalid"></label><label>Colore<input name="color" type="color" value="#123456"></label></div><button class="mi-primary">Salva gruppo</button></form></details></section>',
  operators:'<section class="mi-operators"><header class="mi-operators__heading"><h2>Operatori</h2></header><details class="mi-operator-card" open><summary><span>Operatore dimostrativo<small>operatore@example.invalid</small></span></summary><form><div class="mi-operator-grid"><label>Nome<input name="name" value="Operatore dimostrativo"></label><label>Ruolo<select name="role"><option>Gestore gruppo</option><option>Gestore evento</option></select></label></div><fieldset><legend>Gruppi assegnati</legend><label><input type="checkbox" name="scope" checked>Gruppo dimostrativo</label></fieldset><button class="mi-primary">Salva operatore</button></form></details></section>',

@@ -1,5 +1,5 @@
 <?php
-// Real public lookup, preview and email rendering with synthetic WordPress/DB.
+// Ricerca pubblica, anteprima e rendering email con WordPress e database sintetici.
 $fixture = explode('function check_balance(', file_get_contents(__DIR__ . '/public-balance-model.php'), 2)[0];
 eval('?>' . str_replace('__DIR__', var_export(__DIR__, true), $fixture));
 function check_scope($ok, $message) { if (!$ok) throw new RuntimeException($message); }

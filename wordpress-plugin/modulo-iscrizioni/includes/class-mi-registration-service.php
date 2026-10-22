@@ -228,7 +228,7 @@ final class MI_Registration_Service {
 		$opens_input = (string) ( $event['opens_at'] ?? '' );
 		$opens = self::local_datetime( $opens_input );
 		$closes = self::local_datetime( $event['closes_at'] ?? '' );
-		// An omitted opening means immediately; an invalid supplied date never does.
+		// Se manca la data di apertura, le iscrizioni sono subito attive; una data non valida non le attiva.
 		if ( ( '' !== $opens_input && ! $opens ) || ! $closes || ( $opens && $closes <= $opens ) ) {
 			return 'MISCONFIGURED';
 		}
@@ -241,7 +241,7 @@ final class MI_Registration_Service {
 		return 'OPEN';
 	}
 
-	/** Validate portal dates before publishing or updating a usable event. */
+	/** Verifica le date nel portale prima di pubblicare o aggiornare un evento utilizzabile. */
 	public static function validate_event_dates( $event ) {
 		$state = self::registration_time_state( $event );
 		if ( 'MISCONFIGURED' === $state ) return new WP_Error( 'mi_event_dates', 'Inserisci una chiusura valida e successiva all’apertura. L’apertura può restare vuota per aprire subito le iscrizioni.' );
@@ -376,8 +376,8 @@ final class MI_Registration_Service {
 			if ( ! $counter ) {
 				throw new RuntimeException( 'Contatore non disponibile.' );
 			}
-			// Another request with this key may have committed while we waited for the event lock.
-			// A locking read sees it even under REPEATABLE READ, before capacity/date rejection.
+			// Un'altra richiesta con la stessa chiave può essersi conclusa durante l'attesa del lock evento.
+			// Una lettura bloccante la rileva anche con REPEATABLE READ prima di verificare capienza e date.
 			$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id, order_code, status, workspace_status, economic_mode, total_cents, initial_due_cents, balance_cents, payment_methods_json, snapshot_json FROM {$registrations_table} WHERE event_id = %d AND idempotency_key = %s FOR UPDATE", $event_id, $idempotency_key ), ARRAY_A );
 			if ( $wpdb->last_error ) throw new RuntimeException( 'Verifica richiesta non disponibile.' );
 			if ( $existing ) {
@@ -628,8 +628,8 @@ final class MI_Registration_Service {
 		if ( ! $force && 'SYNCED' === $registration['workspace_status'] ) {
 			return 'SYNCED';
 		}
-		// In direct-projection mode one coalesced event snapshot replaces every
-		// per-registration write to the retired DB_MODULI replica.
+		// Una sola istantanea aggregata per evento alimenta la proiezione, anziché scritture
+		// separate per ciascuna iscrizione.
 		if ( class_exists( 'MI_Event_Projection' ) && class_exists( 'MI_Sheet_Open' ) ) {
 			MI_Sheet_Open::enqueue( (int) $registration['event_id'] );
 			return 'PENDING';
@@ -655,7 +655,7 @@ final class MI_Registration_Service {
 		$attendance_rows = $wpdb->get_results( $wpdb->prepare( "SELECT detail_json FROM {$wpdb->prefix}mi_registration_events WHERE registration_id=%d AND event_type='MANAGEMENT_attendance' ORDER BY id", $registration_id ), ARRAY_A );
 		if ( $wpdb->last_error ) return 'PENDING';
 		foreach ( $attendance_rows as $entry ) { $detail = json_decode( $entry['detail_json'], true ); if ( isset( $detail['participant_id'], $detail['attendance'] ) ) $attendance[(int) $detail['participant_id']] = $detail['attendance']; }
-		// A mutation committed while reading would mix two revisions in one payload.
+		// Una modifica durante la lettura combinerebbe revisioni diverse nello stesso contenuto.
 		$read_revision = $wpdb->get_var( $wpdb->prepare( "SELECT workspace_revision FROM {$registrations_table} WHERE id=%d", $registration_id ) );
 		if ( null === $read_revision || (string) $read_revision !== (string) $registration['workspace_revision'] ) return 'PENDING';
 		$event_revision = $wpdb->get_var( $wpdb->prepare( "SELECT revision FROM {$wpdb->prefix}mi_management_state WHERE event_id=%d", $registration['event_id'] ) );
@@ -796,7 +796,7 @@ final class MI_Registration_Service {
 		$table = $wpdb->prefix . 'mi_registrations';
 		$now = current_time( 'mysql', true );
 		if ( class_exists( 'MI_Event_Projection' ) && class_exists( 'MI_Sheet_Open' ) ) {
-			// One event refresh supersedes all per-registration retries.
+		// L'aggiornamento dell'evento comprende tutte le iscrizioni e le relative operazioni pendenti.
 			$events = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT event_id FROM {$table} WHERE workspace_status = 'PENDING' AND (workspace_next_attempt_at IS NULL OR workspace_next_attempt_at <= %s) ORDER BY event_id LIMIT 10", $now ) );
 			foreach ( $events as $event_id ) MI_Sheet_Open::enqueue( (int) $event_id );
 			return;
@@ -930,7 +930,7 @@ final class MI_Registration_Service {
 		return self::transition_registration_status( absint( $registration_id ), 'CANCELLED', $actor_label, (bool) $promote_waitlist, (bool) $notify );
 	}
 
-	/** Persist both notices with the cancellation; never send email under the lock. */
+	/** Registra entrambi gli avvisi insieme all'annullamento; l'email viene inviata dopo il rilascio del lock. */
 	private static function queue_cancellation_email_locked( array $row ) {
 		global $wpdb;
 		$registration_id = (int) $row['id'];
@@ -1070,7 +1070,7 @@ final class MI_Registration_Service {
 			}
 			if ( 'EXPIRED' === $target_status ) {
 				if ( get_post_meta( (int) $registration['event_id'], '_mi_event_cancellation_job', true ) ) throw new RuntimeException( 'Annullamento evento in corso.' );
-				// The cron candidate may have received a new deadline while waiting for this lock.
+				// La scadenza può essere cambiata mentre il processo cron attendeva il lock.
 				$deadline = empty( $registration['expires_at'] ) ? false : strtotime( $registration['expires_at'] . ' UTC' );
 				if ( 'PENDING_PAYMENT' !== $registration['status'] || ! $deadline || $deadline > time() ) {
 					if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma non ricevuta.' );
@@ -1163,7 +1163,7 @@ final class MI_Registration_Service {
 			if ( 'ACCEPT' === $decision ) {
 				$event = self::public_event( $event_id, 'publish' !== get_post_status( $event_id ) );
 				if ( is_wp_error( $event ) ) throw new RuntimeException( 'Evento non disponibile.' );
-				// Acceptance retains the economic terms of the original registration.
+				// L'accettazione conserva le condizioni economiche dell'iscrizione originale.
 				$snapshot = json_decode( (string) $row['snapshot_json'], true );
 				$original = (array) ( $snapshot['event'] ?? array() );
 				foreach ( array( 'deposit_mode', 'deposit_fixed_cents', 'deposit_percentage', 'payment_methods', 'payment_instructions' ) as $key ) {
@@ -1324,7 +1324,7 @@ final class MI_Registration_Service {
 		return self::accoda_sincronizzazione_workspace( $registration_id, $current_status );
 	}
 
-	/** The durable outbox is authoritative; cron scheduling is only a wake-up hint. */
+	/** La coda persistente è autorevole; il cron serve ad avviare l'elaborazione. */
 	private static function schedule_email_safely() {
 		try {
 			MI_Spedizione_Email::tenta_spedizione_immediata();
@@ -1365,7 +1365,7 @@ final class MI_Registration_Service {
 
 	private static function sync_workspace_safely( $registration_id ) {
 		if ( class_exists( 'MI_Event_Projection' ) && class_exists( 'MI_Sheet_Open' ) ) {
-			// Existing cron entries from older releases are consumed once, without re-queuing.
+			// Le attività cron già pianificate vengono completate senza reinserirle nella coda.
 			return self::sync_workspace( $registration_id );
 		}
 		static $started = null;
@@ -1483,7 +1483,7 @@ final class MI_Registration_Service {
 		return $participants;
 	}
 
-	/** Shared pure validation for initial registration and reviewed service changes. */
+	/** Verifica condivisa per le nuove iscrizioni e le modifiche ai servizi confermate. */
 	public static function validate_options( $raw, $definitions, $scope ) {
 		$allowed = array();
 		foreach ( (array) $definitions as $definition ) {
@@ -1590,7 +1590,7 @@ final class MI_Registration_Service {
 		);
 	}
 
-	/** Call inside the transaction that changes the registration or its participants. */
+	/** Da chiamare nella transazione che modifica l'iscrizione o i relativi partecipanti. */
 	public static function mark_workspace_changed_locked( $registration_id ) {
 		global $wpdb;
 		$changed = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}mi_registrations SET workspace_revision=workspace_revision+1,workspace_status='PENDING',workspace_attempts=0,workspace_next_attempt_at=NULL WHERE id=%d", $registration_id ) );
@@ -1630,7 +1630,7 @@ final class MI_Registration_Service {
 	private static function generate_order_code( $event_id, $title ) {
 		global $wpdb;
 		$table = $wpdb->prefix . 'mi_booking_codes';
-		// Called inside the registration transaction, after locking this event.
+		// Viene chiamata nella transazione di iscrizione dopo aver acquisito il lock dell'evento.
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT prefix,sequence FROM {$table} WHERE event_id=%d FOR UPDATE", $event_id ), ARRAY_A );
 		if ( $wpdb->last_error ) throw new RuntimeException( 'Codice prenotazione non disponibile.' );
 		if ( ! $row ) {

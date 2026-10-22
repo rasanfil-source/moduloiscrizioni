@@ -1,6 +1,6 @@
 <?php
 defined( 'ABSPATH' ) || exit;
-// Included only by the authorized MI_Admin::payments_page(true) report reader.
+// Incluso solo dal lettore autorizzato del report MI_Admin::payments_page(true).
 $report_url = MI_Portal_Payments::report_url();
 $payments_url = add_query_arg( array( 'mi_portal_view' => 'payments', 'mi_portal_event' => $filter_event ), MI_Portal::url() );
 ?>

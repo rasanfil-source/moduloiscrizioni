@@ -1,5 +1,5 @@
 <?php
-/** Synthetic, personal-data-free benchmark for the shared management selector. */
+/** Misurazione sintetica senza dati personali per il selettore condiviso della gestione. */
 define( 'ABSPATH', __DIR__ );
 function wp_json_encode( $value ) { return json_encode( $value ); }
 function remove_accents( $value ) { return strtr( $value, array( 'à'=>'a', 'è'=>'e', 'é'=>'e', 'ì'=>'i', 'ò'=>'o', 'ù'=>'u' ) ); }

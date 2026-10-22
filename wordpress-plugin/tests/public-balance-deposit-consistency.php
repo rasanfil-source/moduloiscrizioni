@@ -1,5 +1,5 @@
 <?php
-// Reuse only the synthetic adapter; exercise the real balance and quote services.
+// Usa l'adattatore sintetico e verifica i servizi applicativi per saldi e quote.
 $fixture = file_get_contents(__DIR__ . '/public-balance-model.php');
 $fixture = explode('foreach([[0,15000', $fixture, 2)[0];
 eval('?>' . str_replace('__DIR__', var_export(__DIR__, true), $fixture));
@@ -23,7 +23,7 @@ foreach (['lookup', 'preview', 'save'] as $action) {
     check_balance($rejected, 'Inconsistent deposit must be rejected at ' . $action);
     check_balance($before === [$wpdb->reg, $wpdb->persons, $wpdb->events, $wpdb->writes], 'Rejected request changed stored data');
 }
-// Once staff resolves the inconsistency, a normal confirmation works again.
+// Dopo la verifica della segreteria, è possibile confermare regolarmente.
 $wpdb->persons[0]['deposit_due_cents'] = 20000;
 $lookup = MI_Public_Balance::lookup(42, ['action' => 'lookupByCognome', 'cognome' => 'decclesia']);
 $data['persone'][0]['version'] = $lookup['persona']['version'];

@@ -1,14 +1,14 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-/** Builds the complete, rebuildable event-sheet projection from canonical MySQL data. */
+/** Crea dal registro MySQL la proiezione completa del foglio evento, ricostruibile in ogni momento. */
 final class MI_Event_Projection {
 	private static function check_database() {
 		global $wpdb;
 		if ( $wpdb->last_error ) throw new RuntimeException( 'Impossibile costruire la proiezione dell’evento.' );
 	}
 
-	/** Called while the event lease serializes canonical reads and all event writes. */
+	/** Viene chiamata mentre il lock evento coordina le letture canoniche e tutte le scritture dell'evento. */
 	private static function generation( $event_id, $fingerprint ) {
 		$previous = get_post_meta( $event_id, '_mi_projection_version', true );
 		if ( is_array( $previous ) && ( $previous['fingerprint'] ?? '' ) === $fingerprint ) return (string) $previous['generation'];
@@ -147,7 +147,7 @@ final class MI_Event_Projection {
 		return array( 'snapshot' => $snapshot, 'payload' => $payload );
 	}
 
-	/** Large snapshots travel over the already authenticated Workspace → WordPress channel. */
+	/** Le istantanee grandi transitano nel canale autenticato Workspace → WordPress. */
 	public static function encoded_snapshot( array $snapshot ) {
 		$json = MI_Workspace_Client::stable_json( $snapshot['projection'] );
 		if ( ! is_string( $json ) || strlen( $json ) > 12000000 ) throw new RuntimeException( 'La proiezione dell’evento supera il limite di elaborazione Workspace.' );

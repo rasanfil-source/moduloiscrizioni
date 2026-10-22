@@ -3,7 +3,7 @@ defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/class-mi-option-rules.php';
 require_once __DIR__ . '/class-mi-payment-people.php';
 
-/** Public participant workflow adapted from the supplied Cammino balance model. */
+/** Flusso pubblico per consultare e aggiornare le scelte dei partecipanti. */
 final class MI_Public_Balance {
 	private static function decode( $json ) { return (array) json_decode( (string) $json, true ); }
 	private static function check() { global $wpdb; if ( $wpdb->last_error ) throw new RuntimeException( 'Servizio momentaneamente non disponibile. Riprova.' ); }
@@ -75,7 +75,7 @@ final class MI_Public_Balance {
 		if ( ! $matches ) return array( 'success' => false, 'error' => 'not_found' );
 		if ( count( $matches ) > 1 ) return array( 'success' => false, 'error' => 'duplicate', 'candidates' => array_map( static function ( $row ) { return array( 'nome' => $row['first_name'], 'cognome' => $row['last_name'], 'row' => (int) $row['id'], 'room' => $row['room_code'] ); }, $matches ) );
 		$result = self::person( $event, (int) $matches[0]['id'] );
-		// Only an explicitly shared matrimonial room implies a joint choice, as in the model.
+		// Solo una camera matrimoniale dichiarata condivisa comporta una scelta comune.
 		$result['partner'] = null;
 		if ( preg_match( '/^DM[1-9][0-9]*$/', (string) $matches[0]['room_code'] ) ) foreach ( $rows as $row ) {
 			if ( $row['id'] !== $matches[0]['id'] && $row['room_code'] === $matches[0]['room_code'] ) { $result['partner'] = self::person( $event, (int) $row['id'] ); break; }
@@ -283,9 +283,9 @@ final class MI_Public_Balance {
 				$receipt['email'] = $email;
 			}
 			$receipt['causale'] = 'Saldo ' . get_the_title( $event ) . ' — ' . implode( ', ', array_column( $receipt['people'], 'name' ) );
-			// A reopened deadline is relative to confirmation time. Do not invalidate
-			// the financial preview merely because a second elapsed before confirming.
-			// Keep the stored deadline in the fingerprint to detect staff changes.
+			// La scadenza riaperta parte dall'ora di conferma. Il riepilogo economico resta valido
+			// il riepilogo economico resta valido anche se la seconda richiesta arriva prima della conferma.
+			// L'impronta include la scadenza salvata per rilevare le modifiche della segreteria.
 			$fingerprint_receipt = $receipt;
 			foreach ( $fingerprint_receipt['people'] as &$fingerprint_person ) $fingerprint_person['deadline'] = (string) ( $bundles[(int) $fingerprint_person['registration_id']]['registration']['payment_deadline_at'] ?? '' );
 			unset( $fingerprint_person );

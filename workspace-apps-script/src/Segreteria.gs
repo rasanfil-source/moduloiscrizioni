@@ -338,10 +338,10 @@ function generaVistaOperativaEvento_(idEvento, campiForzati) {
       if(amount!=='' && amount!=null && Number.isFinite(Number(amount)))valori[key]=Number(amount)/100;
       else if(ordiniEconomici.has(String(partecipante.codice_ordine)))valori[key]='';
     });
-    // Method subtotals are order-wide: show once, never multiply by headcount.
+    // I subtotali per metodo riguardano l'intera prenotazione: mostra ciascuno una sola volta.
     if(ordiniEconomici.has(String(partecipante.codice_ordine)))['paid_cash','paid_transfer','paid_card'].forEach(key=>{valori[key]='';});
     ordiniEconomici.add(String(partecipante.codice_ordine));
-    // A partial replica cannot acknowledge a signed receipt, even at the same revision.
+    // Una replica parziale non conferma una ricevuta firmata, anche con la stessa revisione.
     const revision=String(iscrizione.workspace_revision||'');
     return { codice_ordine: String(partecipante.codice_ordine), numero_partecipante: numero, valori: valori, workspace_revision: revision && revision===String(iscrizione.replica_completa_revision) ? revision : null };
   });
@@ -505,8 +505,8 @@ function aggiornaStatoOperativo_(orderCode, participantNumber, key, value, opera
 function decodificaOggetto_(value) { try { const parsed = JSON.parse(String(value || '{}')); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; } catch (error) { return {}; } }
 function decodificaElenco_(value) { try { const parsed = JSON.parse(String(value || '[]')); return Array.isArray(parsed) ? parsed : []; } catch (error) { return []; } }
 
-/** Read-only decoding scoped to one generated view, never shared across requests.
- * Exact JSON is the key: equal revision hashes can still have different snapshots.
+/** La decodifica in sola lettura vale per una vista generata e resta limitata alla richiesta.
+ * La chiave usa il JSON completo: viste con la stessa revisione possono avere istantanee diverse.
  */
 function creaCacheDecodificaVista_() {
   const objects=new Map(),lists=new Map(),options=new Map();
@@ -522,7 +522,7 @@ function creaCacheDecodificaVista_() {
   return {object:object,list:list,option:option};
 }
 
-/** Economic columns belong to the order, even in a person-based report. */
+/** Le colonne economiche appartengono alla prenotazione anche nei report per persona. */
 function limitaImportiAUnaRigaPerOrdine_(rows, fields) {
   const monetary = ['total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance'];
   const seen = Object.create(null);

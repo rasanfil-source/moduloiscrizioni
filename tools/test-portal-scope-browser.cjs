@@ -1,4 +1,4 @@
-// Compare the shared base styles with the reserved restyling on synthetic controls.
+// Confronta gli stili condivisi e la vista riservata usando controlli sintetici.
 const fs=require('fs'),assert=require('node:assert/strict');
 const chromium=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright')[process.env.MI_BROWSER_ENGINE||'chromium'];
 const css=fs.readFileSync('wordpress-plugin/modulo-iscrizioni/assets/portal.css','utf8');

@@ -14,7 +14,7 @@ $wpdb = new class { public function prepare( $sql, ...$args ) { return $sql; } p
 require __DIR__ . '/../modulo-iscrizioni/includes/class-mi-workspace-client.php';
 require __DIR__ . '/../modulo-iscrizioni/includes/class-mi-rest-controller.php';
 function dispatch_envelope( $envelope ) { return MI_REST_Controller::workspace_command( new WP_REST_Request( $envelope ) ); }
-// The Node integration test passes an envelope produced by the actual GAS sender.
+// La verifica d'integrazione Node usa una busta prodotta dal mittente Apps Script applicativo.
 if ( in_array( '--stdin', $argv, true ) ) {
     $result = dispatch_envelope( json_decode( stream_get_contents( STDIN ), true ) );
     echo json_encode( $result, JSON_UNESCAPED_UNICODE );

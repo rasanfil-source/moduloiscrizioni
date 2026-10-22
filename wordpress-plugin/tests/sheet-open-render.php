@@ -1,5 +1,5 @@
 <?php
-// Render the real opening page with local synthetic WordPress services.
+// Genera la pagina di apertura applicativa con servizi WordPress sintetici locali.
 define('ABSPATH',__DIR__);
 function is_user_logged_in(){return true;} function absint($v){return abs((int)$v);} function nocache_headers(){}
 function esc_url($v){return htmlspecialchars($v,ENT_QUOTES);} function wp_json_encode($v,$flags=0){return json_encode($v,$flags);}

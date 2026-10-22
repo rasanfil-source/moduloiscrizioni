@@ -59,7 +59,7 @@ final class MI_Workspace_Client {
 		);
 		// La prima preparazione del foglio può richiedere più tempo delle normali repliche.
 		// L'operazione remota è idempotente e un nuovo tentativo non duplica il foglio.
-		// La prima costruzione del foglio include formattazione, convalide e schede
+		// La preparazione del foglio comprende formattazione, convalide e schede
 		// economiche. Le esecuzioni reali possono superare i tre minuti; interrompere
 		// a 30 secondi produce un falso "non raggiungibile" mentre Google continua.
 		// La replica gira nella coda: la formattazione Google può superare un minuto.
@@ -67,8 +67,8 @@ final class MI_Workspace_Client {
 		if ( 'CONFERMA_MODIFICHE_FOGLIO' === $action ) $timeout = 180;
 		if ( in_array( $action, array( 'INVIA_EMAIL_PROVA', 'INVIA_EMAIL_CONFERMA', 'INVIA_EMAIL_CONFERMA_MITTENTE' ), true ) ) $timeout = 60;
 		if ( in_array( $action, array( 'VERIFICA_FOGLI_EVENTO', 'ORGANIZZA_FOGLI_EVENTO' ), true ) ) $timeout = 60;
-		// These deliveries carry revisions and Google tombstones reject late writes.
-		// Email/deletion retain their stronger exclusion until their side effect completes.
+		// Le consegne includono la revisione e Google respinge le scritture successive alla rimozione.
+		// Per email ed eliminazioni il lock resta attivo fino al completamento dell'operazione esterna.
 		if ( class_exists( 'MI_Event_Deletion' ) && 'PROIETTA_EVENTO' === $action ) MI_Event_Deletion::release( absint( $payload['event_id'] ?? 0 ) );
 		$response = wp_remote_post(
 			self::webapp_url(),

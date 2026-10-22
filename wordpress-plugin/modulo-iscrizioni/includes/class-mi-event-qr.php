@@ -2,7 +2,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-/** Public registration QR: generated locally in the browser, never by a third party. */
+/** Il QR pubblico per l'iscrizione viene generato nel browser, senza servizi esterni. */
 final class MI_Event_QR {
 	public static function boot() {
 		add_action( 'wp_ajax_mi_event_qr', array( __CLASS__, 'data' ) );
@@ -14,7 +14,7 @@ final class MI_Event_QR {
 		wp_enqueue_script( 'mi-event-qr', MI_PLUGIN_URL . 'assets/event-qr.js', array( 'mi-qr-generator' ), MI_VERSION, true );
 	}
 
-	/** The standalone portal deliberately does not call wp_footer(). */
+	/** Il portale autonomo non richiama wp_footer(). */
 	public static function standalone_scripts() {
 		if ( ! is_user_logged_in() ) return;
 		foreach ( array( 'qrcode-generator-2.0.4.js', 'event-qr.js' ) as $asset ) {
@@ -48,7 +48,7 @@ final class MI_Event_QR {
 		$id = get_post_thumbnail_id( $group_id );
 		$url = $id ? wp_get_attachment_image_url( $id, 'medium' ) : get_post_meta( $group_id, '_mi_group_logo_url', true );
 		if ( ! $url ) return $missing;
-		// Safe HTTP validates destinations/redirects; embed bytes to avoid canvas CORS errors.
+		// La richiesta HTTP validata controlla destinazioni e reindirizzamenti; incorpora i byte per evitare errori CORS nel canvas.
 		$response = wp_safe_remote_get( $url, array( 'timeout' => 10, 'redirection' => 3, 'limit_response_size' => 2097153 ) );
 		if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) return new WP_Error( 'mi_qr_logo_load', 'Il logo del gruppo non è raggiungibile. Controlla il logo e riprova.' );
 		$bytes = wp_remote_retrieve_body( $response );

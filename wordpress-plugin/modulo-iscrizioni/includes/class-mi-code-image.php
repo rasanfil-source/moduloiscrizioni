@@ -11,8 +11,8 @@ final class MI_Code_Image {
 	private static function qr_svg( $payload ) {
 		$bytes = array_values( unpack( 'C*', $payload ) ?: array() );
 		if ( count( $bytes ) > 106 ) {
-			// This fixed QR version supports 106 bytes, not 106 Unicode characters.
-			// Truncation would produce a valid symbol containing the wrong identifier.
+			// Il limite è di 106 byte, non di 106 caratteri Unicode.
+			// Il taglio del testo potrebbe codificare un identificativo diverso.
 			throw new LengthException( 'Il contenuto del QR supera il limite di 106 byte.' );
 		}
 		$bits = array( 0, 1, 0, 0 );

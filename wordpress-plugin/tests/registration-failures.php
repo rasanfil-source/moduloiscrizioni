@@ -1,5 +1,5 @@
 <?php
-// Fault injection around the real registration service. No remote services or personal data.
+// Simula errori nel servizio applicativo delle iscrizioni, senza servizi remoti o dati personali.
 define('ABSPATH', __DIR__); define('ARRAY_A', 'ARRAY_A'); define('MI_VERSION', 'test');
 define('DAY_IN_SECONDS',86400); define('HOUR_IN_SECONDS',3600);
 class WP_Error { public function __construct(public $code, public $message, public $data=null) {} }

@@ -1,5 +1,5 @@
 <?php
-// Synthetic reads; calculations, public status, payment ledger and projection are real.
+// Letture sintetiche; calcoli, stato pubblico, registro pagamenti e proiezione sono applicativi.
 define('ABSPATH', __DIR__); define('ARRAY_A', 'ARRAY_A');
 function absint($value) { return abs((int)$value); }
 function wp_json_encode($value, ...$args) { return json_encode($value, ...$args); }

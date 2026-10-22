@@ -2,7 +2,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-/** One event lease covers SQL writes and their external effects until request shutdown. */
+/** Un lock per evento coordina le scritture SQL e le operazioni collegate fino alla fine della richiesta. */
 final class MI_Event_Deletion {
 	private static $leases = array();
 	private static $finalizing = 0;
@@ -23,7 +23,7 @@ final class MI_Event_Deletion {
 		return is_user_logged_in() && ! MI_Access::is_suspended() && MI_Access::is_global_manager() && ( current_user_can( 'mi_manage_events' ) || current_user_can( 'manage_options' ) );
 	}
 	public static function job( $id ) { return get_option( 'mi_delete_event_' . absint( $id ), array() ); }
-	/** Release only after a local commit/snapshot, before an idempotent Google call. */
+	/** Rilascia dopo il commit o l'istantanea locale e prima della richiesta Google idempotente. */
 	public static function release( $id ) {
 		global $wpdb;
 		$id = absint( $id );
@@ -42,7 +42,7 @@ final class MI_Event_Deletion {
 			self::$leases[ $id ] = $name;
 			register_shutdown_function( static function () use ( $id ) { self::release( $id ); } );
 		}
-		// Refresh after acquiring the lease: another request may have started deletion.
+		// Aggiorna i dati dopo aver acquisito il lock: un'altra richiesta può aver avviato l'eliminazione.
 		wp_cache_delete( 'mi_delete_event_' . $id, 'options' );
 		if ( ! $deleting && self::job( $id ) ) return new WP_Error( 'mi_event_deleting', 'Evento in eliminazione: le modifiche sono bloccate.' );
 		if ( ! $deleting && MI_Event_Post_Type::EVENT_TYPE !== get_post_type( $id ) ) return new WP_Error( 'mi_event_missing', 'Evento non disponibile.' );
@@ -114,7 +114,7 @@ final class MI_Event_Deletion {
 		$event_emails = self::event_emails( $id );
 		$counts['Comunicazioni dell’evento'] = count( $event_emails );
 		$data = array( 'title' => $post->post_title, 'status' => $post->post_status, 'counts' => $counts, 'sheet_url' => (string) get_post_meta( $id, '_mi_operational_sheet_url', true ), 'sheet_id' => (string) get_post_meta( $id, '_mi_operational_sheet_id', true ), 'page_id' => absint( get_post_meta( $id, '_mi_registration_page_id', true ) ) );
-		// Include all mutable rows, not just counts, so changed values require review.
+		// Includi tutte le righe modificabili, oltre ai conteggi, per rendere visibili le variazioni da verificare.
 		$hash = hash_init( 'sha256' );
 		hash_update( $hash, wp_json_encode( array( $data, get_post_meta( $id ), $post->post_modified_gmt ) ) );
 		foreach ( array_merge( array( 'mi_registrations' ), self::DIRECT ) as $table ) {
@@ -133,7 +133,7 @@ final class MI_Event_Deletion {
 	}
 	private static function event_emails( $id ) {
 		global $wpdb;
-		// Legacy event notifications use registration_id=0 and a structured payload.
+		// Gli avvisi evento usano registration_id=0 e un contenuto strutturato.
 		$rows = $wpdb->get_results( "SELECT id,payload_json FROM {$wpdb->prefix}mi_email_outbox WHERE registration_id=0 ORDER BY id", ARRAY_A );
 		if ( $wpdb->last_error ) throw new RuntimeException( 'Comunicazioni non disponibili.' );
 		return array_values( array_filter( $rows, static function ( $row ) use ( $id ) { $payload = json_decode( $row['payload_json'], true ); return (int) ( $payload['event_id'] ?? 0 ) === (int) $id; } ) );

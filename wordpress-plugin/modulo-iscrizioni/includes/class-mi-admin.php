@@ -156,7 +156,7 @@ final class MI_Admin {
 		$type = $selected ? MI_Management_Service::room_types()[$selected['code']] : null;
 		$ticket = reset( $event['ticket_types'] );
 		$count = $type && empty( $type['individual'] ) ? (int) $type['capacity'] : 1;
-		// Separated registrations exercise the manual assignment of twins and triples.
+		// Le iscrizioni separate consentono di assegnare manualmente le camere doppie e triple.
 		if ( $selected && in_array( $selected['code'], array( 'alloggio-doppia-separati', 'alloggio-tripla' ), true ) && 0 === $index % 2 ) $count = 1;
 		$count = min( $count, max( 1, (int) $ticket['max_per_order'] ) );
 		$payload['tickets'][$ticket['code']] = $count;
@@ -259,7 +259,7 @@ final class MI_Admin {
 		if ( 'ALL' !== $scope ) $event_args['post__in'] = $scope ?: array( 0 );
 		$events = get_posts( $event_args );
 		if ( $portal ) {
-			// Same queries, filters, scope, totals and CSV endpoint as the admin report.
+			// Stesse query, filtri, ambito, totali ed esportazione CSV del report amministrativo.
 			require __DIR__ . '/../templates/portal-payment-report.php';
 			return;
 		}
@@ -628,7 +628,7 @@ final class MI_Admin {
 		} );
 	}
 
-	/** Materialize a consistent InnoDB snapshot before sending any response bytes. */
+	/** Prepara una vista InnoDB coerente prima di inviare i dati della risposta. */
 	private static function download_csv( $name, callable $build ) {
 		global $wpdb;
 		$output = tmpfile();
@@ -727,7 +727,7 @@ final class MI_Admin {
 		}
 		if ( $source ) { $conditions[] = 'p.payment_source = %s'; $parameters[] = $source; }
 		if ( $transaction ) { $conditions[] = 'p.transaction_kind = %s'; $parameters[] = $transaction; }
-		// Form dates are local calendar days; ledger timestamps are UTC.
+		// Le date del modulo sono giorni di calendario locali; le registrazioni contabili usano UTC.
 		foreach ( array( 'from' => $from, 'to' => $to ) as $boundary => $input ) {
 			if ( ! $input ) continue;
 			$date = DateTimeImmutable::createFromFormat( '!Y-m-d', $input, wp_timezone() );
@@ -773,7 +773,7 @@ final class MI_Admin {
 		$table = $wpdb->prefix . 'mi_email_outbox';
 		$registrations = $wpdb->prefix . 'mi_registrations';
 		$detail_id = isset( $_GET['email_id'] ) ? absint( $_GET['email_id'] ) : 0;
-		// Event notices have registration_id=0; resolve their scope from the stored snapshot.
+		// Gli avvisi evento hanno registration_id=0; l'ambito si ricava dall'istantanea salvata.
 		$event_expression = "COALESCE(r.event_id, CASE WHEN JSON_VALID(o.payload_json) THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(o.payload_json, '$.event_id')) AS UNSIGNED) ELSE 0 END)";
 		$scope = MI_Access::event_ids();
 		if ( 'ALL' === $scope ) {
@@ -890,7 +890,7 @@ final class MI_Admin {
 		if ( $post_id && $current_activity_id && $activity_id !== $current_activity_id ) {
 			global $wpdb;
 			$activity_stable = ! (bool) $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$wpdb->prefix}mi_registrations WHERE event_id = %d LIMIT 1", $post_id ) );
-			// save_event retains the original group: validate the same effective configuration.
+			// save_event conserva il gruppo selezionato; verifica la configurazione risultante.
 			if ( ! $activity_stable ) { $activity_id = $current_activity_id; $activity_stable = true; }
 		}
 		$opens = isset( $_POST['mi_registration_opens_at'] ) ? sanitize_text_field( wp_unslash( $_POST['mi_registration_opens_at'] ) ) : '';

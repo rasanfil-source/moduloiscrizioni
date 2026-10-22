@@ -49,7 +49,7 @@ test('attendance switches to surname before paging without overwriting the saved
   assert.equal(context.direction,'asc');
   assert.equal(context.shown,30);
   assert.equal(context.query,'Rossi');
-  // Refreshing or saving attendance must preserve a subsequent manual choice.
+  // Aggiornare o salvare le presenze conserva la successiva scelta manuale dell'ordine.
   context.sort='created_at';context.direction='desc';context.shown=60;
   apply(true);
   assert.equal(context.sort,'created_at');

@@ -99,8 +99,8 @@ function verificaBusta_(envelope) {
   const digest = Utilities.computeHmacSha256Signature(message, ottieniSegretoScript_());
   const expected = Utilities.base64EncodeWebSafe(digest).replace(/=+$/, '');
   if (!confrontaInTempoCostante_(expected, signature)) return { ok: false, error: 'INVALID_SIGNATURE' };
-  // Only authenticated requests can pause background projections. A short lease
-  // gives the interactive opener a turn after the current writer finishes.
+  // Solo una richiesta autenticata può sospendere le proiezioni automatiche. Un lock breve
+  // lascia spazio all'apertura interattiva dopo la conclusione della scrittura in corso.
   if (envelope.action === 'PROIETTA_EVENTO' && (envelope.payload || {}).background !== true) PropertiesService.getScriptProperties().setProperty('MI_INTERACTIVE_OPEN_UNTIL', String(Date.now()+90000));
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return {ok:false,error:'WORKSPACE_BUSY'};
@@ -108,8 +108,8 @@ function verificaBusta_(envelope) {
     const cache = CacheService.getScriptCache();
 	const nonceKey = Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, nonce)).replace(/=+$/, '');
 	const properties = PropertiesService.getScriptProperties();
-	// Shard the durable replay guard below the 9 KB property limit. Cache eviction
-	// must not authorize replay; never evict a still-valid durable nonce.
+	// Suddivide il controllo persistente delle ripetizioni per rispettare il limite di 9 KB delle proprietà.
+	// La rimozione dalla cache non autorizza la ripetizione; conserva ogni nonce ancora valido.
 	const bucketKey='MI_USED_NONCES_'+nonceKey.charAt(0);
 	const durableNonces=JSON.parse(properties.getProperty(bucketKey)||'{}');
 	const legacy=JSON.parse(properties.getProperty('MI_USED_NONCES')||'{}');
@@ -137,8 +137,8 @@ function confrontaInTempoCostante_(left, right) {
 function aggiungiIscrizione_(payload) {
   const risultato = registraIscrizioneCentrale_(payload);
   if (!risultato.complete) return risultato;
-  // MySQL acknowledges the central replica independently of slow sheet formatting.
-  // The periodic event job refreshes the views and retains pending operator edits.
+  // MySQL conferma la replica indipendentemente dalla formattazione dei fogli.
+  // Il processo periodico aggiorna le viste e conserva le modifiche dell'operatore in sospeso.
   if (payload.canonical_source === 'MYSQL') {
     risultato.central_complete = true;
     risultato.event_sheet_complete = false;
@@ -251,7 +251,7 @@ function registraIscrizioneCentrale_(payload) {
     const correzioni = payload.canonical_source === 'MYSQL' ? {} : indiceStatoOperativo_();
     if (payload.canonical_source === 'MYSQL') {
       sincronizzaCamereMysql_(eventId, payload.rooms, payload.workspace_event_revision);
-      // Legacy overrides must not hide values now maintained by the canonical service.
+      // I valori gestiti dal servizio canonico prevalgono sulle impostazioni equivalenti.
       const stato = ottieniSchedaObbligatoria_(MI_SHEETS.OPERATIONAL_STATE);
       eliminaRigheContigue_(stato, convertiRigheInOggetti_(stato).filter(r => String(r.codice_ordine) === orderCode));
     }
@@ -320,7 +320,7 @@ function registraIscrizioneCentrale_(payload) {
   }
 }
 
-/** Called under the central script lock. Room snapshots have an event-wide revision. */
+/** Viene chiamata sotto il lock dello script. Le sistemazioni condividono una revisione per evento. */
 function sincronizzaCamereMysql_(eventId, rooms, revision) {
   revision = String(revision);
   if (!/^(0|[1-9][0-9]{0,19})$/.test(revision) || !Array.isArray(rooms)) throw new Error('INVALID_ROOM_SNAPSHOT');
@@ -337,10 +337,10 @@ function sincronizzaCamereMysql_(eventId, rooms, revision) {
   if (old.length > revision.length || (old.length === revision.length && old > revision)) return;
   const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.ACCOMMODATIONS);
   const existing = convertiRigheInOggetti_(sheet).filter(r => String(r.id_evento) === eventId);
-  // The revision alone is insufficient: a prior writer may have stopped mid-write.
+  // La revisione da sola non basta: una scrittura precedente può essersi interrotta a metà.
   const actual = existing.map(r => [String(r.id_evento), String(r.codice), String(r.nome), Number(r.capienza), String(r.attiva), String(r.note || '')]);
   if (previous && old === revision && serializzaInModoStabile_(actual) === serializzaInModoStabile_(values)) return;
-  // Record the high-water mark before changing rows; an identical retry repairs a partial write.
+  // Registra la revisione massima prima di modificare le righe; la stessa richiesta completa una scrittura parziale.
   if (previous) versions.getRange(previous._row, 1, 1, 2).setValues([[eventId, revision]]);
   else versions.appendRow([eventId, revision]);
   eliminaRigheContigue_(sheet, existing);
@@ -352,7 +352,7 @@ function assicuraRighe_(sheet, required) {
   if(required>available)sheet.insertRowsAfter(available,required-available);
 }
 
-/** Delete bottom-up, preserving rows belonging to other events and retry repair. */
+/** Elimina le righe dal basso verso l'alto, conservando quelle degli altri eventi e consentendo la ripresa. */
 function eliminaRigheContigue_(sheet, rows) {
   const indices = [...new Set(rows.map(row => row._row))].sort((a,b) => b-a);
   for (let i=0; i<indices.length;) {
@@ -393,7 +393,7 @@ function sincronizzaPagamenti_(orderCode, payments) {
 	if (allocations.length && allocated !== amount) throw new Error('INVALID_PAYMENT_ALLOCATIONS');
 	const allocationsJson = allocations.length ? JSON.stringify(allocations) : '';
     const effective = normalizzaTesto_(payment.effective_at, 40);
-    // WordPress sends SQL datetimes in UTC, including legacy rows without an ID.
+    // WordPress invia date SQL in UTC, comprese le righe prive di identificativo specifico.
     const effectiveDate = effective ? new Date(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/.test(effective) ? effective.replace(' ', 'T') + 'Z' : effective) : new Date();
     if (isNaN(effectiveDate.getTime())) {
       aggiungiControllo_('SYNC_PAYMENT', 'PAYMENT', orderCode, 'REJECTED', 'WORDPRESS', 'INVALID_EFFECTIVE_AT', 'WORDPRESS_PROXY');

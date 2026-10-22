@@ -1,7 +1,5 @@
-# Stampa della prenotazione
+# Scheda di prenotazione in stampa
 
-La stampa della scheda esclude intestazione «Gestione iscrizioni», selettori evento, comandi di aggiornamento e apertura foglio, messaggi operativi, pulsanti di navigazione, barra salva/stampa/annulla e pannello di modifica servizi. I nomi dei partecipanti nel riepilogo rimangono visibili come testo.
+La versione stampabile mantiene i dati della prenotazione e i nomi dei partecipanti come testo selezionabile. Nasconde navigazione del portale, selettori evento, comandi di aggiornamento, apertura foglio, messaggi temporanei, pulsanti di spostamento e pannelli per modificare i servizi.
 
-Spaziatura compatta e campi disposti su due colonne riducono l'altezza senza tagliare i dati. La prova browser con prenotazione sintetica di due persone rientra nell'area A4 con margini di 10 mm; non è garantita una sola facciata per prenotazioni numerose o note lunghe. La stampa dell'elenco generale conserva il proprio formato.
-
-Verifica: `tools/test-individual-management-browser.cjs`, inclusi controlli di esclusione degli elementi operativi e altezza utile in modalità stampa. Modifica inclusa nello ZIP 3.26.155.
+La scheda usa spaziatura compatta e dispone i campi su due colonne quando la larghezza lo consente. Note lunghe e nomi non vengono tagliati; il numero di pagine dipende dal numero di partecipanti e dal contenuto inserito. La stampa dell’elenco generale conserva il proprio formato.

@@ -1,5 +1,5 @@
 <?php
-// Synthetic regression cases for the external audit, without WordPress or a live DB.
+// Casi dimostrativi dell'analisi esterna, senza WordPress né database attivo.
 define( 'ABSPATH', __DIR__ ); define( 'ARRAY_A', 'ARRAY_A' ); define( 'HOUR_IN_SECONDS', 3600 );
 class WP_Error { public function __construct( public $code, public $message ) {} }
 function absint( $value ) { return abs( (int) $value ); }

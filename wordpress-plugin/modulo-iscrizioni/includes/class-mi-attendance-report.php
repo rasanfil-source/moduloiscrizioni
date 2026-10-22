@@ -55,7 +55,7 @@ final class MI_Attendance_Report {
 			if ( 'management_attendance' === strtolower( $row['event_type'] ) ) $attendance[$id] = $detail['attendance'] ?? 'UNRECORDED';
 			if ( 'management_identity_link' === strtolower( $row['event_type'] ) ) $links[$id] = (int) ( $detail['target_id'] ?? 0 );
 		}
-		// Path halving shortens repeated lookups without changing the chosen identity.
+		// La ricerca per dimezzamento accorcia le consultazioni ripetute senza cambiare l'identità selezionata.
 		$root = static function ( $id ) use ( &$parents ) { while ( $parents[$id] !== $id ) { $parents[$id] = $parents[$parents[$id]]; $id = $parents[$id]; } return $id; };
 		$mobiles = array(); $by_mobile = array();
 		foreach ( $people as $person ) {
@@ -63,7 +63,7 @@ final class MI_Attendance_Report {
 			if ( ! $mobile ) continue;
 			if ( isset( $by_mobile[$mobile] ) ) $parents[$id] = $root( $by_mobile[$mobile] ); else $by_mobile[$mobile] = $id;
 		}
-		// Explicit, audited identity links also connect records with missing or changed mobiles.
+		// I collegamenti espliciti e registrati nel log associano anche record senza cellulare o con un numero diverso.
 		foreach ( $links as $id => $target ) if ( $target && isset( $parents[$target] ) ) { $left = $root( $id ); $right = $root( $target ); if ( $left !== $right ) $parents[max( $left, $right )] = min( $left, $right ); }
 		$groups = array(); $unrecorded = 0;
 		foreach ( $people as $person ) {

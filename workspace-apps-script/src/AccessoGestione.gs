@@ -60,7 +60,7 @@ function preparaAccessoGestioneEvento_(foglio, idEvento) {
   scheda.setRowHeight(9, 64);
   proteggiProiezione_(scheda);
 }
-/** Pending edits keep the current view intact until the operator synchronizes them. */
+/** Le modifiche in sospeso mantengono integra la vista fino alla sincronizzazione dell'operatore. */
 function scriviProiezioneEvento_(scheda, vista) {
   riprendiScritturaProiezione_(scheda);
   const precedenteProtezione = scheda.getProtections(SpreadsheetApp.ProtectionType.SHEET).find(p=>p.getDescription()==='MI_PROIEZIONE');
@@ -78,7 +78,7 @@ function scriviProiezioneEvento_(scheda, vista) {
   if(!result.scritto)proteggiProiezione_(scheda,intervalliPrecedenti);
   return result;
   } catch(error) {
-    // Do not reopen cells while a journal still needs to finish writing them.
+    // Le celle restano protette finché il giornale non ha completato la scrittura.
     if(!PropertiesService.getScriptProperties().getProperty('MI_WRITE_'+scheda.getParent().getId()))proteggiProiezione_(scheda, intervalliPrecedenti);
     throw error;
   }

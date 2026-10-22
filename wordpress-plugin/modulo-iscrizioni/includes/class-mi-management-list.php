@@ -2,7 +2,7 @@
 defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/class-mi-booking-search.php';
 
-/** Shared selection for displayed pages, CSV and printing. No writes or Sheet calls. */
+/** Selezione condivisa da pagine, esportazione CSV e stampa. Non esegue scritture né richieste a Sheets. */
 final class MI_Management_List {
 	public static function page( $summary, $context, $offset = 0, $limit = 30, $source_version = null ) {
 		$context = is_array( $context ) ? $context : array();
@@ -75,7 +75,7 @@ final class MI_Management_List {
 		return array( 'rows' => array_slice( $rows, $offset, $limit ), 'total' => count( $rows ), 'offset' => $offset, 'limit' => $limit, 'fingerprint' => $fingerprint );
 	}
 
-	/** Cache-independent selection version; only timed filters can change without a canonical write. */
+	/** Impronta della selezione indipendente dalla cache; solo i filtri temporali cambiano senza scritture canoniche. */
 	public static function fingerprint( $source_version, array $context, $total, array $deadline_ids = array() ) {
 		unset( $context['shown'] );
 		$deadline_ids = array_map( 'strval', $deadline_ids );
@@ -83,7 +83,7 @@ final class MI_Management_List {
 		return hash( 'sha256', wp_json_encode( array( $source_version, $context, (int) $total, $deadline_ids ) ) );
 	}
 
-	/** One comparator for complete lists and bounded, cross-chunk page selection. */
+	/** Un solo confronto ordina elenchi completi e pagine selezionate tra blocchi limitati. */
 	private static function sort_rows( array $rows, array $context ) {
 		$sort = in_array( $context['sort'] ?? '', array( 'name', 'buyer', 'code', 'room', 'created_at' ), true ) ? $context['sort'] : 'created_at';
 		$direction = 'desc' === ( $context['direction'] ?? ( 'created_at' === $sort ? 'desc' : 'asc' ) ) ? -1 : 1;
@@ -102,12 +102,12 @@ final class MI_Management_List {
 		return array_column( $rows, 'row' );
 	}
 
-	/** Retain only the first offset+limit matches, regardless of SQL chunk order. */
+	/** Mantiene le corrispondenze fino a offset+limit, indipendentemente dall'ordine dei blocchi SQL. */
 	public static function sorted_prefix( array $retained, array $incoming, array $context, $keep ) {
 		return array_slice( self::sort_rows( array_merge( $retained, $incoming ), $context ), 0, max( 0, (int) $keep ) );
 	}
 
-	/** Aggregates only: payload size depends on schema/services, not participant count. */
+	/** Restituisce aggregati: la dimensione dei dati dipende da schema e servizi, non dal numero di partecipanti. */
 	public static function overview( array $summary ) {
 		$result = array_intersect_key( $summary, array_flip( array( 'ok', 'features', 'updated_at', 'registration_url', 'field_labels', 'payment_counts', 'room_types' ) ) );
 		$metrics = array( 'states' => array(), 'missing' => 0, 'unassigned' => 0, 'receivable' => 0, 'paid' => 0, 'admitted' => 0, 'offers' => 0, 'has_requests' => false, 'has_missing' => false, 'has_attendance' => false );
@@ -139,7 +139,7 @@ final class MI_Management_List {
 				$key = $option['code'] ?? $option['name'];
 				$filters[$key] = array( 'code' => $key, 'name' => $option['name'] ?? $key );
 				if ( ! $admitted || 0 === strpos( (string) $key, 'alloggio-' ) ) continue;
-				// Name is relevant to category classification (e.g. insurance).
+				// Il nome viene considerato nella classificazione della categoria, ad esempio per l'assicurazione.
 				$group = wp_json_encode( array( $key, $option['name'] ?? $key ) );
 				if ( ! isset( $services[$group] ) ) $services[$group] = array( 'code' => $key, 'name' => $option['name'] ?? $key, 'quantity' => 0, 'people' => 0 );
 				$services[$group]['quantity'] += (float) ( $option['quantity'] ?? 0 );
@@ -157,7 +157,7 @@ final class MI_Management_List {
 		return $result;
 	}
 
-	/** Minimal panel-specific data, requested only after the user opens that panel. */
+	/** Fornisce i dati essenziali del riquadro solo quando l'operatore lo apre. */
 	public static function panel( array $summary, $panel ) {
 		if ( 'offers' === $panel ) return array( 'offers' => array_values( array_map( static function ( $item ) { return array_intersect_key( $item, array_flip( array( 'name', 'code', 'offer_expires_at' ) ) ); }, array_filter( $summary['items'], static function ( $item ) { return 'WAITLIST_OFFERED' === $item['status']; } ) ) ) );
 		if ( 'attendance' === $panel ) return array( 'people' => array_values( array_map( static function ( $person ) { return array_intersect_key( $person, array_flip( array( 'id', 'name', 'attendance' ) ) ); }, array_filter( $summary['people'], static function ( $person ) { return in_array( $person['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ); } ) ) ) );
@@ -166,7 +166,7 @@ final class MI_Management_List {
 		return array( 'people' => array_map( static function ( $person ) { return array_intersect_key( $person, array_flip( array( 'id', 'number', 'code', 'name', 'status', 'room', 'options' ) ) ); }, $people ), 'rooms' => $summary['rooms'] ?? array(), 'room_types' => $summary['room_types'] ?? array(), 'rooms_version' => hash( 'sha256', wp_json_encode( $summary['rooms'] ?? array() ) ) );
 	}
 
-	/** Keep only the names and assignments needed by the inventory and service counters. */
+	/** Mantiene solo nomi e assegnazioni necessari per l'inventario e i conteggi dei servizi. */
 	public static function compact( $summary ) {
 		$keys = array_fill_keys( array_keys( $summary['field_labels'] ?? array() ), true );
 		foreach ( $summary['people'] as &$person ) {

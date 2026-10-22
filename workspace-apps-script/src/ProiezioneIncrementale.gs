@@ -1,13 +1,13 @@
-/** Compare cells as Sheets returns them, without treating text as formulas. */
+/** Confronta le celle con i valori restituiti da Sheets, distinguendo il testo dalle formule. */
 function valoreConfrontoProiezione_(value) {
   if (value instanceof Date) return value.getTime();
-  // The leading apostrophe is an input escape, not part of the displayed value.
+  // L'apostrofo iniziale protegge il valore in ingresso e non fa parte del testo visualizzato.
   return typeof value==='string' ? value.replace(/^'(?=[=+@-])/, '') : (value==null?'':value);
 }
 function righeProiezioneUguali_(a,b) {
   return !!a && a.length===b.length && a.every((value,i)=>valoreConfrontoProiezione_(value)===valoreConfrontoProiezione_(b[i]));
 }
-/** Adjacent differences share one service call; unchanged rows are never written. */
+/** Le differenze contigue condividono una chiamata al servizio; le righe invariate non vengono riscritte. */
 function blocchiRigheProiezione_(prima,dopo,primaRiga) {
   const blocks=[];
   dopo.forEach((row,index)=>{
@@ -22,7 +22,7 @@ function estendiGrigliaProiezione_(sheet,rows,columns) {
   if(sheet.getMaxRows()<rows)sheet.insertRowsAfter(sheet.getMaxRows(),rows-sheet.getMaxRows());
   if(sheet.getMaxColumns()<columns)sheet.insertColumnsAfter(sheet.getMaxColumns(),columns-sheet.getMaxColumns());
 }
-/** Preserve user column/row order when the schema and participant identities allow it. */
+/** Mantiene l'ordine scelto di colonne e righe quando schema e identità dei partecipanti lo consentono. */
 function pianoProiezioneIncrementale_(vista,mappa,correnti,intestazioni) {
   const dichiarate=vista.colonne.filter(c=>c.key!=='participant_number');
   const canoniche=[{key:'participant_number',label:'N.',gruppo:'persona',comprimibile:false}].concat(dichiarate,[{key:'_numero',label:'Partecipante interno'},{key:'_ordine',label:'Prenotazione'}]);
@@ -65,9 +65,9 @@ function pianoProiezioneIncrementale_(vista,mappa,correnti,intestazioni) {
     blocks:blocchiRigheProiezione_(schemaChanged?[]:correnti,rows,2),old_rows:correnti.length,read_only:vista.sola_lettura===true};
 }
 
-/** Durable write-ahead journal. Only changed rows are stored for ordinary updates.
- * The ready marker is committed after the complete journal reaches Sheets. The
- * operational sheet stays protected until both data and baseline are committed.
+/** Il giornale persistente registra prima le righe da aggiornare.
+ * Il contrassegno di disponibilità viene registrato quando il giornale è completo in Sheets.
+ * Il foglio resta protetto fino alla conferma dei dati e della base di confronto.
  */
 function preparaScritturaProiezione_(sheet,plan) {
   const book=sheet.getParent(), props=PropertiesService.getScriptProperties(), key='MI_WRITE_'+book.getId();
@@ -85,7 +85,7 @@ function preparaScritturaProiezione_(sheet,plan) {
   return metadata;
 }
 
-/** Rebuild/patch the baseline by comparing blocks, including after partial writes. */
+/** Aggiorna la base di confronto tramite blocchi, anche dopo scritture parziali. */
 function aggiornaBaseIncrementale_(sheet,columns,count) {
   const book=sheet.getParent(), base=book.getSheetByName('_MI_BASE')||book.insertSheet('_MI_BASE');
   const display=count?sheet.getRange(2,1,count,columns.length).getDisplayValues():[];
@@ -102,7 +102,7 @@ function aggiornaBaseIncrementale_(sheet,columns,count) {
   proteggiProiezione_(base);base.hideSheet();
 }
 
-/** Safe to repeat after any service exception or execution timeout. */
+/** L'operazione può essere ripetuta dopo un'eccezione del servizio o un timeout. */
 function riprendiScritturaProiezione_(sheet) {
   const book=sheet.getParent(),props=PropertiesService.getScriptProperties(),key='MI_WRITE_'+book.getId();
   const stage=props.getProperty(key);
@@ -131,8 +131,8 @@ function riprendiScritturaProiezione_(sheet) {
   blocks.forEach(block=>sheet.getRange(block.row,1,block.values.length,width).setNumberFormat('@').setValues(block.values));
   if(!plan.structural&&plan.old_rows>plan.target_rows)sheet.getRange(plan.target_rows+2,1,plan.old_rows-plan.target_rows,width).clearContent().setBackground(null);
   }
-  // The baseline must capture the final display. A COMMITTED journal may
-  // already have reopened editing: never absorb later manual edits into it.
+  // La base deve riflettere i valori visualizzati a fine scrittura. Il giornale COMMITTED può
+  // avere già riaperto le celle modificabili: le modifiche manuali successive restano separate.
   plan.columns.forEach((column,i)=>{if(!plan.target_rows)return;const format=['total','paid','balance','paid_cash','paid_transfer','paid_card'].includes(column.key)?'#,##0.00':['participant_number','_numero'].includes(column.key)?'0':column.key.startsWith('option_')?'0.########':null;if(format)sheet.getRange(2,i+1,plan.target_rows,1).setNumberFormat(format);});
   SpreadsheetApp.flush();
   if(stage!=='COMMITTED'){
@@ -149,12 +149,12 @@ function riprendiScritturaProiezione_(sheet) {
     }
   });
   if(plan.structural)sheet.setFrozenRows(1);
-  // Keep the marker until reopening the editable ranges also succeeds.
+  // Mantiene il contrassegno finché non vengono riaperte anche le celle modificabili.
   proteggiProiezione_(sheet,editable);SpreadsheetApp.flush();
   props.setProperty('MI_READ_ONLY_'+book.getId(),String(plan.read_only));
   if(stage!=='COMMITTED')props.setProperty('MI_MONEY_FORMAT_'+book.getId(),'2');
   props.deleteProperty(key);
-  // Journal contents are no longer needed and may contain removed participants.
+  // Il contenuto del giornale non serve più e può includere partecipanti rimossi.
   journal.clearContents();
   return true;
 }

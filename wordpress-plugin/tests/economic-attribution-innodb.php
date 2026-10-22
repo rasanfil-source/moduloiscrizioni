@@ -1,6 +1,6 @@
 <?php
-// Regression tests for attributed quotes, deposits and credits.
-// Requires the isolated mi_ledger_test database on localhost:33317; uses temporary tables.
+// Verifica l'attribuzione individuale di quote, caparre e crediti.
+// Richiede il database isolato mi_ledger_test sulla porta locale 33317 e usa tabelle temporanee.
 require __DIR__ . '/individual-management-innodb.php';
 $event = ['economic_mode'=>'DEPOSIT_BALANCE','deposit_mode'=>'FIXED','deposit_fixed_cents'=>3000];
 $economic = MI_Registration_Validation_Test::riepilogo_economico($event, 11000, 'PENDING_PAYMENT', 2, [10000,1000]);
@@ -50,7 +50,7 @@ $summary=MI_Payment_People::summary($detail['individual']);
 echo 'PAYMENT_HEADER '.json_encode(['header_balance'=>$detail['residuo'],'individual_balance'=>$summary['balance'],'header_deposit_missing'=>$detail['deposit_missing'],'individual_deposit_missing'=>$summary['deposit_missing'],'credit'=>$summary['credit']])."\n";
 check($detail['residuo']===10000&&$summary['balance']===10000&&$detail['deposit_missing']===3000&&$summary['deposit_missing']===3000,'Header compensation regression');
 
-// A shared cost has an exact equal proposal and a persisted operator allocation.
+// Una spesa comune produce una ripartizione equa e conserva l'assegnazione dell'operatore.
 $shared=['participant_id'=>0,'options'=>['common'=>1],'reason'=>'Ripartizione concordata'];
 $preview=MI_Management_Service::options_preview(1,$shared,version());
 check($preview['allocations']===[1=>1000,2=>1000],'Equal allocation proposal');

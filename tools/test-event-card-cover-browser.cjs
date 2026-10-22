@@ -1,4 +1,4 @@
-// Card geometry regression: use classic scrollbars, the case that exposes reserved gutters.
+// Geometria delle tessere con barre di scorrimento classiche per verificare gli spazi riservati.
 const fs=require('fs'),assert=require('node:assert/strict');
 const {chromium}=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright');
 const svg=(w,h)=>'data:image/svg+xml,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="100%" height="100%" fill="#b08d3f"/><circle cx="${w/2}" cy="${h/2}" r="${Math.min(w,h)/3}" fill="#1b2b52"/></svg>`);

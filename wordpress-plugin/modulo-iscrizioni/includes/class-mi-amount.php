@@ -1,7 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-/** One parser for publication checks and persisted event prices. Invalid is distinct from zero. */
+/** Un solo parser verifica la pubblicazione e i prezzi salvati. Un valore non valido resta distinto da zero. */
 final class MI_Amount {
  public static function cents( $raw ) {
   if ( ! is_scalar( $raw ) ) return null;

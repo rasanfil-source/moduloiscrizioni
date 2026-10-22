@@ -1,5 +1,5 @@
 <?php
-// Isolated report rendering: real reader/template, synthetic WordPress and database.
+// Rendering del rapporto con lettore e modello effettivi, WordPress e database sintetici.
 define('ABSPATH', __DIR__); define('ARRAY_A', 'ARRAY_A');
 $caps=['mi_portal_access'=>true,'mi_view_registrations'=>true,'mi_manage_payments'=>true]; $logged=true; $no_events=false;
 function current_user_can($cap){return $GLOBALS['caps'][$cap]??false;}

@@ -1,6 +1,6 @@
 <?php
 if(!function_exists('wp_timezone')){function wp_timezone(){return new DateTimeZone('Europe/Rome');}}
-// Read-only audit: real calculation/summary classes, synthetic WordPress/database reads.
+// Consultazione in sola lettura con classi di calcolo applicative e dati WordPress sintetici.
 define('ABSPATH', __DIR__);
 define('ARRAY_A', 'ARRAY_A');
 function wp_json_encode($value) { return json_encode($value); }
@@ -48,7 +48,7 @@ $detail=MI_Payment_Ledger::detail(1);
 $out=['quotes_known'=>$position['quotes_known'],'payments_known'=>$position['payments_known'],'deposits_known'=>$position['deposits_known'],'individual_balances'=>array_column($position['people'],'balance'),'healthy_management_balance'=>$healthy['items'][0]['balance'],'inconsistent_deposit_management_balance'=>$management['items'][0]['balance'],'overview_receivable'=>$overview['metrics']['receivable'],'payment_detail_balance'=>$detail['saldo']['residuo']];
 if($out['healthy_management_balance']!==10000||$out['inconsistent_deposit_management_balance']!==10000||$out['overview_receivable']!==10000||$out['payment_detail_balance']!==10000)throw new RuntimeException('Bug reproduction changed');
 if(!in_array('--json',$argv,true))echo json_encode($out,JSON_PRETTY_PRINT).PHP_EOL;
-// Ordinary partial family deposit: one of two people has paid; booking remains pending.
+// Caparra familiare parziale: una delle due persone ha pagato e la prenotazione resta in attesa.
 $wpdb->people[0]['deposit_due_cents']=3000;
 $wpdb->payments[0]['amount_cents']=3000;
 $wpdb->payments[0]['participant_allocations_json']='[{"participant_id":1,"amount_cents":3000,"name":"Ada Esempio"}]';
@@ -58,10 +58,10 @@ if(!in_array('--json',$argv,true))echo json_encode(['case'=>'partial-family-depo
 
 if(in_array('--json',$argv,true))echo json_encode(['overview'=>$partialOverview,'page'=>MI_Management_List::page($partial,[])]);
 
-// Known balances remain filterable even if only the deposit is inconsistent.
+// I saldi noti restano filtrabili anche quando la sola caparra è incoerente.
 $settled = MI_Management_List::page($management, ['deposit'=>'settled']);
 if ($settled['total'] !== 1 || !$settled['rows'][0]['totals_known']) throw new RuntimeException('Known settled balance hidden by deposit inconsistency');
-// Missing historical quote data must never become a settled individual position.
+// Una quota individuale non ricostruibile resta distinta da una posizione saldata.
 $wpdb->order['snapshot_json'] = '{}'; $wpdb->items = []; $wpdb->payments = [];
 $unknown = MI_Management_Service::summary(42, [1], []);
 if (is_wp_error($unknown)) throw new RuntimeException($unknown->message);

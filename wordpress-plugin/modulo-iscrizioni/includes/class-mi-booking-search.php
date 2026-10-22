@@ -1,7 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-/** Same words and fields for the booking entry points; callers enforce access scope. */
+/** Usa gli stessi termini e campi per gli accessi alla prenotazione; ogni chiamante applica il proprio ambito autorizzativo. */
 final class MI_Booking_Search {
 	public static function words( $query ) {
 		return array_slice( preg_split( '/\s+/u', trim( mb_substr( (string) $query, 0, 80 ) ), -1, PREG_SPLIT_NO_EMPTY ), 0, 12 );

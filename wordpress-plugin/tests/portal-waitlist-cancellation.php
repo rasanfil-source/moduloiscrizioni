@@ -1,5 +1,5 @@
 <?php
-// The real AJAX handler and real cancellation/promotion service, synthetic WordPress/DB.
+// Gestore AJAX e servizio di annullamento e promozione applicativi con WordPress e database sintetici.
 $testDir = __DIR__;
 $fixture = explode('$failures=[];', file_get_contents($testDir . '/registration-failures.php'), 2)[0];
 $fixture = str_replace('__DIR__', var_export($testDir, true), $fixture);

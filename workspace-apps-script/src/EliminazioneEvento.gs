@@ -1,9 +1,9 @@
-/** Small permanent tombstone rejects delayed deliveries after event removal. */
+/** Il contrassegno permanente respinge le consegne ritardate dopo la rimozione dell'evento. */
 function eventoInEliminazione_(id) {
   return !!PropertiesService.getScriptProperties().getProperty('MI_DELETED_EVENT_' + String(id));
 }
 
-/** Signed, direct and repeatable: MySQL data is removed only by WordPress. */
+/** La richiesta firmata è ripetibile; i dati MySQL vengono rimossi soltanto da WordPress. */
 function eliminaDatiEventoDaWordPress_(payload) {
   payload = payload || {};
   const id = String(payload.id_evento || '');
@@ -19,7 +19,7 @@ function eliminaDatiEventoDaWordPress_(payload) {
     let job = JSON.parse(props.getProperty(key) || 'null');
     if (job && job.request !== request) return {ok:false,error:'DELETION_CONFLICT'};
     if (job && job.mode !== mode) {
-      // Only a signed WordPress administrative decision may stop trash attempts.
+      // Solo una decisione amministrativa firmata da WordPress può interrompere i tentativi di cestinamento.
       if (job.mode!=='trash' || mode!=='keep' || payload.preserve_file!==true || String(payload.id_foglio||'')!==String(job.files[0]||'')) return {ok:false,error:'DELETION_CONFLICT'};
       job.previous_mode=job.mode;job.mode='keep';job.preserve_file=true;
       props.setProperty(key,JSON.stringify(job));
@@ -33,7 +33,7 @@ function eliminaDatiEventoDaWordPress_(payload) {
     }
     const sheetUrl = job.files.length ? 'https://docs.google.com/spreadsheets/d/'+job.files[0]+'/edit' : '';
     if (job.complete) return {ok:true,complete:true,sheet_url:sheetUrl};
-    // Do not swallow permission/not-found errors: retain the reference for an explicit retry.
+    // Gli errori di permesso o di elemento non trovato restano visibili; il riferimento consente un nuovo tentativo esplicito.
     while (job.fileIndex < job.files.length) {
       if (mode==='trash') {
         const file = DriveApp.getFileById(job.files[job.fileIndex]);

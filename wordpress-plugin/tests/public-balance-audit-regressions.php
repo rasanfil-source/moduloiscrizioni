@@ -1,5 +1,5 @@
 <?php
-// Local audit with the existing synthetic database adapter; no email transport.
+// Verifica locale con l'adattatore database sintetico del progetto, senza trasporto email.
 $testDir = __DIR__;
 $fixture = file_get_contents($testDir . '/public-balance-model.php');
 $fixture = explode('function check_balance(', $fixture, 2)[0];
@@ -69,7 +69,7 @@ $initialExpiry = (new ReflectionMethod(AuditRealRegistration::class, 'registrati
 $saved = audit_public_save(['pullman-a' => 0], '12345678-1234-4234-8234-123456789a04');
 audit_public_result('unchanged_summary_introduces_expiry', $initialExpiry === null && $saved['success'] && $wpdb->reg['expires_at'] === null, ['creation_expiry' => $initialExpiry, 'deadline_before' => null, 'deadline_after' => $wpdb->reg['expires_at'], 'services_unchanged' => $wpdb->persons[0]['options_json'] === '[]']);
 
-// A real increase still opens a payment window; a future window is not extended.
+// Un aumento effettivo apre una finestra di pagamento senza prolungare una scadenza futura.
 $saved=audit_public_save(['pullman-a'=>1],'12345678-1234-4234-8234-123456789a05');
 audit_public_result('economic_increase_reopens_payment',$wpdb->reg['total_cents']===51000&&strtotime($wpdb->reg['expires_at'].' UTC')>time()+47*3600,[]);
 $future=$wpdb->reg['expires_at'];

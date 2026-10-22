@@ -258,7 +258,7 @@
   });
 }());
 
-// A disabled attendance report must not block unrelated group changes.
+// Il report presenze disattivato non blocca le modifiche indipendenti ai gruppi.
 document.querySelectorAll('[name="mi_annual_attendance_report"]').forEach(toggle=>{
  const fields=toggle.form?.querySelectorAll('[data-mi-attendance-period] input')||[];
  const update=()=>fields.forEach(field=>{field.disabled=!toggle.checked;field.required=toggle.checked;});

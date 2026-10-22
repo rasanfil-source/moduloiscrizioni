@@ -23,7 +23,7 @@
   }
   document.addEventListener('click',e=>document.querySelectorAll('[data-order-menu][open]').forEach(menu=>{if(!menu.contains(e.target))menu.open=false;}));
   // Minimal OOXML workbook, packaged locally as a standard uncompressed ZIP.
-  // Text is explicitly typed: phone numbers keep leading zeros and input never becomes a formula.
+  // Il testo viene impostato esplicitamente: i numeri conservano gli zeri iniziali e il foglio non interpreta il valore come formula.
   function reportWorkbook(rows) {
     if(!rows.length||rows.length>1048576||rows.reduce((n,r)=>Math.max(n,r.length),0)>16384)throw new Error('Il rapporto supera i limiti Excel.');
     const xml=v=>String(v??'').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g,'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
@@ -82,7 +82,7 @@
     const title='mi-confirm-'+requestId();dialog.querySelector('h2').id=title;dialog.setAttribute('aria-labelledby',title);
     return new Promise(resolve=>presentDialog(dialog,previous,value=>resolve(value==='accept')));
   }
-  // Confirmations also serve the event and group forms outside management.
+  // Le conferme sono usate anche dai moduli di eventi e gruppi al di fuori della gestione.
   const confirmingForms = new WeakSet(), approvedForms = new WeakSet();
   document.addEventListener('submit', async event => {
     const form = event.target;
@@ -331,7 +331,7 @@
         content.innerHTML=`<section class="mi-management-summary" aria-label="Riepilogo evento"><h3>Riepilogo</h3><div class="mi-management-summary-cards">${summaryCards}</div></section><p data-new-registration><a class="mi-primary mi-new-registration" href="${esc(data.registration_url||'#')}" target="_blank" rel="noopener">Inserisci nuova iscrizione</a></p><label>Cerca nome o codice <input type="search" data-query></label><button data-clear-query>Cancella ricerca</button><div data-list></div>`;
         const newRegistration=content.querySelector('[data-new-registration]');
         if(eventActions){eventActions.hidden=false;const actionBar=document.createElement('div');actionBar.className='mi-management-actionbar';newRegistration.before(actionBar);actionBar.append(eventActions,newRegistration);}
-        // Metrics remain visible on every viewport, without an expandable wrapper.
+        // I conteggi restano visibili a ogni larghezza senza un riquadro da espandere.
         arrangeManagement();
         if(!features.payments)content.querySelector('[data-net-paid]')?.setAttribute('hidden','');
 
@@ -591,7 +591,7 @@
               if(provided){pageRows=provided.rows;pageTotal=provided.total;}
               else{
                 const wanted=append?pageRows.length:listContext.shown-30;
-                // A restored list is fetched in bounded pages too.
+                // Anche gli elenchi ripristinati vengono caricati in pagine limitate.
                 let rows=append?pageRows:[],fingerprint=append?pageFingerprint:'';
                 do{const response=await request('list_page',{context:JSON.stringify(listContext),offset:rows.length,limit:30});
                   if(revision!==listGeneration||ticket!==generation)return;
@@ -828,7 +828,7 @@ const message=assignmentText+(preview.before_total!==null?'Quota personale: '+mo
     content.addEventListener('click',async e=>{const b=e.target.closest('button,.mi-participant-row[data-open],.mi-all-person[data-open]');if(!b||busy||pending)return;if(b.matches('.mi-participant-row,.mi-all-person')&&e.target.closest('a,button,input,select,textarea,label'))return;if(dirty&&(b.dataset.cancel||b.dataset.deleteRoom)){say('Salva le modifiche oppure scartale con Aggiorna riepilogo prima di annullare o eliminare.');return;}if(b.closest('[data-mi-payments]'))return;if(b.dataset.unlink){if(dirty){say('Salva o scarta la bozza prima di rimuovere il collegamento.');return;}if(await ask('Rimuovere questo collegamento personale dal rapporto annuale?','Rimuovi collegamento'))mutate('identity_link',{participant_id:Number(b.dataset.unlink),target_id:0});}if(b.dataset.open){if(b.dataset.openEvent){if(!await canLeave())return;returnEvent=event;event=b.dataset.openEvent;select.value=event;}detail(b.dataset.open,b.dataset.personFocus);}if(b.hasAttribute('data-back')){if(!await canLeave())return;event=returnEvent;select.value=event;summary();}if(b.dataset.deleteRoom&&await ask('Eliminare la camera '+b.dataset.deleteRoom+'? La camera è vuota.','Elimina camera'))mutate(order?'room_delete':'event_room_delete',{code:b.dataset.deleteRoom});if(b.dataset.cancel&&await ask('Annullare la partecipazione?'+(booking?.is_free_event?'':' L’annullamento non riduce automaticamente gli importi: verifica il dovuto ed eventualmente usa «Rettifica il dovuto». Eventuali rimborsi si registrano separatamente.'),'Annulla partecipazione')){busy=true;b.disabled=true;try{const result=await request('cancel',{participant_id:b.dataset.cancel});dirty=false;busy=false;await detail(order);say(result.message);}catch(err){say(err.message);}finally{busy=false;b.disabled=false;}}});
     content.addEventListener('keydown',e=>{const row=e.target.closest('.mi-participant-row[data-open],.mi-all-person[data-open]');if(!row||e.target!==row||!['Enter',' '].includes(e.key))return;e.preventDefault();row.click();});
     select.onchange=async()=>{const next=select.value;if(!await canLeave()){select.value=event;return;}event=next;updateLocation();summary();};root.querySelector('[data-refresh]').onclick=()=>order?detail(order):summary();root.querySelector('[data-print]').onclick=()=>{if(printList){printList();return;}root.querySelectorAll('.mi-print-value').forEach(el=>el.remove());root.querySelectorAll('form input,form select,form textarea').forEach(el=>{const span=document.createElement('span');span.className='mi-print-value';span.textContent=el.tagName==='SELECT'?(el.selectedOptions[0]?.textContent||''):el.value;el.after(span);});document.body.classList.add('mi-management-printing');window.addEventListener('afterprint',()=>document.body.classList.remove('mi-management-printing'),{once:true});window.print();};
-    // Refresh the visible context after the existing draft/cancel guard has settled.
+    // Aggiorna il contesto visibile dopo la conclusione del controllo su bozze e annullamenti.
     for(const control of [select,periodSelect])if(control?.onchange){const change=control.onchange;control.onchange=async function(...args){try{return await change.apply(this,args);}finally{updateEventContext();}};}
     if(eventActions?.dataset.sheetAuto==='1'&&event)syncSheet();else if(order&&event)detail(order);else summary();
   }

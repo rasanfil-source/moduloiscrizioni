@@ -1,7 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-/** Transactional notification outbox for staff changes; never records a payment. */
+/** Coda transazionale delle notifiche per le modifiche della segreteria; non registra pagamenti. */
 final class MI_Booking_Update_Email {
 	public static function snapshot( $id ) {
 		global $wpdb;
@@ -53,7 +53,7 @@ final class MI_Booking_Update_Email {
 		$snapshot['status_url'] = $managed ? MI_Portal::balance_url( $id, $r['order_code'], $r['buyer_email'] ) : '';
 		return array( 'event_id' => (int) $r['event_id'], 'recipient' => $r['buyer_email'], 'email_preview' => $snapshot );
 	}
-	/** Must be called inside the same transaction as the audited change. */
+	/** Da chiamare nella stessa transazione della modifica registrata nel log. */
 	public static function enqueue( $id, $event_type, $audit_id ) {
 		if ( ! in_array( strtolower( $event_type ), array( 'management_change_options', 'management_adjust_due', 'change_accommodation', 'room_assign', 'room_swap' ), true ) ) return;
 		global $wpdb;

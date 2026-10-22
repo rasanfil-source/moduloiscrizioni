@@ -217,8 +217,8 @@ test('la console non richiede mai foto o scansioni dei documenti', () => {
 	assert.doesNotMatch(segreteriaHtml, /type\s*=\s*["']file["']/i);
 	assert.doesNotMatch(segreteriaHtml, /foto(?:grafia)?\s+(?:del|di)\s+document|scansione\s+(?:del|di)\s+document/i);
 	assert.doesNotMatch(combined, /DriveApp\.createFile/);
-	// Email creates inline assets; the direct projection creates only an in-memory
-	// blob to decompress signed JSON. Neither path may acquire document files.
+	// L'email genera risorse incorporate; la proiezione diretta usa solo un blocco in memoria
+	// per decomprimere il JSON firmato. Nessuno dei due flussi accede ai file dei documenti.
 	assert.doesNotMatch(Object.entries(sources).filter(([name]) => !['Email.gs', 'ProiezioneDiretta.gs'].includes(name)).map(([, text]) => text).join('\n'), /Utilities\.newBlob/);
 	assert.doesNotMatch(sources['ProiezioneDiretta.gs'], /DriveApp\.(?:createFile|getFiles|getFilesByName)/);
 });

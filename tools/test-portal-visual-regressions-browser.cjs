@@ -1,4 +1,4 @@
-// Read-only UI verification: current assets, synthetic data, intercepted requests.
+// Verifica in sola lettura dell'interfaccia: asset applicativi, dati sintetici e richieste intercettate.
 const fs=require('fs'),path=require('path'),assert=require('node:assert/strict');
 const chromium=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright')[process.env.MI_BROWSER_ENGINE||'chromium'];
 const assets=path.resolve('wordpress-plugin/modulo-iscrizioni/assets');

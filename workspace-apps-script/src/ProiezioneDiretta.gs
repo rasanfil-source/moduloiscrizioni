@@ -1,4 +1,4 @@
-/** MySQL is authoritative; this module materializes a signed event snapshot directly. */
+/** MySQL è il registro autorevole; questo modulo vi materializza direttamente una proiezione firmata dell'evento. */
 function decodificaProiezioneDiretta_(payload) {
   const encoded=String((payload||{}).projection_gzip||''), expected=String((payload||{}).projection_hash||'').toLowerCase();
   if (!encoded || encoded.length>8000000 || !/^[a-f0-9]{64}$/.test(expected)) throw new Error('INVALID_EVENT_PROJECTION');
@@ -14,7 +14,7 @@ function decodificaProiezioneDiretta_(payload) {
   if (!projection || typeof projection!=='object' || Array.isArray(projection)) throw new Error('INVALID_EVENT_PROJECTION');
   return projection;
 }
-/** Pull oversized snapshots through the separately signed Workspace → WordPress API. */
+/** Le proiezioni più grandi vengono richieste tramite il canale firmato Workspace → WordPress. */
 function caricaProiezioneDiretta_(payload) {
   if ((payload||{}).projection_pull!==true) return decodificaProiezioneDiretta_(payload);
   if ((payload||{}).projection_gzip) throw new Error('INVALID_EVENT_PROJECTION');
@@ -67,8 +67,8 @@ function apriFoglioEventoFirmato_(payload, create, title) {
   if(!/^[1-9][0-9]*$/.test(eventId)|| (requested && !/^[A-Za-z0-9_-]{20,}$/.test(requested)))throw new Error('INVALID_EVENT_SHEET');
   let book,created=false;
   if(requested){
-    // A service/permission error is not proof that the registered file is gone.
-    // Preserve the durable reference so a retry cannot create an orphan copy.
+    // Un errore del servizio o dei permessi non dimostra che il file registrato sia assente.
+    // Conserva il riferimento per evitare la creazione di copie senza collegamento.
     const file=DriveApp.getFileById(requested);
     if(file.isTrashed()){
       if(explicit||!create)throw new Error('EVENT_SHEET_MISSING');
@@ -120,7 +120,7 @@ function proiettaEventoDaWordPress_(payload) {
     if(typeof eventoInEliminazione_==='function'&&eventoInEliminazione_(eventId))throw new Error('EVENT_DELETED');
     verificaGenerazioneProiezione_(eventId,payload);
     const opened=apriFoglioEventoFirmato_(payload,true,projection.event.titolo), properties=PropertiesService.getScriptProperties(), key='MI_DIRECT_VIEW_'+opened.book.getId(), fingerprint=String(payload.fingerprint||'');
-    // Older receipts contain only the fingerprint: rebuild once to learn read_only.
+      // Se la ricevuta contiene soltanto l'impronta, ricostruisci la proiezione per determinare read_only.
     let receipt;try{receipt=JSON.parse(properties.getProperty(key)||'null');}catch(error){receipt=null;}
     if(typeof riprendiScritturaProiezione_==='function')riprendiScritturaProiezione_(opened.sheet);
     abilitaLetturaFoglioEventoConLink_(opened.book.getId());
@@ -134,7 +134,7 @@ function proiettaEventoDaWordPress_(payload) {
     timings.view_ms=Date.now()-viewStarted;
     const writeStarted=Date.now();
     if(changed){
-      // Invalidate before writing so an interrupted update cannot reuse an old receipt.
+      // Invalida la ricevuta prima della scrittura, così un'interruzione non riutilizza un esito precedente.
       properties.deleteProperty(key);
       result=scriviProiezioneEvento_(opened.sheet,view);
       aggiornaPagamentiDaProiezione_(opened.book,projection,readOnly);
@@ -149,8 +149,8 @@ function proiettaEventoDaWordPress_(payload) {
   }finally{lock.releaseLock();}
 }
 
-/** Record the high-water mark before writing: a failed new delivery must never
- * allow an older one to roll the sheet back. Same-generation retries can repair it.
+/** Registra la revisione massima prima della scrittura, così una consegna precedente
+ * non può riportare indietro il foglio. Un nuovo tentativo sulla stessa revisione può completarla.
  */
 function verificaGenerazioneProiezione_(eventId,payload) {
   const props=PropertiesService.getScriptProperties(),key='MI_DIRECT_GENERATION_'+eventId;

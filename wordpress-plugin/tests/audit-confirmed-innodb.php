@@ -1,5 +1,5 @@
 <?php
-// Real management handlers, real deadline algorithm, isolated temporary InnoDB tables.
+// Gestori effettivi della gestione e calcolo delle scadenze su tabelle InnoDB temporanee isolate.
 $root=dirname(__DIR__,2);$tests=$root.'/wordpress-plugin/tests';
 $fixture=file_get_contents($tests.'/innodb-fixture.php');
 $fixture=preg_replace('/static function reopened_payment_deadline\(.*?(?=static function append_registration_event)/s','static function reopened_payment_deadline($registration,$now=null){return MI_Registration_Validation_Test::reopened_payment_deadline($registration,$now);}',$fixture);
@@ -65,7 +65,7 @@ foreach(['participant_phone'=>'399991112233','participant_email'=>'persona-unica
 }
 check($wpdb->last_error==='','Unexpected database error');
 
-// Keep quantities within configured limits, including a no-op staff save.
+// Rispetta i limiti configurati delle quantità, compreso il salvataggio senza variazioni.
 $bus['max_quantity']=3;$snapshot=json_decode($snapshot,true);$snapshot['event']['options']=[$bus];
 $wpdb->update('wp_mi_registrations',['snapshot_json'=>json_encode($snapshot)],['id'=>1]);
 save_extra('change_options',['participant_id'=>1,'options'=>['bus-andata'=>3],'reason'=>'']);

@@ -1,4 +1,4 @@
-// Synthetic PHP-rendered wizard, exercised in a local browser only.
+// Procedura guidata generata da PHP con dati sintetici, aperta soltanto nel browser locale.
 const fs=require('fs'),http=require('http'),assert=require('node:assert/strict'),{execFileSync}=require('child_process');
 const chromium=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright')[process.env.MI_BROWSER_ENGINE||'chromium'];
 const php=process.env.MI_PHP_BINARY||'php';

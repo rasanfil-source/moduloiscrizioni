@@ -1,5 +1,5 @@
 <?php
-// Exercise the production classification against a fixed WordPress clock.
+// Verifica la classificazione applicativa usando un orologio WordPress fisso.
 define('ABSPATH', __DIR__);
 function wp_timezone() { return new DateTimeZone('Europe/Rome'); }
 function current_time($type, $gmt = false) { return $GLOBALS['event_test_now']; }

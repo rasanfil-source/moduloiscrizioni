@@ -8,7 +8,7 @@
   });
   async function png(data) {
     const qr = window.qrcode(0, 'H');
-    // Byte mode must encode the complete URL, including non-ASCII characters.
+    // La modalità a byte codifica l'intero URL, compresi i caratteri non ASCII.
     const bytes = new TextEncoder().encode(data.url);
     qr.addData(Array.from(bytes, byte => String.fromCharCode(byte)).join(''), 'Byte');
     qr.make();
@@ -23,7 +23,7 @@
       if (qr.isDark(y, x)) ctx.fillRect((x + quiet) * scale, (y + quiet) * scale, scale, scale);
     }
     const logo = await loadImage(data.logo);
-    // Keep the central white plate below 18% of the symbol width; preserve quiet zone.
+    // Mantiene la base bianca centrale sotto il 18% della larghezza e conserva la zona libera.
     const plate = Math.max(3, Math.floor(count * 0.17) | 1) * scale;
     const start = (canvas.width - plate) / 2, available = plate - scale;
     ctx.fillStyle = '#fff'; ctx.fillRect(start, start, plate, plate);
@@ -43,7 +43,7 @@
       button.disabled = true;
       status.textContent = 'Preparazione del PNG…';
       try {
-        // Read current data even for a tab left open while another operator edits the event.
+        // Legge i dati correnti anche se la scheda è rimasta aperta durante la modifica dell'evento da parte di un altro operatore.
         const response = await fetch(root.dataset.miEventQr, {credentials: 'same-origin', cache: 'no-store'});
         const result = await response.json();
         if (!response.ok || !result.success) throw new Error(typeof result.data === 'string' ? result.data : 'Ricarica la pagina e riprova.');

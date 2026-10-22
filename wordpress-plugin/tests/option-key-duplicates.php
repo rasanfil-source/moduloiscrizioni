@@ -1,5 +1,5 @@
 <?php
-// Real create/option validation with the existing synthetic registration adapter.
+// Verifica applicativa della creazione e delle opzioni con l'adattatore sintetico delle iscrizioni.
 $testDir = __DIR__;
 $fixture = explode('$failures=[];', file_get_contents($testDir . '/registration-failures.php'), 2)[0];
 $fixture = str_replace('__DIR__', var_export($testDir, true), $fixture);

@@ -1,4 +1,4 @@
-// Real JS and PHP serializers, synthetic data, no WordPress or Google writes.
+// Serializzatori JavaScript e PHP applicativi, dati sintetici, nessuna scrittura WordPress o Google.
 const fs=require('fs'),http=require('http'),path=require('path'),assert=require('node:assert/strict'),{execFileSync}=require('child_process');
 const {chromium}=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright');
 const assets=path.resolve('wordpress-plugin/modulo-iscrizioni/assets');

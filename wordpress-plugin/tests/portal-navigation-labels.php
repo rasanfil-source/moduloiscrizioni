@@ -1,5 +1,5 @@
 <?php
-// Real label function with synthetic access scopes; no WordPress writes.
+// Funzione delle etichette con ambiti di accesso sintetici, senza scritture WordPress.
 define('ABSPATH', __DIR__);
 class MI_Access { public static $scope; public static function event_ids() { return self::$scope; } }
 require __DIR__ . '/../modulo-iscrizioni/includes/class-mi-portal.php';

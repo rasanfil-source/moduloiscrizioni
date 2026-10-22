@@ -1,4 +1,4 @@
-// Regression checks: credits do not reduce the amount actually received.
+// Controlla che i crediti non riducano l'importo effettivamente incassato.
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';

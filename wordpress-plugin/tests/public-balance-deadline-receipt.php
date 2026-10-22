@@ -1,5 +1,5 @@
 <?php
-// Real public balance and payment deadline calculation; database/email transport simulated.
+// Saldo pubblico e calcolo della scadenza con trasporto database ed email simulato.
 $testDir=__DIR__;
 $fixture=explode('function check_balance(',file_get_contents($testDir.'/public-balance-model.php'),2)[0];
 $fixture=str_replace('__DIR__',var_export($testDir,true),$fixture);

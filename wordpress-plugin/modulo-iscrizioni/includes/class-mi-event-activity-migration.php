@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Explicitly migrates an event to another activity without touching registrations.
+ * Sposta in modo esplicito un evento a un'altra attività senza modificare le iscrizioni.
  */
 final class MI_Event_Activity_Migration {
 	const PAGE_SLUG = 'mi-event-activity-migration';

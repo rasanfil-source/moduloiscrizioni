@@ -46,7 +46,7 @@ function miPanelCache(load, { ttl = 30000, limit = 12 } = {}) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Move the existing navigation, including its permission-filtered links; never clone actions.
+  // Sposta la navigazione esistente e i relativi collegamenti autorizzati, senza duplicare le azioni.
   document.querySelectorAll('.mi-portal').forEach((portal, index) => {
     const header=portal.querySelector('.mi-portal-header'), nav=portal.querySelector('.mi-portal-switcher[aria-label="Segreteria eventi"]');
     if(!header||!nav)return;
@@ -960,8 +960,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// Preserve the explicit deletion choice and prevent repeated submissions.
-// Keep one bounded deletion request in flight; errors require an explicit retry.
+// Conserva la scelta esplicita di eliminazione e impedisce invii ripetuti.
+// Mantiene una sola richiesta attiva; un nuovo tentativo richiede una scelta dell'operatore.
 function miSetupDeletion(form) {
   if (!form || !form.dataset.miDeleteAjax) return;
   const button=form.querySelector('button[type="submit"]');
@@ -992,7 +992,7 @@ function miSetupDeletion(form) {
   if(form.hasAttribute('data-mi-delete-continue'))timer=setTimeout(run,2000);
 }
 miSetupDeletion(document.querySelector('[data-mi-delete-form]'));
-// Event selection is updated inline: keep navigation aligned with the current URL.
+// La selezione dell'evento aggiorna la navigazione e resta coerente con l'URL corrente.
 document.addEventListener('click', event => {
   const link=event.target.closest('.mi-portal-switcher a');if(!link)return;
   const destination=new URL(link.href),current=new URL(location.href);
@@ -1036,7 +1036,7 @@ if(window.miEmailAppearance){const form=document.querySelector('.mi-event-wizard
   else setupCommunicationFormatting();
 }());
 
-// A disabled attendance report must not block unrelated group changes.
+// Il report presenze disattivato non blocca le modifiche indipendenti ai gruppi.
 document.querySelectorAll('[name="mi_annual_attendance_report"]').forEach(toggle=>{
  const fields=toggle.form?.querySelectorAll('[data-mi-attendance-period] input')||[];
  const update=()=>fields.forEach(field=>{field.disabled=!toggle.checked;field.required=toggle.checked;});

@@ -1,8 +1,8 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-/** Rebuildable read models. Permissions are checked by callers on every request;
- * cache identity covers canonical row revisions, event state and inherited schema.
+/** Viste di lettura ricostruibili. I chiamanti verificano i permessi a ogni richiesta;
+ * la cache considera revisioni dei dati canonici, stato dell'evento e schema ereditato.
  */
 final class MI_Event_Read_Cache {
 	public static function state( $event_id ) {

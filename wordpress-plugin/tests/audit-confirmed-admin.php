@@ -1,5 +1,5 @@
 <?php
-// Diagnostics only: execute real handlers against synthetic WordPress metadata.
+// Esegue i gestori effettivi usando metadati WordPress sintetici.
 $root=dirname(__DIR__,2);$fixture=$root.'/wordpress-plugin/tests/php-behavior.php';
 $prefix=explode('$event = array(',file_get_contents($fixture),2)[0];
 $prefix=str_replace('$format, $timestamp, $timezone = null','$format, $timestamp = null, $timezone = null',$prefix);

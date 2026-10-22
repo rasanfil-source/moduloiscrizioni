@@ -152,7 +152,7 @@ function cancelLivePreview() {
   ++_livePreviewRevision;
 }
 
-// The server owns deposit rounding and allocation across the entire booking.
+// Il server calcola gli arrotondamenti e la ripartizione della caparra per l'intera prenotazione.
 function scheduleLivePreview(loaded) {
   const revision = _livePreviewRevision;
   const people = loaded.map(p=>({row:p.row,token:p.model.token,version:p.model.version,services:getTransfer(p.cardEl)}));
@@ -227,7 +227,7 @@ const emailSection      = document.getElementById('emailSection');
 const payPopup          = document.getElementById('payPopup');
 
 
-// ─── MOBILE: STICKY CALC BUTTON ──────────────────────────────────────────────
+// ─── PULSANTE DI CALCOLO FISSO SU SCHERMI PICCOLI ────────────────────────────
 const calcBtnAnchor = document.createComment('calc-btn-anchor');
 if (calcBtnContainer?.parentNode)
   calcBtnContainer.parentNode.insertBefore(calcBtnAnchor, calcBtnContainer);

@@ -1,4 +1,4 @@
-/** Editable fields are data, never payment totals or booking identifiers. */
+/** I campi modificabili contengono dati operativi, mai importi o identificativi della prenotazione. */
 function campoModificabileFoglio_(key) {
   return /^[a-z][a-z0-9_-]{0,79}$/.test(key) && !String(key).startsWith('option_') && !['_ordine','_numero','event','order_code','participant_number','status','options','total','paid','paid_cash','paid_transfer','paid_card','balance','special_requests','attendance','constructor','prototype'].includes(key);
 }
@@ -47,9 +47,7 @@ function leggiBaseFoglio_(foglio) {
   return base;
 }
 
-/** Recupera il caso circoscritto in cui il progressivo 1..N e' stato scritto
- * nella prima colonna del vecchio tracciato, che conteneva l'identificatore
- * interno del partecipante. La riparazione e' ammessa soltanto se ordine,
+/** Riconosce il progressivo 1..N nella prima colonna quando ordine,
  * posizione e tutti gli altri valori coincidono con la base protetta. */
 function riparaProgressivoSuIdentitaLegacy_(sheet) {
   const columns=mappaColonneEvento_(sheet);
@@ -91,8 +89,8 @@ function modificheCorrentiFoglio_(sheet) {
     if (!row.some(v=>String(v)!=='')) return null;
     const values = {};
     Object.keys(columns).filter(key=>!['_ordine','_numero'].includes(key)).forEach(key=>values[key]=row[columns[key]-1]);
-    // Older baselines recorded an unformatted decimal before setting the money
-    // format. Accept only the same underlying number, never a changed amount.
+    // La base può contenere un decimale senza formato valuta.
+    // Accetta solo lo stesso valore numerico, mai un importo diverso.
     const original=base[JSON.stringify([String(row[columns._ordine-1]),Number(row[columns._numero-1])])];
     if(original)['total','paid','balance','paid_cash','paid_transfer','paid_card'].forEach(key=>{
       const before=String(original[key]??'');
@@ -128,9 +126,9 @@ function salvaBaseFoglio_(sheet) {
   base.hideSheet();
 }
 
-/** A signed receipt can be acknowledged by a newer complete replica too:
- * the queue may coalesce the intermediate revision containing the accepted text.
- * Until that revision arrives, leave the base intact to prevent stale overwrites.
+/** Una replica completa può confermare una ricevuta firmata anche quando
+ * la coda accorpa la revisione intermedia che contiene il testo accettato.
+ * La base resta invariata finché la replica non riporta il valore canonico.
  */
 function allineaBaseConVista_(sheet, vista) {
   pulisciRicevuteInvariate_(sheet);
@@ -151,7 +149,7 @@ function allineaBaseConVista_(sheet, vista) {
       const revision=Number(row && row.workspace_revision);
       if (Number.isSafeInteger(revision) && revision>=receipt.revision && change.before===receipt.before) {
         if (!confirmed[id]) confirmed[id]={};
-        // A later local edit stays pending, now against the accepted database value.
+        // La modifica locale successiva resta in sospeso rispetto al valore accettato nel database.
         confirmed[id][change.key]=receipt.accepted;
         delete receipts[id][change.key];
       }
@@ -169,7 +167,7 @@ function allineaBaseConVista_(sheet, vista) {
   });
 }
 
-/** Remove only receipts which acknowledge a value already present in the base. */
+/** Rimuove soltanto le ricevute che confermano un valore già presente nella base. */
 function pulisciRicevuteInvariate_(sheet) {
   const base=sheet.getParent().getSheetByName('_MI_BASE');
   if (!base || base.getLastRow()<2) return;
@@ -204,8 +202,8 @@ function leggiModificheEventoMysql_(payload) {
   } finally {lock.releaseLock();}
 }
 
-/** Signed MySQL receipts normalize only the submitted cell, never a newer edit.
- * Keep the base unchanged: only the returning canonical view acknowledges it.
+/** Le ricevute MySQL firmate normalizzano la cella inviata senza modifiche successive.
+ * La base cambia quando la vista canonica restituita conferma il valore.
  */
 function confermaModificheFoglio_(payload) {
   const eventId=String(payload.event_id||''), receipts=payload.confirmations;
@@ -223,7 +221,7 @@ function confermaModificheFoglio_(payload) {
     const base=leggiBaseFoglio_(sheet.getParent()), columns=mappaColonneEvento_(sheet);
     if (!base || !columns._ordine || !columns._numero) throw new Error('SHEET_BASE_MISSING');
     const rows=sheet.getLastRow()>1?sheet.getRange(2,1,sheet.getLastRow()-1,sheet.getLastColumn()).getDisplayValues():[];
-    // Index once, retaining ambiguous identities as null rather than picking a row.
+    // Crea l'indice una volta e mantiene nulle le identità ambigue, senza scegliere una riga.
     const positions=new Map();
     rows.forEach((row,index)=>{const id=JSON.stringify([String(row[columns._ordine-1]),Number(row[columns._numero-1])]);positions.set(id,positions.has(id)?null:index);});
     const baseSheet=sheet.getParent().getSheetByName('_MI_BASE');
@@ -253,7 +251,7 @@ function confermaModificheFoglio_(payload) {
   } finally {lock.releaseLock();}
 }
 
-/** Verify the exact MySQL revisions, then refresh the event under the same lock. */
+/** Verifica le revisioni MySQL e aggiorna l'evento mantenendo lo stesso lock. */
 function preparaAperturaFoglio_(payload) {
   const eventId=String(payload.event_id||''), expected=payload.registrations;
   if (!/^[1-9][0-9]*$/.test(eventId) || !Array.isArray(expected)) throw new Error('INVALID_OPEN_REQUEST');
@@ -296,7 +294,7 @@ function preparaAperturaFoglio_(payload) {
   } finally {lock.releaseLock();}
 }
 
-/** Called only under the script lock, from an authenticated WordPress request. */
+/** Viene chiamata sotto il lock dello script da una richiesta WordPress autenticata. */
 function aggiornaProfiloEventoMysql_(eventId, profile) {
   if (!['MINIMO','QUOTA_UNICA','SERVIZI_MULTIPLI','VIAGGIO_COMPLESSO'].includes(profile)) throw new Error('INVALID_OPERATIONAL_PROFILE');
   const sheet=ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS);

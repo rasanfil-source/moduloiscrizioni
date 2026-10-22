@@ -44,7 +44,7 @@ final class MI_Shortcode {
 		return add_query_arg( 'mi_iscrizione', absint( $event_id ), home_url( '/' ) );
 	}
 
-	/** Hold the namespace lock through event creation and alias assignment. */
+	/** Mantiene il lock del namespace durante la creazione dell'evento e l'assegnazione dell'alias. */
 	public static function validate_public_slug( $raw, $event_id = 0 ) {
 		$slug = strtolower( trim( (string) $raw ) );
 		if ( '' === $slug ) return '';

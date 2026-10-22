@@ -29,7 +29,7 @@ check_date_field(MI_Field_Schema::validate_answers(['document_expiry' => $today-
 check_date_field(is_array(MI_Field_Schema::validate_answers(['document_expiry' => $today->modify('+10 days')->format('Y-m-d')], [$catalog['document_expiry']])), 'Future document expiry rejected');
 echo "PASS: custom dates accept past/future on current and legacy schemas; invalid dates, birth and document limits remain protected.\n";
 
-// Exercise the management adapter and its real save method, shared with sheet edits.
+// Verifica l'adattatore di gestione e il metodo di salvataggio usato anche dalle modifiche nel foglio.
 function sanitize_textarea_field($v) { return trim(strip_tags($v)); }
 function get_post_meta(...$args) { return ''; }
 function wp_json_encode($v) { return json_encode($v); }

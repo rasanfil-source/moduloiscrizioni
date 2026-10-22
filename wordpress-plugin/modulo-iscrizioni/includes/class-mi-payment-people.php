@@ -3,7 +3,7 @@ defined( 'ABSPATH' ) || exit;
 
 /** Quote individuali e attribuzioni: nessuna ripartizione implicita dei versamenti storici. */
 final class MI_Payment_People {
-	/** Preserve deadlines for logistical edits and unchanged economic positions. */
+	/** Conserva le scadenze nelle modifiche logistiche e nelle posizioni economiche invariate. */
 	public static function payment_deadline_changes( array $registration, $covered, $economic_change ) {
 		if ( ! in_array( $registration['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) return array();
 		$changes = array( 'status' => $covered ? 'CONFIRMED' : 'PENDING_PAYMENT' );
@@ -15,7 +15,7 @@ final class MI_Payment_People {
 		}
 		return $changes;
 	}
-	/** Shared service fees are split equally in participant ID order; cents are never lost. */
+	/** Le quote dei servizi condivisi si dividono in parti uguali nell'ordine degli identificativi, senza perdere centesimi. */
 	public static function common_shares( array $registration, array $people ) {
 		$cost = 0;
 		foreach ( json_decode( $registration['order_options_json'] ?? '[]', true ) ?: array() as $option ) $cost += (int) ( $option['quantity'] ?? 0 ) * (int) ( $option['unit_price_cents'] ?? 0 );
@@ -43,7 +43,7 @@ final class MI_Payment_People {
 		}
 		return $totals;
 	}
-	/** Keep the existing individual deposit, capped at the new personal quote. */
+	/** Conserva la caparra individuale entro il limite della nuova quota personale. */
 	public static function retained_deposits( array $people, array $deltas ) {
 		$deposits = array();
 		foreach ( $people as $person ) {
@@ -52,7 +52,7 @@ final class MI_Payment_People {
 		}
 		return $deposits;
 	}
-	/** Project percentage deposits after person-scoped price changes. Null means the plan is not percentage-based or quotes are not attributable. */
+	/** Proietta le caparre percentuali dopo una variazione individuale della quota. Null indica un piano non percentuale o quote non attribuibili. */
 	public static function projected_deposits( array $registration, array $position, array $deltas, $new_total ) {
 		$snapshot = json_decode( $registration['snapshot_json'] ?? '{}', true ) ?: array();
 		$event = $snapshot['event'] ?? array();
@@ -75,7 +75,7 @@ final class MI_Payment_People {
 		foreach ( $remainders as $id => $remainder ) { if ( $assigned >= $target ) break; $deposits[$id]++; $assigned++; }
 		return $deposits;
 	}
-	/** True/false when person coverage is knowable, null for legacy or aggregate-only histories. */
+	/** Restituisce true o false quando è nota la copertura personale, null se sono disponibili solo dati aggregati. */
 	public static function covered( array $position, $economic_mode, array $total_deltas = array(), array $projected_deposits = array() ) {
 		if ( empty( $position['quotes_known'] ) || empty( $position['payments_known'] ) ) return null;
 		if ( 'DEPOSIT_BALANCE' === $economic_mode && false === ( $position['deposits_known'] ?? true ) && ! $projected_deposits ) return null;

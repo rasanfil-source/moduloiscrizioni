@@ -114,7 +114,7 @@ final class MI_Field_Schema {
 		);
 	}
 
-	/** Exact event configuration used by the Google projection, including empty events. */
+	/** Configurazione completa usata per la proiezione Google, anche quando l'evento non ha iscrizioni. */
 	public static function workspace_event_schema( $event_id ) {
 		return array(
 			'fields' => array_merge( self::public_fields( self::event_configuration( $event_id ) ), self::sanitize_custom_fields( get_post_meta( $event_id, '_mi_custom_participant_fields', true ) ) ),
@@ -269,7 +269,7 @@ final class MI_Field_Schema {
 				$date = DateTimeImmutable::createFromFormat( '!Y-m-d', $value, wp_timezone() );
 				$today = new DateTimeImmutable( 'today', wp_timezone() );
 				$oldest = $today->modify( '-120 years' );
-				// Older published custom fields have no explicit rule yet.
+				// I campi personalizzati già pubblicati possono non avere una regola esplicita.
 				$date_rule = $field['date_rule'] ?? ( str_starts_with( $key, 'custom_' ) ? 'any' : 'past' );
 				$future_rule = 'future' === $date_rule;
 				$invalid_date = ! $date || $date->format( 'Y-m-d' ) !== $value || ( 'any' !== $date_rule && ( $future_rule ? $date < $today || $date > $today->modify( '+20 years' ) : $date > $today || $date < $oldest ) );

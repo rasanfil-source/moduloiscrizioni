@@ -26,13 +26,14 @@ for name,size in [('Title',27),('Heading 1',20),('Heading 2',12)]:
 doc.styles['Subtitle'].font.size=Pt(13)
 pages=base.joinpath('contenuto.txt').read_text(encoding='utf-8').split('===PAGE===')
 for idx,page in enumerate(pages):
-    if idx: doc.add_page_break()
     for li,line in enumerate(page.strip().splitlines()):
         line=line.strip()
         if not line: continue
         if idx==0 and li==0: doc.add_paragraph(line,'Title')
         elif idx==0 and li==1: doc.add_paragraph(line,'Subtitle')
-        elif line.startswith('# '): doc.add_paragraph(line[2:],'Heading 1')
+        elif line.startswith('# '):
+            heading = doc.add_paragraph(line[2:],'Heading 1')
+            if idx and li == 0: heading.paragraph_format.page_break_before=True
         elif line.startswith('## '): doc.add_paragraph(line[3:],'Heading 2')
         else:
             p=doc.add_paragraph(line)

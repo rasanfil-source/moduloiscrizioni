@@ -65,7 +65,7 @@ foreach([['2026-07','2025-09'],['2026-00','2026-12'],['2026-01',''],['1999-12','
 }
 echo "Presenze: ciclo settembre-giugno, estremi inclusivi, deduplica e periodi invalidi verificati.\n";
 
-// Descending links form a long chain before any attendance lookup compresses it.
+// I collegamenti decrescenti formano una catena lunga prima della consultazione delle presenze.
 $chain_people=[];$chain_audit=[];
 for($id=800;$id>=1;$id--){
  $chain_people[]=['id'=>$id,'registration_id'=>$id,'event_id'=>$id%2?10:11,'order_code'=>'CHAIN'.$id,'first_name'=>'Test','last_name'=>'Persona'];

@@ -1,5 +1,5 @@
 <?php
-// Only the isolated local test database. Tables are owned by this test.
+// Usa esclusivamente il database locale isolato; le tabelle appartengono a questa prova.
 define( 'ABSPATH', __DIR__ ); define( 'ARRAY_A', 'ARRAY_A' );
 function current_user_can( $c ) { return true; }
 function check_admin_referer( $n ) {}
@@ -77,7 +77,7 @@ function run_csv( $kind, $mode ) {
 }
 $created_tables = array();
 try {
-	// Refuse to overwrite tables from another unfinished run.
+	// Evita di sovrascrivere tabelle appartenenti a un'esecuzione non conclusa.
 	sql_csv('CREATE TABLE csv_audit_mi_posts (ID INT PRIMARY KEY,post_title VARCHAR(255)) ENGINE=InnoDB');
 	$created_tables[]='posts';
 	sql_csv("INSERT INTO csv_audit_mi_posts VALUES (42,'Evento 42')");

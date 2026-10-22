@@ -10,7 +10,7 @@ function add_action($hook,$callback){$GLOBALS['actions'][$hook][]=$callback;}
 function spawn_cron(){$GLOBALS['spawned']++;}
 require __DIR__.'/../modulo-iscrizioni/includes/class-mi-spedizione-email.php';
 $scheduled=[];$actions=[];$spawned=0;
-// No database or transport is available: any synchronous dispatch fails this test.
+// Senza database o trasporto, l'invio sincrono deve interrompere la verifica.
 MI_Spedizione_Email::tenta_spedizione_immediata();
 MI_Spedizione_Email::tenta_spedizione_immediata();
 if(count($scheduled)!==1||$scheduled[0][0]>time()||$scheduled[0][1]!=='mi_spedisci_email_in_coda'||$spawned!==0)throw new Exception('Dispatch must be scheduled once without blocking');

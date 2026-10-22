@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {projectionContext,projectionFixture} from './helpers/projection-performance.mjs';
 test('view decoding preserves results, parses each JSON once and does not retain earlier input',()=>{
  const projection=projectionFixture(100),before=JSON.stringify(projection),cached=projectionContext(),plain=projectionContext();
- // Use the same renderer without memoization as the reference behavior.
+ // Usa lo stesso generatore di riferimento senza memorizzazione dei risultati.
  plain.context.creaCacheDecodificaVista_=()=>({object:plain.context.decodificaOggetto_,list:plain.context.decodificaElenco_,option:(value,key)=>plain.context.decodificaElenco_(value).find(o=>'option_'+String(o.code)===key)});
  const expected=plain.context.generaVistaDaProiezioneDiretta_(projection);
  const actual=cached.context.generaVistaDaProiezioneDiretta_(projection);

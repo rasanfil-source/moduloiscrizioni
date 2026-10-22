@@ -40,13 +40,13 @@ foreach(['ROOM_SWAP','SHEET_SYNC'] as $source){
  assert_room(!empty($r['rejected'])&&str_contains($r['message'],'incompatibile'),'Cross-type swap accepted');
  assert_room($wpdb->people===$before&&!$wpdb->committed,'Rejected swap changed people');
 }
-// First update succeeds, second fails: the entire swap must roll back.
+// Se il primo aggiornamento riesce e il secondo fallisce, l'intero scambio viene annullato.
 $wpdb=new RoomAuditDB();$wpdb->people[1]['options_json']='[]';$before=$wpdb->people;$r=swap_rooms();
 assert_room(!empty($r['rejected'])&&$wpdb->people===$before,'Second-person failure left a partial swap');
-// Generic legacy inventory is intentionally supported without typed services.
+// L'inventario generico è supportato anche senza servizi associati alla tipologia.
 $wpdb=new RoomAuditDB();foreach($wpdb->people as &$p)$p['options_json']='[]';unset($p);
 $r=swap_rooms();assert_room(!empty($r['saved'])&&$wpdb->committed,'Legacy swap rejected');
-// Same-type full rooms: transient overcapacity must not block an atomic swap.
+// Le camere piene della stessa tipologia consentono lo scambio nella medesima transazione.
 class SameTypeDB extends RoomAuditDB {
  function get_results($q,$f){if(str_contains($q[0],'mi_rooms'))return [['code'=>'S1','name'=>'Singola 1','capacity'=>1],['code'=>'S2','name'=>'Singola 2','capacity'=>1]];return parent::get_results($q,$f);}
 }

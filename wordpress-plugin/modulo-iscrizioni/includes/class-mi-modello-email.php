@@ -48,7 +48,7 @@ final class MI_Modello_Email {
 		return $clean;
 	}
 
-	/** Missing controls (older open forms) preserve the explicit logo setting. */
+	/** I controlli assenti nel modulo aperto conservano l'impostazione esplicita del logo. */
 	public static function logo_override( array $style, $mode, $previous = array() ) {
 		if ( 'SHOW' === $mode || 'HIDE' === $mode ) $style['logo_enabled'] = 'SHOW' === $mode;
 		elseif ( 'INHERIT' === $mode ) unset( $style['logo_enabled'] );
@@ -313,7 +313,7 @@ final class MI_Modello_Email {
 		return $snapshot;
 	}
 
-	/** Small escaped formatting subset; raw HTML is never accepted. */
+	/** Accetta una selezione limitata di formattazione sicura e rifiuta l'HTML non elaborato. */
 	public static function formatta_comunicazione( $text ) {
 		$lines = explode( "\n", str_replace( "\r", '', (string) $text ) );
 		$html = ''; $list = false;

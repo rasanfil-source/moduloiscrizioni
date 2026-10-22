@@ -5,7 +5,7 @@ try {
     $campaignPhp = (Resolve-Path -LiteralPath $PhpPath).Path
     $campaignArgs = @()
     if ($IsWindows) { $campaignArgs = @('-d', ('extension_dir=' + (Join-Path (Split-Path $campaignPhp) 'ext')), '-d', 'extension=mbstring', '-d', 'extension=mysqli') }
-    # Existing fixtures use only localhost:33317 and the synthetic mi_ledger_test database.
+    # I dati di esempio usano solo localhost:33317 e il database sintetico mi_ledger_test.
     $campaignTests = @('audit-confirmed-innodb.php','payment-ledger-innodb.php','management-innodb.php','payment-people-innodb.php',
         'individual-management-innodb.php','combined-services-innodb.php','attendance-inline-innodb.php',
         'accommodation-change-innodb.php','percentage-deposit-unit.php','sheet-receipts-innodb.php',

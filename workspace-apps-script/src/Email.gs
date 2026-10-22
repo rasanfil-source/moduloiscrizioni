@@ -7,7 +7,7 @@ function statoCanaleEmail_() {
   return { ok: !!authorized, error: authorized ? '' : 'EMAIL_SENDER_NOT_AUTHORIZED', channel: 'GOOGLE_WORKSPACE', sender: sender };
 }
 
-/** Keep a bounded replay guard; MySQL remains the authoritative outbox. */
+/** Limita il controllo delle ripetizioni; MySQL resta la coda autorevole. */
 function pulisciRicevuteEmail_ (props) {
   const now=Date.now(), last=Number(props.getProperty('MI_EMAIL_LEDGER_CLEANED_AT')||0);
   if (now-last<86400000) return;
@@ -15,13 +15,13 @@ function pulisciRicevuteEmail_ (props) {
   Object.keys(all).forEach(key=>{
     if (!/^MI_EMAIL_DELIVERY_[a-f0-9]{64}$/.test(key)) return;
     const value=String(all[key]||''), parts=value.split('|');
-    // SENDING is never discarded automatically: its delivery is uncertain.
+    // Lo stato SENDING non viene eliminato in automatico: l'esito della consegna è incerto.
     if (parts[0]==='ACCEPTED'&&Number(parts[1])>0&&now-Number(parts[1])>90*86400000) props.deleteProperty(key);
   });
   props.setProperty('MI_EMAIL_LEDGER_CLEANED_AT',String(now));
 }
 
-/** Signed WordPress outbox. Persist intent before sending: uncertain deliveries require review. */
+/** Coda WordPress firmata. Registra l'intento prima dell'invio per consentire la verifica degli esiti incerti. */
 function inviaEmailConfermaDaWordPress_(payload) {
   const p = payload || {};
   const sender = statoCanaleEmail_();
@@ -127,8 +127,8 @@ function inviaCodaEmailDiTest() {
     uncertain = allRows.filter(row => String(row.stato).toUpperCase() === 'TEST_IN_CORSO').length;
     const actor = Session.getActiveUser().getEmail();
     remaining = rows.length;
-    // Small resumable runs. Persist each intent before contacting the mail service:
-    // a timeout or ambiguous failure must never turn into an automatic resend.
+    // Esecuzioni brevi e riprendibili. Registra ogni intento prima di contattare il servizio email:
+    // un timeout o un esito incerto non avvia mai un nuovo invio automatico.
     for (const row of rows) {
       if (sent >= 25 || Date.now() - startedAt >= 240000 || MailApp.getRemainingDailyQuota() < 1) break;
       const payload = JSON.parse(String(row.contenuto_json || '{}'));
@@ -153,7 +153,7 @@ function inviaCodaEmailDiTest() {
     }
     SpreadsheetApp.flush();
   } finally { lock.releaseLock(); }
-  // UI alerts suspend execution: never show them while holding the lock.
+  // Gli avvisi dell'interfaccia sospendono l'esecuzione: mostrarli solo dopo aver rilasciato il lock.
   SpreadsheetApp.getUi().alert('Email di test inviate: ' + sent + '. Tutte esclusivamente al destinatario privato configurato.' +
     (remaining ? ' Restano ' + remaining + ' email PREVIEW: ripeti il comando quando la quota è disponibile.' : ' Nessuna email PREVIEW rimanente.') +
     (uncertain ? ' Sono presenti ' + uncertain + ' righe TEST_IN_CORSO: verifica la consegna prima di modificarne lo stato.' : ''));

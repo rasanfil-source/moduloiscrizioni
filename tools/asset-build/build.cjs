@@ -9,7 +9,7 @@ const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
   // Git conserva gli asset testuali con LF: l'hash deve essere identico anche
   // quando il checkout Windows presenta CRLF.
   const input=Buffer.from(fs.readFileSync(path.join(root,name),'utf8').replace(/\r\n/g,'\n'));
-  // No bundling, property mangling, module conversion or external symbol renaming.
+  // Nessun accorpamento, alterazione dei nomi delle proprietà, conversione dei moduli o rinomina dei simboli esterni.
   const result=await esbuild.transform(input.toString(),{loader:name.endsWith('.js')?'js':'css',minifyWhitespace:true,minifySyntax:false,minifyIdentifiers:false,legalComments:'inline',target:'es2020',charset:'utf8'});
   const output=Buffer.from(result.code),out='min/'+name;
   manifest[name]={file:out,source:sha(input),hash:sha(output)};

@@ -1,5 +1,5 @@
 <?php
-// Reuse only fixture declarations/data; all tested service methods are real.
+// Riutilizza solo dichiarazioni e dati della fixture; i metodi di servizio sono quelli applicativi.
 $testDir = __DIR__;
 $fixture = file_get_contents($testDir . '/registration-failures.php');
 $fixture = explode('$failures=[];', $fixture, 2)[0];
@@ -12,7 +12,7 @@ class AuditRegistrationDatabase extends FaultDatabase {
     public $people = [], $items = [], $payments = [], $selectedDeadline = '', $deadlineAtLock = '';
     function get_col($sql) {
         $this->selectedDeadline = $this->registration['expires_at'];
-        // A partial payment/price correction commits after the cron SELECT.
+        // Un pagamento parziale o una variazione di prezzo viene confermato dopo la SELECT del cron.
         $this->registration['expires_at'] = gmdate('Y-m-d H:i:s', time() + 48 * 3600);
         $this->registration['payment_deadline_at'] = $this->registration['expires_at'];
         $this->payments = [['transaction_kind' => 'PAYMENT', 'amount_cents' => 10000, 'participant_allocations_json' => '[{"participant_id":1,"amount_cents":10000}]']];

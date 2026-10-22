@@ -1,4 +1,4 @@
-// Local synthetic browser test. No WordPress site is accessed.
+// Verifica browser locale con dati sintetici; non accede al sito WordPress.
 const fs=require('fs'), http=require('http'), assert=require('node:assert/strict');
 const {chromium}=require(process.env.MI_PLAYWRIGHT_MODULE || 'playwright');
 const jsQR=require('../.tmp/event-qr-tests/node_modules/jsqr');

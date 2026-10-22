@@ -117,7 +117,7 @@ function apriFoglioOperativoConLock_(form) {
 	const titoloPulito = String(vista.evento.titolo || idEvento).replace(/[\\/:*?"<>|#%{}]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140);
 	const titolo = 'Evento ' + idEvento + ' - ' + titoloPulito;
   const foglio = foglioDaCompletare || SpreadsheetApp.create(titolo);
-  // Persist the identity before formatting: a retry resumes the same document.
+  // Registra l'identità prima della formattazione: un nuovo tentativo riprende lo stesso documento.
   proprieta.setProperty(chiavePreparazione, String(foglio.getId()));
   const valori = [idEvento, neutralizzaFormula_(vista.evento.titolo, 200), foglio.getId(), foglio.getUrl(), '', '', new Date()];
 	if (esistente) registro.getRange(esistente._row, 1, 1, valori.length).setValues([valori]);
@@ -166,7 +166,7 @@ function verificaFoglioEventoDaWordPress_(payload) {
 		return {ok:true,esiste:true,id_evento:idEvento,id_foglio:opened.book.getId(),url_foglio:opened.book.getUrl()};
 	} catch(error) {
 		const detail=String(error&&error.message?error.message:error);
-		// Only our own explicit missing/trashed marker proves absence; Drive errors may mean denied access.
+		// Solo il contrassegno esplicito di elemento assente o cestinato ne attesta l'assenza; un errore Drive può indicare accesso negato.
 		if (detail==='EVENT_SHEET_MISSING') return {ok:true,esiste:false,id_evento:idEvento};
 		return {ok:false,error:'SHEET_UNAVAILABLE',id_evento:idEvento};
 	}
@@ -260,8 +260,8 @@ function aggiornaFoglioOperativoEventoConLock_(form) {
   const esito = scriviProiezioneEvento_(scheda, vista);
   if (!esito.manuali && !esito.conflitti) configuraSchedeEconomicheEvento_(foglio, idEvento, vista.sola_lettura);
   aggiornaProiezionePagamentiEventoConLock_(foglio, idEvento);
-  // Store only after all writes succeed. Pending edits remain in the sheet;
-  // a new canonical value changes the fingerprint and retries acknowledgment.
+  // Registra il risultato solo dopo aver completato tutte le scritture. Le modifiche in sospeso restano nel foglio;
+  // un nuovo valore canonico aggiorna l'impronta e consente la conferma.
   if (!esito.manuali && !esito.conflitti) proprieta.setProperty(chiaveProiezione, impronta);
   else proprieta.deleteProperty(chiaveProiezione);
   aggiungiControllo_('FOGLIO_OPERATIVO', 'REFRESH', idEvento, 'SUCCESS', normalizzaTesto_(Session.getActiveUser().getEmail() || 'SEGRETERIA', 120), 'DATABASE_TO_EVENT_SHEET', 'SEGRETERIA');

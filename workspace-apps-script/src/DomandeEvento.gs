@@ -1,4 +1,4 @@
-/** Include both optional and required questions, even in saved operational views. */
+/** Include le domande facoltative e obbligatorie anche nelle viste operative salvate. */
 function aggiungiColonneDomande_(colonne, evento, iscrizioni, partecipanti, cache) {
   const decode=cache?cache.object:decodificaOggetto_;
   const definitions = new Map();
@@ -21,7 +21,7 @@ function aggiungiColonneDomande_(colonne, evento, iscrizioni, partecipanti, cach
   });
 }
 
-/** The configured fields, not a generic travel profile, define the event sheet. */
+/** I campi configurati per l'evento definiscono il foglio e il relativo profilo operativo. */
 function vistaEventoSolaLettura_(evento, colonne) {
   const schema = decodificaOggetto_(evento.schema_vista_json);
   return Array.isArray(schema.fields) && Array.isArray(schema.options) && ['NONE','ZERO'].includes(schema.pricing) && !colonne.some(c => c.key === 'total');

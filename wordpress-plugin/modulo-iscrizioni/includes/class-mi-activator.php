@@ -302,7 +302,7 @@ final class MI_Activator {
 
 		self::backfill_ticket_counters( $ticket_counters, $registrations, $items );
 		update_option( 'mi_db_version', MI_VERSION, false );
-		// Retry a failed index migration instead of marking an incomplete schema current.
+		// Completa la migrazione degli indici prima di registrare lo schema come aggiornato.
 		$audit_index = $wpdb->get_results( "SHOW INDEX FROM {$registration_events} WHERE Key_name='type_actor'", ARRAY_A );
 		if ( ! $wpdb->last_error && array_column( (array) $audit_index, 'Column_name' ) === array( 'event_type', 'actor_label' ) ) update_option( 'mi_db_schema_revision', self::SCHEMA_REVISION, false );
 	}

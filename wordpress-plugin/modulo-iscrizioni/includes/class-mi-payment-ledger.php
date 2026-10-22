@@ -4,7 +4,7 @@ require_once __DIR__ . '/class-mi-payment-people.php';
 
 /** Registro autorevole MySQL. Nessuna richiesta Google nel percorso di lettura o salvataggio. */
 final class MI_Payment_Ledger {
-	/** Current amounts, distinct from the original installment plan. No database writes. */
+	/** Importi correnti, distinti dal piano rateale iniziale. Non esegue scritture nel database. */
 	public static function position( array $registration, $net_paid ) {
 		$total = max( 0, (int) $registration['total_cents'] );
 		$paid = max( 0, (int) $net_paid );
@@ -13,7 +13,7 @@ final class MI_Payment_Ledger {
 		$initial = $deposit ? min( $total, max( 0, (int) ( $registration['initial_due_cents'] ?? 0 ) ) ) : 0;
 		return array( 'total' => $total, 'paid' => $paid, 'balance' => max( 0, $total - $paid ), 'managed' => $managed, 'deposit_plan' => $deposit, 'deposit_due' => $initial, 'deposit_missing' => max( 0, $initial - $paid ), 'deposit_covered' => $deposit && $initial > 0 && $paid >= $initial );
 	}
-	/** Caller supplies already scoped registrations; bounded bulk reads also preserve individual debts. */
+	/** Il chiamante fornisce le iscrizioni autorizzate; le letture in blocco preservano anche i debiti individuali. */
 	public static function positions( array $registrations, $id_key = 'id' ) {
 		global $wpdb;
 		if ( ! $registrations ) return array();

@@ -1,4 +1,4 @@
-// Synthetic CPU/parse benchmark. Google API and network latency are excluded.
+// Misurazione sintetica di CPU e analisi; esclude API Google e latenza di rete.
 import assert from 'node:assert/strict';
 import {performance} from 'node:perf_hooks';
 import {projectionContext,projectionFixture} from '../workspace-apps-script/tests/helpers/projection-performance.mjs';

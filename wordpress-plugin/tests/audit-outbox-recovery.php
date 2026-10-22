@@ -1,5 +1,5 @@
 <?php
-// In-memory database and mail transport; the dispatcher is the unmodified source.
+// Database e servizio email in memoria; il gestore delle consegne è quello dei sorgenti.
 define('ABSPATH', __DIR__);
 define('ARRAY_A', 'ARRAY_A');
 define('MINUTE_IN_SECONDS', 60);

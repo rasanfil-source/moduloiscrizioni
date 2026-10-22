@@ -17,7 +17,7 @@ final class MI_Access {
 		add_filter( 'map_meta_cap', array( __CLASS__, 'map_event_meta_cap' ), 10, 4 );
 	}
 
-	/** Assign the authorized group before save_post checks the event scope. */
+	/** Assegna il gruppo autorizzato prima che save_post verifichi l'ambito dell'evento. */
 	public static function initialize_event_group( $new_status, $old_status, $post ) {
 		if ( 'auto-draft' !== $old_status || ! in_array( $new_status, array( 'draft', 'pending', 'publish', 'private', 'future' ), true ) || MI_Event_Post_Type::EVENT_TYPE !== $post->post_type ) return;
 		$user_id = get_current_user_id();

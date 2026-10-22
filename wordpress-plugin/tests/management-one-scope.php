@@ -1,5 +1,5 @@
 <?php
-// Real management summary; reuse the existing synthetic read adapter.
+// Riepilogo di gestione applicativo con l'adattatore di lettura sintetico del progetto.
 $fixture = explode('$wpdb=new AuditDatabase();', file_get_contents(__DIR__ . '/management-deposit-totals.php'), 2)[0];
 eval('?>' . str_replace('__DIR__', var_export(__DIR__, true), $fixture));
 foreach (['ONE', 'ALL'] as $scope) foreach (['ACTIVE', 'CANCELLED'] as $status) {

@@ -34,7 +34,7 @@ final class MI_Portal {
 
 	/** La cancellazione definitiva passa sempre dalla procedura coordinata. */
 	public static function purge_trashed_drafts() {
-		// Definitive removal now requires the reviewed, resumable deletion workflow.
+		// L'eliminazione richiede una verifica e può essere ripresa dal punto raggiunto.
 	}
 
 	/** Allinea i fogli alla stessa distinzione tra eventi correnti e passati mostrata nel portale. */
@@ -81,7 +81,7 @@ final class MI_Portal {
 			}
 		}
 		// Gli errori non sono certificati: saranno ritentati nel ciclo giornaliero
-		// successivo, senza affamare gli altri eventi con un retry infinito.
+		// evento successivo, lasciando spazio agli altri eventi tra un nuovo tentativo e l'altro.
 		if ( count( $remaining ) > count( $batch ) ) {
 			update_option( 'mi_sheet_organization_cursor', max( $batch ), false );
 			if ( ! wp_next_scheduled( 'mi_organizza_fogli_evento' ) ) wp_schedule_single_event( time() + 60, 'mi_organizza_fogli_evento' );
@@ -103,7 +103,7 @@ final class MI_Portal {
 	}
 
 	private static function current_view() {
-		// Keep the initial screen and its conditional assets aligned, including PWA launches.
+		// La schermata iniziale e le risorse condizionali restano allineate anche all'apertura dalla PWA.
 		return sanitize_key( wp_unslash( $_GET['mi_portal_view'] ?? 'management' ) );
 	}
 
@@ -748,7 +748,7 @@ final class MI_Portal {
 		catch ( Throwable $error ) { return self::redirect_result( 'Saldo non disponibile. Annullamento non eseguito.', true, $event_id ); }
 		foreach ( $rows as $row ) { $position = $positions[$row['id']]; $recipients[] = array( 'order_code' => $row['order_code'], 'paid_cents' => $position['effective_paid'], 'balance_cents' => $position['managed'] ? $position['effective_balance'] : 0 ); }
 		if ( $wpdb->last_error ) return self::redirect_result( 'Iscrizioni non disponibili. Annullamento non eseguito.', true, $event_id );
-		// The event lease protects this durable recipient list and every retry.
+		// Il lock evento protegge l'elenco persistente dei destinatari e i relativi tentativi di invio.
 		$job = get_post_meta( $event_id, '_mi_event_cancellation_job', true );
 		if ( ! is_array( $job ) ) {
 			$job = array( 'recipients' => $recipients, 'reason' => $reason );
@@ -1118,7 +1118,7 @@ final class MI_Portal {
 
 	/** Autentica esclusivamente nella pagina autonoma della Segreteria, senza passare da wp-login.php. */
 	private static function gestisci_accesso_portale() {
-		// The nonce also permits login from a page containing the portal shortcode.
+		// Il nonce consente l'accesso anche da una pagina che contiene lo shortcode del portale.
 		if ( is_user_logged_in() ) {
 			wp_safe_redirect( self::base_url() );
 			exit;
@@ -1317,12 +1317,12 @@ final class MI_Portal {
 		return 'Gestisci eventi';
 	}
 
-	/** The manager's explicit declaration owns this label, never computed prices. */
+	/** L'etichetta dipende dalla dichiarazione esplicita del gestore, non dai prezzi calcolati. */
 	public static function is_free_configuration( array $config ) {
 		return 'ZERO' === ( $config['pricing_mode'] ?? '' );
 	}
 
-	/** Immutable revision IDs also version the small card cache; scope is checked by the caller. */
+	/** Gli identificativi di revisione immutabili identificano anche la cache delle schede; il chiamante verifica l'ambito. */
 	private static function published_card_summaries( array $revision_ids ) {
 		global $wpdb;
 		$revision_ids = array_values( array_unique( array_filter( array_map( 'absint', $revision_ids ) ) ) );
@@ -1341,7 +1341,7 @@ final class MI_Portal {
 			if ( ! is_array( $config ) ) return array();
 			$summaries[ (int) $revision['event_id'] ] = array_intersect_key( $config, $keys );
 		}
-		// Never persist an incomplete read; retry missing revisions on the next request.
+		// Non salvare una lettura incompleta; la richiesta successiva recupera le revisioni mancanti.
 		if ( count( $rows ) === count( $revision_ids ) ) set_transient( $key, $summaries, HOUR_IN_SECONDS );
 		return $summaries;
 	}
@@ -1740,7 +1740,7 @@ final class MI_Portal {
 		return true;
 	}
 	private static function draft_initial_step( $event_id ) {
-		// A copied configuration still needs review from the beginning (title, group and dates).
+		// La configurazione copiata richiede la verifica iniziale di titolo, gruppo e date.
 		if ( get_post_meta( $event_id, '_mi_duplicate_request', true ) ) return 0;
 		$event = get_post( $event_id );
 		if ( ! $event || ! trim( (string) $event->post_title ) ) return 0;
@@ -1769,7 +1769,7 @@ final class MI_Portal {
 		$sheet_missing = '1' === get_post_meta( $event_id, '_mi_sheet_missing', true );
 		$registration_url = esc_url( (string) get_post_meta( $event_id, '_mi_registration_url', true ) );
 		if ( ! $registration_url ) $registration_url = esc_url( MI_Shortcode::url_iscrizione( $event_id ) );
-		// Generate the public route even when an older event stores an operator URL.
+		// Genera il collegamento pubblico anche quando l'evento contiene un URL operativo.
 		$balance_url = esc_url( add_query_arg( array( 'mi_status' => 'balance', 'evento' => $event_id ), home_url( '/' ) ) );
 		$has_balance = 'DEPOSIT_BALANCE' === get_post_meta( $event_id, '_mi_economic_mode', true );
 		$is_published = 'publish' === get_post_status( $event_id );

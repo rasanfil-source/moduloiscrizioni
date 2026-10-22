@@ -148,7 +148,7 @@ final class MI_REST_Controller {
 			$raw = $envelope['payload_firmato'] ?? null;
 			$hash = $envelope['payload_hash'] ?? null;
 			if ( ! is_string( $raw ) || strlen( $raw ) > 2000000 || ! is_string( $hash ) || ! preg_match( '/^[a-f0-9]{64}$/D', $hash ) || ! hash_equals( hash( 'sha256', $raw ), $hash ) ) return new WP_Error( 'mi_workspace_payload_invalid', 'Contenuto Workspace non valido.', array( 'status' => 401 ) );
-			// The command consumes only the authenticated JSON, never a second payload.
+			// Il comando usa esclusivamente il JSON autenticato, senza un secondo contenuto da elaborare.
 			$decoded = json_decode( $raw );
 			if ( JSON_ERROR_NONE !== json_last_error() || ! is_object( $decoded ) ) return new WP_Error( 'mi_workspace_payload_invalid', 'Contenuto Workspace non valido.', array( 'status' => 400 ) );
 			$payload = json_decode( $raw, true );

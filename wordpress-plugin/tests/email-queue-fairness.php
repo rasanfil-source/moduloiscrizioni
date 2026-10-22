@@ -1,5 +1,5 @@
 <?php
-// Synthetic in-memory database and transport; original dispatcher is unchanged.
+// Database e trasporto in memoria; viene usato il gestore delle consegne applicativo.
 define('ABSPATH', __DIR__);
 define('ARRAY_A', 'ARRAY_A');
 define('MINUTE_IN_SECONDS', 60);

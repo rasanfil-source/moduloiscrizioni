@@ -19,14 +19,14 @@ foreach ([null,'manage','management','registrations','groups','payments','paymen
         $_GET=['mi_portal'=>'1'];if ($view!==null) $_GET['mi_portal_view']=$view;$assets=[];
         MI_Portal::assets();
         $management=$logged&&in_array($view,[null,'management','registrations','groups'],true);
-        // The shared management stylesheet remains needed by the event toolbar.
+        // Il foglio di stile della gestione serve anche alla barra degli eventi.
         if (count(array_filter($assets,fn($h)=>$h==='mi-portal-management'))!==($management?2:1)) throw new Exception('Management assets: '.$view);
         if (in_array('mi-portal-payments',$assets,true)!==($logged&&in_array($view,['payments','payment-report'],true))) throw new Exception('Payment assets: '.$view);
     }
 }
 echo "Portal loading: 20 combinations passed, including default startup.\n";
 
-// Exercise the real router: opening Iscrizioni must not prepare the Eventi list.
+// Verifica il router: aprendo Iscrizioni non viene preparato l'elenco Eventi.
 function is_ssl(){return true;}
 function current_user_can($cap){return $cap==='mi_portal_access';}
 function absint($v){return abs((int)$v);}

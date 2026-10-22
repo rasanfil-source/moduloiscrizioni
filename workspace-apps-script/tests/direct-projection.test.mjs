@@ -81,7 +81,7 @@ test('an unchanged direct projection does not rewrite the event sheet',()=>{
  assert.equal(measured.performance.view_built,false);assert.equal(measured.performance.participants,1);
  assert.equal(Object.hasOwn(second,'performance'),false);
 
- // Existing installations upgrade their old receipt once, without assuming read-only.
+ // L'installazione adatta una volta la ricevuta registrata senza presumere la sola lettura.
  values.set('MI_DIRECT_VIEW_sheet-id','revision-three');context.proiettaEventoDaWordPress_(request);
  assert.equal(calls.view,2);
  context.modificheCorrentiFoglio_=()=>({changes:[{id:1}],errors:[]});
@@ -89,7 +89,7 @@ test('an unchanged direct projection does not rewrite the event sheet',()=>{
  assert.equal(context.proiettaEventoDaWordPress_(request).ready,false);
  assert.equal(values.has('MI_DIRECT_VIEW_sheet-id'),false);
 
- // A failed flush must not publish a ready receipt; a later request retries.
+ // Una scrittura incompleta non conferma la ricevuta; una richiesta successiva riprende il lavoro.
  context.modificheCorrentiFoglio_=()=>({changes:[],errors:[]});
  context.scriviProiezioneEvento_=()=>({aggiunte:0,manuali:0,conflitti:0});
  context.SpreadsheetApp.flush=()=>{throw Error('synthetic flush failure');};

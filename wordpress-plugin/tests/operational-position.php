@@ -1,5 +1,5 @@
 <?php
-// Pure domain/read tests: no WordPress deployment, email or Sheets operations.
+// Verifiche di dominio e lettura senza deployment WordPress, email o operazioni Sheets.
 define( 'ABSPATH', __DIR__ );
 define( 'ARRAY_A', 'ARRAY_A' );
 require __DIR__ . '/../modulo-iscrizioni/includes/class-mi-payment-ledger.php';

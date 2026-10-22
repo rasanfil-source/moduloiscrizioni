@@ -1,7 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-/** Opening a sheet is a verified refresh, never a direct link to a stale projection. */
+/** L'apertura del foglio aggiorna e verifica la proiezione prima di mostrarla. */
 final class MI_Sheet_Open {
 	private static $working = false;
 	public static function boot() {
@@ -9,7 +9,7 @@ final class MI_Sheet_Open {
 		add_action( 'wp_ajax_mi_open_sheet', array( __CLASS__, 'ajax' ) );
 		add_action( 'mi_refresh_event_sheet', array( __CLASS__, 'refresh_background' ) );
 	}
-	/** Durable, coalesced projection job; never call Google in the saving request. */
+	/** Operazione persistente e accorpata; la richiesta di salvataggio non chiama Google. */
 	public static function enqueue( $event_id, $delay = 0 ) {
 		$event_id = absint( $event_id );
 		if ( ! $event_id || self::$working ) return;
@@ -21,7 +21,7 @@ final class MI_Sheet_Open {
 		$event_id = absint( $event_id );
 		if ( ! get_post_meta( $event_id, '_mi_operational_sheet_url', true ) || 'trash' === get_post_status( $event_id ) ) return;
 		if ( class_exists( 'MI_Event_Deletion' ) && MI_Event_Deletion::job( $event_id ) ) return;
-		// Schedule recovery first, including when a remote request exhausts PHP's time budget.
+		// Pianifica il recupero prima della richiesta remota, che può esaurire il tempo disponibile in PHP.
 		self::enqueue( $event_id, 60 );
 		self::$working = true;
 		try {
@@ -151,7 +151,7 @@ final class MI_Sheet_Open {
 		if ( ! is_user_logged_in() ) { auth_redirect(); exit; }
 		$event = absint( $_GET['mi_open_sheet'] );
 		if ( ! MI_Portal_Management::allowed() || ! MI_Access::can_access_event( $event ) ) wp_die( 'Evento non accessibile.', '', array( 'response' => 403 ) );
-		// Only use an existing receipt here: the fallback page owns slow remote work.
+		// Usa solo una ricevuta esistente: la pagina di servizio gestisce le richieste remote più lente.
 		if ( self::receipt( $event ) ) {
 			try {
 				if ( class_exists( 'MI_Event_Deletion' ) && is_wp_error( MI_Event_Deletion::enter( $event ) ) ) throw new RuntimeException( 'Evento occupato.' );

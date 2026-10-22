@@ -45,7 +45,7 @@ final class MI_Spedizione_Email {
 		if ( 'publish' === $new && 'publish' !== $old && MI_Event_Post_Type::EVENT_TYPE === $post->post_type ) {
 			self::$pubblicazioni[$post->ID] = true;
 			update_post_meta( $post->ID, '_mi_publication_notification_pending', '1' );
-			// Persist a fallback before later save hooks or remote calls can interrupt the request.
+			// Registra un'alternativa prima degli hook di salvataggio e delle richieste remote.
 			wp_schedule_single_event( time() + 120, 'mi_riprova_notifica_pubblicazione', array( (int) $post->ID, 1 ) );
 		}
 	}
@@ -282,7 +282,7 @@ final class MI_Spedizione_Email {
 				$wpdb->query( 'ROLLBACK' );
 				return new WP_Error( 'mi_operational_email_storage', 'Non è stato possibile preparare la comunicazione.', array( 'status' => 500 ) );
 			}
-			// The UNIQUE origin_key in the committed outbox protects retries even if cache/cron fail.
+			// origin_key univoca nella coda confermata protegge i nuovi tentativi anche senza cache o cron.
 			try { set_transient( $idempotency_key, 1, DAY_IN_SECONDS ); } catch ( Throwable $error ) {}
 			try { if ( 'ANTEPRIMA' !== $effective_mode && $count ) self::pianifica_spedizione(); } catch ( Throwable $error ) {}
 			return array( 'ok' => true, 'count' => $count, 'mode' => $effective_mode, 'message' => 'Comunicazione preparata nella coda WordPress.' );
@@ -413,15 +413,15 @@ final class MI_Spedizione_Email {
 		$stale = gmdate( 'Y-m-d H:i:s', time() - 15 * MINUTE_IN_SECONDS );
 		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'PENDING', processing_started_at = NULL WHERE status = 'SENDING' AND processing_started_at < %s", $stale ) );
 		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'TEST_PENDING', processing_started_at = NULL WHERE status = 'TEST_SENDING' AND processing_started_at < %s", $stale ) );
-		// Exhausted interrupted attempts must remain visible and manually recoverable.
+		// I tentativi interrotti restano visibili e possono essere ripresi manualmente.
 		$wpdb->query( "UPDATE {$table} SET status = 'FAILED', processing_started_at = NULL, last_error = 'Tentativi esauriti; verifica l esito prima di riaccodare.' WHERE status = 'PENDING' AND attempts >= 5" );
 		$wpdb->query( "UPDATE {$table} SET status = 'TEST_FAILED', processing_started_at = NULL, last_error = 'Tentativi esauriti; verifica l esito prima di riaccodare.' WHERE status = 'TEST_PENDING' AND attempts >= 5" );
 		// La modalità selezionata decide il canale: un invio di prova non può
-		// raggiungere la casella di test dopo il passaggio in Operativo.
+		// raggiungere la casella di prova dopo il passaggio in Operativo.
 		$stati = 'OPERATIVO' === $modalita ? array( "'PENDING'" ) : array( "'TEST_PENDING'" );
-		// Scan past blocked events without consuming the ten-delivery budget.
-		// Persist progress across bounded scans so a large paused deletion cannot
-		// indefinitely starve later events. The next empty page wraps to the start.
+		// Esamina gli eventi sospesi senza consumare il limite di dieci invii.
+		// Registra il punto raggiunto tra scansioni limitate, così un'eliminazione estesa
+		// non ritarda gli eventi successivi. Una pagina vuota riporta la scansione all'inizio.
 		$cursor_key = 'mi_email_scan_cursor_' . strtolower( $modalita );
 		$cursor = absint( get_option( $cursor_key, 0 ) ); $processed = 0; $blocked_events = array();
 		for ( $batch = 0; $batch < 10 && $processed < 10; $batch++ ) {
@@ -527,8 +527,8 @@ final class MI_Spedizione_Email {
 				try {
 					self::$codice_incorporato = MI_Code_Image::svg( $istantanea['identificativo']['modalita'], $code_payload );
 				} catch ( LengthException $error ) {
-					// Fail before contacting Google; the outbox records an actionable error,
-					// without logging the payload or sending a truncated identifier.
+					// Interrompe l'invio prima di contattare Google e registra un esito consultabile,
+					// senza scrivere il contenuto nel log o inviare un identificativo troncato.
 					return new WP_Error( 'mi_email_qr_too_long', 'Email non inviata: il contenuto del QR supera 106 byte. Correggi l’identificativo prima di riprovare.' );
 				}
 				catch ( InvalidArgumentException $error ) { return new WP_Error( 'mi_email_barcode_invalid', $error->getMessage() ); }

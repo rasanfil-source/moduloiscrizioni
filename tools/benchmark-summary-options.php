@@ -1,6 +1,6 @@
 <?php
-// Synthetic CPU benchmark of the two loops in MI_Management_Service::summary().
-// Excludes SQL, WordPress, network and cache: not an endpoint latency estimate.
+// Misurazione sintetica dei due cicli di MI_Management_Service::summary().
+// Esclude SQL, WordPress, rete e cache: non stima la latenza dell'endpoint.
 function catalog(array $groups, bool $append): array {
     $options = [];
     foreach ($groups as $group) {

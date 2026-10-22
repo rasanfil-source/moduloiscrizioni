@@ -1,5 +1,5 @@
 <?php
-// Local diagnostics: real application methods, isolated WordPress/database doubles.
+// Diagnostica locale con metodi applicativi e sostituti isolati di WordPress e del database.
 $fixture = __DIR__ . '/php-behavior.php';
 $prefix = explode('$event = array(', file_get_contents($fixture), 2)[0];
 eval('?>' . str_replace('__DIR__', var_export(dirname($fixture), true), $prefix));

@@ -1,5 +1,5 @@
 <?php
-// Real management, selector and compressed cache; synthetic WordPress and SQL reads.
+// Gestione, selettore e cache compressa con letture WordPress e SQL sintetiche.
 define('ABSPATH', __DIR__); define('ARRAY_A', 'ARRAY_A');
 function absint($v) { return abs((int)$v); }
 function sanitize_key($v) { return strtolower((string)$v); }
@@ -92,7 +92,7 @@ $future = array_column($model['people'], 'future_events', 'id');
 if ($future[1] !== 'Sì' || $future[2] !== 'No' || $future[3] !== 'Non richiesto') throw new RuntimeException('Preferenze future assenti nel riepilogo.');
 check_page(!is_wp_error($model), 'Fixture summary failed');
 $token = MI_Event_Read_Cache::state(42)['token'];
-// Every text comparator, direction and view must agree across cache/SQL pages and chunks.
+// Confronti testuali, direzioni e viste coincidono tra pagine e blocchi SQL o cache.
 foreach (['people','orders'] as $view) foreach (['created_at','name','buyer','code','room'] as $sort) foreach (['asc','desc'] as $direction) {
     $context = ['view'=>$view, 'sort'=>$sort, 'direction'=>$direction, 'includeClosed'=>true];
     $expected = MI_Management_List::page($model, $context, 0, 200, $token);
@@ -116,30 +116,30 @@ foreach (['people','orders'] as $view) foreach (['created_at','name','buyer','co
     $exportLast = read_page($context, 200, 200);
     check_page($exportFirst['fingerprint'] === $exportLast['fingerprint'] && array_merge($exportFirst['rows'], $exportLast['rows']) === $expectedRows, 'Export batches differ across cache expiry');
 }
-// The actual natural room sequence, without closed rows, must not end in S9.
+// La sequenza alfabetica delle camere, senza righe chiuse, non termina in S9.
 $context = ['view'=>'people', 'sort'=>'room'];
 $GLOBALS['cache_clock'] += 301;
 $page = read_page($context, 0, 30);
 $rooms = array_column($page['rows'], 'room');
 check_page($rooms === array_map(fn($id)=>'S'.$id, range(1,30)), 'First 30 naturally ordered rooms differ');
-// Ordinary pagination retains the SQL date fast path; textual sorts scan bounded chunks.
+// L'impaginazione ordinaria usa il percorso SQL delle date; l'ordine alfabetico esamina blocchi limitati.
 check_page((bool)array_filter($wpdb->selected, fn($sql)=>str_contains($sql, 'r.created_at DESC') && str_contains($sql, 'OFFSET 30')), 'Chronological fast path lost');
 check_page((bool)array_filter($wpdb->selected, fn($sql)=>str_contains($sql, 'p.id>200 ORDER BY p.id LIMIT 200')), 'Second bounded chunk not exercised');
-// Text search and empty selections also have cache-independent fingerprints.
+// La ricerca testuale e le selezioni vuote hanno impronte indipendenti dalla cache.
 foreach (['Rene 2','not-present'] as $query) {
     $context = ['query'=>$query, 'sort'=>'name'];
     MI_Event_Read_Cache::put(42, $token, $model); $cached = read_page($context);
     $GLOBALS['cache_clock'] += 301; $cold = read_page($context);
     check_page($cached === $cold, 'Filtered page differs after cache expiry');
 }
-// Actual record and event metadata changes must still invalidate multi-page reads.
+// Le variazioni dei record e dei metadati evento rinnovano le letture distribuite su più pagine.
 $before = read_page([])['fingerprint'];
 $wpdb->orders[1]['workspace_revision']++;
 check_page(read_page([])['fingerprint'] !== $before, 'Canonical write not detected');
 $before = read_page([])['fingerprint'];
 $GLOBALS['meta']['_mi_special_requests_enabled'] = '1';
 check_page(read_page([])['fingerprint'] !== $before, 'Event schema change not detected');
-// Timed membership spans two chunks; fingerprints use all matches, not only the returned page.
+// L'appartenenza temporale attraversa due blocchi; l'impronta considera tutte le corrispondenze.
 foreach ($wpdb->orders as $id=>&$row) { $row['status']='WAITLIST_OFFERED'; $row['waitlist_offer_expires_at']=gmdate('Y-m-d H:i:s', time()+($id<=210 ? 3600 : 172800)); } unset($row);
 foreach ($wpdb->people as &$row) $row['status']='ACTIVE'; unset($row);
 $GLOBALS['transients'] = [];
@@ -153,7 +153,7 @@ foreach (['people','orders'] as $view) {
 }
 echo "PASS: cached/SQL pages agree across expiry, warming, text sorts, directions, views, export batches and timed filters; real version changes remain detectable.\n";
 
-// Inject failures and writes between version capture and row selection.
+// Simula scritture e indisponibilità durante la lettura coerente dei dati.
 class InterruptedPageDatabase extends ConsistencyDatabase {
     public $changeOnRead = false, $failCount = false, $pageReads = 0;
     function get_row($sql, $mode = null) {
