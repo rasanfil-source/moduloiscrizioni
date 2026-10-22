@@ -4,6 +4,7 @@ defined( 'ABSPATH' ) || exit;
 
 final class MI_Access {
 	public static function boot() {
+		add_action( 'transition_post_status', array( __CLASS__, 'initialize_event_group' ), 5, 3 );
 		add_action( 'pre_get_posts', array( __CLASS__, 'scope_event_list' ) );
 		add_action( 'admin_init', array( __CLASS__, 'guard_event_editor' ) );
 		add_action( 'show_user_profile', array( __CLASS__, 'profile_scope' ) );
@@ -14,6 +15,18 @@ final class MI_Access {
 		add_filter( 'wp_authenticate_user', array( __CLASS__, 'block_suspended_user' ), 10, 2 );
 		add_action( 'admin_menu', array( __CLASS__, 'trim_delegate_menu' ), 999 );
 		add_filter( 'map_meta_cap', array( __CLASS__, 'map_event_meta_cap' ), 10, 4 );
+	}
+
+	/** Assegna il gruppo autorizzato prima che save_post verifichi l'ambito dell'evento. */
+	public static function initialize_event_group( $new_status, $old_status, $post ) {
+		if ( 'auto-draft' !== $old_status || ! in_array( $new_status, array( 'draft', 'pending', 'publish', 'private', 'future' ), true ) || MI_Event_Post_Type::EVENT_TYPE !== $post->post_type ) return;
+		$user_id = get_current_user_id();
+		if ( ! $user_id || (int) $post->post_author !== $user_id || self::is_suspended( $user_id ) || ! current_user_can( 'mi_create_events' ) || ! current_user_can( 'mi_manage_events' ) ) return;
+		if ( wp_is_post_autosave( $post->ID ) || wp_is_post_revision( $post->ID ) || get_post_meta( $post->ID, '_mi_activity_id', true ) ) return;
+		if ( ! isset( $_POST['mi_event_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['mi_event_nonce'] ) ), 'mi_save_event' ) ) return;
+		$group_id = absint( $_POST['mi_activity_id'] ?? 0 );
+		if ( ! $group_id || MI_Event_Post_Type::ACTIVITY_TYPE !== get_post_type( $group_id ) || ! self::can_access_activity( $group_id, $user_id ) ) return;
+		update_post_meta( $post->ID, '_mi_activity_id', $group_id );
 	}
 
 	public static function block_suspended_user( $user, $password ) {
@@ -47,8 +60,9 @@ final class MI_Access {
 	}
 
 	public static function can_access_event( $event_id, $user_id = 0 ) {
+		if ( self::is_suspended( $user_id ) ) return false;
+		if ( self::is_global_manager( $user_id ) ) return true;
 		$user = $user_id ? get_user_by( 'id', $user_id ) : wp_get_current_user();
-		if ( $user && user_can( $user, 'mi_manage_all_events' ) ) return true;
 		if ( $user && in_array( 'mi_assigned_event_manager', (array) $user->roles, true ) ) {
 			$scope = get_user_meta( $user->ID, '_mi_event_scope', true );
 			return in_array( absint( $event_id ), array_map( 'absint', is_array( $scope ) ? $scope : array() ), true );
@@ -57,9 +71,10 @@ final class MI_Access {
 	}
 
 	public static function event_ids( $user_id = 0 ) {
+		if ( self::is_suspended( $user_id ) ) return array();
 		$user_id = $user_id ?: get_current_user_id();
 		$user = get_user_by( 'id', $user_id );
-		if ( $user && ( user_can( $user, 'manage_options' ) || user_can( $user, 'mi_manage_all_events' ) ) ) return 'ALL';
+		if ( self::is_global_manager( $user_id ) ) return 'ALL';
 		if ( $user && in_array( 'mi_assigned_event_manager', (array) $user->roles, true ) ) {
 			$scope = get_user_meta( $user_id, '_mi_event_scope', true );
 			return array_values( array_unique( array_filter( array_map( 'absint', is_array( $scope ) ? $scope : array() ) ) ) );
@@ -68,7 +83,7 @@ final class MI_Access {
 		if ( ! is_array( $groups ) || ! $groups ) return array();
 		return array_values( array_map( 'absint', get_posts( array(
 			'post_type'              => MI_Event_Post_Type::EVENT_TYPE,
-			'post_status'            => array( 'publish', 'draft', 'private' ),
+			'post_status'            => array( 'publish', 'draft', 'private', 'mi_archived' ),
 			'numberposts'            => -1,
 			'fields'                 => 'ids',
 			'update_post_meta_cache' => false,
@@ -78,21 +93,23 @@ final class MI_Access {
 	}
 
 	public static function map_event_meta_cap( $caps, $cap, $user_id, $args ) {
-		if ( ! in_array( $cap, array( 'edit_mi_event', 'read_mi_event', 'delete_mi_event' ), true ) || empty( $args[0] ) ) {
+		if ( ! in_array( $cap, array( 'edit_post', 'read_post', 'delete_post', 'edit_mi_event', 'read_mi_event', 'delete_mi_event' ), true ) || empty( $args[0] ) ) {
 			return $caps;
 		}
 		$event_id = absint( $args[0] );
 		if ( MI_Event_Post_Type::EVENT_TYPE !== get_post_type( $event_id ) ) {
-			return array( 'do_not_allow' );
+			return $caps;
 		}
+		if ( self::is_suspended( $user_id ) ) return array( 'do_not_allow' );
+		$read = in_array( $cap, array( 'read_post', 'read_mi_event' ), true );
 		$event = get_post( $event_id );
 		if ( $event && 'auto-draft' === $event->post_status && (int) $event->post_author === (int) $user_id ) {
-			return 'read_mi_event' === $cap ? array( 'read' ) : array( 'mi_manage_events' );
+			return $read ? array( 'read' ) : array( 'mi_manage_events' );
 		}
 		if ( ! self::can_access_event( $event_id, $user_id ) ) {
 			return array( 'do_not_allow' );
 		}
-		if ( 'read_mi_event' === $cap ) {
+		if ( $read ) {
 			return array( 'read' );
 		}
 		return array( 'mi_manage_events' );

@@ -1,5 +1,5 @@
 <?php
-// Local database only; the Workspace transport records messages without sending them.
+// Solo database locale; il trasporto Workspace registra i messaggi senza inviarli.
 require __DIR__.'/publication-email.php';
 define('MINUTE_IN_SECONDS',60);
 function home_url(){return 'https://example.invalid';}
@@ -8,7 +8,7 @@ class MI_Event_Deletion {static function enter($id){return true;}static function
 class MI_Workspace_Client {static $sent=[];static function request($action,$payload){self::$sent[]=$payload;return ['ok'=>true,'channel'=>'GOOGLE_WORKSPACE'];}}
 
 $GLOBALS['email_options']=['mi_modalita_spedizione_email'=>'OPERATIVO','mi_prova_email_verificata'=>hash('sha256','test@example.invalid')];
-// Set the proof through the same fingerprint calculation used in production.
+// Prepara la prova con lo stesso calcolo d'impronta usato dall'applicazione.
 $fingerprint=new ReflectionMethod(MI_Spedizione_Email::class,'impronta_destinatario');$fingerprint->setAccessible(true);
 $GLOBALS['email_options']['mi_prova_email_verificata']=$fingerprint->invoke(null,'test@example.invalid');
 $GLOBALS['email_meta'][9]['_mi_email_style']['contact_email']='group@example.invalid';

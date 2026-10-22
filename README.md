@@ -1,49 +1,50 @@
-# Modulo iscrizioni multi-evento
+# Modulo Iscrizioni
 
-Progetto di un modulo WordPress riutilizzabile per iscrizioni a eventi, configurazione dei dati richiesti e gestione economica facoltativa tramite Google Apps Script e Google Sheets.
+Modulo WordPress per configurare eventi, raccogliere iscrizioni e gestire partecipanti, servizi, presenze e pagamenti. WordPress e MySQL registrano i dati operativi; Google Apps Script prepara i fogli dei singoli eventi e gestisce le attività affidate a Google.
 
-Il modello distingue:
+## Architettura
 
-- sola raccolta delle iscrizioni, senza prezzi;
-- iscrizione con calcolo del prezzo, senza gestione dell'incasso;
-- iscrizione con pagamento completo oppure caparra, saldo e ricalcolo auditabile.
+- **WordPress e MySQL** gestiscono eventi, gruppi, autorizzazioni, iscrizioni, disponibilità, pagamenti e comunicazioni.
+- **MODULI AUTONOMO**, il progetto Apps Script collegato a WordPress, aggiorna i fogli evento e restituisce al portale le modifiche operative confermate.
+- **I fogli evento** presentano i dati dell'evento e consentono le modifiche operative previste dal portale.
 
-La parrocchia è l'ente base. Ogni gruppo può avere logo, immagine, colori e contatti propri; ogni evento può applicare sostituzioni controllate.
+Le richieste tra WordPress e Apps Script sono firmate. MySQL conserva il registro autorevole; i fogli sono viste operative aggiornabili.
 
-## Stato
+## Funzioni
 
-Il codice locale contiene la versione **3.26.146**. La versione installata sul sito richiede una verifica separata. Il [manuale del segretario](docs/manuale-segretario/Manuale_del_segretario.docx) descrive criteri e procedure operative. Le modifiche dell’ultimo rilascio sono descritte nelle [valutazione audit e correzioni](docs/rilascio-3.26.146.md).
+- Moduli pubblici per le iscrizioni, con capienza, tipologie, servizi e domande configurabili.
+- Portale per la gestione di gruppi, eventi, persone, sistemazioni e presenze.
+- Registro dei pagamenti e dei rimborsi, con importi calcolati in centesimi.
+- Comunicazioni email con anteprima e coda gestita dal servizio di posta.
+- Foglio operativo dedicato a ciascun evento, collegato ai dati di WordPress.
+- Consultazione pubblica della prenotazione e del saldo tramite collegamento dedicato.
 
-Una bozza è una creazione interrotta: selezionandola da **Gestisci eventi** si riapre dal primo passaggio incompleto, già popolato con i dati salvati. Se la configurazione è completa, si apre direttamente **Attiva l’evento**, con gli indirizzi pronti per i pulsanti **Iscriviti** e, quando previsto, **Saldo**, oltre allo shortcode per WordPress e Divi. Workspace crea in modo idempotente un foglio operativo dedicato nella stessa cartella Drive di `DB_MODULI`, con nome `Evento ID - Titolo`, e ne restituisce il collegamento. La preparazione non pubblica l’evento e non invia email.
+## Documentazione
 
-MySQL WordPress è il registro autorevole per iscrizioni, pagamenti, camere e dati operativi. Google riceve la replica; nel foglio evento le celle azzurre si correggono e si confermano tramite Sincronizza nel portale. Il referente può consultare conferma e saldo senza vedere note interne o altri dati personali. Email, QR e barcode sono generati localmente; la modalità email iniziale resta `ANTEPRIMA` e `OPERATIVO` richiede una prova sintetica accettata dal sistema di posta.
+- [Plugin WordPress](wordpress-plugin/modulo-iscrizioni/README.md)
+- [Progetto Apps Script MODULI AUTONOMO](workspace-apps-script/README.md)
+- [Architettura e flussi operativi](PROGETTO.md)
+- [Schema dei dati](docs/SCHEMA_DATI.md)
+- [Contratto dell'interfaccia](UX-CONTRACT.md) e [sistema grafico](DESIGN.md)
+- [Manuale della segreteria](docs/manuale-segretario/Manuale_del_segretario.docx)
+- [Sicurezza](SECURITY.md)
 
-Il sistema non richiede fotografie o scansioni dei documenti. Se indispensabili per l'iniziativa, raccoglie soltanto dati testuali strutturati. La replica conserva i dati operativi in MySQL, necessari alla gestione centrale.
+## Requisiti
 
-Il codice non memorizza IBAN, numeri completi di carta, link operativi, ID del foglio, URL di distribuzione, segreti o destinatari reali. L’aggiornamento del repository non equivale a un deploy: prima dell’uso occorre aggiornare il plugin, eseguire `configuraCartellaDiLavoro()` sul progetto Apps Script aggiornato e collaudare in ambiente autorizzato con sole identità fittizie.
+Il plugin richiede WordPress 6.4 o successivo e PHP 7.4 o successivo. L'integrazione Google usa un progetto Apps Script autonomo, autorizzato dal suo proprietario e configurato con l'indirizzo del servizio WordPress.
 
-- [Progetto funzionale e tecnico](PROGETTO.md)
-- [Manuale del segretario](docs/manuale-segretario/Manuale_del_segretario.docx)
-- [Schema dati](docs/SCHEMA_DATI.md)
-- [Contratto della gestione web](UX-CONTRACT.md)
-- [Configurazione evento dimostrativa](schema/evento.example.json)
-- [Prototipo statico](prototipo/README.md)
-- [Plugin WordPress — vertical slice](wordpress-plugin/modulo-iscrizioni/README.md)
-- [Backend Google Workspace](workspace-apps-script/README.md)
-- [Politica di sanitizzazione](docs/SANITIZZAZIONE.md)
+## Verifica dei sorgenti
 
-## Dati reali vietati
-
-Questo repository è destinato a essere pubblico. Non devono essere aggiunti dati di iscritti o viaggiatori, fogli di lavoro reali, esportazioni, indirizzi personali, numeri di documento, coordinate bancarie, link di pagamento operativi, credenziali, ID di deployment o destinatari email reali.
-
-Gli esempi usano esclusivamente identità fittizie, domini `example.invalid` e configurazioni marcate come non pubblicabili. Prima di ogni commit eseguire:
+Su Windows, eseguire la verifica disponibile con PowerShell 7:
 
 ```powershell
-pwsh.exe -NoLogo -NoProfile -File .\tools\check-sanitization.ps1
+pwsh.exe -NoLogo -NoProfile -Command "& ./tools/verify.ps1 -PhpPath .tmp/php-runtime/php.exe"
 ```
 
-I fogli Excel ricevuti come riferimento restano fuori dal repository: se ne ricavano soltanto strutture e casi d'uso generalizzati.
+Per la sanitizzazione dei dati dimostrativi:
 
-## Licenza
+```powershell
+pwsh.exe -NoLogo -NoProfile -Command "& ./tools/check-sanitization.ps1"
+```
 
-La licenza di distribuzione non è ancora stata definita. Finché non viene aggiunto un file `LICENSE`, il codice non è concesso in riuso automatico a terzi.
+Usare identità e recapiti dimostrativi negli esempi e nelle prove.

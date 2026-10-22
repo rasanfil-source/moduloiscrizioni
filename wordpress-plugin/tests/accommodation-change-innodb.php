@@ -1,10 +1,10 @@
 <?php
-// Existing suite provisions only the disposable localhost database mi_ledger_test.
+// La suite usa soltanto il database temporaneo mi_ledger_test sul computer locale.
 require __DIR__.'/management-innodb.php';
 $definitions=[];foreach(['singola'=>10000,'doppia-separati'=>7000,'tripla'=>6000,'multipla'=>3000]as $code=>$price)$definitions[]=['code'=>'alloggio-'.$code,'name'=>$code,'scope'=>'TICKET','price_cents'=>$price,'max_quantity'=>1];
 $snapshot=json_encode(['event'=>['options'=>$definitions,'pricing_mode'=>'CALCULATED','participant_extra_scope'=>'ALL']]);
 foreach([30,31]as $id){seed_auto_rooms($id,['singola']);$wpdb->query($wpdb->prepare("UPDATE wp_mi_registrations SET snapshot_json=%s,economic_mode='DEPOSIT_BALANCE',total_cents=12000,initial_due_cents=3000,balance_cents=9000 WHERE id=%d",$snapshot,$id));$wpdb->query($wpdb->prepare('UPDATE wp_mi_participants SET options_json=%s WHERE registration_id=%d',json_encode([['code'=>'alloggio-singola','name'=>'Singola','quantity'=>1,'unit_price_cents'=>10000],['code'=>'bus','name'=>'Pullman','quantity'=>1,'unit_price_cents'=>1000]]),$id));run_auto_rooms($id);}
-// total 12000 includes a previous +1000 correction; switching must preserve it and bus.
+// Il totale 12000 comprende una rettifica di +1000; il cambio conserva rettifica e trasporto.
 $data=['people'=>[['code'=>'AUTO30','number'=>1],['code'=>'AUTO31','number'=>1]],'type'=>'alloggio-doppia-separati','number'=>'','reason'=>'Abbinamento concordato'];
 $before=assigned_rooms(30);$p=MI_Management_Service::change_accommodation(42,$data);check(isset($p['version']),'Anteprima assente: '.json_encode($p));
 check($p['orders'][0]['after_total']===9000&&$p['orders'][1]['after_total']===9000,'Differenza economica o rettifica precedente persa');
@@ -18,11 +18,11 @@ $data['people']=[['code'=>'AUTO30','number'=>1]];$data['type']='alloggio-tripla'
 $wpdb->query('UPDATE wp_mi_registrations SET total_cents=9500 WHERE id=30');
 $r=MI_Management_Service::change_accommodation(42,$data,$p['version'],'wp_7_12345678-1234-4234-8234-123456781002');check(!empty($r['rejected']),'Anteprima obsoleta accettata');
 $p=MI_Management_Service::change_accommodation(42,$data);check($p['orders'][0]['after_total']===8500,'Rettifica successiva non conservata');
-// A second selected registration without the target tariff rejects the whole operation.
+// Una seconda iscrizione selezionata, priva della tariffa richiesta, annulla l'intera operazione.
 $data['people'][]=['code'=>'AUTO31','number'=>1];$wpdb->query("UPDATE wp_mi_registrations SET snapshot_json='{}' WHERE id=31");
 $p=MI_Management_Service::change_accommodation(42,$data);check(!empty($p['rejected']),'Tariffa mancante ignorata');check((int)$wpdb->get_var('SELECT total_cents FROM wp_mi_registrations WHERE id=30')===9500,'Cambio parziale');
 $wpdb->query($wpdb->prepare('UPDATE wp_mi_registrations SET snapshot_json=%s WHERE id=31',$snapshot));
-// Test payment freshness and refund estimate using real ledger table defaults.
+// Verifica l'aggiornamento dei pagamenti e la stima del rimborso con le impostazioni effettive del registro.
 $data['people']=[['code'=>'AUTO30','number'=>1]];$p=MI_Management_Service::change_accommodation(42,$data);
 check(false!==$wpdb->insert('wp_mi_payments',['registration_id'=>30,'transaction_kind'=>'PAYMENT','amount_cents'=>10000,'payment_source'=>'CASH','origin_id'=>'test-room-payment','effective_at'=>gmdate('Y-m-d H:i:s'),'created_at'=>gmdate('Y-m-d H:i:s')]),$wpdb->last_error);
 $r=MI_Management_Service::change_accommodation(42,$data,$p['version'],'wp_7_12345678-1234-4234-8234-123456781003');check(!empty($r['rejected']),'Pagamento intervenuto dopo anteprima ignorato');
@@ -30,7 +30,7 @@ $p=MI_Management_Service::change_accommodation(42,$data);check($p['orders'][0]['
 $r=MI_Management_Service::change_accommodation(42,$data,$p['version'],'wp_7_12345678-1234-4234-8234-123456781004');check(!empty($r['saved']),'Cambio con restituzione non salvato');check((int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_payments')===1,'Rimborso creato automaticamente');
 check(MI_Management_Service::change_accommodation(43,$data) instanceof WP_Error,'Evento non autorizzato accessibile');
 $GLOBALS['test_payment_permission']=false;check(MI_Management_Service::change_accommodation(42,$data) instanceof WP_Error,'Permesso pagamenti ignorato');$GLOBALS['test_payment_permission']=true;
-// Failure during second registration update must roll back rooms, services, totals and audit.
+// Un errore nell'aggiornamento della seconda iscrizione annulla camere, servizi, totali e registro.
 $data=['people'=>[['code'=>'AUTO30','number'=>1],['code'=>'AUTO31','number'=>1]],'type'=>'alloggio-multipla','number'=>'','reason'=>'Cambio camerata'];$p=MI_Management_Service::change_accommodation(42,$data);
 $before=$wpdb->get_results('SELECT id,room_code,options_json FROM wp_mi_participants ORDER BY id',ARRAY_A);$before_rooms=$wpdb->get_results('SELECT * FROM wp_mi_rooms ORDER BY code',ARRAY_A);
 class FailingAccommodationDatabase extends DatabaseAdapter {function update($table,$data,$where){if($table==='wp_mi_registrations'&&(int)$where['id']===31)return false;return parent::update($table,$data,$where);}}

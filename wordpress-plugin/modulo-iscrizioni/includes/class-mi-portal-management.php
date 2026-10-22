@@ -18,7 +18,7 @@ final class MI_Portal_Management {
 				$past = get_post_meta( $candidate->ID, '_mi_event_archived_at', true ) || MI_Portal::is_past_event( $end );
 				if ( $past === ( 'past' === $period ) ) $ids[] = (int) $candidate->ID;
 			}
-			$result = MI_Management_Service::all_people( $ids, sanitize_text_field( wp_unslash( $_POST['query'] ?? '' ) ), absint( $_POST['offset'] ?? 0 ), '1' === ( $_POST['include_closed'] ?? '' ) );
+			$result = MI_Management_Service::all_people( $ids, sanitize_text_field( wp_unslash( $_POST['query'] ?? '' ) ), absint( $_POST['offset'] ?? 0 ), '1' === ( $_POST['include_closed'] ?? '' ), strtoupper( sanitize_text_field( wp_unslash( $_POST['status'] ?? '' ) ) ), sanitize_key( wp_unslash( $_POST['sort'] ?? 'created_at' ) ) );
 			if ( is_wp_error( $result ) ) wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
 			wp_send_json_success( $result );
 		}
@@ -37,13 +37,18 @@ final class MI_Portal_Management {
 			if ( is_wp_error( $result ) ) wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
 			wp_send_json_success( $result );
 		}
-		if ( in_array( $operation, array( 'summary', 'list_page' ), true ) ) {
-			$result = MI_Management_Service::summary( $event_id );
-			if ( ! is_wp_error( $result ) ) $result['rooms_version'] = hash( 'sha256', wp_json_encode( $result['rooms'] ) );
+		if ( in_array( $operation, array( 'summary', 'list_page', 'summary_panel' ), true ) ) {
+			$panel = sanitize_key( wp_unslash( $_POST['panel'] ?? '' ) );
+			if ( 'summary_panel' === $operation && ! in_array( $panel, array( 'rooms', 'attendance', 'offers' ), true ) ) wp_send_json_error( array( 'message' => 'Pannello non disponibile.' ), 400 );
+			$context = json_decode( wp_unslash( $_POST['context'] ?? '{}' ), true );
+			$result = 'list_page' === $operation ? MI_Management_Service::page( $event_id, $context, absint( $_POST['offset'] ?? 0 ), absint( $_POST['limit'] ?? 30 ) ) : null;
+			if ( null === $result ) $result = MI_Management_Service::summary( $event_id );
+			if ( ! is_wp_error( $result ) && isset( $result['rooms'] ) ) $result['rooms_version'] = hash( 'sha256', wp_json_encode( $result['rooms'] ) );
 			if ( ! is_wp_error( $result ) ) {
-				if ( 'list_page' === $operation ) $result = MI_Management_List::page( $result, json_decode( wp_unslash( $_POST['context'] ?? '{}' ), true ), absint( $_POST['offset'] ?? 0 ), absint( $_POST['limit'] ?? 30 ) );
-				else {
-					$result = MI_Management_List::compact( $result );
+				if ( 'list_page' === $operation && ! isset( $result['rows'] ) ) $result = MI_Management_List::page( $result, $context, absint( $_POST['offset'] ?? 0 ), absint( $_POST['limit'] ?? 30 ) );
+				elseif ( 'summary_panel' === $operation ) $result = MI_Management_List::panel( $result, $panel );
+				elseif ( 'summary' === $operation ) {
+					$result = MI_Management_List::overview( $result );
 					$result['attendance_availability'] = MI_Management_Service::attendance_availability( $event_id );
 				}
 			}
@@ -52,18 +57,18 @@ final class MI_Portal_Management {
 		} elseif ( in_array( $operation, array( 'event_room_save', 'event_room_delete' ), true ) ) {
 			$result = MI_Management_Service::save_event_room( $event_id, 'event_room_save' === $operation ? 'room_save' : 'room_delete', json_decode( wp_unslash( $_POST['data'] ?? 'null' ), true ), sanitize_text_field( wp_unslash( $_POST['version'] ?? '' ) ), 'wp_' . get_current_user_id() . '_' . sanitize_text_field( wp_unslash( $_POST['request_id'] ?? '' ) ) );
 		} elseif ( 'attendance_bulk' === $operation ) {
-			$result = MI_Management_Service::save_attendance_bulk( $event_id, json_decode( wp_unslash( $_POST['data'] ?? 'null' ), true ) );
+			$result = MI_Management_Service::save_attendance_bulk( $event_id, json_decode( wp_unslash( $_POST['data'] ?? 'null' ), true ), 'wp_' . get_current_user_id() . '_' . sanitize_text_field( wp_unslash( $_POST['request_id'] ?? '' ) ) );
 		} elseif ( 'identity_preview' === $operation ) {
 			try { $result = MI_Attendance_Report::target( $event_id, sanitize_text_field( wp_unslash( $_POST['target_order'] ?? '' ) ), absint( $_POST['target_number'] ?? 0 ) ); }
 			catch ( Throwable $error ) { wp_send_json_error( array( 'message' => $error->getMessage() ), 400 ); }
 		} elseif ( 'sheet_changes' === $operation ) {
-			$result = MI_Workspace_Client::request( 'LEGGI_MODIFICHE_FOGLIO', array( 'event_id' => (string) $event_id ) );
+			$result = MI_Workspace_Client::request( 'LEGGI_MODIFICHE_FOGLIO', array( 'event_id' => (string) $event_id, 'sheet_id' => (string) get_post_meta( $event_id, '_mi_operational_sheet_id', true ), 'direct_projection' => true ) );
 		} elseif ( in_array( $operation, array( 'sheet_save', 'room_swap', 'room_assign' ), true ) ) {
 			$changes = json_decode( wp_unslash( $_POST['data'] ?? 'null' ), true );
 			$request_id = 'wp_' . get_current_user_id() . '_' . sanitize_text_field( wp_unslash( $_POST['request_id'] ?? '' ) );
 			$result = MI_Management_Service::save_sheet( $event_id, $changes, $request_id, 'room_assign' === $operation ? 'ROOM_ASSIGN' : ( 'room_swap' === $operation ? 'ROOM_SWAP' : 'SHEET_SYNC' ) );
 			if ( ! is_wp_error( $result ) && ! empty( $result['saved'] ) && ! empty( $result['confirmations'] ) ) {
-				$ack = MI_Workspace_Client::request( 'CONFERMA_MODIFICHE_FOGLIO', array( 'event_id' => (string) $event_id, 'confirmations' => $result['confirmations'] ) );
+				$ack = MI_Workspace_Client::request( 'CONFERMA_MODIFICHE_FOGLIO', array( 'event_id' => (string) $event_id, 'sheet_id' => (string) get_post_meta( $event_id, '_mi_operational_sheet_id', true ), 'direct_projection' => true, 'confirmations' => $result['confirmations'] ) );
 				if ( is_wp_error( $ack ) ) { $result['ack_pending'] = true; $result['message'] .= ' Dati salvati; conferma nel foglio non completata. Riprova la stessa sincronizzazione.'; }
 			}
 		} else {
@@ -77,7 +82,7 @@ final class MI_Portal_Management {
 			} elseif ( 'detail' === $operation ) {
 				$result = MI_Management_Service::detail( (int) $row['id'] );
 			} elseif ( 'cancel_registration' === $operation ) {
-				$result = MI_Registration_Service::cancel_registration( (int) $row['id'], 'WP#' . get_current_user_id() . ' · ' . wp_get_current_user()->display_name, false );
+				$result = MI_Registration_Service::cancel_registration( (int) $row['id'], 'WP#' . get_current_user_id() . ' · ' . wp_get_current_user()->display_name );
 				if ( ! is_wp_error( $result ) ) $result = array( 'ok' => true, 'saved' => true, 'message' => 'Prenotazione annullata. L’allineamento dei fogli può richiedere qualche istante.' );
 			} elseif ( 'cancel' === $operation ) {
 				$participant_id = absint( $_POST['participant_id'] ?? 0 );
@@ -96,7 +101,7 @@ final class MI_Portal_Management {
 		}
 		if ( is_wp_error( $result ) ) wp_send_json_error( array( 'message' => $result->get_error_message() ), 502 );
 		$result['sheet_url'] = get_post_meta( $event_id, '_mi_operational_sheet_url', true ) ? MI_Sheet_Open::url( $event_id ) : '';
-		$result['report_url'] = current_user_can( 'mi_view_registrations' ) || current_user_can( 'manage_options' ) ? add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-payments', 'payment_event_id' => $event_id ), admin_url( 'edit.php' ) ) : '';
+		$result['report_url'] = current_user_can( 'mi_view_registrations' ) || current_user_can( 'manage_options' ) ? MI_Portal_Payments::report_url( $event_id ) : '';
 		wp_send_json_success( $result );
 	}
 	public static function render( $registration_id = 0 ) {
@@ -111,7 +116,7 @@ final class MI_Portal_Management {
 		if ( ! $event_id && $order ) { global $wpdb; $event_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$wpdb->prefix}mi_registrations WHERE order_code=%s", $order ) ); }
 		if ( $event_id && ! MI_Access::can_access_event( $event_id ) ) { echo '<p>Evento non accessibile.</p>'; return; }
 		$scope = MI_Access::event_ids();
-		$query = array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish','private','draft' ), 'numberposts' => -1 );
+		$query = array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish','private','draft' ), 'numberposts' => -1, 'orderby' => array( 'date' => 'DESC', 'ID' => 'DESC' ) );
 		if ( 'ALL' !== $scope ) $query['post__in'] = $scope ?: array( 0 );
 		$events = get_posts( $query );
 		$periods = array();
@@ -120,13 +125,18 @@ final class MI_Portal_Management {
 			$periods[$event->ID] = get_post_meta( $event->ID, '_mi_event_archived_at', true ) || MI_Portal::is_past_event( $end ) ? 'past' : 'current';
 		}
 		$period = $periods[$event_id] ?? ( 'past' === ( $_GET['mi_portal_period'] ?? '' ) ? 'past' : 'current' );
+		if ( ! isset( $_GET['mi_portal_event'] ) && ! $event_id && ! $order && ! $registration_id ) {
+			foreach ( $events as $event ) {
+				if ( $periods[$event->ID] === $period ) { $event_id = (int) $event->ID; break; }
+			}
+		}
 		$compact = (bool) $registration_id;
 		?>
 		<section class="mi-management<?php echo $compact ? ' mi-management--compact' : ''; ?>" data-mi-management data-endpoint="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'mi_portal_management' ) ); ?>" data-event="<?php echo esc_attr( $event_id ); ?>" data-order="<?php echo esc_attr( $order ); ?>">
 		<?php if ( ! $compact ) : ?><h2>Gestione iscrizioni</h2><?php endif; ?>
 		<div class="mi-management-event-selectors"<?php echo $compact ? ' hidden' : ''; ?>><label><select data-period-select aria-label="Eventi attivi o passati"><option value="current" <?php selected( $period, 'current' ); ?>>Eventi attivi</option><option value="past" <?php selected( $period, 'past' ); ?>>Eventi passati</option></select></label>
 		<label>Evento<select data-event-select aria-label="Evento"><option value="">Tutti gli eventi</option><?php foreach ( $events as $event ) : ?><option data-period="<?php echo esc_attr( $periods[$event->ID] ); ?>" value="<?php echo esc_attr( $event->ID ); ?>" <?php selected( $event_id, $event->ID ); ?>><?php echo esc_html( $event->post_title ); ?></option><?php endforeach; ?></select></label></div>
-		<div data-event-actions data-sheet-auto="<?php echo empty( $_GET['mi_sheet_sync'] ) ? '0' : '1'; ?>" hidden><div class="mi-booking-detail__actions mi-event-toolbar"><button type="button" data-refresh aria-label="Aggiorna riepilogo"><span class="mi-refresh-icon" aria-hidden="true">↻</span><span class="mi-refresh-label">Aggiorna riepilogo</span></button><button type="button" data-print>Stampa riepilogo iscritti</button><a class="mi-sheet-button" data-open-sheet hidden target="_blank" rel="noopener"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true" focusable="false"><path d="M6 2h8l5 5v15H6zM14 2v6h5"/><path d="M9 11h7v8H9zM9 15h7M12.5 11v8"/></svg><span>Apri</span><span aria-hidden="true">↗</span></a></div>
+		<div data-event-actions data-sheet-auto="<?php echo empty( $_GET['mi_sheet_sync'] ) ? '0' : '1'; ?>" hidden><div class="mi-booking-detail__actions mi-event-toolbar"><button type="button" data-refresh aria-label="Aggiorna riepilogo"><span class="mi-refresh-icon" aria-hidden="true">↻</span><span class="mi-refresh-label">Aggiorna riepilogo</span></button><button type="button" data-print>Stampa riepilogo iscritti</button><details class="mi-sheet-menu" data-sheet-menu hidden><summary class="mi-sheet-button"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true" focusable="false"><path d="M6 2h8l5 5v15H6zM14 2v6h5"/><path d="M9 11h7v8H9zM9 15h7M12.5 11v8"/></svg><span>Foglio</span><span class="mi-sheet-chevron" aria-hidden="true">▾</span></summary><div class="mi-sheet-menu__panel"><a class="mi-sheet-button" data-open-sheet hidden target="_blank" rel="noopener"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true" focusable="false"><path d="M6 2h8l5 5v15H6zM14 2v6h5"/><path d="M9 11h7v8H9zM9 15h7M12.5 11v8"/></svg><span>Apri foglio</span><span aria-hidden="true">↗</span></a><button type="button" data-sheet-sync hidden>Importa modifiche dal foglio</button></div></details></div>
 		<p data-management-status role="status" aria-live="polite"></p></div><div data-management-content></div>
 		</section>
 		<?php

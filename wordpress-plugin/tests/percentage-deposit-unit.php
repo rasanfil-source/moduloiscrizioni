@@ -15,7 +15,7 @@ check_percentage( array_sum( $deposits ) === 20000 && $deposits[1] === 10000 && 
 $registration['snapshot_json'] = json_encode( array( 'event' => array( 'deposit_mode' => 'FIXED', 'deposit_fixed_cents' => 10000 ) ) );
 check_percentage( null === $method->invoke( null, $registration, $position, array(), 66667 ), 'Le caparre fisse non devono essere modificate dal ricalcolo percentuale.' );
 $now = strtotime( '2026-09-17 10:00:00 UTC' );
-$reopened = MI_Registration_Service::reopened_payment_deadline( array( 'event_id' => 42, 'payment_deadline_at' => '2026-09-16 09:00:00', 'snapshot_json' => json_encode( array( 'event' => array( 'waitlist_offer_hours' => 24 ) ) ) ), $now );
+$reopened = MI_Registration_Service::reopened_payment_deadline( array( 'event_id' => 42, 'payment_deadline_at' => '2026-09-16 09:00:00', 'snapshot_json' => json_encode( array( 'event' => array( 'reopened_payment_hours' => 24 ) ) ) ), $now );
 check_percentage( '2026-09-18 10:00:00' === $reopened, 'Una scadenza trascorsa non è stata sostituita con una nuova finestra.' );
 $future = MI_Registration_Service::reopened_payment_deadline( array( 'event_id' => 42, 'payment_deadline_at' => '2026-09-20 09:00:00', 'snapshot_json' => '{}' ), $now );
 check_percentage( '2026-09-20 09:00:00' === $future, 'Una scadenza ancora valida è stata modificata.' );
@@ -23,7 +23,7 @@ foreach ( array( null, '', 'data non valida', '2026-09-17 10:00:00' ) as $deadli
 	$actual = MI_Registration_Service::reopened_payment_deadline( array( 'payment_deadline_at' => $deadline, 'snapshot_json' => '{}' ), $now );
 	check_percentage( '2026-09-19 10:00:00' === $actual, 'Una scadenza assente, invalida o appena trascorsa deve ricevere 48 ore.' );
 }
-$capped = MI_Registration_Service::reopened_payment_deadline( array( 'snapshot_json' => json_encode( array( 'event' => array( 'waitlist_offer_hours' => 999 ) ) ) ), $now );
+$capped = MI_Registration_Service::reopened_payment_deadline( array( 'snapshot_json' => json_encode( array( 'event' => array( 'reopened_payment_hours' => 999 ) ) ) ), $now );
 check_percentage( '2026-09-24 10:00:00' === $capped, 'La finestra non deve superare 168 ore.' );
 echo "PASS: ricalcolo percentuale esatto e caparra fissa invariata.\n";
 $people=[['id'=>1,'total'=>10000,'deposit'=>3000],['id'=>2,'total'=>10000,'deposit'=>3000]];

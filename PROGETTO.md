@@ -1,49 +1,46 @@
-# Modello corrente — 3.25.1
+# Architettura del sistema
 
-Il progetto è in sviluppo e usa dati fittizi. Non esiste uno storico operativo da migrare.
+Modulo Iscrizioni collega il portale WordPress ai fogli operativi Google dedicati agli eventi. WordPress e MySQL gestiscono le operazioni e conservano i dati; il progetto Apps Script MODULI AUTONOMO prepara le viste Google e i servizi collegati.
 
-## Un sistema, tre accessi
+## Componenti
 
-La segreteria lavora nel portale WordPress autenticato. Vi accede direttamente, dal collegamento nel foglio evento o dal menu di DB_MODULI. Tutti gli accessi aprono la stessa interfaccia e usano gli stessi servizi.
+- **Plugin WordPress:** configurazione di gruppi ed eventi, pubblicazione dei moduli, gestione delle iscrizioni e autorizzazioni della segreteria.
+- **MySQL:** registro canonico di iscrizioni, partecipanti, disponibilità, servizi, pagamenti, camere e attività.
+- **MODULI AUTONOMO:** servizio Apps Script collegato a WordPress tramite richieste firmate. Crea i fogli evento, aggiorna le proiezioni e gestisce le attività Google autorizzate.
+- **Fogli evento:** viste operative dei dati MySQL. Le modifiche ammesse vengono sottoposte a confronto e conferma nel portale.
 
-WordPress/MySQL gestisce eventi, gruppi, identità, permessi, iscrizioni, disponibilità, pagamenti, camere e correzioni operative. Apps Script riceve una replica e rigenera i fogli evento. Le richieste tra sistemi sono firmate; il browser non sceglie liberamente l'operatore o gli eventi autorizzati.
+La segreteria accede al portale autenticato e ai fogli dei singoli eventi. Le richieste firmate trasportano l'identità del servizio e il contesto dell'evento; il browser non determina autonomamente le autorizzazioni.
 
-## Lavoro della segreteria
+## Iscrizioni e partecipanti
 
-- Cercare una prenotazione nell'evento e vedere partecipanti, importi e singoli movimenti.
-- Registrare incassi e rimborsi dal modulo web dei pagamenti.
-- Correggere nome e cognome, completare dati mancanti, svuotare dati facoltativi.
-- Assegnare o rimuovere camera e sigla pullman.
-- Creare camere, modificarne nome/capienza, eliminare camere vuote.
-- Annullare una partecipazione tramite il servizio WordPress che gestisce i posti.
-- Inserire nuove iscrizioni usando il modulo dell'evento.
+Ogni evento definisce capienza, tipologie, servizi, domande e modalità economica. Il server verifica le regole dell'evento e la disponibilità sotto lock. Le richieste idempotenti conservano un identificativo stabile, così un nuovo invio non duplica la stessa operazione.
 
-I campi richiesti dipendono dalla configurazione dell'evento. La modifica operativa consente completamenti progressivi; il riepilogo segnala ciò che manca. Non è presente un editor delle opzioni economiche delle prenotazioni già acquisite né l'aggiunta di persone a un ordine esistente: si inserisce una nuova iscrizione.
+I dati richiesti dipendono dal profilo dell'evento. La scheda di gestione permette di completare i dati operativi e mostra le informazioni ancora necessarie. Annullamento di una partecipazione e rimborso sono operazioni distinte.
 
 ## Registro economico
 
-Pagamenti è il registro canonico. La validazione avviene sul server. I movimenti conservano identità, data, importo, tipo, metodo, riferimento e operatore. I rimborsi e gli storni sottraggono dal versato; i movimenti confermati non si modificano direttamente.
+Il portale registra incassi e rimborsi in MySQL. I movimenti conservano identità, data, importo, tipo, metodo, riferimento e operatore. Gli importi e gli aggregati sono calcolati in centesimi; il server applica le regole economiche configurate per l'evento.
 
-La UI non richiede di classificare ogni incasso come caparra, intermedio o saldo. Le regole economiche dell'evento rimangono nel backend. Importi e aggregati sono calcolati in centesimi. L'annullamento di una partecipazione e il rimborso sono operazioni distinte.
+Un movimento confermato rimane nel registro. La scheda mostra il totale, quanto è stato versato e il saldo o credito risultante. Le operazioni economiche vengono associate alle persone quando l'attribuzione è disponibile.
 
-## Consultazione e report
+## Fogli evento e report
 
-Il foglio evento è una proiezione protetta, ricostruibile da MySQL. Le celle azzurre consentono correzioni dei dati operativi: Sincronizza apre il confronto e la conferma nel portale. Le modifiche pendenti sono conservate; le colonne economiche restano protette. Il portale mostra un riepilogo filtrabile di prenotazioni, residui, dati mancanti e camere non assegnate. I modelli report esistenti rimangono disponibili per stampe e viste specifiche.
+Ogni foglio è una proiezione dei dati MySQL, ricostruibile dal registro canonico. La segreteria può modificare le celle operative previste; il portale presenta i valori proposti prima di applicarli ai dati.
 
-Il trigger aggiorna le proiezioni conservando cursore, limite temporale e gestione degli errori. Un aggiornamento del foglio fallito non annulla un pagamento già registrato: la proiezione viene ritentata.
+Il processo di scrittura conserva una traccia persistente dell'aggiornamento, così può completare il lavoro dopo un'interruzione senza rendere operative righe parziali. Gli aggiornamenti periodici mantengono il contesto di elaborazione e le modifiche ancora da confermare.
 
-## Coerenza delle modifiche
+Il portale offre elenchi filtrabili, riepiloghi economici e report configurabili per l'evento. La selezione dei dati e l'ordinamento sono applicati in modo coerente nelle viste, nelle esportazioni e nella stampa.
 
-I salvataggi operativi verificano versione corrente e capienza sotto lock. Un identificativo di richiesta stabile evita duplicazioni. Il registro persistente consente allo stesso operatore di riprendere un salvataggio interrotto dopo aver riaperto la scheda. La replica delle iscrizioni conserva le correzioni operative.
+## Email
 
-Il payload originale delle iscrizioni resta disponibile nelle strutture esistenti; non è stata introdotta una nuova espansione asincrona dei partecipanti. Questa è una modifica architetturale distinta dalla semplificazione operativa.
+WordPress compone e conserva i messaggi nella coda. Il servizio email registra l'intento prima dell'invio e rende visibili alla segreteria gli esiti che richiedono una decisione. La modalità di anteprima permette di controllare le comunicazioni prima dell'invio operativo.
 
-## Distribuzione e manutenzione
+## Configurazione tecnica
 
-Deploy del 9 settembre 2026: plugin WordPress 3.25.1 e Web App Apps Script versione 64, sul collegamento esistente. Verificati salvataggio operativo, pagamento unico e modifica Sheet → MySQL. Due attivatori Google avviano il cron e le proiezioni ogni cinque minuti. Il recupero WordPress è stato corretto e collaudato: 38 repliche sincronizzate, nessuna pendente. Stato e verifiche aggiornate in [Passaggio MySQL](docs/PASSAGGIO_MYSQL.md).
+Il plugin richiede WordPress 6.4 o successivo e PHP 7.4 o successivo. Il progetto Apps Script usa proprietà private per l'indirizzo del servizio e la chiave condivisa. La distribuzione collega la Web App al sito WordPress e autorizza i servizi Google richiesti.
 
-Le guide sostituite, le vecchie note di rilascio e i verbali superati sono stati rimossi. Restano il manuale operativo aggiornato; la cronologia Git resta invariata.
+I sorgenti Apps Script sono in [`workspace-apps-script/src`](workspace-apps-script/src); le istruzioni di configurazione sono nel [README di MODULI AUTONOMO](workspace-apps-script/README.md). Le opzioni del plugin sono descritte nel [README WordPress](wordpress-plugin/modulo-iscrizioni/README.md).
 
-- [Manuale del segretario](docs/manuale-segretario/Manuale_del_segretario.docx)
-- [Schema logico](docs/SCHEMA_DATI.md)
-- [Contratto dell'interfaccia](UX-CONTRACT.md)
+## Protezione dei dati
+
+Il plugin non conserva coordinate bancarie, numeri completi di carte o credenziali di provider di pagamento. I dati dimostrativi usano identità fittizie; i segreti di servizio sono conservati nelle proprietà riservate della piattaforma.

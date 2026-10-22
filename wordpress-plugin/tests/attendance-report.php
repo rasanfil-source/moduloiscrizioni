@@ -9,6 +9,8 @@ $report=MI_Attendance_Report::aggregate($people,$audit,$events,2026,2);check_rep
 $audit[]=['registration_id'=>2,'event_type'=>'MANAGEMENT_identity_link','detail_json'=>json_encode(['participant_id'=>2,'target_id'=>1])];
 $audit[]=['registration_id'=>3,'event_type'=>'MANAGEMENT_identity_link','detail_json'=>json_encode(['participant_id'=>3,'target_id'=>2])];
 $report=MI_Attendance_Report::aggregate($people,$audit,$events,2026,2);check_report(count($report['items'])===1&&$report['items'][0]['count']===2,'Collegamenti espliciti o deduplica evento errati');
+$stored_audit=array_map(static function($row){$row['event_type']=strtolower($row['event_type']);return $row;},$audit);
+check_report(MI_Attendance_Report::aggregate($people,$stored_audit,$events,2026,2)===$report,'Tipi normalizzati dal database non riconosciuti');
 $audit[]=['registration_id'=>2,'event_type'=>'MANAGEMENT_identity_link','detail_json'=>json_encode(['participant_id'=>2,'target_id'=>0])];
 check_report(count(MI_Attendance_Report::aggregate($people,$audit,$events,2026,2)['items'])===0,'Rimozione collegamento non rispettata');
 $audit[]=['registration_id'=>1,'event_type'=>'MANAGEMENT_attendance','detail_json'=>json_encode(['participant_id'=>1,'attendance'=>'ABSENT'])];
@@ -16,6 +18,12 @@ check_report(count(MI_Attendance_Report::aggregate($people,$audit,$events,2026,1
 $audit[]=['registration_id'=>1,'event_type'=>'MANAGEMENT_identity_link','detail_json'=>json_encode(['participant_id'=>2,'target_id'=>1])];
 check_report(count(MI_Attendance_Report::aggregate($people,$audit,$events,2026,2)['items'])===0,'Audit riferito a un’altra prenotazione accettato');
 echo "Rapporto annuale: omonimi separati, collegamenti confermati, rimozioni, anno, presenza effettiva ed eventi unici verificati.\n";
+$closed_people=array_map(static function($p){$p['status']='CANCELLED';$p['booking_status']='CONFIRMED';return $p;},$people);
+check_report(MI_Attendance_Report::aggregate($closed_people,[],$events,2026,1)['unrecorded']===0,'Cancelled people counted as unrecorded');
+$waiting_people=array_map(static function($p){$p['status']='ACTIVE';$p['booking_status']='WAITLISTED';return $p;},$people);
+check_report(MI_Attendance_Report::aggregate($waiting_people,[],$events,2026,1)['unrecorded']===0,'Waiting people counted as unrecorded');
+$recorded=[['registration_id'=>1,'event_type'=>'MANAGEMENT_attendance','detail_json'=>json_encode(['participant_id'=>1,'attendance'=>'PRESENT'])]];
+check_report(count(MI_Attendance_Report::aggregate($closed_people,$recorded,$events,2026,1)['items'])===1,'Historical actual attendance erased by later cancellation');
 $mobile_people=$people;
 $mobile_people[0]['extra_json']=json_encode(['participant_phone'=>'+39 312 345 6789']);
 $mobile_people[1]['extra_json']=json_encode(['participant_phone'=>'0039 3123456789']);
@@ -57,7 +65,7 @@ foreach([['2026-07','2025-09'],['2026-00','2026-12'],['2026-01',''],['1999-12','
 }
 echo "Presenze: ciclo settembre-giugno, estremi inclusivi, deduplica e periodi invalidi verificati.\n";
 
-// Descending links form a long chain before any attendance lookup compresses it.
+// I collegamenti decrescenti formano una catena lunga prima della consultazione delle presenze.
 $chain_people=[];$chain_audit=[];
 for($id=800;$id>=1;$id--){
  $chain_people[]=['id'=>$id,'registration_id'=>$id,'event_id'=>$id%2?10:11,'order_code'=>'CHAIN'.$id,'first_name'=>'Test','last_name'=>'Persona'];

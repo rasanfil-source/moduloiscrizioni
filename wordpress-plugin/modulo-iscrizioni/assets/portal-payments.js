@@ -104,7 +104,7 @@ function init(root) {
   }
   function showDeposit(r) {
       let deposit=el('[data-deposit-summary]');if(!deposit){deposit=document.createElement('p');deposit.dataset.depositSummary='1';el('[data-balance]').closest('.mi-payment-summary').append(deposit);}
-      deposit.hidden=!r.deposit_plan;deposit.textContent=r.deposit_plan?'Caparra prevista '+money(r.deposit_due)+' · Ancora da coprire '+money(r.deposit_missing)+(r.deposit_covered&&r.residuo>0?' · Caparra coperta, saldo da completare':r.deposit_due===0?' · Nessuna caparra richiesta':''):'';
+      deposit.hidden=!r.deposit_plan;deposit.textContent=r.deposit_plan?(r.deposit_due===null?'Caparre individuali da verificare':'Caparra prevista '+money(r.deposit_due)+' · Ancora da coprire '+money(r.deposit_missing)+(r.deposit_covered&&r.residuo>0?' · Caparra coperta, saldo da completare':r.deposit_due===0?' · Nessuna caparra richiesta':'')):'';
   }
   function showHistory(movements) {
     const host=el('[data-payment-history]');host.replaceChildren();
@@ -115,7 +115,7 @@ function init(root) {
     const table=document.createElement('table');table.className='mi-payment-history-table';const head=table.createTHead().insertRow();
     for(const label of ['Data','Tipo','Importo','Metodo','Riferimento','Operatore','Nota','Persone']){const th=document.createElement('th');th.scope='col';th.textContent=label;head.append(th);}
     const body=table.createTBody();
-    for(const m of movements){const row=body.insertRow();for(const value of [new Date(m.data).toLocaleDateString('it-IT'),m.tipo,money(m.importo),m.metodo,m.riferimento,m.operatore,m.nota||'',m.persone||''])row.insertCell().textContent=value;}
+    for(const m of movements){const row=body.insertRow();for(const value of [m.data_locale||'—',m.tipo,money(m.importo),m.metodo,m.riferimento,m.operatore,m.nota||'',m.persone||''])row.insertCell().textContent=value;}
     scroll.append(table);host.append(scroll);
   }
   function invalidate() {

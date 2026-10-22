@@ -504,7 +504,7 @@
     margin-right: 6px;
   }
 
-  /* Success check pop */
+  /* Animazione del riscontro positivo */
   @keyframes popIn {
     0%   { transform: scale(0); opacity: 0; }
     100% { transform: scale(1); opacity: 1; }
@@ -529,7 +529,7 @@
 
   #warmupBadge.ready { background: #c6f6d5; color: #276749; }
 
-  /* ── Calcola button – mobile sticky ── */
+  /* ── Pulsante di calcolo fisso su schermi piccoli ── */
   #calcBtnContainer { margin-bottom: 18px; }
 
   @media (max-width: 900px) {

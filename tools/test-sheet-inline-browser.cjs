@@ -1,4 +1,4 @@
-// Runs the real management UI against synthetic responses. No live records.
+// Esegue l'interfaccia di gestione con risposte sintetiche e senza record attivi.
 const fs=require('fs'),http=require('http'),path=require('path'),assert=require('node:assert/strict');
 const {chromium}=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright');
 let opens=0,mode='error';const calls=[];

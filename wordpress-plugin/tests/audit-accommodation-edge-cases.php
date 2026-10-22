@@ -1,5 +1,5 @@
 <?php
-// Regression checks; disposable localhost mi_ledger_test only, via existing fixture.
+// Controlli con dati temporanei nel solo database locale mi_ledger_test e la fixture del progetto.
 require __DIR__ . '/accommodation-change-innodb.php';
 seed_auto_rooms(80, ['singola', 'singola']);
 $wpdb->query($wpdb->prepare("UPDATE wp_mi_registrations SET snapshot_json=%s,economic_mode='FULL_PAYMENT',total_cents=20000,initial_due_cents=20000 WHERE id=80", $snapshot));

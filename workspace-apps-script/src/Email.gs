@@ -7,7 +7,21 @@ function statoCanaleEmail_() {
   return { ok: !!authorized, error: authorized ? '' : 'EMAIL_SENDER_NOT_AUTHORIZED', channel: 'GOOGLE_WORKSPACE', sender: sender };
 }
 
-/** Signed WordPress outbox. Persist intent before sending: uncertain deliveries require review. */
+/** Limita il controllo delle ripetizioni; MySQL resta la coda autorevole. */
+function pulisciRicevuteEmail_ (props) {
+  const now=Date.now(), last=Number(props.getProperty('MI_EMAIL_LEDGER_CLEANED_AT')||0);
+  if (now-last<86400000) return;
+  const all=props.getProperties();
+  Object.keys(all).forEach(key=>{
+    if (!/^MI_EMAIL_DELIVERY_[a-f0-9]{64}$/.test(key)) return;
+    const value=String(all[key]||''), parts=value.split('|');
+    // Lo stato SENDING non viene eliminato in automatico: l'esito della consegna è incerto.
+    if (parts[0]==='ACCEPTED'&&Number(parts[1])>0&&now-Number(parts[1])>90*86400000) props.deleteProperty(key);
+  });
+  props.setProperty('MI_EMAIL_LEDGER_CLEANED_AT',String(now));
+}
+
+/** Coda WordPress firmata. Registra l'intento prima dell'invio per consentire la verifica degli esiti incerti. */
 function inviaEmailConfermaDaWordPress_(payload) {
   const p = payload || {};
   const sender = statoCanaleEmail_();
@@ -20,31 +34,50 @@ function inviaEmailConfermaDaWordPress_(payload) {
   if (p.mode === 'OPERATIVO' && (replyTo.length > 254 || !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(replyTo))) return { ok: false, error: 'INVALID_REPLY_TO' };
   if (!p.oggetto || !p.testo || !p.html || String(p.oggetto).length > 250 || String(p.testo).length > 100000 || String(p.html).length > 300000 || /[\r\n]/.test(String(p.oggetto))) return { ok: false, error: 'INVALID_EMAIL_PAYLOAD' };
   const lock = LockService.getScriptLock();
+  const senderName = String(p.nome_mittente || '').trim() || 'Parrocchia Sant’Eugenio';
+  if (senderName.length > 120 || /[\r\n\x00]/.test(senderName)) return { ok: false, error: 'INVALID_SENDER_NAME' };
+  const requestedSender = String(p.indirizzo_mittente || sender.sender).trim().toLowerCase();
+  if (requestedSender.length > 254 || !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(requestedSender)) return { ok: false, error: 'INVALID_SENDER_EMAIL' };
   if (!lock.tryLock(1000)) return { ok: false, error: 'EMAIL_BUSY' };
   try {
-    const book = ottieniFoglioDiLavoroAssociato_();
-    let sheet = book.getSheetByName('Registro invii email');
-    if (!sheet) { sheet = book.insertSheet('Registro invii email'); sheet.appendRow(['delivery_key', 'stato', 'data_utc']); }
-    const rows = sheet.getLastRow() > 1 ? sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues() : [];
-    const previous = rows.find(row => row[0] === p.delivery_key);
-    if (previous) return previous[1] === 'ACCEPTED' ? { ok: true, channel: 'GOOGLE_WORKSPACE', replayed: true } : { ok: false, error: 'EMAIL_DELIVERY_UNCERTAIN' };
+    pulisciRicevuteEmail_(props);
+    const key='MI_EMAIL_DELIVERY_'+p.delivery_key;
+    const previous=String(props.getProperty(key)||'');
+    if (previous) return previous.startsWith('ACCEPTED|') ? { ok: true, channel: 'GOOGLE_WORKSPACE', replayed: true } : { ok: false, error: 'EMAIL_DELIVERY_UNCERTAIN' };
+    let alias = '';
+    if (requestedSender !== sender.sender) {
+      try { alias = GmailApp.getAliases().find(address => String(address).toLowerCase() === requestedSender) || ''; }
+      catch (error) { return { ok: false, error: 'EMAIL_ALIAS_CHECK_FAILED' }; }
+      if (!alias) return { ok: false, error: 'EMAIL_ALIAS_NOT_AUTHORIZED' };
+    }
     if (MailApp.getRemainingDailyQuota() < 1) return { ok: false, error: 'EMAIL_QUOTA_EXCEEDED' };
-    sheet.appendRow([p.delivery_key, 'SENDING', new Date().toISOString()]);
-    const row = sheet.getLastRow();
-    SpreadsheetApp.flush();
-    const options = { to: recipient, subject: String(p.oggetto), body: String(p.testo), htmlBody: String(p.html), name: 'Parrocchia Sant’Eugenio', replyTo: recipient };
+    const options = { to: recipient, subject: String(p.oggetto), body: String(p.testo), htmlBody: String(p.html), name: senderName, replyTo: recipient };
     if (p.mode === 'OPERATIVO') options.replyTo = replyTo;
     if (p.codice_svg) options.inlineImages = { 'mi-registration-code': Utilities.newBlob(String(p.codice_svg), 'image/svg+xml', 'codice-iscrizione.svg') };
     // La quota viene controllata prima di registrare SENDING. Dopo sendEmail,
     // un'eccezione non prova che Google non abbia accettato il messaggio:
     // conserviamo l'intento per evitare duplicati, senza dedurlo dal testo
     // dell'errore (localizzato e non un codice di consegna affidabile).
-    try { MailApp.sendEmail(options); }
+    props.setProperty(key,'SENDING|'+Date.now());
+    try {
+      if (alias) {
+        options.from = alias;
+        GmailApp.sendEmail(recipient, options.subject, options.body, options);
+      } else { MailApp.sendEmail(options); }
+    }
     catch (error) { console.error('EMAIL_SEND_FAILED', String(error)); return { ok: false, error: 'EMAIL_DELIVERY_UNCERTAIN' }; }
-    sheet.getRange(row, 2).setValue('ACCEPTED');
-    SpreadsheetApp.flush();
-    return { ok: true, channel: 'GOOGLE_WORKSPACE', sender: sender.sender };
+    props.setProperty(key,'ACCEPTED|'+Date.now());
+    return { ok: true, channel: 'GOOGLE_WORKSPACE', sender: requestedSender };
   } finally { lock.releaseLock(); }
+}
+
+/** Eseguire dall'editor con l'account della distribuzione per autorizzare Gmail. Non invia email. */
+function verificaMittentiEmailAutorizzati() {
+  const state = statoCanaleEmail_();
+  if (!state.ok) throw new Error(state.error);
+  const aliases = GmailApp.getAliases();
+  console.log('Mittenti aggiuntivi autorizzati: ' + aliases.join(', '));
+  return { sender: state.sender, aliases: aliases };
 }
 
 /** Invia soltanto la prova del Modulo Iscrizioni richiesta da WordPress. */
@@ -59,7 +92,6 @@ function inviaEmailProvaDaWordPress_(payload) {
   const html = String(payload.html || '').slice(0, 60000);
   if (!oggetto || !testo || !html) return { ok: false, error: 'INVALID_EMAIL_PAYLOAD' };
   MailApp.sendEmail({ to: destinatarioConfigurato, subject: oggetto, body: testo, htmlBody: html, name: 'Modulo Iscrizioni' });
-  aggiungiControllo_('SEND_TEST_EMAIL', 'EMAIL', 'PROVA_WORDPRESS', 'SUCCESS', 'WORDPRESS', 'SIGNED_TEST_RECIPIENT', 'WORDPRESS_PROXY');
   return { ok: true, channel: 'GOOGLE_WORKSPACE' };
 }
 
@@ -80,23 +112,49 @@ function inviaCodaEmailDiTest() {
   const recipient = String(PropertiesService.getScriptProperties().getProperty(MI_TEST_EMAIL_PROPERTY) || '').trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) throw new Error('Configura prima il destinatario email di test dal menu Modulo iscrizioni.');
 
-  const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.EMAIL_OUTBOX);
-  const index = creaIndiceIntestazioni_(sheet);
-  const rows = convertiRigheInOggetti_(sheet).filter(function (row) { return String(row.stato).toUpperCase() === 'PREVIEW'; });
+  const startedAt = Date.now();
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) throw new Error('Invio occupato. Riprova tra poco.');
   let sent = 0;
-  rows.forEach(function (row) {
-    const payload = JSON.parse(String(row.contenuto_json || '{}'));
-    const orderCode = normalizzaTesto_(row.codice_ordine, 64);
-    MailApp.sendEmail({
-      to: recipient,
-      subject: '[TEST] Iscrizione ' + orderCode,
-      body: 'Questa è una prova protetta.\n\nCodice ordine: ' + orderCode + '\nStato: ' + normalizzaTesto_(payload.status, 30) + '\nModello: ' + normalizzaTesto_(row.tipo_modello, 80) + '\n\nNessun messaggio è stato inviato al destinatario originale.',
-      name: 'Modulo iscrizioni — TEST'
-    });
-    sheet.getRange(row._row, index.stato + 1).setValue('TEST_INVIATA');
-    aggiungiControllo_('SEND_TEST_EMAIL', 'EMAIL', row.id_messaggio, 'SUCCESS', Session.getActiveUser().getEmail(), 'TEST_RECIPIENT_ONLY', 'WORKSPACE_UI');
-    sent += 1;
-  });
-  SpreadsheetApp.flush();
-  SpreadsheetApp.getUi().alert(sent ? 'Email di test inviate: ' + sent + '. Tutte esclusivamente al destinatario privato configurato.' : 'Nessuna email PREVIEW da inviare.');
+  let remaining = 0;
+  let uncertain = 0;
+  try {
+    const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.EMAIL_OUTBOX);
+    const index = creaIndiceIntestazioni_(sheet);
+    const allRows = convertiRigheInOggetti_(sheet);
+    const rows = allRows.filter(function (row) { return String(row.stato).toUpperCase() === 'PREVIEW'; });
+    if (!Number.isInteger(index.stato)) throw new Error('Colonna stato mancante nella coda email.');
+    uncertain = allRows.filter(row => String(row.stato).toUpperCase() === 'TEST_IN_CORSO').length;
+    const actor = Session.getActiveUser().getEmail();
+    remaining = rows.length;
+    // Esecuzioni brevi e riprendibili. Registra ogni intento prima di contattare il servizio email:
+    // un timeout o un esito incerto non avvia mai un nuovo invio automatico.
+    for (const row of rows) {
+      if (sent >= 25 || Date.now() - startedAt >= 240000 || MailApp.getRemainingDailyQuota() < 1) break;
+      const payload = JSON.parse(String(row.contenuto_json || '{}'));
+      const orderCode = normalizzaTesto_(row.codice_ordine, 64);
+      sheet.getRange(row._row, index.stato + 1).setValue('TEST_IN_CORSO');
+      SpreadsheetApp.flush();
+      try {
+        MailApp.sendEmail({
+          to: recipient,
+          subject: '[TEST] Iscrizione ' + orderCode,
+          body: 'Questa è una prova protetta.\n\nCodice ordine: ' + orderCode + '\nStato: ' + normalizzaTesto_(payload.status, 30) + '\nModello: ' + normalizzaTesto_(row.tipo_modello, 80) + '\n\nNessun messaggio è stato inviato al destinatario originale.',
+          name: 'Modulo iscrizioni — TEST'
+        });
+        sheet.getRange(row._row, index.stato + 1).setValue('TEST_INVIATA');
+        SpreadsheetApp.flush();
+      } catch (error) {
+        throw new Error('Invio di test interrotto: verifica la riga ' + row._row + ' prima di riprovare. Le righe TEST_IN_CORSO non vengono reinviate automaticamente.');
+      }
+      aggiungiControllo_('SEND_TEST_EMAIL', 'EMAIL', row.id_messaggio, 'SUCCESS', actor, 'TEST_RECIPIENT_ONLY', 'WORKSPACE_UI');
+      sent += 1;
+      remaining -= 1;
+    }
+    SpreadsheetApp.flush();
+  } finally { lock.releaseLock(); }
+  // Gli avvisi dell'interfaccia sospendono l'esecuzione: mostrarli solo dopo aver rilasciato il lock.
+  SpreadsheetApp.getUi().alert('Email di test inviate: ' + sent + '. Tutte esclusivamente al destinatario privato configurato.' +
+    (remaining ? ' Restano ' + remaining + ' email PREVIEW: ripeti il comando quando la quota è disponibile.' : ' Nessuna email PREVIEW rimanente.') +
+    (uncertain ? ' Sono presenti ' + uncertain + ' righe TEST_IN_CORSO: verifica la consegna prima di modificarne lo stato.' : ''));
 }

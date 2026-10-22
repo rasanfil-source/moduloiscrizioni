@@ -1,4 +1,4 @@
-// Actual JS and PHP selection, synthetic records; no WordPress/Google writes.
+// Selezione JavaScript e PHP effettiva, record sintetici, nessuna scrittura WordPress o Google.
 const fs=require('fs'),http=require('http'),path=require('path'),assert=require('node:assert/strict'),{execFileSync}=require('child_process');
 const {chromium}=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright');
 const assets=path.resolve('wordpress-plugin/modulo-iscrizioni/assets');
@@ -12,13 +12,25 @@ const server=http.createServer(async(req,res)=>{try{if(req.url==='/')return res.
 (async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({channel:'msedge',headless:true});try{const page=await browser.newPage({acceptDownloads:true});const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:'+server.address().port);
 const rows=async count=>page.waitForFunction(n=>document.querySelectorAll('[data-list] tbody tr').length===n,count);
 await rows(30);
+assert.equal(await page.locator('.mi-participant-scroll-shell').count(),1);const bottomHint=page.locator('.mi-scroll-hint--bottom');assert.equal(await bottomHint.isVisible(),true);await page.locator('.mi-participant-scroll').evaluate(viewport=>viewport.scrollTop=viewport.scrollHeight);await page.waitForFunction(()=>document.querySelector('.mi-scroll-hint--bottom').hidden);assert.equal(await bottomHint.evaluate(element=>element.hidden),true);
 const box=page.locator('[data-attendance-toggle="1"]');assert.equal(await box.isChecked(),false);
-assert.equal(await page.locator('[data-list] th').last().innerText(),'Presente');
+assert.equal(await page.locator('[data-list] th').last().innerText(),'Stato');
+const presenceIndex=await page.locator('[data-list] th').evaluateAll(headers=>headers.findIndex(header=>header.textContent==='Presente'));
+assert.ok([2,3].includes(presenceIndex));
+assert.equal(await box.evaluate(input=>input.closest('td').cellIndex),presenceIndex);
+assert.equal(await page.locator('[data-list] tbody tr').first().getAttribute('data-open'),'TEST');
+assert.equal(await page.locator('[data-list] tbody tr').first().locator('button[data-open]').count(),0);
+assert.equal(await page.locator('[data-list] .mi-participant-actions').count(),0);
 await box.check();await page.getByText('Presenza salvata. Il foglio verrà aggiornato.',{exact:true}).waitFor();assert.equal(people[0].attendance,'PRESENT');
 await page.locator('[data-refresh]').click();await rows(30);assert.equal(await box.isChecked(),true);
-failAttendance=true;await box.uncheck();await page.getByText(/Presenza non salvata/).waitFor();assert.equal(await box.isChecked(),true);
+failAttendance=true;await box.click();await page.getByText(/Presenza non salvata/).waitFor();assert.equal(await box.isChecked(),true);
 failAttendance=false;await box.uncheck();await page.getByText('Presenza salvata. Il foglio verrà aggiornato.',{exact:true}).waitFor();assert.equal(people[0].attendance,'ABSENT');
 summary.attendance_availability.available=false;summary.attendance_availability.enabled=false;await page.locator('[data-refresh]').click();await rows(30);assert.equal(await page.locator('[data-attendance-toggle]').count(),0);
+summary.features.payments=false;await page.locator('[data-refresh]').click();await rows(30);
+const compactHeaders=await page.locator('[data-list] th').evaluateAll(headers=>headers.map(header=>({text:header.textContent.trim(),className:header.className,hidden:header.hidden})));
+assert.equal(compactHeaders.some(header=>header.text==='Stato'),false);
+assert.deepEqual(compactHeaders.filter(header=>!header.hidden).map(header=>header.text.replace(/[↑↓↕]/g,'').trim()),['N.','Partecipante','Contatti']);
+assert.equal(compactHeaders.findIndex(header=>header.className.includes('mi-participant-contacts-cell')),compactHeaders.findIndex(header=>header.className.includes('mi-participant-name'))+1);
 summary.attendance_availability={enabled:true,available:false,starts_at:Math.floor(Date.now()/1000)+3600,server_now:Math.floor(Date.now()/1000)};await page.locator('[data-refresh]').click();await rows(30);assert.equal(await page.locator('[data-attendance-toggle]').count(),0);
-assert.deepEqual(errors,[]);console.log('PASS: casella destra, salvataggio e rilettura, revoca, rollback UI, gruppo disabilitato e evento futuro.');
+assert.deepEqual(errors,[]);console.log('PASS: presenza e controlli indipendenti dalla riga apribile, colonne compatte senza Stato e Gestisci, salvataggio, rollback e finestra temporale.');
 }finally{await browser.close();server.close();}})().catch(e=>{console.error(e);server.close();process.exitCode=1;});

@@ -1,4 +1,5 @@
 function onOpen() {
+  if (typeof MI_STANDALONE_MODE !== 'undefined' && MI_STANDALONE_MODE === true) return;
   SpreadsheetApp.getUi().createMenu('Modulo iscrizioni')
     .addItem('Apri gestione web', 'apriGestioneWeb')
     .addItem('Inizializza/aggiorna struttura', 'configuraCartellaDiLavoro')
@@ -13,7 +14,6 @@ function onOpen() {
     .addItem('Attiva sincronizzazione automatica eventi', 'attivaSincronizzazioneFogliEventi')
     .addSeparator()
     .addItem('Configura destinatario email di test', 'configuraDestinatarioTestEmail')
-    .addItem('Invia coda al solo destinatario di test', 'inviaCodaEmailDiTest')
     .addToUi();
 }
 
@@ -111,7 +111,8 @@ function inizializzaScheda_(sheet, headers) {
   if (hasData && sheet.getName() === MI_SHEETS.PARTICIPANTS && (usesItalianPrevious || usesPreviousHeaders)) {
     const oldRows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
     const migratedRows = oldRows.map(function (row) {
-      return [row[0], row[1], '', 0, row[2], row[3], row[4], '[]', 'ATTIVO', ''];
+      const migrated = [row[0], row[1], '', 0, row[2], row[3], row[4], '[]', 'ACTIVE', ''];
+      return migrated.concat(Array(Math.max(0, headers.length - migrated.length)).fill(''));
     });
     sheet.getRange(2, 1, migratedRows.length, headers.length).clearContent().setValues(migratedRows);
   }

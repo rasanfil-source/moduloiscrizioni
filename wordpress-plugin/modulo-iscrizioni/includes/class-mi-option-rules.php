@@ -1,7 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-/** Semantic rules shared by registration, staff changes and public self-service. */
+/** Regole di significato condivise da iscrizioni, modifiche della segreteria e funzioni pubbliche. */
 final class MI_Option_Rules {
 	public static function is_accommodation( array $option ) {
 		return 'alloggio' === ( $option['category'] ?? '' ) || 'alloggio' === ( $option['choice_group'] ?? '' ) || 0 === strpos( (string) ( $option['code'] ?? '' ), 'alloggio-' );
@@ -11,8 +11,8 @@ final class MI_Option_Rules {
 	}
 	public static function choice_group( array $option ) {
 		$group = trim( (string) ( $option['choice_group'] ?? '' ) );
-		// Category describes a service; only a group makes it an alternative.
-		// Preserve cumulative accommodation extras (for example additional nights).
+		// La categoria descrive il servizio; un gruppo definisce le opzioni alternative.
+		// I servizi aggiuntivi per l'alloggio sono cumulabili, ad esempio per notti ulteriori.
 		return '' !== $group ? $group : ( 0 === strpos( (string) ( $option['code'] ?? '' ), 'alloggio-' ) ? 'alloggio' : '' );
 	}
 }

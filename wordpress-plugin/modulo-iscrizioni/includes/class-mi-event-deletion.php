@@ -2,7 +2,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-/** One event lease covers SQL writes and their external effects until request shutdown. */
+/** Un lock per evento coordina le scritture SQL e le operazioni collegate fino alla fine della richiesta. */
 final class MI_Event_Deletion {
 	private static $leases = array();
 	private static $finalizing = 0;
@@ -11,6 +11,7 @@ final class MI_Event_Deletion {
 
 	public static function boot() {
 		add_filter( 'pre_delete_post', array( __CLASS__, 'guard_delete' ), 10, 3 );
+		add_filter( 'pre_trash_post', array( __CLASS__, 'guard_trash' ), 10, 3 );
 		add_filter( 'wp_insert_post_data', array( __CLASS__, 'guard_post' ), 10, 2 );
 		add_action( 'save_post_' . MI_Event_Post_Type::EVENT_TYPE, array( __CLASS__, 'guard_saved_post' ), 0 );
 		add_filter( 'post_row_actions', array( __CLASS__, 'row_actions' ), 20, 2 );
@@ -22,7 +23,7 @@ final class MI_Event_Deletion {
 		return is_user_logged_in() && ! MI_Access::is_suspended() && MI_Access::is_global_manager() && ( current_user_can( 'mi_manage_events' ) || current_user_can( 'manage_options' ) );
 	}
 	public static function job( $id ) { return get_option( 'mi_delete_event_' . absint( $id ), array() ); }
-	/** Release only after a local commit/snapshot, before an idempotent Google call. */
+	/** Rilascia dopo il commit o l'istantanea locale e prima della richiesta Google idempotente. */
 	public static function release( $id ) {
 		global $wpdb;
 		$id = absint( $id );
@@ -41,7 +42,7 @@ final class MI_Event_Deletion {
 			self::$leases[ $id ] = $name;
 			register_shutdown_function( static function () use ( $id ) { self::release( $id ); } );
 		}
-		// Refresh after acquiring the lease: another request may have started deletion.
+		// Aggiorna i dati dopo aver acquisito il lock: un'altra richiesta può aver avviato l'eliminazione.
 		wp_cache_delete( 'mi_delete_event_' . $id, 'options' );
 		if ( ! $deleting && self::job( $id ) ) return new WP_Error( 'mi_event_deleting', 'Evento in eliminazione: le modifiche sono bloccate.' );
 		if ( ! $deleting && MI_Event_Post_Type::EVENT_TYPE !== get_post_type( $id ) ) return new WP_Error( 'mi_event_missing', 'Evento non disponibile.' );
@@ -64,6 +65,13 @@ final class MI_Event_Deletion {
 		if ( MI_Event_Post_Type::EVENT_TYPE !== $post->post_type || self::$finalizing === (int) $post->ID ) return $delete;
 		if ( ! wp_doing_cron() && self::allowed() ) { wp_safe_redirect( self::url( $post->ID ) ); exit; }
 		return false;
+	}
+	public static function guard_trash( $trash, $post, $previous_status ) {
+		if ( MI_Event_Post_Type::EVENT_TYPE !== $post->post_type ) return $trash;
+		if ( ! MI_Access::can_access_event( $post->ID ) ) return false;
+		global $wpdb;
+		$exists = $wpdb->get_var( $wpdb->prepare( "SELECT 1 FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d LIMIT 1", $post->ID ) );
+		return $wpdb->last_error || $exists || 'draft' !== $post->post_status ? false : $trash;
 	}
 	public static function guard_post( $data, $postarr ) {
 		$id = absint( $postarr['ID'] ?? 0 );
@@ -106,7 +114,7 @@ final class MI_Event_Deletion {
 		$event_emails = self::event_emails( $id );
 		$counts['Comunicazioni dell’evento'] = count( $event_emails );
 		$data = array( 'title' => $post->post_title, 'status' => $post->post_status, 'counts' => $counts, 'sheet_url' => (string) get_post_meta( $id, '_mi_operational_sheet_url', true ), 'sheet_id' => (string) get_post_meta( $id, '_mi_operational_sheet_id', true ), 'page_id' => absint( get_post_meta( $id, '_mi_registration_page_id', true ) ) );
-		// Include all mutable rows, not just counts, so changed values require review.
+		// Includi tutte le righe modificabili, oltre ai conteggi, per rendere visibili le variazioni da verificare.
 		$hash = hash_init( 'sha256' );
 		hash_update( $hash, wp_json_encode( array( $data, get_post_meta( $id ), $post->post_modified_gmt ) ) );
 		foreach ( array_merge( array( 'mi_registrations' ), self::DIRECT ) as $table ) {
@@ -125,7 +133,7 @@ final class MI_Event_Deletion {
 	}
 	private static function event_emails( $id ) {
 		global $wpdb;
-		// Legacy event notifications use registration_id=0 and a structured payload.
+		// Gli avvisi evento usano registration_id=0 e un contenuto strutturato.
 		$rows = $wpdb->get_results( "SELECT id,payload_json FROM {$wpdb->prefix}mi_email_outbox WHERE registration_id=0 ORDER BY id", ARRAY_A );
 		if ( $wpdb->last_error ) throw new RuntimeException( 'Comunicazioni non disponibili.' );
 		return array_values( array_filter( $rows, static function ( $row ) use ( $id ) { $payload = json_decode( $row['payload_json'], true ); return (int) ( $payload['event_id'] ?? 0 ) === (int) $id; } ) );
@@ -148,6 +156,23 @@ final class MI_Event_Deletion {
 			return $job;
 		} catch ( Throwable $error ) { return new WP_Error( 'mi_delete_error', $error->getMessage() ); }
 	}
+	public static function preserve_file( $id, $request, $reason, $confirmed ) {
+		if ( ! self::allowed() || ! current_user_can( 'manage_options' ) || ! $confirmed ) return new WP_Error( 'mi_delete_access', 'Solo un amministratore può confermare lo sblocco.' );
+		$reason = trim( sanitize_textarea_field( $reason ) );
+		if ( '' === $reason || strlen( $reason ) > 2000 ) return new WP_Error( 'mi_delete_reason', 'Indica una motivazione, massimo 2000 byte.' );
+		$lease = self::enter( $id, true );
+		if ( is_wp_error( $lease ) ) return $lease;
+		try {
+			$job = self::job( $id );
+			if ( ! $job || ! hash_equals( $job['request'], $request ) || 'google' !== $job['stage'] ) throw new RuntimeException( 'La procedura è cambiata. Ricarica la pagina.' );
+			if ( ! empty( $job['preserve_file'] ) ) return $job;
+			if ( 'trash' !== $job['mode'] || empty( $job['error'] ) ) throw new RuntimeException( 'Lo sblocco è disponibile solo dopo un errore nella fase Google.' );
+			$job['preserve_file'] = array( 'actor' => get_current_user_id(), 'at' => gmdate( 'c' ), 'reason' => $reason, 'previous_mode' => $job['mode'], 'previous_error' => $job['error'], 'sheet_id' => $job['sheet_id'], 'sheet_url' => $job['sheet_url'] );
+			$job['mode'] = 'keep';
+			self::save_job( $id, $job );
+			return $job;
+		} catch ( Throwable $error ) { return new WP_Error( 'mi_delete_override', $error->getMessage() ); }
+	}
 	public static function advance( $id ) {
 		global $wpdb;
 		if ( ! self::allowed() ) return new WP_Error( 'mi_delete_access', 'Accesso non consentito.' );
@@ -157,9 +182,7 @@ final class MI_Event_Deletion {
 		if ( ! $job || 'done' === $job['stage'] ) return $job;
 		try {
 			if ( 'google' === $job['stage'] ) {
-				$codes = $wpdb->get_col( $wpdb->prepare( "SELECT order_code FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d", $id ) );
-				if ( $wpdb->last_error ) throw new RuntimeException( 'Codici iscrizione non disponibili.' );
-				$result = MI_Workspace_Client::request( 'ELIMINA_DATI_EVENTO', array( 'id_evento' => (string) $id, 'request_id' => $job['request'], 'mode' => $job['mode'], 'id_foglio' => $job['sheet_id'], 'order_codes' => $codes ) );
+				$result = MI_Workspace_Client::request( 'ELIMINA_DATI_EVENTO', array( 'id_evento' => (string) $id, 'request_id' => $job['request'], 'mode' => $job['mode'], 'id_foglio' => $job['sheet_id'], 'direct_projection' => true, 'preserve_file' => ! empty( $job['preserve_file'] ) ) );
 				if ( is_wp_error( $result ) ) throw new RuntimeException( 'Pulizia Google non completata: ' . $result->get_error_message() );
 				if ( empty( $result['complete'] ) ) { $job['error'] = ''; self::save_job( $id, $job ); return $job; }
 				$job['sheet_url'] = (string) ( $result['sheet_url'] ?? $job['sheet_url'] );
@@ -212,6 +235,10 @@ final class MI_Event_Deletion {
 		$id = absint( $_POST['event_id'] ?? 0 );
 		if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ?? '' ) ), 'mi_delete_event_' . $id ) ) return new WP_Error( 'mi_delete_nonce', 'Sessione scaduta. Ricarica la pagina prima di riprendere.' );
 		$job = self::job( $id );
+		if ( ! empty( $_POST['preserve_file'] ) ) {
+			$result = self::preserve_file( $id, sanitize_text_field( wp_unslash( $_POST['request_id'] ?? '' ) ), wp_unslash( $_POST['preserve_reason'] ?? '' ), ! empty( $_POST['confirm_preserve'] ) );
+			return is_wp_error( $result ) ? $result : self::advance( $id );
+		}
 		$result = $job ?: self::begin( $id, sanitize_text_field( wp_unslash( $_POST['fingerprint'] ?? '' ) ), sanitize_text_field( wp_unslash( $_POST['request_id'] ?? '' ) ), sanitize_key( $_POST['sheet_mode'] ?? '' ), sanitize_text_field( wp_unslash( $_POST['confirm_title'] ?? '' ) ), ! empty( $_POST['confirm_delete'] ) );
 		if ( ! is_wp_error( $result ) ) $result = self::advance( $id );
 		return $result;
@@ -243,8 +270,8 @@ final class MI_Event_Deletion {
 		$job = self::job( $id );
 		echo '<section class="mi-portal-card"><h2>Eliminazione evento</h2>';
 		if ( 'done' === ( $job['stage'] ?? '' ) ) {
-			echo '<p role="status">Evento eliminato. La pulizia di WordPress e Google è completata.</p>';
-			if ( 'keep' === $job['mode'] && $job['sheet_url'] ) echo '<p><a target="_blank" rel="noopener" href="' . esc_url( $job['sheet_url'] ) . '">Apri il foglio conservato, scollegato dall’evento</a></p>';
+			echo '<p role="status">' . ( ! empty( $job['preserve_file'] ) ? 'Evento eliminato. Associazione Google scollegata per decisione amministrativa; lo stato del file Drive non è stato verificato e non sono stati effettuati ulteriori tentativi di cestinamento.' : 'Evento eliminato. La pulizia di WordPress e Google è completata.' ) . '</p>';
+			if ( 'keep' === $job['mode'] && $job['sheet_url'] ) echo '<p><a target="_blank" rel="noopener" href="' . esc_url( $job['sheet_url'] ) . '">Apri il riferimento al foglio scollegato (se accessibile)</a></p>';
 			if ( ! empty( $job['page_warning'] ) ) echo '<p>' . esc_html( $job['page_warning'] ) . '</p>';
 		} else {
 			$error = sanitize_text_field( wp_unslash( $_GET['mi_delete_error'] ?? ( $job['error'] ?? '' ) ) );
@@ -273,7 +300,13 @@ final class MI_Event_Deletion {
 				} catch ( Throwable $error ) { echo '<p role="alert">' . esc_html( $error->getMessage() ) . '</p>'; }
 			} else echo '<button type="submit">Riprendi eliminazione</button>';
 			echo '</form>';
+			if ( $job && 'google' === $job['stage'] && 'trash' === $job['mode'] && ! empty( $job['error'] ) && current_user_can( 'manage_options' ) ) {
+				echo '<details><summary>Sblocco amministrativo: prosegui senza cestinare il file</summary><p>Il file potrebbe esistere ancora e contenere dati degli iscritti. Questa scelta non verifica né elimina il file: registra la decisione e completa l’eliminazione dell’evento.</p><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="mi_delete_event"><input type="hidden" name="event_id" value="' . esc_attr( $id ) . '"><input type="hidden" name="request_id" value="' . esc_attr( $job['request'] ) . '"><input type="hidden" name="preserve_file" value="1">';
+				wp_nonce_field( 'mi_delete_event_' . $id );
+				echo '<label>Motivazione<textarea name="preserve_reason" required maxlength="500"></textarea></label><label><input type="checkbox" name="confirm_preserve" value="1" required> Confermo di proseguire senza ulteriori tentativi di cestinamento del file Drive</label><button type="submit" class="mi-danger">Conferma sblocco e prosegui</button></form></details>';
+			}
 		}
+		if ( ! empty( $job['preserve_file'] ) ) echo '<p>Decisione amministrativa registrata: utente ' . esc_html( $job['preserve_file']['actor'] ) . ', ' . esc_html( $job['preserve_file']['at'] ) . '. Motivazione: ' . esc_html( $job['preserve_file']['reason'] ) . '. Riferimento Drive: ' . esc_html( $job['preserve_file']['sheet_id'] ) . '.</p>';
 		echo '<p><a href="' . esc_url( add_query_arg( array( 'mi_portal' => 1, 'mi_portal_view' => 'manage' ), home_url( '/' ) ) ) . '">Torna a Gestisci eventi</a></p></section>';
 	}
 }

@@ -27,10 +27,14 @@ $patterns = @(
 )
 
 $issues = [System.Collections.Generic.List[string]]::new()
-# Il controllo riguarda esattamente i file pubblicati, non backup privati locali.
+# Controlla i file tracciati presenti nel checkout, non i backup privati locali.
 $trackedPaths = git -C $root ls-files
 if ($LASTEXITCODE -ne 0) { throw 'Impossibile enumerare i file Git.' }
-$files = $trackedPaths | ForEach-Object { Get-Item -LiteralPath (Join-Path $root $_) -Force -ErrorAction Stop }
+# Le eliminazioni non ancora registrate nell'indice sono normali durante lo sviluppo.
+# Escludere solo quelle confermate da Git; gli altri errori di lettura restano fatali.
+$deletedPaths = @(git -C $root ls-files --deleted)
+if ($LASTEXITCODE -ne 0) { throw 'Impossibile enumerare le eliminazioni Git.' }
+$files = $trackedPaths | Where-Object { $_ -notin $deletedPaths } | ForEach-Object { Get-Item -LiteralPath (Join-Path $root $_) -Force -ErrorAction Stop }
 # Identità pubblica del prodotto; non autorizza altri indirizzi dello stesso dominio.
 $publicEmailAddresses = @('info@parrocchiasanteugenio.it', 'wordpress@parrocchiasanteugenio.it')
 

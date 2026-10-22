@@ -5,9 +5,24 @@ function urlGestioneWeb_(vista, evento, ordine) {
   if (base === endpoint || !/^https:\/\//.test(base)) throw new Error('Configura prima il collegamento WordPress.');
   return base + '?mi_portal=1&mi_portal_view=' + encodeURIComponent(vista || 'management') + (evento ? '&mi_portal_event=' + encodeURIComponent(evento) : '') + (ordine ? '&mi_order=' + encodeURIComponent(ordine) : '');
 }
-function apriGestioneWeb(vista) {
-  const url = urlGestioneWeb_(vista);
-  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput('<p><a target="_blank" rel="noopener" href="' + url.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '">Apri la gestione eventi</a></p><p>Accedi con le tue credenziali WordPress.</p>').setWidth(430).setHeight(160), 'Gestione web');
+function apriGestioneWeb(vista, evento, ordine) {
+  const options=vista && typeof vista==='object'?vista:{vista:vista,evento:evento,ordine:ordine};
+  evento=String(options.evento||'');ordine=String(options.ordine||'');
+  if(ordine && !evento){
+    const row=convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).find(r=>String(r.codice_ordine)===ordine);
+    if(!row)throw new Error('Prenotazione non trovata. Seleziona prima l’evento.');
+    evento=String(row.id_evento||'');
+  }
+  if(!evento){
+    const book=SpreadsheetApp.getActiveSpreadsheet();
+    if(book){const props=PropertiesService.getScriptProperties().getProperties();const key=Object.keys(props).find(k=>k.startsWith('MI_DIRECT_SHEET_')&&props[k]===book.getId());if(key)evento=key.slice('MI_DIRECT_SHEET_'.length);}
+  }
+  const url = urlGestioneWeb_(options.vista,evento,ordine);
+  if(options.client===true)return {ok:true,url:url};
+  let ui;
+  try{ui=SpreadsheetApp.getUi();}catch(error){return {ok:true,url:url};}
+  ui.showModalDialog(HtmlService.createHtmlOutput('<p><a target="_blank" rel="noopener" href="' + url.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '">Apri la gestione eventi</a></p><p>Accedi con le tue credenziali WordPress.</p>').setWidth(430).setHeight(160), 'Gestione web');
+  return {ok:true,url:url,dialog:true};
 }
 function proteggiProiezione_(scheda, modificabili) {
   const protections = scheda.getProtections(SpreadsheetApp.ProtectionType.SHEET);
@@ -30,7 +45,7 @@ function preparaAccessoGestioneEvento_(foglio, idEvento) {
     scheda.setRowHeight(8,54);
     scheda.getRange('A9').setValue('Apri il riepilogo delle modifiche e conferma con il tuo accesso al portale.');
   } catch (e) { scheda.getRange('A4').setValue(e.message); }
-  scheda.getRange('A6').setValue('Ultimo controllo automatico');
+  scheda.getRange('A6').setValue('Collegamento gestione configurato il');
   scheda.getRange('B6').setValue(new Date()).setNumberFormat('dd/mm/yyyy hh:mm');
   scheda.setColumnWidth(1, 650);
   scheda.setColumnWidth(2, 220);
@@ -45,8 +60,9 @@ function preparaAccessoGestioneEvento_(foglio, idEvento) {
   scheda.setRowHeight(9, 64);
   proteggiProiezione_(scheda);
 }
-/** Pending edits keep the current view intact until the operator synchronizes them. */
+/** Le modifiche in sospeso mantengono integra la vista fino alla sincronizzazione dell'operatore. */
 function scriviProiezioneEvento_(scheda, vista) {
+  riprendiScritturaProiezione_(scheda);
   const precedenteProtezione = scheda.getProtections(SpreadsheetApp.ProtectionType.SHEET).find(p=>p.getDescription()==='MI_PROIEZIONE');
   const intervalliPrecedenti = precedenteProtezione ? precedenteProtezione.getUnprotectedRanges() : [];
   proteggiProiezione_(scheda);
@@ -58,32 +74,12 @@ function scriviProiezioneEvento_(scheda, vista) {
     proteggiProiezione_(scheda, intervalliPrecedenti);
     return {aggiunte:0,manuali:pending.changes.length,conflitti:pending.errors.length};
   }
-  scheda.createDeveloperMetadataFinder().withKey('MI_CAMPO').find().forEach(function (m) { m.remove(); });
-  scheda.clear();
-  scheda.getRange(1,1,scheda.getMaxRows(),scheda.getMaxColumns()).clearDataValidations();
-  scheda.getRange(1,1,scheda.getMaxRows(),scheda.getMaxColumns()).breakApart();
-  scheda.showColumns(1,scheda.getMaxColumns());
-  const colonne = [{key:'_numero',label:'Partecipante'}].concat(vista.colonne, [{key:'_ordine',label:'Prenotazione'}]);
-  if (scheda.getMaxColumns() < colonne.length) scheda.insertColumnsAfter(scheda.getMaxColumns(), colonne.length - scheda.getMaxColumns());
-  const rows = vista.righe.map(function (r) { return [r.numero_partecipante].concat(vista.colonne.map(function (c) { const v=r.valori[c.key]; return typeof v==='number' && Number.isFinite(v) ? v : neutralizzaFormula_(v, 5000); }), [r.codice_ordine]); });
-  if (scheda.getMaxRows() < rows.length + 1) scheda.insertRowsAfter(scheda.getMaxRows(), rows.length + 1 - scheda.getMaxRows());
-  scheda.getRange(1,1,1,colonne.length).setValues([colonne.map(function (c) {return c.label;})]).setFontWeight('bold');
-  colonne.forEach(function (c,i) { identificaColonnaEvento_(scheda,i+1,c.key); });
-  if (rows.length) scheda.getRange(2,1,rows.length,colonne.length).setNumberFormat('@').setValues(rows);
-  scheda.setFrozenRows(1);
-  const modificabili = [];
-  colonne.forEach(function(c,i) {
-    if (!vista.sola_lettura && campoModificabileFoglio_(c.key) && rows.length) {
-      const range = scheda.getRange(2,i+1,rows.length,1);
-      range.setNumberFormat('@').setBackground('#eef5fc');
-      modificabili.push(range);
-    }
-  });
-  salvaBaseFoglio_(scheda);
-  proteggiProiezione_(scheda, modificabili);
-  return { aggiunte:rows.length, manuali:0, conflitti:0 };
+  const result=scriviVistaIncrementale_(scheda,vista);
+  if(!result.scritto)proteggiProiezione_(scheda,intervalliPrecedenti);
+  return result;
   } catch(error) {
-    proteggiProiezione_(scheda, intervalliPrecedenti);
+    // Le celle restano protette finché il giornale non ha completato la scrittura.
+    if(!PropertiesService.getScriptProperties().getProperty('MI_WRITE_'+scheda.getParent().getId()))proteggiProiezione_(scheda, intervalliPrecedenti);
     throw error;
   }
 }

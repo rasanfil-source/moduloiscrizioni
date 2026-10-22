@@ -44,7 +44,7 @@ final class MI_Shortcode {
 		return add_query_arg( 'mi_iscrizione', absint( $event_id ), home_url( '/' ) );
 	}
 
-	/** Hold the namespace lock through event creation and alias assignment. */
+	/** Mantiene il lock del namespace durante la creazione dell'evento e l'assegnazione dell'alias. */
 	public static function validate_public_slug( $raw, $event_id = 0 ) {
 		$slug = strtolower( trim( (string) $raw ) );
 		if ( '' === $slug ) return '';
@@ -122,8 +122,9 @@ final class MI_Shortcode {
 
 	private static function enqueue_assets() {
 		wp_enqueue_style( 'mi-public', MI_PLUGIN_URL . 'assets/public.css', array(), MI_VERSION );
-		wp_enqueue_script( 'mi-core', MI_PLUGIN_URL . 'assets/core.js', array(), MI_VERSION, true );
-		wp_enqueue_script( 'mi-public', MI_PLUGIN_URL . 'assets/public.js', array( 'mi-core' ), MI_VERSION, true );
+		// WordPress mantiene l'ordine delle dipendenze e valuta gli eventuali script inline.
+		wp_enqueue_script( 'mi-core', MI_PLUGIN_URL . 'assets/core.js', array(), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
+		wp_enqueue_script( 'mi-public', MI_PLUGIN_URL . 'assets/public.js', array( 'mi-core' ), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
 	}
 
 	public static function render( $attributes ) {
@@ -158,7 +159,8 @@ final class MI_Shortcode {
 			<nav class="mi-registration__progress" aria-label="Avanzamento iscrizione"><ol><li aria-current="step" data-mi-progress="1"><span>1</span> Iscrizioni</li><li data-mi-progress="2"><span>2</span> Informazioni</li><li data-mi-progress="3"><span>3</span> Conferma</li></ol></nav>
 			<form class="mi-registration__form" novalidate>
 				<section class="mi-registration__step" data-mi-step="1" aria-labelledby="<?php echo esc_attr( $instance_id ); ?>-step-1"><h2 id="<?php echo esc_attr( $instance_id ); ?>-step-1" tabindex="-1">Iscrizioni</h2>
-					<div class="mi-registration__tickets"><?php foreach ( $event['ticket_types'] as $ticket ) : ?><?php $type_availability = $event['availability']['ticket_types'][ $ticket['code'] ] ?? array(); $type_remaining = $type_availability['remaining'] ?? null; $maximum = ( $event['waitlist_enabled'] || null === $type_remaining ) ? $ticket['max_per_order'] : min( $ticket['max_per_order'], $type_remaining ); ?><label class="mi-registration__ticket"><span><strong>Seleziona la quantità</strong></span><span class="mi-registration__quantity"><input type="number" min="0" max="<?php echo esc_attr( max( 0, $maximum ) ); ?>" value="0" data-mi-ticket="<?php echo esc_attr( $ticket['code'] ); ?>" aria-label="Quantità <?php echo esc_attr( $ticket['name'] ); ?>" <?php disabled( 0 === $maximum && ! $event['waitlist_enabled'] ); ?>></span></label><?php endforeach; ?></div>
+					<div class="mi-registration__tickets"><?php foreach ( $event['ticket_types'] as $ticket ) : ?><?php $type_availability = $event['availability']['ticket_types'][ $ticket['code'] ] ?? array(); $type_remaining = $type_availability['remaining'] ?? null; $maximum = ( $event['waitlist_enabled'] || null === $type_remaining ) ? $ticket['max_per_order'] : min( $ticket['max_per_order'], $type_remaining ); if ( $maximum <= 0 ) continue; ?><?php /* Ogni contatore selezionabile parte da una iscrizione per semplificare la compilazione. */ ?>
+					<label class="mi-registration__ticket"><span><strong>Seleziona la quantità</strong></span><span class="mi-registration__quantity"><input type="number" min="0" max="<?php echo esc_attr( $maximum ); ?>" value="1" data-mi-ticket="<?php echo esc_attr( $ticket['code'] ); ?>" aria-label="Quantità <?php echo esc_attr( $ticket['name'] ); ?>"></span></label><?php endforeach; ?></div>
 					<?php $order_options = array_values( array_filter( $event['options'], static function ( $option ) { return 'ORDER' === ( $option['scope'] ?? '' ); } ) ); if ( $order_options ) : ?><fieldset class="mi-registration__options"><legend>Opzioni per l’ordine</legend><?php foreach ( $order_options as $option ) : ?><label><span><?php echo esc_html( $option['name'] ); ?><?php if ( in_array( $event['pricing_mode'], array( 'FIXED', 'CALCULATED' ), true ) && (int) $option['price_cents'] > 0 ) : ?> · <?php echo esc_html( number_format_i18n( $option['price_cents'] / 100, 2 ) ); ?> €<?php endif; ?></span><input type="number" min="0" max="<?php echo esc_attr( $option['max_quantity'] ); ?>" value="0" data-mi-order-option="<?php echo esc_attr( $option['code'] ); ?>"></label><?php endforeach; ?></fieldset><?php endif; ?>
 				</section>
 				<?php $waitlist_email_required = $event['availability']['full'] && $event['waitlist_enabled']; ?>

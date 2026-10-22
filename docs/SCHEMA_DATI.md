@@ -69,7 +69,7 @@ Vincoli principali:
 
 ### `Organizations`
 
-Nel primo rilascio esiste normalmente una sola organizzazione.
+Il modello operativo prevede una sola organizzazione.
 
 | Campo | Tipo | Regola |
 |---|---|---|
@@ -309,7 +309,7 @@ Gli eventi economici successivi all'ordine sono append-only e contengono almeno:
 - `reason_code`, nota protetta ed eventuale `reverses_event_id`;
 - attore, canale e timestamp.
 
-Il totale corrente è `base_total + CHARGE - CREDIT`. Un errore viene corretto da uno storno collegato e da una nuova riga; nessun evento viene aggiornato o cancellato. Se una diminuzione porta gli incassi sopra il totale, l'ordine diventa `OVERPAID` e l'eventuale rimborso viene registrato separatamente in `Payments`.
+Il totale corrente è `base_total + CHARGE - CREDIT`. Le rettifiche sono rappresentate da uno storno collegato e da una nuova riga; nessun movimento viene aggiornato o cancellato. Se una diminuzione porta gli incassi sopra il totale, l'ordine diventa `OVERPAID` e l'eventuale rimborso viene registrato separatamente in `Payments`.
 
 ### `Payments`
 
@@ -333,7 +333,7 @@ WordPress è la fonte autorevole per autenticazione e autorizzazione del pannell
 - ruoli e assegnazioni sono salvati in WordPress, non in `Organizations`, `Activities`, `EventRevisions` o Google Sheets;
 - nascondere menu non sostituisce mai i controlli lato server.
 
-Nel primo rilascio i delegati selezionano asset già approvati attraverso un endpoint del plugin limitato alle immagini consentite; l'upload di nuovi allegati rimane riservato agli amministratori WordPress, evitando di concedere capability generali sui media.
+I delegati selezionano asset già approvati attraverso un endpoint del plugin limitato alle immagini consentite; l'upload di nuovi allegati rimane riservato agli amministratori WordPress, evitando di concedere capability generali sui media.
 
 Per una richiesta amministrativa WordPress costruisce, dopo controllo di sessione, nonce e capability, un contesto server-to-server simile a questo:
 

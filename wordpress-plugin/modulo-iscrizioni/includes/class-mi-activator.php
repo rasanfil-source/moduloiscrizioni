@@ -3,6 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class MI_Activator {
+	const SCHEMA_REVISION = 1;
 	public static function activate() {
 		self::create_tables();
 		self::add_roles_and_capabilities();
@@ -23,7 +24,7 @@ final class MI_Activator {
 	}
 
 	public static function maybe_upgrade() {
-		if ( MI_VERSION !== get_option( 'mi_db_version' ) ) {
+		if ( MI_VERSION !== get_option( 'mi_db_version' ) || self::SCHEMA_REVISION !== (int) get_option( 'mi_db_schema_revision', 0 ) ) {
 			self::create_tables();
 			self::add_roles_and_capabilities();
 			self::ensure_default_groups();
@@ -117,6 +118,7 @@ final class MI_Activator {
 			idempotency_key varchar(64) NOT NULL,
 			workspace_status varchar(24) NOT NULL DEFAULT 'PENDING',
 			workspace_attempts smallint(5) unsigned NOT NULL DEFAULT 0,
+			workspace_next_attempt_at datetime NULL,
 			workspace_last_error varchar(80) NULL,
 			workspace_synced_at datetime NULL,
 			workspace_revision bigint(20) unsigned NOT NULL DEFAULT 0,
@@ -141,7 +143,7 @@ final class MI_Activator {
 			KEY event_status (event_id,status),
 			KEY event_created (event_id,created_at),
 			KEY workspace_status (workspace_status),
-			KEY workspace_queue (workspace_status,workspace_attempts,id),
+			KEY workspace_queue (workspace_status,workspace_next_attempt_at,workspace_attempts,id),
 			KEY waitlist_queue (event_id,status,capacity_released_at,created_at),
 			KEY waitlist_offer_expiry (status,waitlist_offer_expires_at),
 			KEY payment_deadline (status,payment_deadline_at),
@@ -205,7 +207,7 @@ final class MI_Activator {
 			config_hash varchar(64) NOT NULL,
 			config_json longtext NOT NULL,
 			created_at datetime NOT NULL,
-			PRIMARY KEY (id),
+			PRIMARY KEY  (id),
 			UNIQUE KEY event_revision (event_id,revision_number),
 			UNIQUE KEY event_hash (event_id,config_hash)
 		) ENGINE=InnoDB {$charset};" );
@@ -219,9 +221,10 @@ final class MI_Activator {
 			actor_label varchar(120) NULL,
 			detail_json longtext NULL,
 			created_at datetime NOT NULL,
-			PRIMARY KEY (id),
+			PRIMARY KEY  (id),
 			KEY registration_id (registration_id),
-			KEY reg_type (registration_id,event_type)
+			KEY reg_type (registration_id,event_type),
+			KEY type_actor (event_type,actor_label)
 		) ENGINE=InnoDB {$charset};" );
 
 		dbDelta( "CREATE TABLE {$outbox} (
@@ -261,7 +264,7 @@ final class MI_Activator {
 			origin_channel varchar(24) NOT NULL DEFAULT 'WORDPRESS',
 			origin_id varchar(120) NULL,
 			created_at datetime NOT NULL,
-			PRIMARY KEY (id),
+			PRIMARY KEY  (id),
 			KEY registration_id (registration_id),
 			KEY effective_at (effective_at),
 			UNIQUE KEY origin_payment (origin_channel,origin_id)
@@ -299,14 +302,13 @@ final class MI_Activator {
 
 		self::backfill_ticket_counters( $ticket_counters, $registrations, $items );
 		update_option( 'mi_db_version', MI_VERSION, false );
+		// Completa la migrazione degli indici prima di registrare lo schema come aggiornato.
+		$audit_index = $wpdb->get_results( "SHOW INDEX FROM {$registration_events} WHERE Key_name='type_actor'", ARRAY_A );
+		if ( ! $wpdb->last_error && array_column( (array) $audit_index, 'Column_name' ) === array( 'event_type', 'actor_label' ) ) update_option( 'mi_db_schema_revision', self::SCHEMA_REVISION, false );
 	}
 
 	private static function backfill_ticket_counters( $ticket_counters, $registrations, $items ) {
 		global $wpdb;
-		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$ticket_counters}" );
-		if ( $count > 0 ) {
-			return;
-		}
 		$now = current_time( 'mysql', true );
 		$wpdb->query(
 			$wpdb->prepare(
@@ -315,7 +317,8 @@ final class MI_Activator {
 				 SUM(CASE WHEN r.status IN ('CONFIRMED','PENDING_PAYMENT','WAITLIST_OFFERED') AND r.capacity_released_at IS NULL THEN i.quantity ELSE 0 END),
 				 SUM(CASE WHEN r.status = 'WAITLISTED' AND r.capacity_released_at IS NULL THEN i.quantity ELSE 0 END), %s
 				 FROM {$items} i INNER JOIN {$registrations} r ON r.id = i.registration_id
-				 GROUP BY r.event_id, i.ticket_type_code",
+				 GROUP BY r.event_id, i.ticket_type_code
+				 ON DUPLICATE KEY UPDATE event_id={$ticket_counters}.event_id",
 				$now
 			)
 		);

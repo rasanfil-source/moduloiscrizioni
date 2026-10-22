@@ -1,7 +1,5 @@
 Manuale del segretario per il portale Segreteria eventi
 Guida ai criteri di gestione e alle operazioni quotidiane
-Edizione del 18 settembre 2026 • Versione di riferimento 3.26.129
-
 Questo manuale accompagna chi prende in carico la segreteria: spiega come preparare un evento, gestire le iscrizioni, registrare i movimenti economici, comunicare con gli iscritti e chiudere il lavoro. Il criterio fondamentale è mantenere coerenti persone, posti e contabilità, verificando sempre l’esito delle operazioni.
 
 ## Come utilizzare la guida
@@ -17,7 +15,7 @@ I nomi dei comandi riprendono quelli del portale. Le funzioni disponibili dipend
 7   Quote incassi rimborsi e storni
 8   Comunicazioni e consultazione degli iscritti
 9   Fogli Google stampe ed esportazioni
-10   Chiusura eventi problemi e consegne
+10   Chiusura eventi verifiche e consegne
 
 ## Le quattro verifiche prima di confermare
 - Ho selezionato l’evento e la prenotazione corretti?
@@ -40,7 +38,7 @@ La pagina Stato e saldo mostra i movimenti registrati e le istruzioni previste: 
 ## Il portale conserva il registro principale
 Il registro autorevole è nel sistema WordPress. Google Sheets riceve una replica dei dati. Le modifiche consentite sul foglio devono essere confrontate e confermate con Sincronizza nel portale: non basta cambiare una cella per aggiornare il registro principale.
 
-## Le correzioni devono restare comprensibili
+## Le rettifiche economiche hanno un motivo registrato
 Le operazioni economiche e le variazioni rilevanti conservano uno storico. Scrivi motivi concreti, per esempio «rinuncia al pranzo concordata con il referente». Se una richiesta ha esito incerto, controlla la scheda e usa Riprova sulla stessa richiesta, quando disponibile, evitando di inserire subito una seconda operazione.
 
 ## Si raccolgono soltanto i dati necessari
@@ -146,7 +144,7 @@ Incasso registra denaro ricevuto. Rimborso registra denaro effettivamente restit
 Prima di uno storno identifica il movimento errato e verifica l’effetto previsto; non usarlo per rappresentare una restituzione realmente avvenuta. Non correggere importi intervenendo direttamente sulle celle del foglio Google.
 
 ## Leggere il saldo
-Per comprendere il riepilogo considera il dovuto aggiornato e quanto risulta effettivamente pagato al netto dei rimborsi e delle correzioni. La caparra è una parte del dovuto: averla versata non significa aver pagato tutto. Usa gli importi e le scadenze mostrati dal portale, senza ricostruire una nuova percentuale a mano.
+Per comprendere il riepilogo considera il dovuto aggiornato e quanto risulta effettivamente pagato al netto di rimborsi e rettifiche. La caparra è una parte del dovuto: averla versata non significa aver pagato tutto. Usa gli importi e le scadenze mostrati dal portale, senza ricostruire una nuova percentuale a mano.
 Esempio: dovuto di 300 euro, incassi di 100 euro, nessun rimborso. Restano 200 euro da versare. Se una variazione concordata porta il dovuto a 250 euro, la rettifica riduce il residuo a 150 euro; non produce un movimento di cassa.
 
 ## Gestire una rinuncia con rimborso
@@ -187,11 +185,12 @@ Se il foglio risulta non disponibile, utilizza il comando di ricreazione propost
 
 ## Confermare modifiche fatte sul foglio
 1. Modifica soltanto le celle operative consentite, indicate in azzurro.
-2. Torna nel portale e avvia Sincronizza per l’evento.
-3. Leggi il confronto prima e dopo. Verifica persona, campo e valore proposto.
-4. Conferma le modifiche corrette e risolvi gli eventuali conflitti confrontando i dati aggiornati.
-5. Controlla il risultato nel portale e poi l’allineamento del foglio.
-Gli identificativi delle righe e gli importi non sono campi da correggere nelle celle operative. Se la stessa informazione è stata modificata anche da un collega nel portale, non sovrascrivere senza il confronto.
+2. Torna nel portale e aggiorna il riepilogo dell’evento. Il sistema controlla il foglio in background.
+3. Se esistono modifiche o conflitti, accanto ad Apri compare Sincronizza. Se il foglio è già allineato, il comando resta nascosto.
+4. Avvia Sincronizza e leggi il confronto prima e dopo. Verifica persona, campo e valore proposto.
+5. Conferma le modifiche corrette e risolvi gli eventuali conflitti confrontando i dati aggiornati.
+6. Controlla il risultato nel portale e poi l’allineamento del foglio.
+La regola vale anche per i fogli normalmente aperti in sola lettura: Sincronizza compare soltanto quando il controllo rileva qualcosa da confermare. La colonna N. contiene il progressivo visibile e non viene inviata al portale. Gli identificativi tecnici delle righe, gli importi e le colonne protette non sono campi da correggere. Se la stessa informazione è stata modificata anche da un collega nel portale, non sovrascrivere senza il confronto.
 
 ## Stampare ed esportare elenchi
 Seleziona l’evento e imposta i filtri desiderati. Controlla che non siano rimasti filtri da una ricerca precedente. Stampa ed esportazione comprendono tutti i risultati filtrati, anche oltre le righe già visibili.
@@ -202,13 +201,13 @@ Se i dati cambiano durante l’esportazione e il sistema chiede di ripetere, agg
 Prima della consegna controlla evento, data di estrazione, filtri, numero di persone e colonne. Per l’accoglienza può bastare l’elenco con i nomi; per le camere servono le assegnazioni. Evita di includere note personali o informazioni non necessarie al destinatario.
 Per i controlli economici usa la vista per prenotazione o il riepilogo pertinente: le righe delle persone non devono moltiplicare gli importi comuni. Conserva i file negli spazi autorizzati dall’organizzazione e aggiorna gli elenchi quando cambiano iscrizioni o assegnazioni.
 ===PAGE===
-# Chiusura eventi problemi e consegne
+# Chiusura eventi verifiche e consegne
 ## Annullare o eliminare un evento
 Annulla evento conserva i dati e gestisce l’annullamento dell’iniziativa. L’eliminazione definitiva rimuove l’evento e i dati collegati: non è un modo ordinario per chiudere un’attività conclusa. Prima di intervenire concorda con il responsabile conservazione dei dati, comunicazioni e partite economiche aperte.
 Per l’eliminazione, il ruolo autorizzato apre Elimina definitivamente dal menu dell’evento, controlla il riepilogo e sceglie se cestinare il foglio Google oppure conservarlo come copia scollegata. Completa la conferma richiesta, compresa la riscrittura del titolo quando prevista.
-Attendi Evento eliminato. In caso di errore usa Riprendi eliminazione. Il foglio conservato non si sincronizza più; il cestino Drive non equivale alla distruzione definitiva. Nella versione di riferimento l’eliminazione accoda anche avvisi agli iscritti attivi e all’organizzazione secondo la modalità email: controllala prima dell’azione.
+Attendi Evento eliminato. In caso di errore usa Riprendi eliminazione. Il foglio conservato non si sincronizza più; il cestino Drive non equivale alla distruzione definitiva. L’eliminazione accoda anche avvisi agli iscritti attivi e all’organizzazione secondo la modalità email: controllala prima dell’azione.
 
-## Affrontare i problemi più comuni
+## Situazioni operative da gestire
 - Evento o prenotazione non visibili: controlla selezione, filtri e permessi.
 - Dati cambiati da un altro operatore: ricarica la scheda e ripeti il confronto.
 - Importo inatteso: verifica prenotazione intera, servizi, rettifiche, incassi e rimborsi.
@@ -221,5 +220,5 @@ Per l’assistenza comunica evento, codice prenotazione, comando usato, orario e
 Verifica salvataggi, movimenti, richieste aperte, proposte in scadenza e comunicazioni accodate. Confronta gli incassi registrati con i riscontri disponibili e annota le differenze da risolvere. Chiudi la sessione.
 Al successore consegna l’elenco degli eventi e dei responsabili, scadenze, accordi sulle quote, rimborsi da completare, richieste particolari aperte e anomalie note. Fai predisporre il suo account e i permessi; indica dove trovare collegamenti e documenti autorizzati senza copiare credenziali nel verbale.
 
-## Riferimenti per aggiornare il manuale
-Versione di riferimento 3.26.129. Le procedure riprendono il codice del portale. Riesaminare il manuale quando cambiano funzioni, ruoli o regole organizzative.
+## Aggiornamento del manuale
+Le procedure descrivono il portale operativo. Riesaminare questa guida quando cambiano funzioni, ruoli o regole organizzative.

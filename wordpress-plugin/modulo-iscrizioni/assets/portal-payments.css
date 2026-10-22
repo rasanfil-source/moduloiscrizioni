@@ -7,7 +7,7 @@
 .mi-payments .mi-payment-totals strong{color:var(--ink,#172033);font-weight:var(--fw-medium,600);margin-top:4px}
 .mi-payments input.mi-amount-highlight{border-color:var(--focus,#244fc2);background:var(--info-light,#e8f0fe)}
 
-/* Keep the movement ledger readable, with scrolling confined to its region. */
+/* Mantiene leggibile il registro dei movimenti e limita lo scorrimento alla sua area. */
 .mi-payments .mi-payment-history-scroll{max-width:100%;overflow-x:auto;margin:16px 0 24px;border:1px solid var(--line,#d7dde6);border-radius:12px;background:var(--surface,#fff)}
 .mi-payments .mi-payment-history-table{display:table;width:100%;min-width:760px;margin:0;border-collapse:collapse}
 .mi-payments .mi-payment-history-table :is(th,td){padding:12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line,#d7dde6);overflow-wrap:anywhere}
@@ -34,3 +34,20 @@
 .mi-payments .mi-payment-person:has(input:checked){border-color:var(--navy,#17224a);background:var(--bg,#f5f7fa)}
 .mi-payments [data-selection-total]{font-weight:600;font-variant-numeric:tabular-nums}
 .mi-payments input[readonly]{background:var(--bg,#f5f7fa)}
+
+/* La gerarchia visiva segue quella delle altre schede operative. */
+@media screen {
+  .mi-payments>h2 { margin:0 0 20px; }
+  .mi-payments :is(input,select,textarea):where(:not([type=checkbox]):not([type=hidden])) { border-color:var(--field-border); }
+  .mi-payments input.mi-amount-highlight { border-color:var(--focus); }
+  .mi-payments .mi-payment-summary { background:var(--work-filter,#f5f6f8); border-radius:8px; padding:20px; }
+  .mi-payments .mi-payment-grid { gap:20px; padding-top:20px; border-top:1px solid var(--line); }
+  .mi-payments .mi-payment-actions { padding-top:16px; margin-top:16px; border-top:1px solid var(--line); }
+  .mi-payments .mi-payment-choice { border-radius:8px; }
+  .mi-payments .mi-payment-history-table th { color:var(--muted); background:var(--work-filter,#f5f6f8); }
+}
+@media screen and (max-width:760px) {
+  .mi-payments .mi-payment-summary { padding:14px; }
+  .mi-payments .mi-payment-grid { grid-template-columns:minmax(0,1fr); gap:16px; }
+  .mi-payments .mi-payment-actions button { min-width:0; width:100%; }
+}

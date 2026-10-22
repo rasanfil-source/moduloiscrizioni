@@ -1,6 +1,6 @@
-// Read-only UI verification: current assets, synthetic data, intercepted requests.
+// Verifica in sola lettura dell'interfaccia: asset applicativi, dati sintetici e richieste intercettate.
 const fs=require('fs'),path=require('path'),assert=require('node:assert/strict');
-const {chromium}=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright');
+const chromium=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright')[process.env.MI_BROWSER_ENGINE||'chromium'];
 const assets=path.resolve('wordpress-plugin/modulo-iscrizioni/assets');
 const out=path.resolve('.tmp/portal-visual-regressions');fs.mkdirSync(out,{recursive:true});
 const widths=[1280,1024,800,768,760,600,480,390,360,320];
@@ -20,7 +20,7 @@ const result={browser:'',links:[],payments:[],modal:[],controls:[],errors:[]};
 const equalPx=(actual,expected)=>assert.ok(Math.abs(actual-expected)<0.1,actual+'px differs from '+expected+'px');
 const bounds=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,right:r.right,bottom:r.bottom,clientWidth:e.clientWidth,scrollWidth:e.scrollWidth};};
 (async()=>{
- const browser=await chromium.launch({channel:process.env.MI_BROWSER_CHANNEL||'msedge',headless:true});result.browser=browser.version();
+ const browser=await chromium.launch({...(process.env.MI_BROWSER_ENGINE?{}:{channel:process.env.MI_BROWSER_CHANNEL||'msedge'}),headless:true});result.browser=browser.version();
  const page=await browser.newPage({viewport:{width:1280,height:900},locale:'it-IT'});page.setDefaultTimeout(10000);
  page.on('pageerror',e=>result.errors.push(e.message));
  let mode='management',reference='',emptyHistory=false;
@@ -38,7 +38,7 @@ const bounds=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.w
     else data=p.operation==='summary'?summary:{...booking,order_code:p.order_code};
     return route.fulfill({json:{success:true,data}});
    }
-   if(css.includes(file)||['portal.js','portal-management.js','portal-payments.js'].includes(file))return route.fulfill({body:fs.readFileSync(path.join(assets,file)),contentType:file.endsWith('.css')?'text/css':'text/javascript'});
+   if(css.includes(file)||['portal.js','portal-management.js','portal-payments.js'].includes(file))return route.fulfill({body:fs.readFileSync(path.join(assets,file)),contentType:file.endsWith('.css')?'text/css; charset=utf-8':'text/javascript; charset=utf-8'});
    let body,scripts=[];
    if(mode==='management'){body='<main class="mi-portal">'+management()+'</main>';scripts=['portal-management.js'];}
    if(mode==='modal'){
@@ -110,17 +110,17 @@ const bounds=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.w
    if([360,390,1280].includes(width))await shot('scheda-'+width);
   }
   await page.setViewportSize({width:360,height:480});assert.ok((await content.evaluate(bounds)).height>300);await fits('Short mobile modal');
-  await previous.focus();await page.keyboard.press('Shift+Tab');assert.ok(await page.locator('.mi-detail-back [data-back]').evaluate(e=>e===document.activeElement));await page.keyboard.press('Tab');assert.ok(await previous.evaluate(e=>e===document.activeElement));
-  await next.click();await page.waitForFunction(()=>document.querySelector('.mi-person-economic strong')?.textContent==='ORD-3');assert.ok(await next.isDisabled());
-  await previous.click();await page.waitForFunction(()=>document.querySelector('.mi-person-economic strong')?.textContent==='ORD-2');
-  await close.focus();await page.keyboard.press('ArrowLeft');await page.waitForFunction(()=>document.querySelector('.mi-person-economic strong')?.textContent==='ORD-1');assert.ok(await previous.isDisabled());
+  await previous.focus();await page.keyboard.press('Shift+Tab');assert.ok(await page.locator('.mi-detail-back [data-back]').last().evaluate(e=>e===document.activeElement));await page.keyboard.press('Tab');assert.ok(await previous.evaluate(e=>e===document.activeElement));
+  await next.click();await page.waitForFunction(()=>document.querySelector('[data-booking-overview] [data-open]')?.dataset.open==='ORD-3');assert.ok(await next.isDisabled());
+  await previous.click();await page.waitForFunction(()=>document.querySelector('[data-booking-overview] [data-open]')?.dataset.open==='ORD-2');
+  await close.focus();await page.keyboard.press('ArrowLeft');await page.waitForFunction(()=>document.querySelector('[data-booking-overview] [data-open]')?.dataset.open==='ORD-1');assert.ok(await previous.isDisabled());
   await page.keyboard.press('Escape');assert.ok(await page.locator('.mi-portal-modal').isHidden());assert.ok(await page.getByRole('link',{name:'Scheda 1',exact:true}).evaluate(e=>e===document.activeElement));
   await page.getByRole('link',{name:'Scheda 2',exact:true}).click();await page.locator('[data-person]').waitFor();
   await page.locator('[data-back]').first().click();await page.locator('[data-room-section]>summary').click();await page.locator('[data-room-person]').first().waitFor();
-  assert.ok((await page.locator('.mi-room-assignment-table').evaluate(bounds)).width>260,'Room overview also gains content width');await fits('Room overview inside modal');
+  assert.ok((await page.locator('[data-room-section]').evaluate(bounds)).width>260,'Room overview also gains content width');await fits('Room overview inside modal');
   await close.click();await page.getByRole('link',{name:'Scheda 3',exact:true}).click();await page.locator('[data-person]').waitFor();await page.locator('[data-person] input').first().fill('Bozza sintetica');
   for(const action of [previous,close]){await action.click();await page.getByRole('dialog').getByRole('button',{name:'Continua a modificare',exact:true}).click();}
-  await page.keyboard.press('Escape');assert.ok(await page.locator('.mi-portal-modal').isVisible());assert.equal(await page.locator('[data-person] input').first().inputValue(),'Bozza sintetica');assert.equal(await page.locator('.mi-person-economic strong').textContent(),'ORD-3');
+  await page.keyboard.press('Escape');assert.ok(await page.locator('.mi-portal-modal').isVisible());assert.equal(await page.locator('[data-person] input').first().inputValue(),'Bozza sintetica');assert.equal(await page.locator('[data-booking-overview] [data-open]').first().getAttribute('data-open'),'ORD-3');
   assert.deepEqual(result.errors,[]);fs.writeFileSync(path.join(out,'misure.json'),JSON.stringify(result,null,2));
   console.log('Browser: link visibili 320–1280px; storico contenuto con riferimenti fino a 120 caratteri, tastiera e stampa; controlli 44px; modale, frecce, focus, Escape e protezione bozze verificati. Screenshot: '+out);
  }catch(error){await shot('failure');throw error;}finally{await browser.close();}

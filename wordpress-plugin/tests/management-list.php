@@ -1,11 +1,13 @@
 <?php
-// The browser harness invokes this same production selector via stdin.
+// L'ambiente browser richiama lo stesso selettore applicativo tramite stdin.
 define( 'ABSPATH', __DIR__ );
-function wp_json_encode( $value ) { return json_encode( $value ); }
+function wp_json_encode( $value ) { $json = json_encode( $value ); $GLOBALS['last_encoded_bytes'] = strlen( $json ); return $json; }
 function remove_accents( $value ) { return strtr( $value, array( 'à'=>'a', 'è'=>'e', 'é'=>'e', 'ì'=>'i', 'ò'=>'o', 'ù'=>'u' ) ); }
 require __DIR__ . '/../modulo-iscrizioni/includes/class-mi-management-list.php';
 if ( in_array( '--json', $argv, true ) ) {
 	$input = json_decode( stream_get_contents( STDIN ), true );
+	if ( 'overview' === ( $input['operation'] ?? '' ) ) { echo json_encode( MI_Management_List::overview( $input['summary'] ) ); exit; }
+	if ( 'panel' === ( $input['operation'] ?? '' ) ) { echo json_encode( MI_Management_List::panel( $input['summary'], $input['panel'] ) ); exit; }
 	echo json_encode( 'compact' === ( $input['operation'] ?? '' ) ? MI_Management_List::compact( $input['summary'] ) : MI_Management_List::page( $input['summary'], $input['context'] ?? array(), $input['offset'] ?? 0, $input['limit'] ?? 30 ) );
 	exit;
 }
@@ -18,7 +20,15 @@ $second = MI_Management_List::page( $summary, array(), 30 );
 $third = MI_Management_List::page( $summary, array(), 60 );
 check_list( count( $first['rows'] )===30 && count( $second['rows'] )===30 && count( $third['rows'] )===5, 'Bounded complete pages' );
 check_list( count( array_unique( array_column( array_merge( $first['rows'], $second['rows'], $third['rows'] ), 'id' ) ) )===65, 'No duplicates or omissions' );
-check_list( $first['rows'][1]['name']==='Persona 2', 'Natural ordering' );
+check_list( MI_Management_List::page( $summary, array( 'sort' => 'name' ) )['rows'][1]['name']==='Persona 2', 'Explicit natural ordering' );
+$date_summary = $summary;
+foreach ( $date_summary['people'] as $i => &$row ) { $row['created_at'] = $i < 30 ? '2026-09-01 10:00:00' : '2026-09-25 10:00:00'; $row['registration_id'] = (int) floor( $i / 2 ) + 1; } unset( $row );
+$newest = MI_Management_List::page( $date_summary, array( 'sort' => 'created_at' ) );
+check_list( MI_Management_List::page( $date_summary, array() )['rows'] === $newest['rows'], 'Default ordering is newest registrations first' );
+$older = MI_Management_List::page( $date_summary, array( 'sort' => 'created_at' ), 30 );
+check_list( array_column( array_slice( $newest['rows'], 0, 3 ), 'id' ) === array( 65, 63, 64 ), 'Newest bookings first, stable participant order within tied timestamps' );
+check_list( count( array_unique( array_column( array_merge( $newest['rows'], $older['rows'] ), 'id' ) ) ) === 60, 'Date sorting has no duplicates between pages' );
+check_list( MI_Management_List::page( $date_summary, array( 'sort' => 'created_at', 'query' => 'Persona 6' ) )['rows'][0]['id'] === 65, 'Filtered date sorting must use the same comparator' );
 check_list( $first['fingerprint']===$third['fingerprint'], 'Stable snapshot checksum' );
 check_list( MI_Management_List::page( $summary, array( 'query'=>'Persona 65' ) )['total']===1, 'Search beyond initial page' );
 check_list( MI_Management_List::page( $summary, array( 'query'=>'Persona 65','view'=>'orders' ) )['total']===1, 'Order found by individual name' );
@@ -56,7 +66,24 @@ foreach(array('none'=>1,'partial'=>2,'covered'=>3,'settled'=>4) as $filter=>$id)
 check_list(MI_Management_List::page($payment_summary,array('deposit'=>'unpaid'))['total']===3,'Single payment includes partial payments');
 echo "Paginazione, ricerca globale, filtri combinati, coerenza esportazioni e riepilogo compatto verificati.\n";
 
-// Compare every sort mode to the previous comparator, including ties and accents.
+$full = MI_Management_List::page( $summary, array() ); $full_bytes = $GLOBALS['last_encoded_bytes'];
+$versioned = MI_Management_List::page( $summary, array(), 0, 30, 'canonical-v1' );
+check_list( $GLOBALS['last_encoded_bytes'] < $full_bytes / 5, 'Versioned fingerprint still serializes full rows' );
+check_list( $full['rows'] === $versioned['rows'] && $full['total'] === $versioned['total'], 'Versioning changed selection' );
+check_list( $versioned['fingerprint'] === MI_Management_List::page( $summary, array( 'shown' => 60 ), 30, 30, 'canonical-v1' )['fingerprint'], 'Fingerprint depends on pagination' );
+check_list( $versioned['fingerprint'] !== MI_Management_List::page( $summary, array(), 0, 30, 'canonical-v2' )['fingerprint'], 'Canonical changes not detected' );
+// Simula la selezione un'ora dopo senza scritture canoniche: un'offerta
+// scade mentre un'altra entra nella finestra delle 24 ore, mantenendo il conteggio.
+$timed = $summary;
+foreach ($timed['people'] as &$person) { $person['status'] = 'WAITLIST_OFFERED'; $person['offer_expires_at'] = gmdate('Y-m-d H:i:s', time()+172800); } unset($person);
+$timed['people'][0]['offer_expires_at'] = gmdate('Y-m-d H:i:s', time()+1800);
+$timed['people'][1]['offer_expires_at'] = gmdate('Y-m-d H:i:s', time()+86400+1800);
+$timed_before = MI_Management_List::page($timed, ['deadline'=>'soon'], 0, 30, 'canonical-v1');
+foreach ($timed['people'] as &$person) $person['offer_expires_at'] = gmdate('Y-m-d H:i:s', strtotime($person['offer_expires_at'].' UTC')-3600); unset($person);
+$timed_after = MI_Management_List::page($timed, ['deadline'=>'soon'], 0, 30, 'canonical-v1');
+check_list($timed_before['total'] === $timed_after['total'] && $timed_before['fingerprint'] !== $timed_after['fingerprint'], 'Equal-count timed membership change not detected');
+
+// Confronta le modalità di ordinamento e l'ordine alfabetico, inclusi parità e accenti.
 $sorting=$summary;
 foreach($sorting['people'] as $i=>&$row){$row['name']=$i%2?'René 10':'Rene 2';$row['buyer']='Èva '.($i%3);$row['room']='Camera '.($i%4);$row['code']='T'.($i%5);$row['status']=$i%7?'CONFIRMED':'CANCELLED';}unset($row);
 foreach(['name','buyer','code','room'] as $sort)foreach(['asc','desc'] as $direction){
@@ -70,4 +97,12 @@ foreach(['name','buyer','code','room'] as $sort)foreach(['asc','desc'] as $direc
  });
  check_list($result['rows']===$expected,'Changed ordering '.$sort.' '.$direction);
  check_list($result['fingerprint']===hash('sha256',wp_json_encode($expected)),'Temporary sort keys leaked into fingerprint');
+}
+foreach(['name','buyer','code','room'] as $sort)foreach(['asc','desc'] as $direction){
+ $context=['sort'=>$sort,'direction'=>$direction,'includeClosed'=>true];
+ $prefix=[];
+ foreach(array_chunk(array_reverse($sorting['people']),13) as $chunk)$prefix=MI_Management_List::sorted_prefix($prefix,$chunk,$context,25);
+ $expected=MI_Management_List::page($sorting,$context,15,10)['rows'];
+ check_list(array_column(array_slice($prefix,15,10),'id')===array_column($expected,'id'),'Cross-chunk advanced order '.$sort.' '.$direction);
+ check_list(count($prefix)===25,'Advanced selector retained more than the page prefix');
 }

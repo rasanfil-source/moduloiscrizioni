@@ -20,8 +20,8 @@ class MI_Workspace_Client {
  static $calls=[];
  static function request($action,$payload){
   self::$calls[]=[$action,$payload];
-  if($action==='VERIFICA_FOGLI_EVENTO')return ['stati'=>array_map(fn($id)=>['id_evento'=>$id,'esiste'=>true],$payload['id_eventi'])];
-  return ['ok'=>true,'risultati'=>array_map(fn($id)=>['id_evento'=>$id,'ok'=>$id!=='2'],$payload['eventi_passati'])];
+  if($action==='VERIFICA_FOGLI_EVENTO')return ['stati'=>array_map(fn($sheet)=>['id_evento'=>$sheet['id_evento'],'esiste'=>true],$payload['fogli'])];
+  return ['ok'=>true,'risultati'=>array_map(fn($sheet)=>['id_evento'=>$sheet['id_evento'],'ok'=>$sheet['id_evento']!=='2'],$payload['fogli_passati'])];
  }
 }
 require __DIR__.'/../modulo-iscrizioni/includes/class-mi-portal.php';
@@ -34,5 +34,5 @@ verify(isset($meta[5]['_mi_sheet_archived_at'])&&!isset($options['mi_sheet_organ
 MI_Workspace_Client::$calls=[];
 MI_Portal::archive_completed_event_sheets();
 $moves=array_values(array_filter(MI_Workspace_Client::$calls,fn($c)=>$c[0]==='ORGANIZZA_FOGLI_EVENTO'));
-verify(count($moves)===1&&$moves[0][1]['eventi_passati']===['2'],'Ripetuti spostamenti già confermati o perso retry');
+verify(count($moves)===1&&$moves[0][1]['fogli_passati']===[['id_evento'=>'2','id_foglio'=>'sheet2']]&&$moves[0][1]['direct_projection']===true,'Ripetuti spostamenti già confermati o perso retry');
 echo "PASS: lotti, continuazione, errori per evento, retry e spostamenti invariati.\n";

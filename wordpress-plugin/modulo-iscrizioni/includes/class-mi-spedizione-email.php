@@ -11,6 +11,7 @@ final class MI_Spedizione_Email {
 	private static $codice_incorporato = '';
 	private static $corpo_testo = '';
 	private static $pubblicazioni = array();
+	private static $invio_immediato_in_corso = false;
 
 	public static function avvia() {
 		add_action( 'admin_menu', array( __CLASS__, 'aggiungi_pagina' ) );
@@ -44,7 +45,7 @@ final class MI_Spedizione_Email {
 		if ( 'publish' === $new && 'publish' !== $old && MI_Event_Post_Type::EVENT_TYPE === $post->post_type ) {
 			self::$pubblicazioni[$post->ID] = true;
 			update_post_meta( $post->ID, '_mi_publication_notification_pending', '1' );
-			// Persist a fallback before later save hooks or remote calls can interrupt the request.
+			// Registra un'alternativa prima degli hook di salvataggio e delle richieste remote.
 			wp_schedule_single_event( time() + 120, 'mi_riprova_notifica_pubblicazione', array( (int) $post->ID, 1 ) );
 		}
 	}
@@ -149,6 +150,18 @@ final class MI_Spedizione_Email {
 		}
 	}
 
+	/** Accoda un worker immediato: il trasporto email non blocca la risposta pubblica. */
+	public static function tenta_spedizione_immediata() {
+		if ( self::$invio_immediato_in_corso ) return;
+		$abilitata = ( 'PROVA' === self::modalita() && self::destinatario_prova() ) || ( 'OPERATIVO' === self::modalita() && self::prova_verificata() );
+		if ( ! $abilitata ) return;
+		$now = time();
+		$next = wp_next_scheduled( 'mi_spedisci_email_in_coda' );
+		if ( ! $next ) wp_schedule_single_event( $now, 'mi_spedisci_email_in_coda' );
+		self::$invio_immediato_in_corso = true;
+		if ( ! wp_doing_cron() ) add_action( 'shutdown', static function () { spawn_cron(); } );
+	}
+
 	public static function email_da_spedire( $status ) {
 		return in_array( $status, array( 'PENDING', 'TEST_PENDING' ), true );
 	}
@@ -224,14 +237,16 @@ final class MI_Spedizione_Email {
 			$order_codes = array_keys( $recipient_state );
 			$placeholders = implode( ',', array_fill( 0, count( $order_codes ), '%s' ) );
 			$query_args = array_merge( array( $event_id ), $order_codes );
-			$registrations = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,status,economic_mode,buyer_first_name,buyer_last_name,buyer_email,total_qty,total_cents,initial_due_cents,balance_cents,payment_methods_json FROM {$registrations_table} WHERE event_id=%d AND order_code IN ({$placeholders}) AND status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED','WAITLIST_OFFERED') AND capacity_released_at IS NULL ORDER BY id LIMIT 1000", $query_args ), ARRAY_A );
+			$status_filter = 'EVENT_CANCELLATION' === $template_type ? "status='CANCELLED'" : "status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED','WAITLIST_OFFERED') AND capacity_released_at IS NULL";
+			$registrations = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,status,economic_mode,buyer_first_name,buyer_last_name,buyer_email,total_qty,total_cents,initial_due_cents,balance_cents,payment_methods_json,payment_deadline_at FROM {$registrations_table} WHERE event_id=%d AND order_code IN ({$placeholders}) AND {$status_filter} ORDER BY id LIMIT 1000", $query_args ), ARRAY_A );
 			if ( $wpdb->last_error ) return new WP_Error( 'mi_email_read', 'Prenotazioni non disponibili.' );
+			if ( 'EVENT_CANCELLATION' === $template_type && count( $registrations ) !== count( $order_codes ) ) return new WP_Error( 'mi_email_cancel_incomplete', 'Annullamento dei destinatari non completato.' );
 			try { $positions = MI_Payment_Ledger::positions( $registrations ); }
 			catch ( Throwable $error ) { return new WP_Error( 'mi_email_balance', 'Saldi non disponibili. Comunicazione non preparata.' ); }
 			$now = current_time( 'mysql', true );
 			$count = 0;
-			$wpdb->query( 'START TRANSACTION' );
 			try {
+				if ( false === $wpdb->query( 'START TRANSACTION' ) ) throw new RuntimeException( 'Transazione non disponibile.' );
 				foreach ( $registrations as $registration ) {
 					if ( in_array( $registration['status'], array( 'WAITLISTED', 'WAITLIST_OFFERED' ), true ) && 'EVENT_CANCELLATION' !== $template_type ) continue;
 					$position = $positions[$registration['id']];
@@ -241,7 +256,16 @@ final class MI_Spedizione_Email {
 					$economic = array( 'total_cents' => (int) $position['effective_total'], 'initial_due_cents' => $position['individual_known'] ? (int) $position['individual_deposit_due'] : (int) $registration['initial_due_cents'], 'balance_cents' => $balance, 'payment_methods' => json_decode( (string) $registration['payment_methods_json'], true ) ?: array() );
 					$status_labels = array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'Da pagare', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto' );
 					$participant_count = (int) $position['individual_people_count'] > 0 ? (int) $position['individual_active_count'] : (int) $registration['total_qty'];
-					$values = MI_Modello_Email::valori_ordine( $event, $registration['order_code'], $status_labels[ $registration['status'] ] ?? $registration['status'], $participant_count, trim( $registration['buyer_first_name'] . ' ' . $registration['buyer_last_name'] ), $economic );
+					// La scadenza della prenotazione è UTC e può differire da quella generale.
+					// Se assente/non valida, il modello invita a contattare l'organizzazione.
+					$registration_event = $event;
+					$registration_event['payment_deadline_at'] = '';
+					$deadline = (string) ( $registration['payment_deadline_at'] ?? '' );
+					$deadline_date = $deadline ? DateTimeImmutable::createFromFormat( '!Y-m-d H:i:s', $deadline, new DateTimeZone( 'UTC' ) ) : false;
+					if ( $deadline_date && $deadline_date->format( 'Y-m-d H:i:s' ) === $deadline ) {
+						$registration_event['payment_deadline_at'] = wp_date( 'Y-m-d\TH:i', $deadline_date->getTimestamp(), wp_timezone() );
+					}
+					$values = MI_Modello_Email::valori_ordine( $registration_event, $registration['order_code'], $status_labels[ $registration['status'] ] ?? $registration['status'], $participant_count, trim( $registration['buyer_first_name'] . ' ' . $registration['buyer_last_name'] ), $economic, array(), $registration['buyer_first_name'] );
 					$status_url = MI_Portal::status_url( $registration['id'], $registration['order_code'], $registration['buyer_email'] );
 					if ( 'BALANCE_REMINDER' === $template_type ) $status_url = MI_Portal::balance_url( $registration['id'], $registration['order_code'], $registration['buyer_email'] );
 					$snapshot = MI_Modello_Email::crea_istantanea_operativa( $event_id, $values, $template_type, $message, $status_url );
@@ -253,13 +277,14 @@ final class MI_Spedizione_Email {
 					if ( false === $inserted ) throw new RuntimeException( 'Coda email non salvata.' );
 					if ( $inserted ) $count++;
 				}
-				$wpdb->query( 'COMMIT' );
-				set_transient( $idempotency_key, 1, DAY_IN_SECONDS );
+				if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma non ricevuta.' );
 			} catch ( Throwable $error ) {
 				$wpdb->query( 'ROLLBACK' );
 				return new WP_Error( 'mi_operational_email_storage', 'Non è stato possibile preparare la comunicazione.', array( 'status' => 500 ) );
 			}
-			if ( 'ANTEPRIMA' !== $effective_mode && $count ) self::pianifica_spedizione();
+			// origin_key univoca nella coda confermata protegge i nuovi tentativi anche senza cache o cron.
+			try { set_transient( $idempotency_key, 1, DAY_IN_SECONDS ); } catch ( Throwable $error ) {}
+			try { if ( 'ANTEPRIMA' !== $effective_mode && $count ) self::pianifica_spedizione(); } catch ( Throwable $error ) {}
 			return array( 'ok' => true, 'count' => $count, 'mode' => $effective_mode, 'message' => 'Comunicazione preparata nella coda WordPress.' );
 		} finally {
 			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
@@ -366,11 +391,14 @@ final class MI_Spedizione_Email {
 		$id = absint( $_POST['email_id'] ?? 0 );
 		global $wpdb;
 		$table = $wpdb->prefix . 'mi_email_outbox';
-		$status_corrente = (string) $wpdb->get_var( $wpdb->prepare( "SELECT status FROM {$table} WHERE id = %d", $id ) );
-		$nuovo_status = in_array( $status_corrente, array( 'TEST_FAILED', 'TEST_SENDING' ), true ) ? 'TEST_PENDING' : 'PENDING';
-		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = %s, attempts = 0, last_error = NULL, sent_at = NULL WHERE id = %d AND status IN ('FAILED', 'SENDING', 'TEST_FAILED', 'TEST_SENDING')", $nuovo_status, $id ) );
-		self::pianifica_spedizione();
-		wp_safe_redirect( add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox', 'email_id' => $id, 'mi_esito' => 'riaccodata' ), admin_url( 'edit.php' ) ) );
+		// Un'unica scrittura preserva la modalita anche con richieste concorrenti.
+		// La chiave di consegna resta invariata: non aggirare le ricevute remote.
+		$updated = $id ? $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = CASE WHEN status = 'TEST_FAILED' THEN 'TEST_PENDING' ELSE 'PENDING' END, attempts = 0, last_error = NULL, sent_at = NULL, processing_started_at = NULL WHERE id = %d AND status IN ('FAILED', 'TEST_FAILED')", $id ) ) : 0;
+		$esito = false === $updated ? 'riaccoda_errore' : ( 1 === $updated ? 'riaccodata' : 'riaccoda_non_disponibile' );
+		if ( 1 === $updated ) {
+			try { self::pianifica_spedizione(); } catch ( Throwable $error ) { /* La coda persistente viene recuperata dal cron. */ }
+		}
+		wp_safe_redirect( add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox', 'email_id' => $id, 'mi_esito' => $esito ), admin_url( 'edit.php' ) ) );
 		exit;
 	}
 
@@ -385,16 +413,36 @@ final class MI_Spedizione_Email {
 		$stale = gmdate( 'Y-m-d H:i:s', time() - 15 * MINUTE_IN_SECONDS );
 		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'PENDING', processing_started_at = NULL WHERE status = 'SENDING' AND processing_started_at < %s", $stale ) );
 		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status = 'TEST_PENDING', processing_started_at = NULL WHERE status = 'TEST_SENDING' AND processing_started_at < %s", $stale ) );
+		// I tentativi interrotti restano visibili e possono essere ripresi manualmente.
+		$wpdb->query( "UPDATE {$table} SET status = 'FAILED', processing_started_at = NULL, last_error = 'Tentativi esauriti; verifica l esito prima di riaccodare.' WHERE status = 'PENDING' AND attempts >= 5" );
+		$wpdb->query( "UPDATE {$table} SET status = 'TEST_FAILED', processing_started_at = NULL, last_error = 'Tentativi esauriti; verifica l esito prima di riaccodare.' WHERE status = 'TEST_PENDING' AND attempts >= 5" );
 		// La modalità selezionata decide il canale: un invio di prova non può
-		// raggiungere la casella di test dopo il passaggio in Operativo.
+		// raggiungere la casella di prova dopo il passaggio in Operativo.
 		$stati = 'OPERATIVO' === $modalita ? array( "'PENDING'" ) : array( "'TEST_PENDING'" );
-		$righe = $wpdb->get_results( "SELECT id, registration_id, recipient, template_type, payload_json, attempts, status FROM {$table} WHERE status IN (" . implode( ',', $stati ) . ") AND attempts < 5 ORDER BY id ASC LIMIT 10", ARRAY_A );
+		// Esamina gli eventi sospesi senza consumare il limite di dieci invii.
+		// Registra il punto raggiunto tra scansioni limitate, così un'eliminazione estesa
+		// non ritarda gli eventi successivi. Una pagina vuota riporta la scansione all'inizio.
+		$cursor_key = 'mi_email_scan_cursor_' . strtolower( $modalita );
+		$cursor = absint( get_option( $cursor_key, 0 ) ); $processed = 0; $blocked_events = array();
+		for ( $batch = 0; $batch < 10 && $processed < 10; $batch++ ) {
+		$after = $cursor ? $wpdb->prepare( ' AND id > %d', $cursor ) : '';
+		$righe = $wpdb->get_results( "SELECT id, registration_id, recipient, template_type, payload_json, attempts, status FROM {$table} WHERE status IN (" . implode( ',', $stati ) . ") AND attempts < 5{$after} ORDER BY id ASC LIMIT 10", ARRAY_A );
+		if ( $wpdb->last_error ) break;
+		if ( ! $righe ) { $cursor = 0; break; }
 		foreach ( $righe as $riga ) {
+			if ( $processed >= 10 ) break;
+			$cursor = absint( $riga['id'] );
 			$event_payload = json_decode( (string) $riga['payload_json'], true );
 			$event_id = ! empty( $riga['registration_id'] ) ? MI_Event_Deletion::registration_event( $riga['registration_id'] ) : absint( $event_payload['event_id'] ?? 0 );
+			if ( isset( $blocked_events[$event_id] ) ) continue;
 			if ( in_array( $riga['template_type'], array( 'EVENT_DELETED_NOTICE', 'EVENT_DELETED_SECRETARIAT' ), true ) ) {
 				if ( ! $event_id || 'done' !== ( MI_Event_Deletion::job( $event_id )['stage'] ?? '' ) ) continue;
-			} elseif ( ! $event_id || is_wp_error( MI_Event_Deletion::enter( $event_id ) ) ) continue;
+			} elseif ( ! $event_id || is_wp_error( MI_Event_Deletion::enter( $event_id ) ) ) {
+				$blocked_events[$event_id] = true;
+				MI_Event_Deletion::release( $event_id );
+				continue;
+			}
+			$processed++;
 			try {
 			$id = absint( $riga['id'] );
 			$invio_prova = 'TEST_PENDING' === $riga['status'];
@@ -446,6 +494,8 @@ final class MI_Spedizione_Email {
 			// la cancellazione; gli eventi già elaborati non restano bloccati.
 			} finally { MI_Event_Deletion::release( $event_id ); }
 		}
+		}
+		update_option( $cursor_key, $cursor, false );
 		if ( (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE status IN ('PENDING','TEST_PENDING') AND attempts < 5" ) > 0 ) {
 			self::pianifica_spedizione();
 		}
@@ -477,19 +527,26 @@ final class MI_Spedizione_Email {
 				try {
 					self::$codice_incorporato = MI_Code_Image::svg( $istantanea['identificativo']['modalita'], $code_payload );
 				} catch ( LengthException $error ) {
-					// Fail before contacting Google; the outbox records an actionable error,
-					// without logging the payload or sending a truncated identifier.
+					// Interrompe l'invio prima di contattare Google e registra un esito consultabile,
+					// senza scrivere il contenuto nel log o inviare un identificativo troncato.
 					return new WP_Error( 'mi_email_qr_too_long', 'Email non inviata: il contenuto del QR supera 106 byte. Correggi l’identificativo prima di riprovare.' );
 				}
+				catch ( InvalidArgumentException $error ) { return new WP_Error( 'mi_email_barcode_invalid', $error->getMessage() ); }
 				$codice_html = '<p><img src="cid:mi-registration-code" alt="Codice grafico dell’iscrizione" style="display:block;max-width:280px;height:auto;border:0;"></p>';
 		}
 		$corpo = MI_Modello_Email::componi_html( $istantanea, $codice_html );
 		self::$corpo_testo = MI_Modello_Email::componi_testo( $istantanea );
-		$inviata = MI_Workspace_Client::request( 'INVIA_EMAIL_CONFERMA', array(
+		$mittente = trim( (string) ( $identita['indirizzo_mittente'] ?? MI_Modello_Email::EMAIL_SEGRETERIA ) );
+		if ( ! is_email( $mittente ) ) return new WP_Error( 'mi_email_sender_invalid', 'Email non inviata: indirizzo mittente del gruppo non valido.' );
+		// Una distribuzione precedente deve rifiutare il nuovo invio, non ignorare il mittente.
+		$azione = strtolower( $mittente ) === strtolower( MI_Modello_Email::EMAIL_SEGRETERIA ) ? 'INVIA_EMAIL_CONFERMA' : 'INVIA_EMAIL_CONFERMA_MITTENTE';
+		$inviata = MI_Workspace_Client::request( $azione, array(
+			'indirizzo_mittente' => sanitize_email( $mittente ),
 			'delivery_key' => $delivery_key,
 			'mode' => $invio_prova ? 'PROVA' : 'OPERATIVO',
 			'destinatario' => sanitize_email( $destinatario ),
 			'reply_to' => $reply_to,
+			'nome_mittente' => html_entity_decode( sanitize_text_field( $identita['nome_mittente'] ?? MI_Modello_Email::NOME_SEGRETERIA ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ),
 			'oggetto' => html_entity_decode( sanitize_text_field( $istantanea['oggetto'] ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ),
 			'html' => $corpo,
 			'testo' => self::$corpo_testo,

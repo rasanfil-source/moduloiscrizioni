@@ -1,18 +1,36 @@
-# Backend Workspace
+# Google Apps Script — MODULI AUTONOMO
 
-Rilascio 3.26.147: lettura dei fogli evento tramite link senza login e conferme di sincronizzazione legate alla revisione MySQL. Solo gli editor già autorizzati possono scrivere; DB_MODULI resta privato. Aggiornare sorgenti e distribuzione Web App esistente. Nessuna modifica allo schema. Vedere [installazione e collaudo](../docs/rilascio-3.26.147.md).
+Questo progetto Apps Script collega WordPress a Google Sheets e ai servizi Google usati per le attività degli eventi. Il codice sorgente operativo è nella cartella `src`.
 
-La versione corrente usa MySQL WordPress come registro autorevole. I fogli evento sono proiezioni con celle operative modificabili: Sincronizza apre il confronto e la conferma nel portale. Il centrale non richiede inserimenti manuali.
+## Flussi operativi
 
-- configuraCartellaDiLavoro() prepara le schede tecniche e rimuove i moduli a celle dismessi.
-- apriGestioneWeb() apre il medesimo portale dal menu centrale.
-- sincronizzaFogliEventi() rigenera le proiezioni con retry e cursore.
-- attivaCronWordPress() crea una sola volta l'avvio del cron WordPress ogni cinque minuti, separato dalla proiezione. Serve sull'hosting corrente, dove WP-Cron tramite visite è disabilitato.
-- Pagamenti, correzioni e camere si salvano in MySQL. La replica firmata conserva identificativi e revisioni; il portale verifica permesso e ambito evento.
-- Nessun identificativo operativo o segreto deve essere inserito nei sorgenti.
+- WordPress invia richieste firmate al progetto Apps Script.
+- Il progetto crea e aggiorna il foglio dedicato a ciascun evento.
+- La segreteria consulta il foglio evento e conferma le modifiche operative nel portale WordPress.
+- Il progetto gestisce le attività email autorizzate da WordPress.
 
-Gli elenchi operativi, i report personalizzati e la ricerca nella sidebar leggono la copia locale sincronizzata: importi e stati possono non includere gli ultimi incassi, rimborsi o annullamenti. L'avviso compare anche nell'intestazione stampabile degli elenchi. Prima di richiedere pagamenti o rimborsi, verificare la posizione nel portale WordPress. Generare un report non forza una sincronizzazione e non certifica la freschezza dei dati.
+MySQL conserva il registro autorevole. I fogli evento ne presentano una vista operativa; le colonne economiche e le identità delle iscrizioni restano gestite dal portale.
 
-L'azione firmata `SCHEDA_GESTIONE_PORTALE` è ritirata e risponde `USE_MYSQL_MANAGEMENT`, come la corrispondente azione di modifica. Il portale corrente usa la gestione MySQL; il menu Sheets «Configura elenco operativo» è un percorso distinto e resta disponibile con l'avviso sopra.
+## Configurazione
 
-I sorgenti GS completi vengono generati con node tools/prepara-codice-workspace.mjs. Per installazione e collaudo vedere 3.25.1 (documento storico rimosso).
+1. Crea un progetto Apps Script autonomo e inserisci il sorgente generato con:
+
+   ```powershell
+   pwsh.exe -NoLogo -NoProfile -Command "node tools/prepara-codice-workspace.mjs"
+   ```
+
+   Il file `dist/Codice-Workspace-Progetto-<versione>.gs` è il sorgente unico destinato al progetto autonomo. Caricalo nel progetto come `Codice.gs`.
+
+2. Nelle proprietà dello script configura `MI_SHARED_SECRET` e `MI_WORDPRESS_COMMAND_URL` con i valori condivisi dal sito WordPress.
+3. Distribuisci la Web App con l'account Google autorizzato a creare i fogli evento e gestire le email.
+4. Inserisci l'indirizzo della Web App e le credenziali firmate nelle impostazioni del plugin WordPress.
+
+Il proprietario dello script autorizza i servizi Google richiesti. Nessun segreto, identificativo del sito o dato personale va salvato nei sorgenti.
+
+## Uso dei fogli evento
+
+WordPress prepara il foglio al momento della richiesta firmata. La segreteria può aprirlo dal portale o usare direttamente il collegamento del foglio. Le modifiche ammesse vengono confrontate e confermate nel portale prima di aggiornare MySQL.
+
+## Sorgenti
+
+I file `.gs` in `src` descrivono i flussi di accesso, sincronizzazione, proiezione, report ed email. Il generatore verifica la sintassi e produce il singolo sorgente autonomo in `dist`.

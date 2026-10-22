@@ -50,7 +50,6 @@
 
     <!-- COLONNA DESTRA (sidebar) -->
     <aside>
-      <div id="warmupBadge" role="status" aria-live="polite">Connessione in corso…</div>
 
       <!-- Shortcut calcola desktop -->
       <div id="desktopCalcShortcut">

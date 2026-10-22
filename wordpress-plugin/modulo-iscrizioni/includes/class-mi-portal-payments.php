@@ -6,10 +6,19 @@ require_once __DIR__ . '/class-mi-booking-search.php';
 final class MI_Portal_Payments {
 	public static function boot() {
 		add_action( 'wp_ajax_mi_portal_payment', array( __CLASS__, 'ajax' ) );
-		add_action( 'wp_ajax_nopriv_mi_portal_payment', array( __CLASS__, 'ajax' ) );
 	}
 	public static function allowed() {
 		return is_user_logged_in() && ! MI_Access::is_suspended() && ( current_user_can( 'manage_options' ) || ( current_user_can( 'mi_portal_access' ) && current_user_can( 'mi_manage_payments' ) ) );
+	}
+	public static function report_allowed() {
+		return is_user_logged_in() && ! MI_Access::is_suspended() && ( current_user_can( 'mi_portal_access' ) || current_user_can( 'manage_options' ) ) && current_user_can( 'mi_view_registrations' );
+	}
+	public static function report_url( $event_id = 0 ) {
+		return add_query_arg( array( 'mi_portal_view' => 'payment-report', 'payment_event_id' => absint( $event_id ), 'mi_portal_event' => absint( $event_id ) ), MI_Portal::url() );
+	}
+	public static function render_report() {
+		if ( ! self::report_allowed() ) { echo '<p class="mi-portal-notice mi-portal-error">Non disponi del permesso per consultare il report pagamenti.</p>'; return; }
+		MI_Admin::payments_page( true );
 	}
 	public static function registration( $id ) {
 		global $wpdb;
@@ -28,7 +37,7 @@ final class MI_Portal_Payments {
 		$where .= " AND NOT EXISTS (SELECT 1 FROM {$wpdb->prefix}postmeta free_event WHERE free_event.post_id=r.event_id AND free_event.meta_key='_mi_pricing_mode' AND free_event.meta_value='ZERO')";
 		$offset = ( max( 1, (int) $page ) - 1 ) * 30;
 		$match = MI_Booking_Search::sql( $query );
-		$rows = $wpdb->get_results( "SELECT id,event_id,order_code,buyer_first_name,buyer_last_name FROM {$wpdb->prefix}mi_registrations r WHERE {$where} AND {$match} ORDER BY buyer_last_name,buyer_first_name,id LIMIT 31 OFFSET {$offset}", ARRAY_A );
+		$rows = $wpdb->get_results( "SELECT r.id,r.event_id,r.order_code,r.buyer_first_name,r.buyer_last_name,event_post.post_title AS event_title FROM {$wpdb->prefix}mi_registrations r LEFT JOIN {$wpdb->posts} event_post ON event_post.ID=r.event_id WHERE {$where} AND {$match} ORDER BY r.buyer_last_name,r.buyer_first_name,r.id LIMIT 31 OFFSET {$offset}", ARRAY_A );
 		if ( $wpdb->last_error ) return new WP_Error( 'mi_payment_search', 'Ricerca non disponibile. Riprova.' );
 		$has_more = count( $rows ) > 30; $rows = array_slice( $rows, 0, 30 );
 		$names = array(); $matches = array();
@@ -43,7 +52,7 @@ final class MI_Portal_Payments {
 		}
 		$results = array_map( static function ( $row ) use ( $names, $matches ) {
 			$found = $matches[$row['id']] ?? array();
-			return array( 'id' => (int) $row['id'], 'nome' => $found ? implode( ', ', array_column( $found, 'name' ) ) : implode( ', ', $names[$row['id']] ?? array( trim( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ) ) ), 'matched_participant_ids' => array_column( $found, 'id' ), 'codice' => $row['order_code'], 'evento' => html_entity_decode( get_the_title( (int) $row['event_id'] ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ), 'partecipanti' => $names[$row['id']] ?? array() );
+			return array( 'id' => (int) $row['id'], 'nome' => $found ? implode( ', ', array_column( $found, 'name' ) ) : implode( ', ', $names[$row['id']] ?? array( trim( $row['buyer_first_name'] . ' ' . $row['buyer_last_name'] ) ) ), 'matched_participant_ids' => array_column( $found, 'id' ), 'codice' => $row['order_code'], 'evento' => html_entity_decode( (string) $row['event_title'], ENT_QUOTES | ENT_HTML5, 'UTF-8' ), 'partecipanti' => $names[$row['id']] ?? array() );
 		}, $rows ?: array() );
 		return array( 'prenotazioni' => $results, 'has_more' => $has_more );
 	}
@@ -90,7 +99,7 @@ final class MI_Portal_Payments {
 		<fieldset data-search-fields><label for="mi-payment-search">Nome della persona, email, telefono o codice prenotazione</label>
 		<div class="mi-payment-search"><input id="mi-payment-search" type="search" autocomplete="off" maxlength="80" aria-describedby="mi-payment-search-status"><button type="button" data-clear class="mi-secondary" hidden>Cancella ricerca</button></div>
 		<p id="mi-payment-search-status" role="status" aria-live="polite">Digita almeno due caratteri.</p><div data-results class="mi-booking-list"></div></fieldset>
-		<?php if ( current_user_can( 'mi_view_registrations' ) || current_user_can( 'manage_options' ) ) : ?><p><a class="mi-secondary" href="<?php echo esc_url( add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-payments', 'payment_event_id' => absint( $_GET['mi_portal_event'] ?? 0 ) ), admin_url( 'edit.php' ) ) ); ?>">Report pagamenti e rimborsi</a></p><?php endif; ?>
+		<?php if ( current_user_can( 'mi_view_registrations' ) || current_user_can( 'manage_options' ) ) : ?><p><a class="mi-secondary" href="<?php echo esc_url( self::report_url( absint( $_GET['mi_portal_event'] ?? 0 ) ) ); ?>">Report pagamenti e rimborsi</a></p><?php endif; ?>
 		<p data-status class="mi-payment-status" role="status" aria-live="polite"></p>
 		<button type="button" data-retry-detail class="mi-secondary" hidden>Riprova caricamento saldo</button>
 		<form data-payment-form novalidate hidden>

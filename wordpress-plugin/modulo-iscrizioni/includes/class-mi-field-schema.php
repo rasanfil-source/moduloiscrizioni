@@ -32,6 +32,7 @@ final class MI_Field_Schema {
 				'type'         => 'tel',
 				'max_length'   => 32,
 				'autocomplete' => 'tel',
+				'help'         => '',
 			),
 			'birth_date' => array(
 				'key'          => 'birth_date',
@@ -113,12 +114,13 @@ final class MI_Field_Schema {
 		);
 	}
 
-	/** Exact event configuration used by the Google projection, including empty events. */
+	/** Configurazione completa usata per la proiezione Google, anche quando l'evento non ha iscrizioni. */
 	public static function workspace_event_schema( $event_id ) {
 		return array(
 			'fields' => array_merge( self::public_fields( self::event_configuration( $event_id ) ), self::sanitize_custom_fields( get_post_meta( $event_id, '_mi_custom_participant_fields', true ) ) ),
 			'options' => array_values( (array) get_post_meta( $event_id, '_mi_options', true ) ),
-			'room' => '1' === get_post_meta( $event_id, '_mi_overnight_enabled', true ),
+			'room' => '1' === get_post_meta( $event_id, '_mi_overnight_enabled', true ) || (bool) array_filter( (array) get_post_meta( $event_id, '_mi_options', true ), static function ( $option ) { return 0 === strpos( (string) ( $option['code'] ?? '' ), 'alloggio-' ); } ),
+			'transport' => '1' === get_post_meta( $event_id, '_mi_bus_assignment_enabled', true ),
 			'special_requests' => '1' === get_post_meta( $event_id, '_mi_special_requests_enabled', true ),
 			'pricing' => strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ),
 		);
@@ -215,6 +217,7 @@ final class MI_Field_Schema {
 			$seen[ $key ] = true;
 			$retention = 'SHEETS_ONLY' === strtoupper( sanitize_key( $raw['retention'] ?? '' ) ) ? 'SHEETS_ONLY' : 'STANDARD';
 			$field = array( 'key' => $key, 'label' => $label, 'type' => $type, 'required' => ! empty( $raw['required'] ), 'max_length' => 'textarea' === $type ? 1000 : ( 'email' === $type ? 254 : 180 ), 'help' => '', 'retention' => $retention );
+			if ( 'date' === $type ) $field['date_rule'] = 'any';
 			if ( 'yesno' === $type ) {
 				$field['options'] = array( 'Sì', 'No' );
 				$field['help'] = 'Scegli la risposta appropriata.';
@@ -266,8 +269,10 @@ final class MI_Field_Schema {
 				$date = DateTimeImmutable::createFromFormat( '!Y-m-d', $value, wp_timezone() );
 				$today = new DateTimeImmutable( 'today', wp_timezone() );
 				$oldest = $today->modify( '-120 years' );
-				$future_rule = 'future' === ( $field['date_rule'] ?? '' );
-				$invalid_date = ! $date || $date->format( 'Y-m-d' ) !== $value || ( $future_rule ? $date < $today || $date > $today->modify( '+20 years' ) : $date > $today || $date < $oldest );
+				// I campi personalizzati già pubblicati possono non avere una regola esplicita.
+				$date_rule = $field['date_rule'] ?? ( str_starts_with( $key, 'custom_' ) ? 'any' : 'past' );
+				$future_rule = 'future' === $date_rule;
+				$invalid_date = ! $date || $date->format( 'Y-m-d' ) !== $value || ( 'any' !== $date_rule && ( $future_rule ? $date < $today || $date > $today->modify( '+20 years' ) : $date > $today || $date < $oldest ) );
 				if ( $invalid_date ) {
 					return new WP_Error( 'mi_participant_date_invalid', 'Controlla le date dei partecipanti.', array( 'status' => 400 ) );
 				}

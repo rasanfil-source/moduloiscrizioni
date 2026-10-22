@@ -7,6 +7,7 @@ function sanitize_textarea_field($v) { return strip_tags((string)$v); }
 require __DIR__ . '/../modulo-iscrizioni/includes/class-mi-payment-ledger.php';
 $base = ['request_id'=>'wp_7_12345678-1234-4234-8234-123456789abc','importo'=>'12,34','tipo'=>'INCASSO','metodo'=>'BONIFICO','data'=>'2026-09-09'];
 function check($condition,$message) { if (!$condition) throw new RuntimeException($message); }
+check(!MI_Payment_Ledger::position(['total_cents'=>1000],0)['managed'],'Missing economic mode must not imply collection');
 function rejected($base,$patch) {
  try { MI_Payment_Ledger::normalize(array_replace($base,$patch)); }
  catch (InvalidArgumentException $e) { return; }

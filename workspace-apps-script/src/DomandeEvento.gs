@@ -1,16 +1,17 @@
-/** Include both optional and required questions, even in saved operational views. */
-function aggiungiColonneDomande_(colonne, evento, iscrizioni, partecipanti) {
+/** Include le domande facoltative e obbligatorie anche nelle viste operative salvate. */
+function aggiungiColonneDomande_(colonne, evento, iscrizioni, partecipanti, cache) {
+  const decode=cache?cache.object:decodificaOggetto_;
   const definitions = new Map();
   const add = field => {
     if (!field || !/^custom_[A-Za-z0-9_-]{1,73}$/.test(String(field.key || ''))) return;
     definitions.set(field.key, String(field.label || field.key));
   };
   iscrizioni.forEach(r => {
-    const snapshot = decodificaOggetto_(r.snapshot_json);
+    const snapshot = decode(r.snapshot_json);
     ((snapshot.event || {}).participant_fields || []).forEach(add);
   });
   decodificaElenco_(evento.domande_json).forEach(add);
-  partecipanti.forEach(p => Object.keys(decodificaOggetto_(p.dati_aggiuntivi_json)).forEach(key => {
+  partecipanti.forEach(p => Object.keys(decode(p.dati_aggiuntivi_json)).forEach(key => {
     if (!definitions.has(key)) add({key:key,label:key.replace(/^custom_/, '').replace(/_/g, ' ')});
   }));
   definitions.forEach((label, key) => {
@@ -20,13 +21,13 @@ function aggiungiColonneDomande_(colonne, evento, iscrizioni, partecipanti) {
   });
 }
 
-/** The configured fields, not a generic travel profile, define the event sheet. */
+/** I campi configurati per l'evento definiscono il foglio e il relativo profilo operativo. */
 function vistaEventoSolaLettura_(evento, colonne) {
   const schema = decodificaOggetto_(evento.schema_vista_json);
-  return Array.isArray(schema.fields) && Array.isArray(schema.options) && schema.pricing === 'ZERO' && !colonne.some(c => c.key === 'total');
+  return Array.isArray(schema.fields) && Array.isArray(schema.options) && ['NONE','ZERO'].includes(schema.pricing) && !colonne.some(c => c.key === 'total');
 }
 
-function applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, pagamenti) {
+function applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, pagamenti, cache) {
   const schema = decodificaOggetto_(evento.schema_vista_json);
   if (!Array.isArray(schema.fields) || !Array.isArray(schema.options)) return;
   const catalogo = campiElencoOperativo_(false);
@@ -38,12 +39,19 @@ function applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, 
   };
   ['last_name','first_name','phone'].forEach(key=>add(key));
   schema.fields.forEach(field=>{if (field) add(field.key, field.label);});
+  aggiungiColonneDomande_(result, {domande_json:'[]'}, iscrizioni, partecipanti, cache);
   if (schema.room) add('room');
+  if (schema.transport) add('transport');
+  if (iscrizioni.some(r=>['WAITLISTED','WAITLIST_OFFERED','LISTA_ATTESA','POSTO_PROPOSTO'].includes(String(r.stato).toUpperCase()))) add('status');
   aggiungiColonneServizi_(result, schema.options);
+  partecipanti.forEach(person=>{
+    const options=cache?cache.list(person.opzioni_json):decodificaElenco_(person.opzioni_json);
+    aggiungiColonneServizi_(result, options.filter(option=>Number(option.quantity)>0).map(option=>Object.assign({},option,{scope:'TICKET'})));
+  });
   if (schema.special_requests) add('special_requests');
   const codes = new Set(iscrizioni.map(r=>String(r.codice_ordine)));
-  const economic = schema.pricing !== 'ZERO' || iscrizioni.some(r=>Number(r.totale_centesimi)>0 || Number(r.versato_centesimi)>0) || pagamenti.some(p=>codes.has(String(p.codice_ordine)));
+  const economic = !['NONE','ZERO'].includes(schema.pricing) || iscrizioni.some(r=>Number(r.totale_centesimi)>0 || Number(r.versato_centesimi)>0) || pagamenti.some(p=>codes.has(String(p.codice_ordine)));
   if (economic) ['total','paid','paid_cash','paid_transfer','paid_card','balance'].forEach(key=>add(key));
-  if (partecipanti.some(p=>['PRESENT','ABSENT','UNRECORDED'].includes(decodificaOggetto_(p.dati_aggiuntivi_json).attendance))) add('attendance','Presenza effettiva');
+  if (partecipanti.some(p=>['PRESENT','ABSENT','UNRECORDED'].includes((cache?cache.object(p.dati_aggiuntivi_json):decodificaOggetto_(p.dati_aggiuntivi_json)).attendance))) add('attendance','Presenza effettiva');
   colonne.splice(0, colonne.length, ...result);
 }

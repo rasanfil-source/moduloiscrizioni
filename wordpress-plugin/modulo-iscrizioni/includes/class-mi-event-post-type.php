@@ -1,6 +1,7 @@
 <?php
 
 defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/class-mi-amount.php';
 
 final class MI_Event_Post_Type {
 	const EVENT_TYPE = 'mi_event';
@@ -9,8 +10,7 @@ final class MI_Event_Post_Type {
 	const GROUP_TYPE = 'mi_activity';
 
 	private static function price_cents( $raw ) {
-		$raw = is_scalar( $raw ) ? trim( sanitize_text_field( (string) $raw ) ) : '';
-		return preg_match( '/^\d+(?:[.,]\d{1,2})?$/D', $raw ) ? max( 0, (int) round( (float) str_replace( ',', '.', $raw ) * 100 ) ) : 0;
+		return MI_Amount::cents( $raw ) ?? 0;
 	}
 
 	public static function boot() {
@@ -106,6 +106,8 @@ final class MI_Event_Post_Type {
 
 	public static function render_event_box( $post ) {
 		wp_nonce_field( 'mi_save_event', 'mi_event_nonce' );
+		echo '<p><label><input type="checkbox" name="mi_event_qr_enabled" value="1" ' . checked( get_post_meta( $post->ID, '_mi_event_qr_enabled', true ), '1', false ) . '> Genera il QR delle iscrizioni con il logo del gruppo</label></p><p>PNG scaricabile dopo la pubblicazione. Richiede un logo del gruppo.</p>';
+		if ( class_exists( 'MI_Event_QR' ) ) MI_Event_QR::render( $post->ID );
 		$activity_id = absint( get_post_meta( $post->ID, '_mi_activity_id', true ) );
 		$opens_at = (string) get_post_meta( $post->ID, '_mi_registration_opens_at', true );
 		$closes_at = (string) get_post_meta( $post->ID, '_mi_registration_closes_at', true );
@@ -123,6 +125,7 @@ final class MI_Event_Post_Type {
 		$payment_methods = get_post_meta( $post->ID, '_mi_payment_methods', true );
 		$payment_methods = is_array( $payment_methods ) ? $payment_methods : array();
 		$identifier_display = get_post_meta( $post->ID, '_mi_identifier_display', true ) ?: 'TEXT';
+		$reopened_payment_hours = min( 168, max( 1, absint( get_post_meta( $post->ID, '_mi_reopened_payment_hours', true ) ?: 48 ) ) );
 		$payment_deadline_at = (string) get_post_meta( $post->ID, '_mi_payment_deadline_at', true );
 		$marketing_enabled = '1' === get_post_meta( $post->ID, '_mi_marketing_enabled', true );
 		$custom_participant_fields = MI_Field_Schema::sanitize_custom_fields( get_post_meta( $post->ID, '_mi_custom_participant_fields', true ) );
@@ -154,13 +157,14 @@ final class MI_Event_Post_Type {
 			</select></p>
 			<p><label for="mi_capacity"><strong>Posti disponibili</strong></label><br><input id="mi_capacity" name="mi_capacity" type="number" min="1" max="10000" value="<?php echo esc_attr( $capacity ); ?>" required></p>
 			<h3 class="mi-admin-section-title">Date e lista d’attesa</h3>
-			<p><label for="mi_registration_opens_at"><strong>Apertura iscrizioni</strong></label><br><input id="mi_registration_opens_at" name="mi_registration_opens_at" type="datetime-local" value="<?php echo esc_attr( $opens_at ); ?>" required></p>
+			<p><label for="mi_registration_opens_at"><strong>Apertura iscrizioni</strong></label><br><input id="mi_registration_opens_at" name="mi_registration_opens_at" type="datetime-local" value="<?php echo esc_attr( $opens_at ); ?>"><br><small>Facoltativa: se vuota, le iscrizioni aprono subito alla pubblicazione.</small></p>
 			<p><label for="mi_registration_closes_at"><strong>Chiusura iscrizioni</strong></label><br><input id="mi_registration_closes_at" name="mi_registration_closes_at" type="datetime-local" value="<?php echo esc_attr( $closes_at ); ?>" required></p>
 			<p><label for="mi_event_starts_at"><strong>Data e ora dell’evento</strong></label><br><input id="mi_event_starts_at" name="mi_event_starts_at" type="datetime-local" value="<?php echo esc_attr( $event_starts_at ); ?>"></p>
 			<p><label for="mi_event_location"><strong>Luogo dell’evento</strong></label><br><input id="mi_event_location" name="mi_event_location" type="text" maxlength="180" value="<?php echo esc_attr( $event_location ); ?>" placeholder="Es. Piazza San Pietro, Roma"></p>
 			<p><label><input name="mi_waitlist_enabled" type="checkbox" value="1" <?php checked( $waitlist ); ?>> Attiva automaticamente la lista d’attesa a esaurimento posti</label></p>
 			<p><label for="mi_waitlist_offer_hours"><strong>Tempo per accettare un posto liberato</strong></label><br><input id="mi_waitlist_offer_hours" name="mi_waitlist_offer_hours" type="number" min="1" max="168" value="<?php echo esc_attr( $waitlist_offer_hours ); ?>"> ore</p>
 			<h3 class="mi-admin-section-title">Quote e pagamenti</h3>
+			<p><label for="mi_reopened_payment_hours"><strong>Tempo per pagare dopo una rettifica</strong></label><br><input id="mi_reopened_payment_hours" name="mi_reopened_payment_hours" type="number" min="1" max="168" value="<?php echo esc_attr( $reopened_payment_hours ); ?>"> ore<br><small>Da 1 a 168 ore; predefinito 48. Usato quando il pagamento viene riaperto senza una scadenza ancora futura. Indipendente dalla lista d’attesa.</small></p>
 			<p><label for="mi_payment_deadline_at"><strong>Scadenza prenotazioni non saldate</strong></label><br><input id="mi_payment_deadline_at" name="mi_payment_deadline_at" type="datetime-local" value="<?php echo esc_attr( $payment_deadline_at ); ?>"></p>
 			<p class="description">Lascia vuoto per non applicare una scadenza automatica. È usata soltanto per gli eventi con versamenti tracciati.</p>
 			<p><label for="mi_pricing_mode"><strong>Prezzo</strong></label><br><select id="mi_pricing_mode" name="mi_pricing_mode"><option value="NONE" <?php selected( $pricing_mode, 'NONE' ); ?>>Nessun prezzo</option><option value="ZERO" <?php selected( $pricing_mode, 'ZERO' ); ?>>Gratuito</option><option value="FIXED" <?php selected( $pricing_mode, 'FIXED' ); ?>>Quota di partecipazione uguale per tutti</option><option value="CALCULATED" <?php selected( $pricing_mode, 'CALCULATED' ); ?>>Prezzi diversi secondo la tipologia</option></select></p>
@@ -202,7 +206,7 @@ final class MI_Event_Post_Type {
 			<div class="mi-field-config__item" data-mi-field="<?php echo esc_attr( $field_key ); ?>">
 				<label><input type="checkbox" name="mi_participant_fields[]" value="<?php echo esc_attr( $field_key ); ?>" <?php checked( in_array( $field_key, $field_configuration['enabled'], true ) ); ?> data-mi-field-enabled> <strong><?php echo esc_html( $field['label'] ); ?></strong></label>
 				<label class="mi-field-config__required"><input type="checkbox" name="mi_participant_required[]" value="<?php echo esc_attr( $field_key ); ?>" <?php checked( in_array( $field_key, $field_configuration['required'], true ) ); ?> data-mi-field-required> Obbligatorio</label>
-				<small><?php echo esc_html( $field['help'] ); ?></small>
+				<small><?php echo esc_html( $field['help'] ?? '' ); ?></small>
 			</div>
 		<?php endforeach; ?>
 		</div>
@@ -263,7 +267,7 @@ final class MI_Event_Post_Type {
 	public static function save_activity( $post_id, $post ) {
 		if ( ! isset( $_POST['mi_activity_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['mi_activity_nonce'] ) ), 'mi_save_activity' ) ) return;
 		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) || ! current_user_can( 'manage_options' ) ) return;
-		try { $period = MI_Attendance_Report::period( wp_date( 'Y' ), sanitize_text_field( wp_unslash( $_POST['mi_attendance_from_month'] ?? '' ) ), sanitize_text_field( wp_unslash( $_POST['mi_attendance_to_month'] ?? '' ) ) ); }
+		try { $period = MI_Attendance_Report::submitted_period( $post_id, wp_unslash( $_POST ) ); }
 		catch ( InvalidArgumentException $e ) { wp_die( esc_html( $e->getMessage() ) ); }
 		update_post_meta( $post_id, '_mi_attendance_from_month', $period[0] );
 		update_post_meta( $post_id, '_mi_attendance_to_month', $period[1] );
@@ -278,7 +282,7 @@ final class MI_Event_Post_Type {
 		update_post_meta( $post_id, '_mi_secondary_color', $secondary_color );
 		update_post_meta( $post_id, '_mi_accent_color', $primary_color );
 		if ( $cover_id ) update_post_meta( $post_id, '_mi_group_cover_image_id', $cover_id ); else delete_post_meta( $post_id, '_mi_group_cover_image_id' );
-		$dependent_events = get_posts( array( 'post_type' => self::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => -1, 'fields' => 'ids', 'meta_key' => '_mi_activity_id', 'meta_value' => $post_id ) );
+		$dependent_events = get_posts( array( 'post_type' => self::EVENT_TYPE, 'post_status' => array( 'publish', 'private', 'mi_archived' ), 'numberposts' => -1, 'fields' => 'ids', 'meta_key' => '_mi_activity_id', 'meta_value' => $post_id ) );
 		foreach ( $dependent_events as $event_id ) update_post_meta( $event_id, '_mi_needs_republish', '1' );
 	}
 
@@ -286,7 +290,7 @@ final class MI_Event_Post_Type {
 		if ( ! isset( $_POST['mi_event_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['mi_event_nonce'] ) ), 'mi_save_event' ) ) {
 			return;
 		}
-		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) || ! current_user_can( 'mi_manage_events' ) ) {
+		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) || ! current_user_can( 'edit_post', $post_id ) ) {
 			return;
 		}
 
@@ -312,6 +316,7 @@ final class MI_Event_Post_Type {
 		update_post_meta( $post_id, '_mi_capacity', $capacity );
 		update_post_meta( $post_id, '_mi_waitlist_enabled', isset( $_POST['mi_waitlist_enabled'] ) ? '1' : '0' );
 		update_post_meta( $post_id, '_mi_waitlist_offer_hours', min( 168, max( 1, absint( $_POST['mi_waitlist_offer_hours'] ?? 48 ) ) ) );
+		if ( isset( $_POST['mi_reopened_payment_hours'] ) ) update_post_meta( $post_id, '_mi_reopened_payment_hours', min( 168, max( 1, absint( $_POST['mi_reopened_payment_hours'] ) ) ) );
 		$payment_deadline_at = isset( $_POST['mi_payment_deadline_at'] ) ? sanitize_text_field( wp_unslash( $_POST['mi_payment_deadline_at'] ) ) : '';
 		if ( '' === $payment_deadline_at || preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $payment_deadline_at ) ) {
 			update_post_meta( $post_id, '_mi_payment_deadline_at', $payment_deadline_at );
@@ -326,7 +331,7 @@ final class MI_Event_Post_Type {
 		foreach ( array( 'opens_at', 'closes_at' ) as $field ) {
 			$key = 'mi_registration_' . $field;
 			$value = isset( $_POST[ $key ] ) ? sanitize_text_field( wp_unslash( $_POST[ $key ] ) ) : '';
-			if ( preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $value ) ) {
+			if ( ( 'opens_at' === $field && isset( $_POST[ $key ] ) && '' === $value ) || preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $value ) ) {
 				update_post_meta( $post_id, '_mi_registration_' . $field, $value );
 			}
 		}
@@ -364,6 +369,7 @@ final class MI_Event_Post_Type {
 		update_post_meta( $post_id, '_mi_operational_profile', MI_Field_Schema::sanitize_operational_profile( wp_unslash( $_POST['mi_operational_profile'] ?? 'AUTOMATICO' ) ) );
 
 		$identifier = isset( $_POST['mi_identifier_display'] ) ? strtoupper( sanitize_key( wp_unslash( $_POST['mi_identifier_display'] ) ) ) : 'TEXT';
+		update_post_meta( $post_id, '_mi_event_qr_enabled', ! empty( $_POST['mi_event_qr_enabled'] ) ? '1' : '0' );
 		update_post_meta( $post_id, '_mi_identifier_display', in_array( $identifier, array( 'NONE', 'TEXT', 'QR', 'BARCODE' ), true ) ? $identifier : 'TEXT' );
 
 		$field_configuration = MI_Field_Schema::sanitize_configuration(
@@ -421,6 +427,7 @@ final class MI_Event_Post_Type {
 		$option_maximums = isset( $_POST['mi_option_max'] ) ? (array) wp_unslash( $_POST['mi_option_max'] ) : array();
 		$options = array();
 		$seen_options = array();
+		$previous_options = array_column( (array) get_post_meta( $post_id, '_mi_options', true ), null, 'code' );
 		foreach ( array_slice( $option_codes, 0, 50, true ) as $index => $raw_code ) {
 			$code = sanitize_title( $raw_code );
 			$name = sanitize_text_field( $option_names[ $index ] ?? '' );
@@ -437,14 +444,20 @@ final class MI_Event_Post_Type {
 				'max_quantity' => min( 20, max( 1, absint( $option_maximums[ $index ] ?? 1 ) ) ),
 			);
 		}
+		foreach ( $options as &$option ) foreach ( array( 'category', 'choice_group' ) as $key ) {
+			$previous = $previous_options[$option['code']] ?? array();
+			if ( array_key_exists( $key, $previous ) ) $option[$key] = $previous[$key];
+		}
+		unset( $option );
 		update_post_meta( $post_id, '_mi_options', $options );
+		update_post_meta( $post_id, '_mi_overnight_enabled', array_filter( $options, static function ( $option ) { return 0 === strpos( $option['code'], 'alloggio-' ); } ) ? '1' : '0' );
 	}
 
 	public static function publish_revision( $post_id, $post ) {
 		if ( 'publish' !== $post->post_status || wp_is_post_revision( $post_id ) || wp_is_post_autosave( $post_id ) ) {
 			return;
 		}
-		if ( ! current_user_can( 'edit_post', $post_id ) ) {
+		if ( ! current_user_can( 'edit_post', $post_id ) || ! MI_Access::can_access_event( $post_id ) ) {
 			return;
 		}
 		MI_Registration_Service::ensure_published_revision( $post_id, true );
@@ -486,7 +499,7 @@ final class MI_Event_Post_Type {
 			return;
 		}
 		if ( self::GROUP_TYPE === $screen->post_type ) wp_enqueue_media();
-		wp_enqueue_style( 'mi-admin', MI_PLUGIN_URL . 'assets/admin.css', array(), MI_VERSION . '.' . filemtime( MI_PLUGIN_DIR . 'assets/admin.css' ) );
-		wp_enqueue_script( 'mi-admin', MI_PLUGIN_URL . 'assets/admin.js', array(), MI_VERSION . '.' . filemtime( MI_PLUGIN_DIR . 'assets/admin.js' ), true );
+		wp_enqueue_style( 'mi-admin', MI_PLUGIN_URL . 'assets/admin.css', array(), MI_VERSION );
+		wp_enqueue_script( 'mi-admin', MI_PLUGIN_URL . 'assets/admin.js', array(), MI_VERSION, true );
 	}
 }

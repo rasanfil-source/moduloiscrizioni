@@ -1,15 +1,15 @@
 //---------------------------------------------------------------------
 //
-// QR Code Generator for JavaScript
+// Generatore di codici QR per JavaScript
 //
 // Copyright (c) 2009 Kazuhiko Arase
 //
-// URL: http://www.d-project.com/
+// Indirizzo: http://www.d-project.com/
 //
-// Licensed under the MIT license:
+// Distribuito con licenza MIT (MIT License):
 //  http://www.opensource.org/licenses/mit-license.php
 //
-// The word 'QR Code' is registered trademark of
+// Il termine «QR Code» è un marchio registrato di
 // DENSO WAVE INCORPORATED
 //  http://www.denso-wave.com/qrcode/faqpatent-e.html
 //
@@ -18,7 +18,7 @@
 var qrcode = function() {
 
   //---------------------------------------------------------------------
-  // qrcode
+  // Funzione qrcode
   //---------------------------------------------------------------------
 
   /**
@@ -181,7 +181,7 @@ var qrcode = function() {
       var data = (_errorCorrectionLevel << 3) | maskPattern;
       var bits = QRUtil.getBCHTypeInfo(data);
 
-      // vertical
+      // Verticale
       for (var i = 0; i < 15; i += 1) {
 
         var mod = (!test && ( (bits >> i) & 1) == 1);
@@ -195,7 +195,7 @@ var qrcode = function() {
         }
       }
 
-      // horizontal
+      // Orizzontale
       for (var i = 0; i < 15; i += 1) {
 
         var mod = (!test && ( (bits >> i) & 1) == 1);
@@ -209,7 +209,7 @@ var qrcode = function() {
         }
       }
 
-      // fixed module
+      // Modulo fisso
       _modules[_moduleCount - 8][8] = (!test);
     };
 
@@ -342,7 +342,7 @@ var qrcode = function() {
         data.write(buffer);
       }
 
-      // calc num max data.
+      // Calcola il numero massimo di dati.
       var totalDataCount = 0;
       for (var i = 0; i < rsBlocks.length; i += 1) {
         totalDataCount += rsBlocks[i].dataCount;
@@ -356,17 +356,17 @@ var qrcode = function() {
           + ')';
       }
 
-      // end code
+      // Codice di termine
       if (buffer.getLengthInBits() + 4 <= totalDataCount * 8) {
         buffer.put(0, 4);
       }
 
-      // padding
+      // Riempimento
       while (buffer.getLengthInBits() % 8 != 0) {
         buffer.putBit(false);
       }
 
-      // padding
+      // Riempimento
       while (true) {
 
         if (buffer.getLengthInBits() >= totalDataCount * 8) {
@@ -496,9 +496,9 @@ var qrcode = function() {
 
       var opts = {};
       if (typeof arguments[0] == 'object') {
-        // Called by options.
+        // Richiamato dalle opzioni.
         opts = arguments[0];
-        // overwrite cellSize and margin.
+        // Sovrascrive cellSize e il margine.
         cellSize = opts.cellSize;
         margin = opts.margin;
         alt = opts.alt;
@@ -508,12 +508,12 @@ var qrcode = function() {
       cellSize = cellSize || 2;
       margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
 
-      // Compose alt property surrogate
+      // Compone il valore alternativo sostitutivo.
       alt = (typeof alt === 'string') ? {text: alt} : alt || {};
       alt.text = alt.text || null;
       alt.id = (alt.text) ? alt.id || 'qrcode-description' : null;
 
-      // Compose title property surrogate
+      // Compone il valore sostitutivo del titolo.
       title = (typeof title === 'string') ? {text: title} : title || {};
       title.text = title.text || null;
       title.id = (title.text) ? title.id || 'qrcode-title' : null;
@@ -659,7 +659,7 @@ var qrcode = function() {
             p += '█';
           }
 
-          // Output 2 characters per pixel, to create full square. 1 character per pixels gives only half width of square.
+          // Usa due caratteri per pixel per ottenere un quadrato completo; un carattere occupa solo metà larghezza.
           ascii += (margin < 1 && y+1 >= max) ? blocksLastLineNoMargin[p] : blocks[p];
         }
 
@@ -704,7 +704,7 @@ var qrcode = function() {
             p = 0;
           }
 
-          // Output 2 characters per pixel, to create full square. 1 character per pixels gives only half width of square.
+          // Usa due caratteri per pixel per ottenere un quadrato completo; un carattere occupa solo metà larghezza.
           line += p ? white : black;
         }
 
@@ -731,7 +731,7 @@ var qrcode = function() {
   };
 
   //---------------------------------------------------------------------
-  // qrcode.stringToBytes
+  // Funzione qrcode.stringToBytes
   //---------------------------------------------------------------------
 
   qrcode.stringToBytesFuncs = {
@@ -748,7 +748,7 @@ var qrcode = function() {
   qrcode.stringToBytes = qrcode.stringToBytesFuncs['default'];
 
   //---------------------------------------------------------------------
-  // qrcode.createStringToBytes
+  // Funzione qrcode.createStringToBytes
   //---------------------------------------------------------------------
 
   /**
@@ -758,7 +758,7 @@ var qrcode = function() {
    */
   qrcode.createStringToBytes = function(unicodeData, numChars) {
 
-    // create conversion map.
+    // Crea la mappa di conversione.
 
     var unicodeMap = function() {
 
@@ -801,10 +801,10 @@ var qrcode = function() {
           var b = unicodeMap[s.charAt(i)];
           if (typeof b == 'number') {
             if ( (b & 0xff) == b) {
-              // 1byte
+              // Un byte
               bytes.push(b);
             } else {
-              // 2bytes
+              // Due byte
               bytes.push(b >>> 8);
               bytes.push(b & 0xff);
             }
@@ -818,7 +818,7 @@ var qrcode = function() {
   };
 
   //---------------------------------------------------------------------
-  // QRMode
+  // Modalità QR
   //---------------------------------------------------------------------
 
   var QRMode = {
@@ -829,7 +829,7 @@ var qrcode = function() {
   };
 
   //---------------------------------------------------------------------
-  // QRErrorCorrectionLevel
+  // Livello di correzione degli errori QR
   //---------------------------------------------------------------------
 
   var QRErrorCorrectionLevel = {
@@ -840,7 +840,7 @@ var qrcode = function() {
   };
 
   //---------------------------------------------------------------------
-  // QRMaskPattern
+  // Schema della maschera QR
   //---------------------------------------------------------------------
 
   var QRMaskPattern = {
@@ -855,7 +855,7 @@ var qrcode = function() {
   };
 
   //---------------------------------------------------------------------
-  // QRUtil
+  // Utilità QR
   //---------------------------------------------------------------------
 
   var QRUtil = function() {
@@ -1126,7 +1126,7 @@ var qrcode = function() {
   }();
 
   //---------------------------------------------------------------------
-  // QRMath
+  // Aritmetica QR (QRMath)
   //---------------------------------------------------------------------
 
   var QRMath = function() {
@@ -1134,7 +1134,7 @@ var qrcode = function() {
     var EXP_TABLE = new Array(256);
     var LOG_TABLE = new Array(256);
 
-    // initialize tables
+    // Inizializza le tabelle.
     for (var i = 0; i < 8; i += 1) {
       EXP_TABLE[i] = 1 << i;
     }
@@ -1176,7 +1176,7 @@ var qrcode = function() {
   }();
 
   //---------------------------------------------------------------------
-  // qrPolynomial
+  // Polinomio QR
   //---------------------------------------------------------------------
 
   function qrPolynomial(num, shift) {
@@ -1237,7 +1237,7 @@ var qrcode = function() {
         num[i] ^= QRMath.gexp(QRMath.glog(e.getAt(i) ) + ratio);
       }
 
-      // recursive call
+      // Chiamata ricorsiva
       return qrPolynomial(num, 0).mod(e);
     };
 
@@ -1245,7 +1245,7 @@ var qrcode = function() {
   };
 
   //---------------------------------------------------------------------
-  // QRRSBlock
+  // Blocchi Reed-Solomon QR
   //---------------------------------------------------------------------
 
   var QRRSBlock = function() {
@@ -1554,7 +1554,7 @@ var qrcode = function() {
   }();
 
   //---------------------------------------------------------------------
-  // qrBitBuffer
+  // Buffer di bit QR
   //---------------------------------------------------------------------
 
   var qrBitBuffer = function() {
@@ -1601,7 +1601,7 @@ var qrcode = function() {
   };
 
   //---------------------------------------------------------------------
-  // qrNumber
+  // Dati numerici QR
   //---------------------------------------------------------------------
 
   var qrNumber = function(data) {
@@ -1658,7 +1658,7 @@ var qrcode = function() {
   };
 
   //---------------------------------------------------------------------
-  // qrAlphaNum
+  // Dati alfanumerici QR
   //---------------------------------------------------------------------
 
   var qrAlphaNum = function(data) {
@@ -1721,7 +1721,7 @@ var qrcode = function() {
   };
 
   //---------------------------------------------------------------------
-  // qr8BitByte
+  // Dati QR a 8 bit
   //---------------------------------------------------------------------
 
   var qr8BitByte = function(data) {
@@ -1750,7 +1750,7 @@ var qrcode = function() {
   };
 
   //---------------------------------------------------------------------
-  // qrKanji
+  // Dati kanji QR
   //---------------------------------------------------------------------
 
   var qrKanji = function(data) {
@@ -1763,7 +1763,7 @@ var qrcode = function() {
       throw 'sjis not supported.';
     }
     !function(c, code) {
-      // self test for sjis support.
+      // Verifica interna del supporto Shift-JIS.
       var test = stringToBytes(c);
       if (test.length != 2 || ( (test[0] << 8) | test[1]) != code) {
         throw 'sjis not supported.';
@@ -1816,11 +1816,11 @@ var qrcode = function() {
   };
 
   //=====================================================================
-  // GIF Support etc.
+  // Supporto GIF e funzioni correlate
   //
 
   //---------------------------------------------------------------------
-  // byteArrayOutputStream
+  // Flusso di output per array di byte
   //---------------------------------------------------------------------
 
   var byteArrayOutputStream = function() {
@@ -1873,7 +1873,7 @@ var qrcode = function() {
   };
 
   //---------------------------------------------------------------------
-  // base64EncodeOutputStream
+  // Flusso di output con codifica Base64
   //---------------------------------------------------------------------
 
   var base64EncodeOutputStream = function() {
@@ -1891,7 +1891,7 @@ var qrcode = function() {
 
     var encode = function(n) {
       if (n < 0) {
-        // error.
+        // Errore.
       } else if (n < 26) {
         return 0x41 + n;
       } else if (n < 52) {
@@ -1927,7 +1927,7 @@ var qrcode = function() {
       }
 
       if (_length % 3 != 0) {
-        // padding
+        // Riempimento
         var padlen = 3 - _length % 3;
         for (var i = 0; i < padlen; i += 1) {
           _base64 += '=';
@@ -1943,7 +1943,7 @@ var qrcode = function() {
   };
 
   //---------------------------------------------------------------------
-  // base64DecodeInputStream
+  // Flusso di input con decodifica Base64
   //---------------------------------------------------------------------
 
   var base64DecodeInputStream = function(str) {
@@ -1973,7 +1973,7 @@ var qrcode = function() {
           _buflen = 0;
           return -1;
         } else if (c.match(/^\s$/) ) {
-          // ignore if whitespace.
+          // Ignora gli spazi vuoti.
           continue;
         }
 
@@ -2006,7 +2006,7 @@ var qrcode = function() {
   };
 
   //---------------------------------------------------------------------
-  // gifImage (B/W)
+  // Immagine GIF in bianco e nero
   //---------------------------------------------------------------------
 
   var gifImage = function(width, height) {
@@ -2024,12 +2024,12 @@ var qrcode = function() {
     _this.write = function(out) {
 
       //---------------------------------
-      // GIF Signature
+      // Firma GIF
 
       out.writeString('GIF87a');
 
       //---------------------------------
-      // Screen Descriptor
+      // Descrittore dello schermo
 
       out.writeShort(_width);
       out.writeShort(_height);
@@ -2039,20 +2039,20 @@ var qrcode = function() {
       out.writeByte(0);
 
       //---------------------------------
-      // Global Color Map
+      // Tavolozza globale
 
-      // black
+      // Nero
       out.writeByte(0x00);
       out.writeByte(0x00);
       out.writeByte(0x00);
 
-      // white
+      // Bianco
       out.writeByte(0xff);
       out.writeByte(0xff);
       out.writeByte(0xff);
 
       //---------------------------------
-      // Image Descriptor
+      // Descrittore dell'immagine
 
       out.writeString(',');
       out.writeShort(0);
@@ -2062,10 +2062,10 @@ var qrcode = function() {
       out.writeByte(0);
 
       //---------------------------------
-      // Local Color Map
+      // Tavolozza locale
 
       //---------------------------------
-      // Raster Data
+      // Dati raster
 
       var lzwMinCodeSize = 2;
       var raster = getLZWRaster(lzwMinCodeSize);
@@ -2085,7 +2085,7 @@ var qrcode = function() {
       out.writeByte(0x00);
 
       //---------------------------------
-      // GIF Terminator
+      // Terminatore GIF
       out.writeString(';');
     };
 
@@ -2130,7 +2130,7 @@ var qrcode = function() {
       var endCode = (1 << lzwMinCodeSize) + 1;
       var bitLength = lzwMinCodeSize + 1;
 
-      // Setup LZWTable
+      // Prepara la tabella LZW
       var table = lzwTable();
 
       for (var i = 0; i < clearCode; i += 1) {
@@ -2142,7 +2142,7 @@ var qrcode = function() {
       var byteOut = byteArrayOutputStream();
       var bitOut = bitOutputStream(byteOut);
 
-      // clear code
+      // Codice di azzeramento
       bitOut.write(clearCode, bitLength);
 
       var dataIndex = 0;
@@ -2178,7 +2178,7 @@ var qrcode = function() {
 
       bitOut.write(table.indexOf(s), bitLength);
 
-      // end code
+      // Codice di termine
       bitOut.write(endCode, bitLength);
 
       bitOut.flush();
@@ -2241,16 +2241,16 @@ var qrcode = function() {
   };
 
   //---------------------------------------------------------------------
-  // returns qrcode function.
+  // Restituisce la funzione qrcode.
 
   return qrcode;
 }();
 
-// multibyte support
+// Supporto multibyte
 !function() {
 
   qrcode.stringToBytesFuncs['UTF-8'] = function(s) {
-    // http://stackoverflow.com/questions/18729405/how-to-convert-utf8-string-to-byte-array
+    // Riferimento per convertire UTF-8 in array di byte: http://stackoverflow.com/questions/18729405/how-to-convert-utf8-string-to-byte-array
     function toUTF8Array(str) {
       var utf8 = [];
       for (var i=0; i < str.length; i++) {
@@ -2265,12 +2265,12 @@ var qrcode = function() {
               0x80 | ((charcode>>6) & 0x3f),
               0x80 | (charcode & 0x3f));
         }
-        // surrogate pair
+        // Coppia surrogata
         else {
           i++;
-          // UTF-16 encodes 0x10000-0x10FFFF by
-          // subtracting 0x10000 and splitting the
-          // 20 bits of 0x0-0xFFFFF into two halves
+          // UTF-16 codifica i valori da 0x10000 a 0x10FFFF
+          // sottraendo 0x10000 e dividendo
+          // i 20 bit risultanti in due gruppi da 10 bit.
           charcode = 0x10000 + (((charcode & 0x3ff)<<10)
             | (str.charCodeAt(i) & 0x3ff));
           utf8.push(0xf0 | (charcode >>18),

@@ -4,16 +4,16 @@ require_once __DIR__ . '/class-mi-payment-people.php';
 
 /** Registro autorevole MySQL. Nessuna richiesta Google nel percorso di lettura o salvataggio. */
 final class MI_Payment_Ledger {
-	/** Current amounts, distinct from the original installment plan. No database writes. */
+	/** Importi correnti, distinti dal piano rateale iniziale. Non esegue scritture nel database. */
 	public static function position( array $registration, $net_paid ) {
 		$total = max( 0, (int) $registration['total_cents'] );
 		$paid = max( 0, (int) $net_paid );
-		$managed = in_array( $registration['economic_mode'] ?? 'FULL_PAYMENT', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
+		$managed = in_array( $registration['economic_mode'] ?? 'REGISTRATION_ONLY', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 		$deposit = 'DEPOSIT_BALANCE' === ( $registration['economic_mode'] ?? '' );
 		$initial = $deposit ? min( $total, max( 0, (int) ( $registration['initial_due_cents'] ?? 0 ) ) ) : 0;
 		return array( 'total' => $total, 'paid' => $paid, 'balance' => max( 0, $total - $paid ), 'managed' => $managed, 'deposit_plan' => $deposit, 'deposit_due' => $initial, 'deposit_missing' => max( 0, $initial - $paid ), 'deposit_covered' => $deposit && $initial > 0 && $paid >= $initial );
 	}
-	/** Caller supplies already scoped registrations; bounded bulk reads also preserve individual debts. */
+	/** Il chiamante fornisce le iscrizioni autorizzate; le letture in blocco preservano anche i debiti individuali. */
 	public static function positions( array $registrations, $id_key = 'id' ) {
 		global $wpdb;
 		if ( ! $registrations ) return array();
@@ -46,9 +46,9 @@ final class MI_Payment_Ledger {
 			$position['individual'] = $individual;
 			$position['individual_known'] = $summary['known'];
 			foreach ( array( 'people_count', 'active_count', 'total', 'paid', 'balance', 'credit', 'deposit_due', 'deposit_missing' ) as $field ) $position['individual_' . $field] = $summary[$field];
-			$position['effective_total'] = $summary['known'] ? $summary['total'] : $position['total'];
-			$position['effective_paid'] = $summary['known'] ? $summary['paid'] : $position['paid'];
-			$position['effective_balance'] = $summary['known'] ? $summary['balance'] : $position['balance'];
+			$position['effective_total'] = $summary['totals_known'] ? $summary['total'] : $position['total'];
+			$position['effective_paid'] = $summary['totals_known'] ? $summary['paid'] : $position['paid'];
+			$position['effective_balance'] = $summary['totals_known'] ? $summary['balance'] : $position['balance'];
 			$result[$id] = $position;
 		}
 		return $result;
@@ -99,11 +99,15 @@ final class MI_Payment_Ledger {
 		}
 		$position = self::position( $r, $paid );
 		foreach ( $rows as $index => $movement ) {
+			$movements[$index]['data_locale'] = ( new DateTimeImmutable( $movement['effective_at'], new DateTimeZone( 'UTC' ) ) )->setTimezone( wp_timezone() )->format( 'd/m/Y' );
 			$allocations = json_decode( $movement['participant_allocations_json'] ?? '[]', true ) ?: array();
 			$movements[$index]['persone'] = implode( ', ', array_column( $allocations, 'name' ) );
 		}
-		$individual = MI_Payment_People::read( $r, $rows ); $summary = MI_Payment_People::summary( $individual );
+		try { $individual = MI_Payment_People::read( $r, $rows ); $summary = MI_Payment_People::summary( $individual ); }
+		catch ( Throwable $error ) { return new WP_Error( 'mi_payment_read', 'Attribuzioni dei pagamenti non disponibili. Richiedi una verifica alla segreteria.' ); }
 		if ( $summary['known'] ) { foreach ( array( 'total', 'paid', 'balance', 'deposit_due', 'deposit_missing' ) as $field ) $position[$field] = $summary[$field]; $position['deposit_covered'] = $position['deposit_plan'] && $summary['deposit_due'] > 0 && $summary['deposit_missing'] === 0; }
+		if ( $summary['totals_known'] ) foreach ( array( 'total', 'paid', 'balance' ) as $field ) $position[$field] = $summary[$field];
+		if ( false === $individual['deposits_known'] ) { $position['deposit_due'] = null; $position['deposit_missing'] = null; $position['deposit_covered'] = false; }
 		return array( 'ok' => true, 'data' => wp_date( 'Y-m-d' ), 'saldo' => array( 'codice' => $r['order_code'], 'referente' => trim( $r['buyer_first_name'] . ' ' . $r['buyer_last_name'] ), 'evento' => html_entity_decode( get_the_title( (int) $r['event_id'] ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ), 'totale' => $position['total'], 'versato' => $position['paid'], 'residuo' => $position['balance'], 'deposit_plan' => $position['deposit_plan'], 'deposit_due' => $position['deposit_due'], 'deposit_missing' => $position['deposit_missing'], 'deposit_covered' => $position['deposit_covered'], 'individual' => $individual, 'movimenti' => $movements ) );
 	}
 	public static function save( $id, array $input ) {
@@ -153,7 +157,7 @@ final class MI_Payment_Ledger {
 			$payment['created_at'] = current_time( 'mysql', true );
 			if ( false === $wpdb->insert( $wpdb->prefix . 'mi_payments', $payment ) ) throw new RuntimeException( 'Movimento non salvato.' );
 			$payment_id = (int) $wpdb->insert_id; $paid += $incoming ? $amount : -$amount;
-			$status = $r['status']; $changes = array( 'workspace_status' => 'PENDING', 'workspace_attempts' => 0, 'workspace_last_error' => 'payment_changed', 'workspace_revision' => (int) $r['workspace_revision'] + 1 );
+			$status = $r['status']; $changes = array( 'workspace_status' => 'PENDING', 'workspace_attempts' => 0, 'workspace_next_attempt_at' => null, 'workspace_last_error' => 'payment_changed', 'workspace_revision' => (int) $r['workspace_revision'] + 1 );
 			if ( in_array( $status, array( 'PENDING_PAYMENT', 'CONFIRMED' ), true ) ) {
 				$covered = $paid >= (int) $r['initial_due_cents'];
 				$updated_history = $history; $updated_history[] = $payment;

@@ -1,5 +1,5 @@
 <?php
-// Test distruttivo esclusivamente nel database locale mi_ledger_test sulla porta 33317.
+// La fixture modifica esclusivamente il database sintetico mi_ledger_test sulla porta 33317.
 define('ABSPATH',__DIR__);define('ARRAY_A','ARRAY_A');
 function wp_timezone(){return new DateTimeZone('Europe/Rome');}
 function sanitize_text_field($v){return trim(preg_replace('/[\r\n\t ]+/',' ',strip_tags((string)$v)));}

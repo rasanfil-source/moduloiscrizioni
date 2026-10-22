@@ -1,0 +1,25 @@
+param([string]$PhpPath = '.tmp/php-runtime/php.exe', [string]$PlaywrightModule = '')
+$ErrorActionPreference = 'Stop'
+Push-Location (Join-Path $PSScriptRoot '..')
+try {
+    $campaignPhp = (Resolve-Path -LiteralPath $PhpPath).Path
+    $campaignArgs = @()
+    if ($IsWindows) { $campaignArgs = @('-d', ('extension_dir=' + (Join-Path (Split-Path $campaignPhp) 'ext')), '-d', 'extension=mbstring', '-d', 'extension=mysqli') }
+    # I dati di esempio usano solo localhost:33317 e il database sintetico mi_ledger_test.
+    $campaignTests = @('audit-confirmed-innodb.php','payment-ledger-innodb.php','management-innodb.php','payment-people-innodb.php',
+        'individual-management-innodb.php','combined-services-innodb.php','attendance-inline-innodb.php',
+        'accommodation-change-innodb.php','percentage-deposit-unit.php','sheet-receipts-innodb.php',
+        'economic-attribution-innodb.php','room-postcommit-innodb.php')
+    foreach ($campaignTest in $campaignTests) {
+        Write-Output "RUN $campaignTest"
+        & $campaignPhp @campaignArgs (Join-Path 'wordpress-plugin/tests' $campaignTest)
+        if ($LASTEXITCODE -ne 0) { throw "Fallito: $campaignTest" }
+    }
+    if ($PlaywrightModule) { $env:MI_PLAYWRIGHT_MODULE = $PlaywrightModule }
+    foreach ($campaignBrowser in @('management-full-event','individual-management','payment-people','accommodation-change','room-assignment','inline-payment')) {
+        Write-Output "RUN browser $campaignBrowser"
+        node (Join-Path 'tools' "test-$campaignBrowser-browser.cjs")
+        if ($LASTEXITCODE -ne 0) { throw "Fallito browser: $campaignBrowser" }
+    }
+    Write-Output 'Campagna: 12 suite PHP/InnoDB e 6 suite browser completate.'
+} finally { Pop-Location }

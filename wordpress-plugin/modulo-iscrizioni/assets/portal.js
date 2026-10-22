@@ -46,6 +46,30 @@ function miPanelCache(load, { ttl = 30000, limit = 12 } = {}) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Sposta la navigazione esistente e i relativi collegamenti autorizzati, senza duplicare le azioni.
+  document.querySelectorAll('.mi-portal').forEach((portal, index) => {
+    const header=portal.querySelector('.mi-portal-header'), nav=portal.querySelector('.mi-portal-switcher[aria-label="Segreteria eventi"]');
+    if(!header||!nav)return;
+    if(!portal.dataset.miPortalScope)portal.dataset.miPortalScope='reserved';
+    if(portal.dataset.miPortalScope!=='reserved')return;
+    const mobile=window.matchMedia('(max-width:760px)'), logout=header.querySelector('.mi-portal-logout');
+    const logoutAnchor=document.createComment('portal logout position');
+    if(logout)logout.before(logoutAnchor);
+    const current=nav.querySelector('.is-active,[aria-current="page"]');
+    const toggle=document.createElement('button');toggle.type='button';toggle.className='mi-portal-menu-toggle';toggle.textContent='☰ Menu'+(current?' · '+current.textContent.trim():'');
+    nav.id=nav.id||'mi-portal-navigation-'+index;toggle.setAttribute('aria-controls',nav.id);toggle.setAttribute('aria-expanded','false');header.append(toggle);
+    portal.classList.add('mi-portal--responsive-nav');
+    const layout=()=>{
+      const hadFocus=nav.contains(document.activeElement)||document.activeElement===toggle;
+      nav.classList.remove('is-open');toggle.setAttribute('aria-expanded','false');
+      if(logout){if(mobile.matches)nav.append(logout);else logoutAnchor.after(logout);}
+      if(hadFocus){if(mobile.matches)toggle.focus();else nav.querySelector('.is-active,a')?.focus();}
+    };
+    toggle.onclick=()=>{const open=nav.classList.toggle('is-open');toggle.setAttribute('aria-expanded',String(open));};
+    nav.addEventListener('keydown',event=>{if(event.key==='Escape'&&mobile.matches){nav.classList.remove('is-open');toggle.setAttribute('aria-expanded','false');toggle.focus();}});
+    if(mobile.addEventListener)mobile.addEventListener('change',layout);else mobile.addListener(layout);
+    layout();
+  });
   const bindPanelIntent = (link, preload) => {
     let timer;
     const cancel = () => clearTimeout(timer);
@@ -124,6 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	  if (!subjectInput || !textInput || !subjectPreview || !textPreview) return;
 	  const replacements = {
 		'{{sottoscrittore.nome_completo}}': 'Nome di chi sottoscrive l’iscrizione',
+		'{{sottoscrittore.nome}}': 'Solo nome di chi sottoscrive l’iscrizione',
 		'{{evento.titolo}}': form.querySelector('[name="title"]')?.value || 'Titolo dell’evento',
 		'{{evento.data}}': form.querySelector('[name="starts_at"]')?.value || 'Data da definire',
 		'{{evento.luogo}}': form.querySelector('[name="location"]')?.value || 'Luogo da definire',
@@ -381,6 +406,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const closesAt = form.querySelector('[data-mi-closes]');
     const startsAt = form.querySelector('[data-mi-starts]');
     const dateFields = [opensAt, closesAt, startsAt].filter(Boolean);
+    const lateRegistrationNotice = form.querySelector('[data-mi-late-registration-notice]');
+    if (lateRegistrationNotice) lateRegistrationNotice.hidden = true;
     const formatItalianDateInput = (field) => {
       const cursor = field.selectionStart ?? field.value.length;
       const digitsBeforeCursor = field.value.slice(0, cursor).replace(/\D/g, '').length;
@@ -428,8 +455,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const opening = parseItalianDate(opensAt?.value || '');
       const closing = parseItalianDate(closesAt?.value || '');
       const start = parseItalianDate(startsAt?.value || '');
-      if (opening && closing && closing < opening) closesAt.setCustomValidity('La chiusura non può precedere l’apertura delle iscrizioni.');
-      if (closing && start && start < closing) startsAt.setCustomValidity('L’inizio dell’evento non può precedere la chiusura delle iscrizioni.');
+      if (opening && closing && closing <= opening) closesAt.setCustomValidity('La chiusura deve essere successiva all’apertura delle iscrizioni.');
+      if (lateRegistrationNotice) lateRegistrationNotice.hidden = !(closing && start && start < closing);
     };
 	validateWizardRelations = updateDateLimits;
 	dateFields.forEach((field) => {
@@ -607,11 +634,21 @@ document.addEventListener('DOMContentLoaded', () => {
 		if (!submit) return;
 		quickForm.dataset.miQuickFormBound = '1';
 		const initialSnapshot = quickEventFormSnapshot(quickForm);
+		const lateRegistrationNotice = quickForm.querySelector('[data-mi-late-registration-notice]');
+		const startsAt = quickForm.querySelector('[name="starts_at"]');
+		const closesAt = quickForm.querySelector('[name="closes_at"]');
+		const updateLateRegistrationNotice = () => {
+			if (!lateRegistrationNotice || !startsAt?.value || !closesAt?.value) return;
+			lateRegistrationNotice.hidden = new Date(closesAt.value) <= new Date(startsAt.value);
+		};
 		const updateSubmitVisibility = () => {
 			submit.hidden = quickEventFormSnapshot(quickForm) === initialSnapshot;
 		};
 		quickForm.addEventListener('input', updateSubmitVisibility);
 		quickForm.addEventListener('change', updateSubmitVisibility);
+		quickForm.addEventListener('input', updateLateRegistrationNotice);
+		quickForm.addEventListener('change', updateLateRegistrationNotice);
+		updateLateRegistrationNotice();
 		updateSubmitVisibility();
 	});
 	bindQuickEventForms();
@@ -697,8 +734,8 @@ document.addEventListener('DOMContentLoaded', () => {
 	  });
 	  document.addEventListener('visibilitychange', () => { if (document.hidden) eventPanelCache.clear(); });
 	  document.addEventListener('mi:operational-saved', () => eventPanelCache.clear());
-	  const listUrl = new URL(window.location.href);
-	  listUrl.searchParams.delete('mi_portal_event');
+  const listUrl = new URL(window.location.href);
+	  listUrl.searchParams.set('mi_portal_event', '0');
 	  listUrl.searchParams.delete('mi_portal_event_panel');
 	  let eventNavigationId = 0;
 	  const fetchEventPanel = (link, prefetch = false) => {
@@ -798,6 +835,7 @@ document.addEventListener('DOMContentLoaded', () => {
   listUrl.searchParams.delete('mi_portal_booking');
   const modal = document.createElement('div');
   modal.className = 'mi-portal-modal';
+  modal.dataset.miPortalScope = 'reserved';
   modal.hidden = true;
   modal.innerHTML = '<div class="mi-portal-modal__backdrop" data-mi-portal-booking-close></div><section class="mi-portal-modal__dialog" role="dialog" aria-modal="true" aria-label="Scheda prenotazione"><div class="mi-portal-modal__toolbar"><button type="button" class="mi-portal-modal__nav mi-portal-modal__nav--previous" data-mi-portal-booking-previous aria-label="Scheda precedente" title="Scheda precedente">◀</button><button type="button" class="mi-portal-modal__nav mi-portal-modal__nav--next" data-mi-portal-booking-next aria-label="Scheda successiva" title="Scheda successiva">▶</button><button type="button" class="mi-portal-modal__close" data-mi-portal-booking-close aria-label="Chiudi la scheda">×</button></div><div class="mi-portal-modal__content" aria-live="polite"></div></section>';
   document.body.append(modal);
@@ -922,8 +960,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// Preserve the explicit deletion choice and prevent repeated submissions.
-// Keep one bounded deletion request in flight; errors require an explicit retry.
+// Conserva la scelta esplicita di eliminazione e impedisce invii ripetuti.
+// Mantiene una sola richiesta attiva; un nuovo tentativo richiede una scelta dell'operatore.
 function miSetupDeletion(form) {
   if (!form || !form.dataset.miDeleteAjax) return;
   const button=form.querySelector('button[type="submit"]');
@@ -954,12 +992,14 @@ function miSetupDeletion(form) {
   if(form.hasAttribute('data-mi-delete-continue'))timer=setTimeout(run,2000);
 }
 miSetupDeletion(document.querySelector('[data-mi-delete-form]'));
-// Event selection is updated inline: keep navigation aligned with the current URL.
+// La selezione dell'evento aggiorna la navigazione e resta coerente con l'URL corrente.
 document.addEventListener('click', event => {
   const link=event.target.closest('.mi-portal-switcher a');if(!link)return;
   const destination=new URL(link.href),current=new URL(location.href);
   if(!['management','registrations','payments'].includes(destination.searchParams.get('mi_portal_view')))return;
-  destination.searchParams.set('mi_portal_event',current.searchParams.get('mi_portal_event')||'0');
+  const selected=current.searchParams.get('mi_portal_event')??document.querySelector('.mi-event-card-shell.is-selected [data-mi-event-id]')?.dataset.miEventId;
+  if(selected!==undefined&&selected!==null)destination.searchParams.set('mi_portal_event',selected);
+  else destination.searchParams.delete('mi_portal_event');
   destination.searchParams.set('mi_portal_period',current.searchParams.get('mi_portal_period')||(current.searchParams.get('mi_portal_history')==='1'?'past':'current'));
   link.href=destination.href;
 },true);
@@ -995,3 +1035,10 @@ if(window.miEmailAppearance){const form=document.querySelector('.mi-event-wizard
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setupCommunicationFormatting);
   else setupCommunicationFormatting();
 }());
+
+// Il report presenze disattivato non blocca le modifiche indipendenti ai gruppi.
+document.querySelectorAll('[name="mi_annual_attendance_report"]').forEach(toggle=>{
+ const fields=toggle.form?.querySelectorAll('[data-mi-attendance-period] input')||[];
+ const update=()=>fields.forEach(field=>{field.disabled=!toggle.checked;field.required=toggle.checked;});
+ toggle.addEventListener('change',update);update();
+});

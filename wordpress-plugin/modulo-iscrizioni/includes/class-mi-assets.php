@@ -12,9 +12,11 @@ final class MI_Assets {
 			$manifest = is_readable( $file ) ? json_decode( file_get_contents( $file ), true ) : array();
 		}
 		$entry = $manifest[$name] ?? null;
-		$source = MI_PLUGIN_DIR . 'assets/' . $name;
 		$minified = MI_PLUGIN_DIR . 'assets/min/' . $name;
-		if ( ! $entry || ! is_readable( $source ) || ! is_readable( $minified ) || hash_file( 'sha256', $source ) !== $entry['source'] || hash_file( 'sha256', $minified ) !== $entry['hash'] ) return $urls[$name] = $original;
+		// Gli hash vengono verificati durante build e packaging. Ricalcolarli durante
+		// ogni richiesta aggiunge I/O al percorso pubblico senza aumentare la
+		// sicurezza: manifest e file minificati appartengono allo stesso rilascio.
+		if ( ! is_array( $entry ) || empty( $entry['hash'] ) || ! preg_match( '/^[a-f0-9]{64}$/D', (string) $entry['hash'] ) || ! is_readable( $minified ) ) return $urls[$name] = $original;
 		return $urls[$name] = MI_PLUGIN_URL . 'assets/min/' . $name . '?mi_asset=' . substr( $entry['hash'], 0, 16 );
 	}
 

@@ -32,7 +32,8 @@ $GLOBALS['event_cover']='https://example.invalid/event.png';expect(MI_Modello_Em
 $values=['{{evento.titolo}}'=>'Assisi','{{ordine.codice}}'=>'FAMILY','{{ordine.partecipanti}}'=>'3','{{ordine.riepilogo}}'=>'3 — Quota di partecipazione','{{sottoscrittore.nome_completo}}'=>'Famiglia Parente'];
 $secretariat=MI_Modello_Email::crea_istantanea_nuova_iscrizione_segreteria(42,$values,1);$secretariat_html=MI_Modello_Email::componi_html($secretariat);
 expect(str_contains($secretariat_html,'<strong>Partecipanti:</strong> 3')&&!str_contains($secretariat_html,'Quota di partecipazione'),'conteggio semplice');
-expect(str_contains($secretariat_html,'Apri la scheda del primo iscritto')&&str_contains($secretariat_html,'mi_order=FAMILY'),'link gestione');
+expect(str_contains($secretariat_html,'Apri prenotazione')&&str_contains($secretariat_html,'mi_order=FAMILY'),'link prenotazione');
+expect(str_contains($secretariat_html,'Apri elenco iscritti')&&str_contains($secretariat_html,esc_url(MI_Portal_Management::url(42))),'link elenco evento senza prenotazione selezionata');
 expect(!str_contains($secretariat_html,'banner.png'),'altre email istituzionali invariate');
 class EmailTestDB {
  public $prefix='wp_';public $db;public $last_error='';public $fail=false;

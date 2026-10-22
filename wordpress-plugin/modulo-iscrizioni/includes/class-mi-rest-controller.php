@@ -47,7 +47,8 @@ final class MI_REST_Controller {
 		$verified = self::verify_workspace_envelope( $envelope );
 		if ( is_wp_error( $verified ) ) return $verified;
 		$action = strtoupper( sanitize_key( (string) ( $envelope['action'] ?? '' ) ) );
-		$payload = (array) ( $envelope['payload'] ?? array() );
+		$payload = $verified;
+		if ( 'GET_EVENT_PROJECTION' === $action ) return self::event_projection_for_workspace( $payload );
 		if ( 'CREATE_EVENT_DRAFT' === $action ) return self::create_event_draft_from_workspace( $payload );
 		if ( 'CREATE_GROUP' === $action ) return self::create_group_from_workspace( $payload );
 		if ( 'GET_MANUAL_REGISTRATION_SCHEMA' === $action ) return self::manual_registration_schema( $payload );
@@ -55,6 +56,26 @@ final class MI_REST_Controller {
 		if ( 'GET_EMAIL_MODE' === $action ) return array( 'ok' => true, 'mode' => MI_Spedizione_Email::modalita() );
 		if ( 'QUEUE_OPERATIONAL_EMAILS' === $action ) return MI_Spedizione_Email::accoda_comunicazione_operativa( $payload );
 		return new WP_Error( 'mi_workspace_action_not_allowed', 'Azione Workspace non consentita.', array( 'status' => 403 ) );
+	}
+
+	private static function event_projection_for_workspace( array $payload ) {
+		$event_id = absint( $payload['event_id'] ?? 0 );
+		$expected_hash = strtolower( (string) ( $payload['projection_hash'] ?? '' ) );
+		$expected_fingerprint = strtolower( (string) ( $payload['fingerprint'] ?? '' ) );
+		if ( ! $event_id || ! preg_match( '/^[a-f0-9]{64}$/D', $expected_hash ) || ! preg_match( '/^[a-f0-9]{64}$/D', $expected_fingerprint ) ) return new WP_Error( 'mi_projection_invalid', 'Richiesta di proiezione non valida.', array( 'status' => 400 ) );
+		if ( class_exists( 'MI_Event_Deletion' ) ) {
+			$lease = MI_Event_Deletion::enter( $event_id );
+			if ( is_wp_error( $lease ) ) { MI_Event_Deletion::release( $event_id ); return new WP_Error( 'mi_projection_deleted', 'Evento non disponibile.', array( 'status' => 409 ) ); }
+		}
+		try {
+			$snapshot = MI_Event_Projection::snapshot( $event_id );
+			if ( ! hash_equals( $expected_fingerprint, $snapshot['fingerprint'] ) ) return new WP_Error( 'mi_projection_changed', 'La proiezione è cambiata; ripetere la richiesta.', array( 'status' => 409 ) );
+			$transfer = MI_Event_Projection::encoded_snapshot( $snapshot );
+			if ( ! hash_equals( $expected_hash, $transfer['projection_hash'] ) ) return new WP_Error( 'mi_projection_changed', 'La proiezione è cambiata; ripetere la richiesta.', array( 'status' => 409 ) );
+			return array( 'ok' => true, 'projection_gzip' => $transfer['projection_gzip'], 'projection_hash' => $transfer['projection_hash'] );
+		} catch ( Throwable $error ) {
+			return new WP_Error( 'mi_projection_unavailable', 'Proiezione non disponibile.', array( 'status' => 503 ) );
+		} finally { if ( class_exists( 'MI_Event_Deletion' ) ) MI_Event_Deletion::release( $event_id ); }
 	}
 
 	private static function manual_registration_schema( array $payload ) {
@@ -120,9 +141,22 @@ final class MI_REST_Controller {
 		$action = strtoupper( sanitize_key( (string) ( $envelope['action'] ?? '' ) ) );
 		$signature = (string) ( $envelope['signature'] ?? '' );
 		$payload = (array) ( $envelope['payload'] ?? array() );
+		$protocol = $envelope['protocollo'] ?? 1;
+		if ( ! in_array( $protocol, array( 1, 2 ), true ) ) return new WP_Error( 'mi_workspace_protocol_invalid', 'Protocollo Workspace non valido.', array( 'status' => 400 ) );
+		$content = MI_Workspace_Client::stable_json( $payload );
+		if ( 2 === $protocol ) {
+			$raw = $envelope['payload_firmato'] ?? null;
+			$hash = $envelope['payload_hash'] ?? null;
+			if ( ! is_string( $raw ) || strlen( $raw ) > 2000000 || ! is_string( $hash ) || ! preg_match( '/^[a-f0-9]{64}$/D', $hash ) || ! hash_equals( hash( 'sha256', $raw ), $hash ) ) return new WP_Error( 'mi_workspace_payload_invalid', 'Contenuto Workspace non valido.', array( 'status' => 401 ) );
+			// Il comando usa esclusivamente il JSON autenticato, senza un secondo contenuto da elaborare.
+			$decoded = json_decode( $raw );
+			if ( JSON_ERROR_NONE !== json_last_error() || ! is_object( $decoded ) ) return new WP_Error( 'mi_workspace_payload_invalid', 'Contenuto Workspace non valido.', array( 'status' => 400 ) );
+			$payload = json_decode( $raw, true );
+			$content = $hash;
+		}
 		$secret = defined( 'MI_WORKSPACE_SHARED_SECRET' ) ? (string) MI_WORKSPACE_SHARED_SECRET : (string) get_option( 'mi_workspace_shared_secret', '' );
 		if ( strlen( $secret ) < 32 || strlen( $nonce ) < 32 || abs( (int) floor( microtime( true ) * 1000 ) - $timestamp ) > 120000 ) return new WP_Error( 'mi_workspace_signature_invalid', 'Firma Workspace non valida.', array( 'status' => 401 ) );
-		$message = $timestamp . "\n" . $nonce . "\n" . $action . "\n" . MI_Workspace_Client::stable_json( $payload );
+		$message = $timestamp . "\n" . $nonce . "\n" . $action . "\n" . $content;
 		$expected = rtrim( strtr( base64_encode( hash_hmac( 'sha256', $message, $secret, true ) ), '+/', '-_' ), '=' );
 		if ( ! hash_equals( $expected, $signature ) ) return new WP_Error( 'mi_workspace_signature_invalid', 'Firma Workspace non valida.', array( 'status' => 401 ) );
 		$nonce_key = 'mi_workspace_command_nonce_' . hash( 'sha256', $nonce );
@@ -135,7 +169,7 @@ final class MI_REST_Controller {
 		} finally {
 			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
 		}
-		return true;
+		return $payload;
 	}
 
 	private static function create_event_draft_from_workspace( array $payload ) {

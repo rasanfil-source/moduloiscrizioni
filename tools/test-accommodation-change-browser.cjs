@@ -1,4 +1,4 @@
-// Local synthetic data only. Real frontend with an idempotent mock transport.
+// Solo dati sintetici locali; interfaccia applicativa con trasporto simulato idempotente.
 const fs=require('fs'),http=require('http'),path=require('path'),assert=require('node:assert/strict');
 const {chromium}=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright');
 const assets=path.resolve('wordpress-plugin/modulo-iscrizioni/assets');

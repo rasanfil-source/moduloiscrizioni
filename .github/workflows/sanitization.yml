@@ -15,10 +15,25 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring
+          coverage: none
       - name: Verify Workspace and WordPress behavior
         run: node --test workspace-apps-script/tests/*.test.mjs wordpress-plugin/tests/*.test.mjs
+      - name: Verify generated assets
+        run: |
+          npm ci --prefix tools/asset-build
+          node tools/asset-build/build.cjs --check
+          node tools/asset-build/verify.cjs
       - name: Verify public balance workflow and actual payments
         run: |
+          php wordpress-plugin/tests/option-key-duplicates.php
+          php wordpress-plugin/tests/public-balance-deadline-receipt.php
+          php wordpress-plugin/tests/management-deposit-totals.php
+          php wordpress-plugin/tests/email-queue-fairness.php
           php wordpress-plugin/tests/public-balance.php
           php wordpress-plugin/tests/public-balance-model.php
           php wordpress-plugin/tests/operational-profile.php
@@ -28,9 +43,14 @@ jobs:
           php wordpress-plugin/tests/group-attendance.php
           php wordpress-plugin/tests/sheet-organization.php
           php wordpress-plugin/tests/audit-regressions.php
+          php wordpress-plugin/tests/audit-dates-access-cache.php
           php wordpress-plugin/tests/event-wizard.php
           php wordpress-plugin/tests/management-list.php
+          php wordpress-plugin/tests/management-page-sql.php
+          php wordpress-plugin/tests/payment-counts.php
           php wordpress-plugin/tests/code-image.php
+          php wordpress-plugin/tests/registration-failures.php
+          php wordpress-plugin/tests/email-transaction-failures.php
 
   economic-innodb:
     runs-on: ubuntu-latest
@@ -65,6 +85,7 @@ jobs:
           php wordpress-plugin/tests/accommodation-change-innodb.php
           php wordpress-plugin/tests/percentage-deposit-unit.php
           php wordpress-plugin/tests/sheet-receipts-innodb.php
+          php wordpress-plugin/tests/room-postcommit-innodb.php
 
   sanitization:
     runs-on: ubuntu-latest

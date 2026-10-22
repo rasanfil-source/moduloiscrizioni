@@ -6,9 +6,14 @@ final class MI_Attendance_Report {
 	public static function group_period( $group_id ) {
 		return self::period( wp_date( 'Y' ), (string) get_post_meta( $group_id, '_mi_attendance_from_month', true ), (string) get_post_meta( $group_id, '_mi_attendance_to_month', true ) );
 	}
+	public static function submitted_period( $group_id, array $input ) {
+		if ( '1' === ( $input['mi_annual_attendance_report'] ?? '' ) ) return self::period( wp_date( 'Y' ), sanitize_text_field( $input['mi_attendance_from_month'] ?? get_post_meta( $group_id, '_mi_attendance_from_month', true ) ), sanitize_text_field( $input['mi_attendance_to_month'] ?? get_post_meta( $group_id, '_mi_attendance_to_month', true ) ) );
+		try { return self::group_period( $group_id ); } catch ( InvalidArgumentException $e ) { return self::period( wp_date( 'Y' ) ); }
+	}
 	public static function period_fields( $group_id = 0 ) {
+		$enabled = '1' === get_post_meta( $group_id, '_mi_annual_attendance_report', true );
 		try { list( $from, $to ) = self::group_period( $group_id ); } catch ( InvalidArgumentException $e ) { $from = ''; $to = ''; }
-		?><div class="mi-group-form-grid"><label>Presenze dal mese<input name="mi_attendance_from_month" type="month" min="2000-01" max="2200-12" required value="<?php echo esc_attr( $from ); ?>"></label><label>Al mese (incluso)<input name="mi_attendance_to_month" type="month" min="2000-01" max="2200-12" required value="<?php echo esc_attr( $to ); ?>"></label></div><p class="mi-portal-muted">Il periodo vale per il rapporto di tutti gli eventi del gruppo e può comprendere due anni, per esempio settembre–giugno. Salva il gruppo per applicarlo.</p><?php
+		?><div class="mi-group-form-grid" data-mi-attendance-period><label>Presenze dal mese<input name="mi_attendance_from_month" type="month" min="2000-01" max="2200-12" <?php echo $enabled ? 'required' : 'disabled'; ?> value="<?php echo esc_attr( $from ); ?>"></label><label>Al mese (incluso)<input name="mi_attendance_to_month" type="month" min="2000-01" max="2200-12" <?php echo $enabled ? 'required' : 'disabled'; ?> value="<?php echo esc_attr( $to ); ?>"></label></div><p class="mi-portal-muted">Il periodo vale per il rapporto di tutti gli eventi del gruppo e può comprendere due anni, per esempio settembre–giugno. Salva il gruppo per applicarlo.</p><?php
 	}
 	public static function render_group( $group_id ) {
 		if ( '1' !== get_post_meta( $group_id, '_mi_annual_attendance_report', true ) || ! MI_Portal_Management::allowed() || ! MI_Access::can_access_activity( $group_id ) ) return;
@@ -47,10 +52,10 @@ final class MI_Attendance_Report {
 			$detail = json_decode( (string) $row['detail_json'], true ); if ( ! is_array( $detail ) ) continue;
 			$id = (int) ( $detail['participant_id'] ?? 0 );
 			if ( ! isset( $by_id[$id] ) || (int) $by_id[$id]['registration_id'] !== (int) $row['registration_id'] ) continue;
-			if ( 'MANAGEMENT_attendance' === $row['event_type'] ) $attendance[$id] = $detail['attendance'] ?? 'UNRECORDED';
-			if ( 'MANAGEMENT_identity_link' === $row['event_type'] ) $links[$id] = (int) ( $detail['target_id'] ?? 0 );
+			if ( 'management_attendance' === strtolower( $row['event_type'] ) ) $attendance[$id] = $detail['attendance'] ?? 'UNRECORDED';
+			if ( 'management_identity_link' === strtolower( $row['event_type'] ) ) $links[$id] = (int) ( $detail['target_id'] ?? 0 );
 		}
-		// Path halving shortens repeated lookups without changing the chosen identity.
+		// La ricerca per dimezzamento accorcia le consultazioni ripetute senza cambiare l'identità selezionata.
 		$root = static function ( $id ) use ( &$parents ) { while ( $parents[$id] !== $id ) { $parents[$id] = $parents[$parents[$id]]; $id = $parents[$id]; } return $id; };
 		$mobiles = array(); $by_mobile = array();
 		foreach ( $people as $person ) {
@@ -58,12 +63,13 @@ final class MI_Attendance_Report {
 			if ( ! $mobile ) continue;
 			if ( isset( $by_mobile[$mobile] ) ) $parents[$id] = $root( $by_mobile[$mobile] ); else $by_mobile[$mobile] = $id;
 		}
-		// Retain historical confirmed links only where neither record has a personal mobile.
-		foreach ( $links as $id => $target ) if ( $target && isset( $parents[$target] ) && empty( $mobiles[$id] ) && empty( $mobiles[$target] ) ) { $left = $root( $id ); $right = $root( $target ); if ( $left !== $right ) $parents[max( $left, $right )] = min( $left, $right ); }
+		// I collegamenti espliciti e registrati nel log associano anche record senza cellulare o con un numero diverso.
+		foreach ( $links as $id => $target ) if ( $target && isset( $parents[$target] ) ) { $left = $root( $id ); $right = $root( $target ); if ( $left !== $right ) $parents[max( $left, $right )] = min( $left, $right ); }
 		$groups = array(); $unrecorded = 0;
 		foreach ( $people as $person ) {
 			$event = $events[(int) $person['event_id']] ?? null; if ( ! $event || substr( $event['date'], 0, 7 ) < $from_month || substr( $event['date'], 0, 7 ) > $to_month ) continue;
-			if ( ! isset( $attendance[$person['id']] ) || 'UNRECORDED' === $attendance[$person['id']] ) $unrecorded++;
+			$admitted = 'ACTIVE' === ( $person['status'] ?? 'ACTIVE' ) && in_array( $person['booking_status'] ?? 'CONFIRMED', array( 'CONFIRMED', 'PENDING_PAYMENT' ), true );
+			if ( $admitted && ( ! isset( $attendance[$person['id']] ) || 'UNRECORDED' === $attendance[$person['id']] ) ) $unrecorded++;
 			if ( 'PRESENT' !== ( $attendance[$person['id']] ?? '' ) ) continue;
 			$key = $root( (int) $person['id'] );
 			if ( ! isset( $groups[$key] ) ) $groups[$key] = array( 'identity' => $key, 'names' => array(), 'events' => array(), 'records' => array() );
@@ -79,11 +85,11 @@ final class MI_Attendance_Report {
 		global $wpdb;
 		if ( ! MI_Portal_Management::allowed() || ! MI_Access::can_access_activity( $group_id ) || $minimum < 1 || $minimum > 1000 ) return new WP_Error( 'mi_report_scope', 'Gruppo o criteri non accessibili.' );
 		try { list( $from_month, $to_month ) = self::period( $year, $from_month, $to_month ); } catch ( InvalidArgumentException $e ) { return new WP_Error( 'mi_report_period', $e->getMessage() ); }
-		$posts = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'private', 'draft' ), 'numberposts' => -1, 'meta_key' => '_mi_activity_id', 'meta_value' => $group_id ) );
+		$posts = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'private', 'mi_archived' ), 'numberposts' => -1, 'meta_key' => '_mi_activity_id', 'meta_value' => $group_id ) );
 		$events = array(); foreach ( $posts as $post ) if ( MI_Access::can_access_event( $post->ID ) ) $events[$post->ID] = array( 'title' => $post->post_title, 'date' => (string) get_post_meta( $post->ID, '_mi_event_starts_at', true ) );
 		if ( ! $events ) return self::aggregate( array(), array(), array(), $year, $minimum, $from_month, $to_month );
 		$ids = implode( ',', array_map( 'intval', array_keys( $events ) ) );
-		$people = $wpdb->get_results( "SELECT p.id,p.registration_id,p.first_name,p.last_name,p.extra_json,r.event_id,r.order_code FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id IN ({$ids}) ORDER BY p.id", ARRAY_A );
+		$people = $wpdb->get_results( "SELECT p.id,p.registration_id,p.first_name,p.last_name,p.extra_json,p.status,r.status AS booking_status,r.event_id,r.order_code FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id IN ({$ids}) ORDER BY p.id", ARRAY_A );
 		if ( $wpdb->last_error ) return new WP_Error( 'mi_report_read', 'Presenze non disponibili.' );
 		$audit = $wpdb->get_results( "SELECT a.registration_id,a.event_type,a.detail_json FROM {$wpdb->prefix}mi_registration_events a JOIN {$wpdb->prefix}mi_registrations r ON r.id=a.registration_id WHERE r.event_id IN ({$ids}) AND a.event_type IN ('MANAGEMENT_attendance','MANAGEMENT_identity_link') ORDER BY a.id", ARRAY_A );
 		if ( $wpdb->last_error ) return new WP_Error( 'mi_report_read', 'Storico presenze non disponibile.' );

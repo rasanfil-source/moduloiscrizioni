@@ -1,37 +1,35 @@
 function doGet(event) {
-  return creaRispostaJson_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, mode: 'PREVIEW' });
+  return creaRispostaJson_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, standalone: progettoAutonomo_(), mode: 'PREVIEW' });
 }
+
+function progettoAutonomo_() { return typeof MI_STANDALONE_MODE !== 'undefined' && MI_STANDALONE_MODE === true; }
 
 function doPost(event) {
   try {
     if (!event || !event.postData || !event.postData.contents) return creaRispostaJson_({ ok: false, error: 'EMPTY_PAYLOAD' });
     const envelope = JSON.parse(event.postData.contents);
     const verified = verificaBusta_(envelope);
-    if (!verified.ok) return creaRispostaJson_(verified.error === 'WORKSPACE_BUSY' && envelope.action === 'PREPARA_APERTURA_FOGLIO' ? {ok:true,ready:false,busy:true,retry_after:3} : { ok: false, error: verified.error });
-    if (envelope.action === 'ELIMINA_DATI_EVENTO') return creaRispostaJson_(eliminaDatiEventoDaWordPress_(envelope.payload));
+    if (!verified.ok) return creaRispostaJson_(verified.error === 'WORKSPACE_BUSY' && envelope.action === 'PROIETTA_EVENTO' ? {ok:true,ready:false,busy:true,retry_after:3} : { ok: false, error: verified.error });
+    if (envelope.action === 'STATO_SCHEMA') return creaRispostaJson_({ ok: true, schema_version: MI_SCHEMA_VERSION, direct_projection: progettoAutonomo_(), standalone: progettoAutonomo_(), central_workbook: !progettoAutonomo_(), projection_pull: progettoAutonomo_(), mode: 'PREVIEW' });
+    if (['PROIETTA_EVENTO','ELIMINA_DATI_EVENTO','VERIFICA_FOGLIO_EVENTO','VERIFICA_FOGLI_EVENTO','ORGANIZZA_FOGLI_EVENTO','LEGGI_MODIFICHE_FOGLIO','CONFERMA_MODIFICHE_FOGLIO'].includes(envelope.action) && !progettoAutonomo_()) return creaRispostaJson_({ok:false,error:'USE_STANDALONE_PROJECT'});
+    if (envelope.action === 'ELIMINA_DATI_EVENTO') return creaRispostaJson_(envelope.payload.direct_projection === true ? eliminaDatiEventoDaWordPress_(envelope.payload) : {ok:false,error:'USE_DIRECT_PROJECTION'});
     if (envelope.action === 'PING') return creaRispostaJson_({ ok: true, service: 'modulo-iscrizioni-workspace', schema_version: MI_SCHEMA_VERSION, mode: 'PREVIEW' });
-	if (envelope.action === 'STATO_SCHEMA') return creaRispostaJson_({ ok: true, schema_version: MI_SCHEMA_VERSION, registration_headers: MI_HEADERS[MI_SHEETS.REGISTRATIONS], participant_headers: MI_HEADERS[MI_SHEETS.PARTICIPANTS], accommodation_headers: MI_HEADERS[MI_SHEETS.ACCOMMODATIONS], group_headers: MI_HEADERS[MI_SHEETS.GROUPS], report_template_headers: MI_HEADERS[MI_SHEETS.REPORT_TEMPLATES], event_headers: MI_HEADERS[MI_SHEETS.EVENTS], mode: 'PREVIEW' });
-	if (envelope.action === 'STATO_REPLICA_ISCRIZIONE') return creaRispostaJson_(statoReplicaIscrizione_(envelope.payload));
-	if (envelope.action === 'PREPARA_PRODUZIONI_EVENTO') return creaRispostaJson_(preparaProduzioniEventoDaWordPress_(envelope.payload));
-	if (envelope.action === 'VERIFICA_FOGLIO_EVENTO') return creaRispostaJson_(verificaFoglioEventoDaWordPress_(envelope.payload));
-	if (envelope.action === 'VERIFICA_FOGLI_EVENTO') return creaRispostaJson_(verificaFogliEventoDaWordPress_(envelope.payload));
-	if (envelope.action === 'ARCHIVIA_FOGLIO_EVENTO') return creaRispostaJson_(archiviaFoglioEventoDaWordPress_(envelope.payload));
-	if (envelope.action === 'ORGANIZZA_FOGLI_EVENTO') return creaRispostaJson_(organizzaFogliEventoDaWordPress_(envelope.payload));
-	if (envelope.action === 'ELIMINA_FOGLIO_EVENTO') return creaRispostaJson_(eliminaFoglioEventoDaWordPress_(envelope.payload));
+	if (envelope.action === 'VERIFICA_FOGLIO_EVENTO') return creaRispostaJson_(envelope.payload.direct_projection === true ? verificaFoglioEventoDaWordPress_(envelope.payload) : {ok:false,error:'USE_DIRECT_PROJECTION'});
+	if (envelope.action === 'VERIFICA_FOGLI_EVENTO') return creaRispostaJson_(envelope.payload.direct_projection === true ? verificaFogliEventoDaWordPress_(envelope.payload) : {ok:false,error:'USE_DIRECT_PROJECTION'});
+	if (envelope.action === 'ORGANIZZA_FOGLI_EVENTO') return creaRispostaJson_(envelope.payload.direct_projection === true ? organizzaFogliEventoDaWordPress_(envelope.payload) : {ok:false,error:'USE_DIRECT_PROJECTION'});
 	if (envelope.action === 'INVIA_EMAIL_PROVA') return creaRispostaJson_(inviaEmailProvaDaWordPress_(envelope.payload));
 	if (envelope.action === 'INVIA_EMAIL_CONFERMA') return creaRispostaJson_(inviaEmailConfermaDaWordPress_(envelope.payload));
+	if (envelope.action === 'INVIA_EMAIL_CONFERMA_MITTENTE') return creaRispostaJson_(envelope.payload && envelope.payload.indirizzo_mittente ? inviaEmailConfermaDaWordPress_(envelope.payload) : {ok:false,error:'INVALID_SENDER_EMAIL'});
 	if (envelope.action === 'STATO_CANALE_EMAIL') return creaRispostaJson_(statoCanaleEmail_());
+    if (envelope.action === 'PROIETTA_EVENTO') return creaRispostaJson_(proiettaEventoDaWordPress_(envelope.payload));
     if (envelope.action === 'REGISTRA_PAGAMENTO_PORTALE') return creaRispostaJson_({ok:false,error:'USE_MYSQL_PAYMENT_LEDGER'});
-    if (envelope.action === 'LEGGI_MODIFICHE_FOGLIO') return creaRispostaJson_(leggiModificheEventoMysql_(envelope.payload));
-    if (envelope.action === 'CONFERMA_MODIFICHE_FOGLIO') return creaRispostaJson_(confermaModificheFoglio_(envelope.payload));
-    if (envelope.action === 'PREPARA_APERTURA_FOGLIO') return creaRispostaJson_(preparaAperturaFoglio_(envelope.payload));
+    if (envelope.action === 'LEGGI_MODIFICHE_FOGLIO') return creaRispostaJson_(envelope.payload.direct_projection === true ? leggiModificheEventoMysql_(envelope.payload) : {ok:false,error:'USE_DIRECT_PROJECTION'});
+    if (envelope.action === 'CONFERMA_MODIFICHE_FOGLIO') return creaRispostaJson_(envelope.payload.direct_projection === true ? confermaModificheFoglio_(envelope.payload) : {ok:false,error:'USE_DIRECT_PROJECTION'});
     if (envelope.action === 'SCHEDA_GESTIONE_PORTALE') return creaRispostaJson_({ok:false,error:'USE_MYSQL_MANAGEMENT'});
     if (envelope.action === 'AGGIORNA_GESTIONE_PORTALE') return creaRispostaJson_({ok:false,error:'USE_MYSQL_MANAGEMENT'});
-    if (envelope.action !== 'APPEND_REGISTRATION') return creaRispostaJson_({ ok: false, error: 'ACTION_NOT_ALLOWED' });
-    return creaRispostaJson_(aggiungiIscrizione_(envelope.payload));
+    return creaRispostaJson_({ ok: false, error: 'ACTION_NOT_ALLOWED' });
   } catch (error) {
 		console.error('WEBAPP_REQUEST_FAILED', error && error.stack ? error.stack : String(error));
-		try { aggiungiControllo_('WEBAPP_REQUEST', 'REQUEST', 'UNAVAILABLE', 'ERROR', 'WORDPRESS', 'UNHANDLED_ERROR', 'WORDPRESS_PROXY'); } catch (auditError) {}
     return creaRispostaJson_({ ok: false, error: 'REQUEST_FAILED', diagnostic: normalizzaTesto_(error && error.message ? error.message : String(error), 300) });
   }
 }
@@ -101,17 +99,17 @@ function verificaBusta_(envelope) {
   const digest = Utilities.computeHmacSha256Signature(message, ottieniSegretoScript_());
   const expected = Utilities.base64EncodeWebSafe(digest).replace(/=+$/, '');
   if (!confrontaInTempoCostante_(expected, signature)) return { ok: false, error: 'INVALID_SIGNATURE' };
-  // Only authenticated requests can pause background projections. A short lease
-  // gives the interactive opener a turn after the current writer finishes.
-  if (envelope.action === 'PREPARA_APERTURA_FOGLIO' && (envelope.payload || {}).background !== true) PropertiesService.getScriptProperties().setProperty('MI_INTERACTIVE_OPEN_UNTIL', String(Date.now()+90000));
+  // Solo una richiesta autenticata può sospendere le proiezioni automatiche. Un lock breve
+  // lascia spazio all'apertura interattiva dopo la conclusione della scrittura in corso.
+  if (envelope.action === 'PROIETTA_EVENTO' && (envelope.payload || {}).background !== true) PropertiesService.getScriptProperties().setProperty('MI_INTERACTIVE_OPEN_UNTIL', String(Date.now()+90000));
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return {ok:false,error:'WORKSPACE_BUSY'};
   try {
     const cache = CacheService.getScriptCache();
 	const nonceKey = Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, nonce)).replace(/=+$/, '');
 	const properties = PropertiesService.getScriptProperties();
-	// Shard the durable replay guard below the 9 KB property limit. Cache eviction
-	// must not authorize replay; never evict a still-valid durable nonce.
+	// Suddivide il controllo persistente delle ripetizioni per rispettare il limite di 9 KB delle proprietà.
+	// La rimozione dalla cache non autorizza la ripetizione; conserva ogni nonce ancora valido.
 	const bucketKey='MI_USED_NONCES_'+nonceKey.charAt(0);
 	const durableNonces=JSON.parse(properties.getProperty(bucketKey)||'{}');
 	const legacy=JSON.parse(properties.getProperty('MI_USED_NONCES')||'{}');
@@ -139,8 +137,8 @@ function confrontaInTempoCostante_(left, right) {
 function aggiungiIscrizione_(payload) {
   const risultato = registraIscrizioneCentrale_(payload);
   if (!risultato.complete) return risultato;
-  // MySQL acknowledges the central replica independently of slow sheet formatting.
-  // The periodic event job refreshes the views and retains pending operator edits.
+  // MySQL conferma la replica indipendentemente dalla formattazione dei fogli.
+  // Il processo periodico aggiorna le viste e conserva le modifiche dell'operatore in sospeso.
   if (payload.canonical_source === 'MYSQL') {
     risultato.central_complete = true;
     risultato.event_sheet_complete = false;
@@ -247,13 +245,13 @@ function registraIscrizioneCentrale_(payload) {
       payload.paid_cents == null ? '' : Math.max(0, Math.round(Number(payload.paid_cents) || 0)),
       '' // Cleared before writes; revision alone must not certify a partial replica.
     ];
-    if (existing) registrations.getRange(existing._row, 1, 1, registrationValues.length).setValues([registrationValues]);
-    else registrations.appendRow(registrationValues);
+    const registrationRow = existing ? existing._row : registrations.getLastRow() + 1;
+    registrations.getRange(registrationRow, 1, 1, registrationValues.length).setValues([registrationValues]);
 
     const correzioni = payload.canonical_source === 'MYSQL' ? {} : indiceStatoOperativo_();
     if (payload.canonical_source === 'MYSQL') {
       sincronizzaCamereMysql_(eventId, payload.rooms, payload.workspace_event_revision);
-      // Legacy overrides must not hide values now maintained by the canonical service.
+      // I valori gestiti dal servizio canonico prevalgono sulle impostazioni equivalenti.
       const stato = ottieniSchedaObbligatoria_(MI_SHEETS.OPERATIONAL_STATE);
       eliminaRigheContigue_(stato, convertiRigheInOggetti_(stato).filter(r => String(r.codice_ordine) === orderCode));
     }
@@ -279,11 +277,16 @@ function registraIscrizioneCentrale_(payload) {
     const participantSheet = ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS);
     const oldRows=convertiRigheInOggetti_(participantSheet).filter(row=>String(row.codice_ordine)===orderCode).sort((a,b)=>a._row-b._row);
     const contiguous=oldRows.length===participantRows.length && oldRows.every((row,i)=>row._row===oldRows[0]._row+i);
-    if (contiguous) participantSheet.getRange(oldRows[0]._row,1,participantRows.length,participantRows[0].length).setValues(participantRows);
+    let participantStartRow;
+    if (contiguous) {
+      participantStartRow = oldRows[0]._row;
+      participantSheet.getRange(participantStartRow,1,participantRows.length,participantRows[0].length).setValues(participantRows);
+    }
     else {
       eliminaRigheContigue_(participantSheet,oldRows);
       assicuraRighe_(participantSheet,participantSheet.getLastRow()+participantRows.length);
-      participantSheet.getRange(participantSheet.getLastRow()+1,1,participantRows.length,participantRows[0].length).setValues(participantRows);
+      participantStartRow = participantSheet.getLastRow()+1;
+      participantSheet.getRange(participantStartRow,1,participantRows.length,participantRows[0].length).setValues(participantRows);
     }
     const outbox = ottieniSchedaObbligatoria_(MI_SHEETS.EMAIL_OUTBOX);
     const message = convertiRigheInOggetti_(outbox).find(function (row) { return String(row.codice_ordine) === orderCode && String(row.tipo_modello) === 'REGISTRATION_CONFIRMATION'; });
@@ -295,15 +298,20 @@ function registraIscrizioneCentrale_(payload) {
     // stato dell'istantanea per non generare una nuova conferma.
     const originalStatus = ['CONFIRMED', 'PENDING_PAYMENT'].indexOf(currentStatus) >= 0 ? currentStatus : normalizzaValoreElenco_(snapshotData && snapshotData.status, ['PENDING_PAYMENT', 'CONFIRMED', 'WAITLISTED']) || currentStatus || 'CONFIRMED';
     const messageValues = [message ? message.id_messaggio : creaIdentificativoOpaco_('msg'), neutralizzaFormula_(orderCode, 64), neutralizzaFormula_(originalRecipient, 254), 'REGISTRATION_CONFIRMATION', JSON.stringify({ order_code: orderCode, status: originalStatus }), message ? message.stato : 'PREVIEW', message && message.data_creazione ? message.data_creazione : new Date()];
-    if (message) outbox.getRange(message._row, 1, 1, messageValues.length).setValues([messageValues]); else outbox.appendRow(messageValues);
+    const outboxRow = message ? message._row : outbox.getLastRow() + 1;
+    outbox.getRange(outboxRow, 1, 1, messageValues.length).setValues([messageValues]);
     sincronizzaPagamenti_(orderCode, payload.payments);
-    const registrationComplete = convertiRigheInOggetti_(registrations).some(function (row) { return String(row.codice_ordine) === orderCode && String(row.chiave_idempotenza) === idempotencyKey && String(row.hash_revisione_evento) === revisionHash && String(row.snapshot_json) === snapshotJson; });
-    const participantCount = convertiRigheInOggetti_(participantSheet).filter(function (row) { return String(row.codice_ordine) === orderCode; }).length;
-    const outboxComplete = convertiRigheInOggetti_(outbox).some(function (row) { return String(row.codice_ordine) === orderCode && String(row.tipo_modello) === 'REGISTRATION_CONFIRMATION' && String(row.destinatario) === originalRecipient; });
-    const complete = registrationComplete && participantCount === participants.length && outboxComplete;
+    // Verifica soltanto le righe appena scritte: rileggere ogni volta l'intera
+    // storia di tre fogli rendeva il costo di una replica crescente nel tempo.
+    const savedRegistration = registrations.getRange(registrationRow, 1, 1, registrationValues.length).getValues()[0];
+    const registrationComplete = String(savedRegistration[0]) === orderCode && String(savedRegistration[10]) === idempotencyKey && String(savedRegistration[17]) === revisionHash && String(savedRegistration[18]) === snapshotJson;
+    const savedParticipantCodes = participantSheet.getRange(participantStartRow, 1, participants.length, 1).getValues();
+    const participantsComplete = savedParticipantCodes.length === participants.length && savedParticipantCodes.every(function (row) { return String(row[0]) === orderCode; });
+    const savedMessage = outbox.getRange(outboxRow, 1, 1, messageValues.length).getValues()[0];
+    const outboxComplete = String(savedMessage[1]) === orderCode && String(savedMessage[2]) === originalRecipient && String(savedMessage[3]) === 'REGISTRATION_CONFIRMATION';
+    const complete = registrationComplete && participantsComplete && outboxComplete;
     if (complete) {
-      const saved = convertiRigheInOggetti_(registrations).find(row=>String(row.codice_ordine)===orderCode);
-      registrations.getRange(saved._row,registrationValues.length,1,1).setValues([[workspaceRevision]]);
+      registrations.getRange(registrationRow,registrationValues.length,1,1).setValues([[workspaceRevision]]);
     }
     aggiungiControllo_('APPEND_REGISTRATION', 'REGISTRATION', orderCode, 'SUCCESS', 'WORDPRESS', 'REGISTRATION_RECORDED', 'WORDPRESS_PROXY');
     return { ok: complete, complete: complete, workspace_revision: String(payload.workspace_revision === undefined ? '' : payload.workspace_revision), replayed: Boolean(existing), order_code: orderCode, error: complete ? undefined : 'INCOMPLETE_REPLICA' };
@@ -312,7 +320,7 @@ function registraIscrizioneCentrale_(payload) {
   }
 }
 
-/** Called under the central script lock. Room snapshots have an event-wide revision. */
+/** Viene chiamata sotto il lock dello script. Le sistemazioni condividono una revisione per evento. */
 function sincronizzaCamereMysql_(eventId, rooms, revision) {
   revision = String(revision);
   if (!/^(0|[1-9][0-9]{0,19})$/.test(revision) || !Array.isArray(rooms)) throw new Error('INVALID_ROOM_SNAPSHOT');
@@ -329,10 +337,10 @@ function sincronizzaCamereMysql_(eventId, rooms, revision) {
   if (old.length > revision.length || (old.length === revision.length && old > revision)) return;
   const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.ACCOMMODATIONS);
   const existing = convertiRigheInOggetti_(sheet).filter(r => String(r.id_evento) === eventId);
-  // The revision alone is insufficient: a prior writer may have stopped mid-write.
+  // La revisione da sola non basta: una scrittura precedente può essersi interrotta a metà.
   const actual = existing.map(r => [String(r.id_evento), String(r.codice), String(r.nome), Number(r.capienza), String(r.attiva), String(r.note || '')]);
   if (previous && old === revision && serializzaInModoStabile_(actual) === serializzaInModoStabile_(values)) return;
-  // Record the high-water mark before changing rows; an identical retry repairs a partial write.
+  // Registra la revisione massima prima di modificare le righe; la stessa richiesta completa una scrittura parziale.
   if (previous) versions.getRange(previous._row, 1, 1, 2).setValues([[eventId, revision]]);
   else versions.appendRow([eventId, revision]);
   eliminaRigheContigue_(sheet, existing);
@@ -344,7 +352,7 @@ function assicuraRighe_(sheet, required) {
   if(required>available)sheet.insertRowsAfter(available,required-available);
 }
 
-/** Delete bottom-up, preserving rows belonging to other events and retry repair. */
+/** Elimina le righe dal basso verso l'alto, conservando quelle degli altri eventi e consentendo la ripresa. */
 function eliminaRigheContigue_(sheet, rows) {
   const indices = [...new Set(rows.map(row => row._row))].sort((a,b) => b-a);
   for (let i=0; i<indices.length;) {
@@ -385,7 +393,8 @@ function sincronizzaPagamenti_(orderCode, payments) {
 	if (allocations.length && allocated !== amount) throw new Error('INVALID_PAYMENT_ALLOCATIONS');
 	const allocationsJson = allocations.length ? JSON.stringify(allocations) : '';
     const effective = normalizzaTesto_(payment.effective_at, 40);
-    const effectiveDate = effective ? new Date(stableId && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(effective) ? effective.replace(' ', 'T') + 'Z' : effective) : new Date();
+    // WordPress invia date SQL in UTC, comprese le righe prive di identificativo specifico.
+    const effectiveDate = effective ? new Date(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/.test(effective) ? effective.replace(' ', 'T') + 'Z' : effective) : new Date();
     if (isNaN(effectiveDate.getTime())) {
       aggiungiControllo_('SYNC_PAYMENT', 'PAYMENT', orderCode, 'REJECTED', 'WORDPRESS', 'INVALID_EFFECTIVE_AT', 'WORDPRESS_PROXY');
       throw new Error('INVALID_EFFECTIVE_AT');
