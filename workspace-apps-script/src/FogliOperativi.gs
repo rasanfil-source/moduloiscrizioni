@@ -24,11 +24,26 @@ function preparaProduzioniEventoDaWordPress_(payload) {
     return preparaProduzioniEventoConLock_(payload);
   } finally {lock.releaseLock();}
 }
+function risolviProfiloPreparazioneOperativa_(richiesto, payload) {
+  const validi = ['MINIMO', 'QUOTA_UNICA', 'SERVIZI_MULTIPLI', 'VIAGGIO_COMPLESSO'];
+  const esplicito = normalizzaValoreElenco_(richiesto, ['AUTOMATICO'].concat(validi)) || 'AUTOMATICO';
+  if (validi.indexOf(esplicito) >= 0) return esplicito;
+  const schema = (payload && payload.event_schema && typeof payload.event_schema === 'object') ? payload.event_schema : {};
+  const campi = Array.isArray(schema.fields) ? schema.fields : [];
+  const documenti = ['birth_date', 'document_type', 'document_number', 'document_issue_date', 'document_expiry_date', 'document_expiry', 'document_country', 'nationality'];
+  if (schema.room === true || campi.some(function (campo) { return campo && documenti.indexOf(String(campo.key || '')) >= 0; })) return 'VIAGGIO_COMPLESSO';
+  const opzioni = Array.isArray(schema.options) ? schema.options : (Array.isArray(payload.servizi) ? payload.servizi : []);
+  if (opzioni.length || schema.transport === true) return 'SERVIZI_MULTIPLI';
+  const prezzo = normalizzaTesto_(schema.pricing || payload.modalita_prezzo, 40).toUpperCase();
+  if (prezzo === 'FIXED' || prezzo === 'CALCULATED') return 'QUOTA_UNICA';
+  return 'MINIMO';
+}
 function preparaProduzioniEventoConLock_(payload) {
   payload = payload || {};
   const idEvento = normalizzaTesto_(payload.id_evento, 40);
   const titolo = normalizzaTesto_(payload.titolo, 200);
   if (!/^\d+$/.test(idEvento) || !titolo) return { ok: false, error: 'EVENTO_NON_VALIDO' };
+  const profiloOperativo = risolviProfiloPreparazioneOperativa_(payload.profilo_operativo, payload);
   const eventi = ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS);
   const esistente = convertiRigheInOggetti_(eventi).find(function (riga) { return String(riga.id_evento) === idEvento; });
   const valori = [
@@ -43,7 +58,7 @@ function preparaProduzioniEventoConLock_(payload) {
     new Date(),
     JSON.stringify(Array.isArray(payload.servizi) ? payload.servizi : []),
     JSON.stringify(Array.isArray(payload.domande_partecipanti) ? payload.domande_partecipanti : decodificaElenco_((esistente || {}).domande_json)),
-    normalizzaValoreElenco_(payload.profilo_operativo, ['MINIMO', 'QUOTA_UNICA', 'SERVIZI_MULTIPLI', 'VIAGGIO_COMPLESSO']) || (esistente || {}).profilo_operativo || ''
+    profiloOperativo
   ];
   if (eventi.getMaxColumns() < 12) eventi.insertColumnsAfter(eventi.getMaxColumns(), 12 - eventi.getMaxColumns());
   eventi.getRange(1, 12).setValue('profilo_operativo');
@@ -51,7 +66,6 @@ function preparaProduzioniEventoConLock_(payload) {
   if (esistente) eventi.getRange(esistente._row, 1, 1, valori.length).setValues([valori]);
   else eventi.appendRow(valori);
   if (payload.event_schema !== undefined) aggiornaSchemaEventoMysql_(idEvento, payload.event_schema);
-	const profiloOperativo = normalizzaValoreElenco_(payload.profilo_operativo, ['AUTOMATICO', 'MINIMO', 'QUOTA_UNICA', 'SERVIZI_MULTIPLI', 'VIAGGIO_COMPLESSO']) || 'AUTOMATICO';
   const risultato = apriFoglioOperativoConLock_({ id_evento: idEvento, titolo: titolo, profilo_operativo: profiloOperativo });
 	const urlIscrizione = normalizzaUrlPubblico_(payload.url_iscrizione);
 	const urlSaldo = normalizzaUrlPubblico_(payload.url_saldo);
@@ -296,3 +310,4 @@ function raggruppaColonneFoglioOperativo_(scheda, colonne) {
   });
   chiudi(colonne.length - 1);
 }
+
