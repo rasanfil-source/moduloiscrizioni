@@ -973,7 +973,7 @@ final class MI_Management_Service {
 						if ( '' !== $patch['after'] ) {
 							if ( ! preg_match( '/^' . $type['prefix'] . '[1-9][0-9]{0,5}$/', $patch['after'] ) ) throw new InvalidArgumentException( 'Numero o sigla camera non validi per la sistemazione richiesta.' );
 							$existing = array_column( self::rooms( $event_id ), null, 'code' )[$patch['after']] ?? null;
-							$capacity = ! empty( $type['individual'] ) ? ( $existing['capacity'] ?? ( $patch['capacity'] ?? null ) ) : (int) $type['capacity'];
+							$capacity = ! empty( $type['individual'] ) ? ( $existing['capacity'] ?? ( $patch['capacity'] ?? (int) $type['capacity'] ) ) : (int) $type['capacity'];
 							if ( ! is_int( $capacity ) || $capacity < 1 || $capacity > 1000 ) throw new InvalidArgumentException( 'Indica il numero di posti per la camera multipla.' );
 							if ( $existing && ! self::room_compatible_with_type( $type, $existing ) ) throw new InvalidArgumentException( 'La capienza della camera non corrisponde al tipo richiesto. Verifica l’inventario.' );
 							if ( ! $existing ) self::save_room( array( 'event_id' => $event_id, 'accommodations' => self::rooms( $event_id ) ), 'room_save', array( 'code' => $patch['after'], 'name' => $patch['after'], 'capacity' => $capacity ) );

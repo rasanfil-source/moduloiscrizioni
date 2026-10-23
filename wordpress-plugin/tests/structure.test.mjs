@@ -126,7 +126,7 @@ test('la pubblicazione mostra attesa ed esito vicino al comando senza duplicare 
   assert.match(shortcode, /<strong>Seleziona la quantità<\/strong>/);
 });
 
-test('la pubblicazione notifica la parrocchia e il recapito del gruppo', async () => {
+test('gli avvisi evento raggiungono segreteria, gruppo e operatore assegnato', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const email = await read('includes/class-mi-spedizione-email.php');
   assert.match(portal, /function risolvi_gestore_evento/);
@@ -138,8 +138,11 @@ test('la pubblicazione notifica la parrocchia e il recapito del gruppo', async (
   assert.match(email, /\?WP_User \$gestore/);
   assert.match(portal, /_mi_manager_user_id/);
   assert.match(email, /function accoda_notifiche_attivazione_evento/);
-  assert.match(portal, /al gruppo e alla segreteria parrocchiale/);
-  assert.match(email, /\$destinatari = self::destinatari_avvisi_evento\( \$event_id \)/);
+  assert.match(email, /function destinatari_avvisi_evento/);
+  assert.match(email, /\$emails = array\( self::destinatario_segreteria\(\), self::destinatario_evento\( \$event_id \) \)/);
+  assert.match(email, /if \( \$gestore instanceof WP_User \) \$emails\[\] = \$gestore->user_email/);
+  assert.match(email, /\$recipients\[strtolower\( \$email \)\] = \$email/);
+  assert.match(email, /\$destinatari = self::destinatari_avvisi_evento\( \$event_id(?:, \$gestore)? \)/);
   assert.match(email, /function accoda_notifica_gestore_evento/);
   assert.match(email, /EVENT_MANAGER_READY/);
   assert.match(email, /MI_Modello_Email::crea_istantanea_pubblicazione_evento/);
@@ -847,7 +850,7 @@ test('le email non mostrano identificativi testuali o grafici', async () => {
   assert.match(model, /payload_qr/);
   assert.match(model, /'modalita' => 'NONE'/);
   assert.match(sender, /identificativo/);
-  assert.match(sender, /istantanee storiche già accodate non devono mostrare il codice interno/);
+  assert.match(sender, /Le istantanee in coda non devono mostrare il codice interno/);
   assert.match(sender, /Codice\(\?: iscrizione\)\?/);
   assert.doesNotMatch(model, /buyer_email/);
 });
@@ -1109,7 +1112,7 @@ test('il pannello espone e riaccoda in sicurezza una replica Workspace', async (
   assert.match(admin, /Ultimo errore Workspace/);
   assert.match(admin, /Sincronizzata il/);
   assert.match(admin, /Riaccoda replica Workspace/);
-  assert.match(admin, /Sincronizza ora questa prenotazione/);
+  assert.match(admin, /Avvia aggiornamento Workspace/);
   assert.match(admin, /\$immediata\s*\? MI_Registration_Service::sincronizza_iscrizione_workspace\( \$registration_id \)\s*: MI_Registration_Service::accoda_iscrizione_workspace/);
   assert.match(service, /accoda_iscrizione_workspace/);
   assert.match(service, /wp_schedule_single_event/);
@@ -1850,7 +1853,7 @@ test('ogni sistemazione dispone di un costo che entra nelle opzioni economiche',
   const css = await read('assets/portal.css');
   assert.match(portal, /name="accommodation_price\[/);
   assert.match(portal, /\$accommodation_options\[\] = array\([^;]*'scope' => 'TICKET'[^;]*'price_cents' => \$accommodation_price/);
-  assert.match(portal, /\$priced_options = array_merge\( \$accommodation_options, \$service_options, \$extra_services \)/);
+  assert.match(portal, /\$priced_options = array_merge\( \$unmanaged_options, \$accommodation_options, \$service_options, \$extra_services \)/);
   assert.match(script, /data-mi-accommodation/);
   assert.match(css, /\.mi-accommodation-fee/);
 });
@@ -2121,7 +2124,8 @@ test('camere, stampa e filtri seguono la nuova gerarchia operativa', async () =>
   assert.match(css, /form:has\(>\.mi-room-sticky-actions\)\{padding-bottom:88px\}/);
   assert.match(css, /details\[data-room-section\]\{[^}]*border-left:5px solid var\(--navy/);
   assert.match(css, /\.mi-room-section-chevron/);
-  assert.match(service, /'alloggio-doppia-matrimoniale' === \$code[\s\S]*2 === count\( \$selected \)[\s\S]*continue/);
+  assert.match(service, /foreach \( self::room_types\(\) as \$code => \$type \)[\s\S]*\$selected = array_values\( array_filter\( \$all/);
+  assert.match(service, /\$groups = 1 === \$capacity \? array_map\([\s\S]*: array_chunk\( \$selected, \$capacity \)/);
 });
 
 test('la variazione distingue checkbox dei servizi e assegnazione della sistemazione', async () => {
@@ -2416,7 +2420,7 @@ test('le azioni sensibili verificano capability e ambito sul server', async () =
   assert.match(portal, /\$required_capability = \$existing_event_id \? 'mi_manage_events' : 'mi_create_events'/);
   assert.match(portal, /Gruppo non accessibile/);
   assert.match(access, /function event_ids[\s\S]*mi_assigned_event_manager[\s\S]*_mi_event_scope/);
-  assert.match(access, /scope_event_list[\s\S]*self::event_ids\(\)[\s\S]*post__in/);
+  assert.match(access, /scope_event_list[\s\S]*\$scope = self::event_ids\( \$user_id \)[\s\S]*post__in/);
 });
 
 test('il normale accesso WordPress non viene sostituito dalla Segreteria', async () => {

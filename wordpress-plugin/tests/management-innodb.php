@@ -167,7 +167,8 @@ $multiple=[];foreach([1,2]as $id)$multiple[]=['order_code'=>'TEST'.$id,'number'=
 $r=MI_Management_Service::save_sheet(42,$multiple,'wp_7_12345678-1234-4234-8234-123456780003','ROOM_ASSIGN');check(!empty($r['rejected']),'Codice M condiviso accettato');
 check((int)$wpdb->get_var("SELECT COUNT(*) FROM wp_mi_rooms WHERE code='M1'")===0,'Camera creata non annullata dopo rifiuto');
 check((int)$wpdb->get_var("SELECT COUNT(*) FROM wp_mi_participants WHERE room_code='DS1'")===2,'Batch rifiutato ha modificato persone');
-$multiple[1]['after']='M2';$r=MI_Management_Service::save_sheet(42,$multiple,'wp_7_12345678-1234-4234-8234-123456780004','ROOM_ASSIGN');check(!empty($r['saved']),'Progressivi M individuali rifiutati');
+$multiple[1]['after']='M2';$r=MI_Management_Service::save_sheet(42,$multiple,'wp_7_12345678-1234-4234-8234-123456780004','ROOM_ASSIGN');check(!empty($r['saved']),'Progressivi M individuali rifiutati: '.json_encode($r));
+check((int)$wpdb->get_var("SELECT capacity FROM wp_mi_rooms WHERE code='M1'")===1&&(int)$wpdb->get_var("SELECT capacity FROM wp_mi_rooms WHERE code='M2'")===1,'Capienza predefinita delle camere individuali errata');
 $r=MI_Management_Service::save_sheet(43,$multiple,'wp_7_12345678-1234-4234-8234-123456780005','ROOM_ASSIGN');check($r instanceof WP_Error,'Assegnazione fuori evento accettata');
 $stale=$multiple;$stale[0]['before']='DS1';$stale[0]['after']='M3';$r=MI_Management_Service::save_sheet(42,$stale,'wp_7_12345678-1234-4234-8234-123456780006','ROOM_ASSIGN');check(!empty($r['rejected']),'Assegnazione obsoleta accettata');
 check((int)$wpdb->get_var("SELECT COUNT(*) FROM wp_mi_rooms WHERE code='M3'")===0,'Nuovo codice persistito dopo conflitto');
