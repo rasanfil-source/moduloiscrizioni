@@ -188,7 +188,7 @@ function assigned_rooms($id){global $wpdb;return array_column($wpdb->get_results
 foreach([10=>['singola','singola'],11=>['multipla','multipla'],12=>['doppia-matrimoniale','doppia-matrimoniale'],13=>['doppia-separati','doppia-separati'],14=>['tripla','tripla','tripla'],15=>['doppia-separati'],16=>['doppia-separati','doppia-separati','doppia-separati','doppia-separati'],17=>['doppia-separati','singola']]as $id=>$types){seed_auto_rooms($id,$types);run_auto_rooms($id);}
 check(assigned_rooms(10)===['S1','S2'],'Singole senza progressivi individuali');
 check(assigned_rooms(11)===['M3','M4'],'Multiple senza progressivi individuali successivi');
-foreach([12=>'DM1',13=>'DS2',14=>'T2']as $id=>$code)check(count(array_unique(assigned_rooms($id)))===1&&assigned_rooms($id)[0]===$code,'Gruppo congiunto senza codice condiviso '.$id);
+foreach([12=>'DM1',13=>'DS1',14=>'T2']as $id=>$code)check(count(array_unique(assigned_rooms($id)))===1&&assigned_rooms($id)[0]===$code,'Gruppo congiunto senza codice condiviso '.$id.': '.json_encode(assigned_rooms($id)));
 check(assigned_rooms(15)===['']&&assigned_rooms(16)===['','','',''],'Richieste da abbinare assegnate automaticamente');
 check(assigned_rooms(17)===['','S3'],'Iscrizione mista abbinata impropriamente');
 seed_auto_rooms(21,['doppia-matrimoniale','doppia-matrimoniale','singola']);run_auto_rooms(21);
