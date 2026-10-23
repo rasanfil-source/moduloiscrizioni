@@ -108,11 +108,15 @@ final class MI_REST_Controller {
 	}
 
 	private static function create_group_from_workspace( array $payload ) {
+		global $wpdb;
 		$name = mb_substr( sanitize_text_field( $payload['name'] ?? '' ), 0, 120 );
 		$slug = sanitize_title( $payload['slug'] ?? $name );
 		$logo_url = self::sanitize_https_asset_url( $payload['logo_url'] ?? '' );
 		$image_url = self::sanitize_https_asset_url( $payload['image_url'] ?? '' );
 		if ( ! $name || ! $slug ) return new WP_Error( 'mi_workspace_group_invalid', 'Nome del gruppo non valido.', array( 'status' => 400 ) );
+		$lock_name = 'mi_ws_group_' . substr( hash( 'sha256', $wpdb->prefix . '|' . $slug ), 0, 48 );
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 3)', $lock_name ) ) ) return new WP_Error( 'mi_workspace_busy', 'Creazione gruppo momentaneamente occupata.', array( 'status' => 503 ) );
+		try {
 		$existing = get_page_by_path( $slug, OBJECT, MI_Event_Post_Type::GROUP_TYPE );
 		if ( $existing ) {
 			self::save_group_asset_urls( (int) $existing->ID, $logo_url, $image_url );
@@ -122,6 +126,9 @@ final class MI_REST_Controller {
 		if ( is_wp_error( $group_id ) ) return $group_id;
 		self::save_group_asset_urls( (int) $group_id, $logo_url, $image_url );
 		return array( 'ok' => true, 'group_id' => (int) $group_id, 'name' => get_the_title( $group_id ), 'slug' => $slug, 'existing' => false );
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
+		}
 	}
 
 	private static function sanitize_https_asset_url( $value ) {
@@ -181,8 +188,11 @@ final class MI_REST_Controller {
 		$locked = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 3)', $lock_name ) );
 		if ( 1 !== $locked ) return new WP_Error( 'mi_workspace_busy', 'Creazione bozza momentaneamente occupata.', array( 'status' => 503 ) );
 		try {
-		$existing = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'any', 'numberposts' => 1, 'meta_key' => '_mi_workspace_draft_id', 'meta_value' => $draft_id ) );
-		if ( $existing ) return rest_ensure_response( self::event_draft_response( (int) $existing[0]->ID ) );
+		$existing = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array_values( array_unique( array_merge( get_post_stati(), array( 'trash' ) ) ) ), 'numberposts' => 1, 'meta_key' => '_mi_workspace_draft_id', 'meta_value' => $draft_id ) );
+		if ( $existing ) {
+			if ( 'trash' === $existing[0]->post_status ) return new WP_Error( 'mi_workspace_event_trashed', 'Esiste già un evento con questo identificativo nel cestino. Ripristinalo o rimuovilo prima di ripetere la creazione.', array( 'status' => 409 ) );
+			return rest_ensure_response( self::event_draft_response( (int) $existing[0]->ID ) );
+		}
 		$copy_id = absint( $payload['copy_event_id'] ?? 0 );
 		$activity_id = absint( $payload['group_id'] ?? $payload['activity_id'] ?? 0 );
 		$group_slug = sanitize_title( $payload['group_slug'] ?? '' );
@@ -196,7 +206,7 @@ final class MI_REST_Controller {
 		}
 		$event_id = wp_insert_post( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'draft', 'post_title' => $title ), true );
 		if ( is_wp_error( $event_id ) ) return $event_id;
-		$copy_keys = array( '_mi_data_profile', '_mi_participant_fields', '_mi_participant_required_fields', '_mi_custom_participant_fields', '_mi_participant_extra_scope', '_mi_operational_profile', '_mi_special_requests_enabled', '_mi_marketing_enabled', '_mi_email_settings', '_mi_identifier_mode' );
+		$copy_keys = array( '_mi_data_profile', '_mi_participant_fields', '_mi_participant_required_fields', '_mi_custom_participant_fields', '_mi_participant_extra_scope', '_mi_operational_profile', '_mi_special_requests_enabled', '_mi_marketing_enabled', '_mi_email_template', '_mi_email_style', '_mi_identifier_display', '_mi_event_qr_enabled' );
 		if ( $copy_id ) foreach ( $copy_keys as $key ) { $value = get_post_meta( $copy_id, $key, true ); if ( '' !== $value ) update_post_meta( $event_id, $key, $value ); }
 		update_post_meta( $event_id, '_mi_workspace_draft_id', $draft_id );
 		update_post_meta( $event_id, '_mi_activity_id', $activity_id );

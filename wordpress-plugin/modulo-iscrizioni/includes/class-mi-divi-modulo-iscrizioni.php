@@ -41,18 +41,34 @@ final class MI_Divi_Modulo_Iscrizioni extends ET_Builder_Module {
 		if ( ! $event_id || MI_Event_Post_Type::EVENT_TYPE !== get_post_type( $event_id ) || ( ! $manager_allowed && ! $public_allowed ) ) {
 			return current_user_can( 'mi_manage_events' ) ? '<p class="mi-registration__notice">Seleziona un evento accessibile nelle impostazioni dell’elemento Modulo iscrizioni.</p>' : '';
 		}
-		return MI_Shortcode::render( array( 'event' => $event_id ) );
+		$preview = $manager_allowed && 'publish' !== get_post_status( $event_id );
+		return MI_Shortcode::render( array( 'event' => $event_id, 'anteprima' => $preview ? 1 : 0 ) );
 	}
 
 	private static function opzioni_eventi() {
+		static $options_cache = array();
+		$user_id = get_current_user_id();
+		if ( isset( $options_cache[ $user_id ] ) ) return $options_cache[ $user_id ];
 		$options = array( '' => 'Seleziona evento' );
-		$events = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) );
+		$query = array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' );
+		if ( MI_Access::is_suspended( $user_id ) ) return $options_cache[ $user_id ] = $options;
+		$user = get_user_by( 'id', $user_id );
+		if ( ! MI_Access::is_global_manager( $user_id ) ) {
+			if ( $user && in_array( 'mi_assigned_event_manager', (array) $user->roles, true ) ) {
+				$scope = MI_Access::event_ids( $user_id );
+				$query['post__in'] = $scope ? $scope : array( 0 );
+			} else {
+				$groups = MI_Access::activity_ids( $user_id );
+				if ( ! is_array( $groups ) || ! $groups ) return $options_cache[ $user_id ] = $options;
+				$query['meta_query'] = array( array( 'key' => '_mi_activity_id', 'value' => array_values( array_map( 'absint', $groups ) ), 'compare' => 'IN', 'type' => 'NUMERIC' ) );
+			}
+		}
+		$events = get_posts( $query );
 		$status_labels = array( 'publish' => 'pubblicato', 'draft' => 'bozza', 'private' => 'privato' );
 		foreach ( $events as $event ) {
-			if ( ! MI_Access::can_access_event( $event->ID ) ) continue;
 			$status = $status_labels[ $event->post_status ] ?? $event->post_status;
 			$options[ (string) $event->ID ] = $event->post_title . ' — ' . $status;
 		}
-		return $options;
+		return $options_cache[ $user_id ] = $options;
 	}
 }

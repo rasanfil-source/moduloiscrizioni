@@ -430,6 +430,15 @@ final class MI_Management_Service {
 			'alloggio-multipla' => array( 'prefix' => 'M', 'name' => 'Multipla', 'capacity' => 1, 'individual' => true ),
 		);
 	}
+	private static function room_compatible_with_type( $type, $room ) {
+		if ( ! is_array( $type ) || ! is_array( $room ) ) return false;
+		$prefix = (string) ( $type['prefix'] ?? '' );
+		$code = (string) ( $room['code'] ?? '' );
+		$capacity = (int) ( $room['capacity'] ?? 0 );
+		if ( ! $prefix || ! preg_match( '/^' . preg_quote( $prefix, '/' ) . '[1-9][0-9]*$/D', $code ) ) return false;
+		if ( ! empty( $type['individual'] ) ) return $capacity >= 1 && $capacity <= 1000;
+		return $capacity === (int) ( $type['capacity'] ?? 0 );
+	}
 	/** Anteprima e conferma usano lo stesso piano calcolato dal server, senza prezzi forniti dal client. */
 	private static function accommodation_plan( $event_id, $data, $lock = false ) {
 		global $wpdb;
@@ -571,39 +580,53 @@ final class MI_Management_Service {
 		global $wpdb;
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_registrations WHERE id=%d FOR UPDATE", $registration_id ), ARRAY_A ); self::check_database();
 		if ( ! $row || ! in_array( $row['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ) return;
-		$event_id = (int) $row['event_id']; $booking = self::booking( $row ); $all = $booking['participants']; $rooms = self::rooms( $event_id ); $groups = array();
+		$event_id = (int) $row['event_id']; $booking = self::booking( $row ); $all = $booking['participants']; $rooms = self::rooms( $event_id ); $next = array(); $assignments = array();
 		foreach ( self::room_types() as $code => $type ) {
 			$selected = array_values( array_filter( $all, static function ( $person ) use ( $code ) {
 				return 'ACTIVE' === $person['status'] && ! $person['room'] && array_filter( $person['options'], static function ( $option ) use ( $code ) { return ( $option['code'] ?? '' ) === $code && (int) ( $option['quantity'] ?? 0 ) > 0; } );
 			} ) );
-			if ( 'alloggio-doppia-matrimoniale' === $code ) {
-				if ( 2 === count( $selected ) ) $groups[] = array( $type, $selected );
-				continue;
-			}
-			if ( 1 === $type['capacity'] ) { foreach ( $selected as $person ) $groups[] = array( $type, array( $person ) ); }
-			elseif ( count( $all ) === $type['capacity'] && count( $selected ) === count( $all ) ) $groups[] = array( $type, $selected );
-			elseif ( $selected ) {
+			if ( ! $selected ) continue;
+			$capacity = (int) $type['capacity'];
+			$groups = 1 === $capacity ? array_map( static function ( $person ) { return array( $person ); }, $selected ) : array_chunk( $selected, $capacity );
+			foreach ( $groups as $persons ) {
+				$group_size = count( $persons );
+				$full_group = $group_size === $capacity;
+				$empty_room = '';
 				$has_open_room = false;
-				foreach ( $rooms as $room ) if ( preg_match( '/^' . $type['prefix'] . '[1-9][0-9]*$/', $room['code'] ) && $room['available'] > 0 ) { $has_open_room = true; break; }
-				if ( ! $has_open_room ) $groups[] = array( $type, array( $selected[0] ) );
+				if ( $capacity > 1 ) foreach ( $rooms as $room ) {
+					if ( ! preg_match( '/^' . $type['prefix'] . '[1-9][0-9]*$/', $room['code'] ) || (int) $room['capacity'] !== $capacity || $room['available'] < 1 ) continue;
+					$has_open_room = true;
+					// Non si uniscono prenotazioni diverse nella stessa camera. Un gruppo
+					// può riutilizzare soltanto una camera vuota con posti sufficienti.
+					if ( 0 === (int) $room['occupied'] && $room['available'] >= $group_size ) { $empty_room = $room['code']; break; }
+				}
+				if ( ! $full_group && 1 === $group_size && $has_open_room ) continue;
+				if ( ! $full_group && $group_size > 1 && ! $empty_room && $has_open_room ) continue;
+				$room_code = $empty_room;
+				if ( ! $room_code ) {
+					$prefix = $type['prefix'];
+					if ( ! isset( $next[$prefix] ) ) {
+						$next[$prefix] = 1;
+						foreach ( $rooms as $room ) if ( preg_match( '/^' . $prefix . '([1-9][0-9]*)$/', $room['code'], $match ) ) $next[$prefix] = max( $next[$prefix], (int) $match[1] + 1 );
+					}
+					if ( $next[$prefix] > 999999 ) throw new RuntimeException( 'Numerazione camere esaurita.' );
+					$room_code = $prefix . $next[$prefix]++;
+					self::save_room( array( 'event_id' => $event_id, 'accommodations' => $rooms ), 'room_save', array( 'code' => $room_code, 'name' => $room_code, 'capacity' => $capacity ) );
+					$rooms[] = array( 'code' => $room_code, 'name' => $room_code, 'capacity' => $capacity, 'occupied' => 0, 'available' => $capacity );
+				}
+				foreach ( $persons as $person ) {
+					if ( false === $wpdb->update( $wpdb->prefix . 'mi_participants', array( 'room_code' => $room_code ), array( 'id' => $person['id'] ) ) ) throw new RuntimeException( 'Assegnazione automatica non salvata.' );
+					$assignments[] = array( 'participant_id' => $person['id'], 'before' => '', 'after' => $room_code );
+				}
+				foreach ( $rooms as &$room ) if ( $room_code === $room['code'] ) {
+					$room['occupied'] += $group_size;
+					$room['available'] = max( 0, $room['capacity'] - $room['occupied'] );
+					break;
+				}
+				unset( $room );
 			}
 		}
-		if ( ! $groups ) return;
-		$next = array(); $assignments = array();
-		foreach ( $groups as list( $type, $persons ) ) {
-			$prefix = $type['prefix'];
-			if ( ! isset( $next[$prefix] ) ) {
-				$next[$prefix] = 1;
-				foreach ( $rooms as $room ) if ( preg_match( '/^' . $prefix . '([1-9][0-9]*)$/', $room['code'], $match ) ) $next[$prefix] = max( $next[$prefix], (int) $match[1] + 1 );
-			}
-			if ( $next[$prefix] > 999999 ) throw new RuntimeException( 'Numerazione camere esaurita.' );
-			$code = $prefix . $next[$prefix]++;
-			self::save_room( array( 'event_id' => $event_id, 'accommodations' => $rooms ), 'room_save', array( 'code' => $code, 'name' => $code, 'capacity' => $type['capacity'] ) );
-			foreach ( $persons as $person ) {
-				if ( false === $wpdb->update( $wpdb->prefix . 'mi_participants', array( 'room_code' => $code ), array( 'id' => $person['id'] ) ) ) throw new RuntimeException( 'Assegnazione automatica non salvata.' );
-				$assignments[] = array( 'participant_id' => $person['id'], 'before' => '', 'after' => $code );
-			}
-		}
+		if ( ! $assignments ) return;
 		MI_Registration_Service::mark_workspace_changed_locked( $registration_id );
 		if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}mi_management_state SET revision=revision+1 WHERE event_id=%d", $event_id ) ) || ! MI_Registration_Service::append_registration_event( $registration_id, 'AUTO_ROOM_ASSIGN', '', '', 'SYSTEM', array( 'assignments' => $assignments ) ) ) throw new RuntimeException( 'Assegnazione automatica non tracciata.' );
 	}
@@ -773,11 +796,18 @@ final class MI_Management_Service {
 				if ( ! $type ) throw new InvalidArgumentException( 'Scegli prima la sistemazione.' );
 				$next = 1; foreach ( $booking['accommodations'] as $existing ) if ( preg_match( '/^' . $type['prefix'] . '([1-9][0-9]*)$/', $existing['code'], $match ) ) $next = max( $next, (int) $match[1] + 1 );
 				$room = $type['prefix'] . $next;
-				$new_room = array( 'code' => $room, 'name' => $room, 'capacity' => $type['capacity'] );
+				$capacity = (int) $type['capacity'];
+				if ( ! empty( $type['individual'] ) ) {
+					$requested_capacity = absint( $data['capacity'] ?? 0 );
+					if ( $requested_capacity ) $capacity = $requested_capacity;
+					else foreach ( $booking['accommodations'] as $existing ) if ( self::room_compatible_with_type( $type, $existing ) ) { $capacity = (int) $existing['capacity']; break; }
+				}
+				if ( $capacity < 1 || $capacity > 1000 ) throw new InvalidArgumentException( 'La capienza della camera non è valida.' );
+				$new_room = array( 'code' => $room, 'name' => $room, 'capacity' => $capacity );
 			} elseif ( '' !== $room ) {
 				$destination = array_column( $booking['accommodations'], null, 'code' )[$room] ?? null;
 				if ( ! $destination || ( $destination['available'] < 1 && $room !== $person['room'] ) ) throw new InvalidArgumentException( 'Camera non disponibile o al completo.' );
-				if ( ! $type || $destination['capacity'] !== $type['capacity'] || ! preg_match( '/^' . $type['prefix'] . '[1-9][0-9]*$/', $room ) ) throw new InvalidArgumentException( 'Camera incompatibile con la sistemazione scelta.' );
+				if ( ! $type || ! self::room_compatible_with_type( $type, $destination ) ) throw new InvalidArgumentException( 'Camera incompatibile con la sistemazione scelta.' );
 			}
 		}
 		if ( array_key_exists( 'bus', $data ) ) {
@@ -943,9 +973,9 @@ final class MI_Management_Service {
 						if ( '' !== $patch['after'] ) {
 							if ( ! preg_match( '/^' . $type['prefix'] . '[1-9][0-9]{0,5}$/', $patch['after'] ) ) throw new InvalidArgumentException( 'Numero o sigla camera non validi per la sistemazione richiesta.' );
 							$existing = array_column( self::rooms( $event_id ), null, 'code' )[$patch['after']] ?? null;
-							$capacity = $type['capacity'] ?? ( $existing['capacity'] ?? ( $patch['capacity'] ?? null ) );
+							$capacity = ! empty( $type['individual'] ) ? ( $existing['capacity'] ?? ( $patch['capacity'] ?? null ) ) : (int) $type['capacity'];
 							if ( ! is_int( $capacity ) || $capacity < 1 || $capacity > 1000 ) throw new InvalidArgumentException( 'Indica il numero di posti per la camera multipla.' );
-							if ( $existing && (int) $existing['capacity'] !== $capacity ) throw new InvalidArgumentException( 'La capienza della camera non corrisponde al tipo richiesto. Verifica l’inventario.' );
+							if ( $existing && ! self::room_compatible_with_type( $type, $existing ) ) throw new InvalidArgumentException( 'La capienza della camera non corrisponde al tipo richiesto. Verifica l’inventario.' );
 							if ( ! $existing ) self::save_room( array( 'event_id' => $event_id, 'accommodations' => self::rooms( $event_id ) ), 'room_save', array( 'code' => $patch['after'], 'name' => $patch['after'], 'capacity' => $capacity ) );
 							$booking['accommodations'] = self::rooms( $event_id );
 						}
@@ -1021,7 +1051,7 @@ final class MI_Management_Service {
 		if ( '' !== $value && ( in_array( $key, array( 'phone', 'participant_phone', 'mobile' ), true ) || 'tel' === ( $definitions[$key]['type'] ?? '' ) ) ) $value = MI_Field_Schema::normalize_phone( $value );
 		return $value;
 	}
-	/** Sheets baseline contains displayed, whitespace-normalized text (formula escape excluded). */
+	/** Testo mostrato nel foglio, normalizzato negli spazi e senza la protezione delle formule. */
 	private static function sheet_display_value( $value ) {
 		$value = preg_replace( '/[\x00-\x1f\x7f]/u', ' ', (string) $value );
 		return mb_substr( trim( preg_replace( '/[\s\x{FEFF}]+/u', ' ', $value ) ), 0, 5000 );
@@ -1043,7 +1073,7 @@ final class MI_Management_Service {
 		foreach ( $person['options'] ?? array() as $option ) {
 			$type = $types[$option['code'] ?? ''] ?? null;
 			if ( ! $type || (int) ( $option['quantity'] ?? 0 ) < 1 ) continue;
-			if ( (int) $destination['capacity'] !== $type['capacity'] || ! preg_match( '/^' . $type['prefix'] . '[1-9][0-9]*$/', $destination['code'] ) ) throw new InvalidArgumentException( 'Camera incompatibile con la sistemazione acquistata. Per cambiare tipologia usa Cambia sistemazione.' );
+			if ( ! self::room_compatible_with_type( $type, $destination ) ) throw new InvalidArgumentException( 'Camera incompatibile con la sistemazione acquistata. Per cambiare tipologia usa Cambia sistemazione.' );
 		}
 	}
 	private static function save_participant( $booking, $data, $defer_capacity = false ) {

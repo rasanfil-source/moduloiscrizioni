@@ -46,8 +46,8 @@
   },
   "portal.css": {
     "file": "min/portal.css",
-    "source": "ab4c3a55665e05a777938021b524427f437059e61e839e79f3a5bba537ac5acf",
-    "hash": "fca2afe3dcf51262613d169ae6b700fe6d7f4e8a9d96e967c211d5d953c9e860"
+    "source": "0ae7cdea1181e114d39acb0beedf9b60920d3949ba08ac7f0e932eff5d5407cd",
+    "hash": "4504d7b0270cdebfe8357390abf74b81645ba71633b5ab9a5466a05fd5fa9be4"
   },
   "portal.js": {
     "file": "min/portal.js",

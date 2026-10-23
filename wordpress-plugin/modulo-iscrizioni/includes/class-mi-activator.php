@@ -365,7 +365,7 @@ final class MI_Activator {
 		}
 	}
 
-	/** Migra una sola volta i ruoli storici, preservando gli ambiti già assegnati. */
+	/** Applica una sola volta la mappatura dei ruoli, preservando gli ambiti già assegnati. */
 	private static function migrate_legacy_roles() {
 		$mapping = array(
 			'mi_secretary'      => 'mi_registration_manager',

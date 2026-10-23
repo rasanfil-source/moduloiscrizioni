@@ -6,11 +6,10 @@ require_once __DIR__ . '/class-mi-payment-people.php';
 
 final class MI_Registration_Service {
 	/**
-	 * Restituisce una scadenza UTC utilizzabile quando una posizione già confermata
-	 * torna in attesa di pagamento. Una scadenza storica non deve provocare
-	 * l'annullamento automatico al cron immediatamente successivo. La finestra
-	 * dedicata alle rettifiche è indipendente dalle offerte della lista d'attesa.
-	 * Per le prenotazioni precedenti usa il valore dell'evento, oppure 48 ore.
+	 * Calcola una scadenza UTC quando una posizione già confermata torna in attesa
+	 * di pagamento. La finestra dedicata alle rettifiche è indipendente dalle offerte
+	 * della lista d'attesa. Se manca un termine valido, usa il valore dell'evento
+	 * oppure 48 ore.
 	 */
 	public static function reopened_payment_deadline( array $registration, $now = null ) {
 		$now = null === $now ? time() : (int) $now;
@@ -565,10 +564,55 @@ final class MI_Registration_Service {
 	 * penalizzare gruppi collegati dalla stessa rete; quello per email frena
 	 * invece le ripetizioni sulla stessa identità.
 	 */
+	/** Restituisce l'IP del client; gli header proxy sono attendibili solo se REMOTE_ADDR è in una rete configurata. */
+	public static function client_ip() {
+		$remote = trim( (string) ( $_SERVER['REMOTE_ADDR'] ?? '' ) );
+		if ( ! filter_var( $remote, FILTER_VALIDATE_IP ) ) return 'unknown';
+		$trusted = defined( 'MI_TRUSTED_PROXY_CIDRS' ) ? MI_TRUSTED_PROXY_CIDRS : array();
+		$trusted = apply_filters( 'mi_trusted_proxy_cidrs', $trusted );
+		if ( is_string( $trusted ) ) $trusted = preg_split( '/[,\s]+/', $trusted, -1, PREG_SPLIT_NO_EMPTY );
+		$trusted = array_values( array_filter( (array) $trusted, 'is_string' ) );
+		if ( ! self::ip_in_cidrs( $remote, $trusted ) ) return $remote;
+		$cloudflare_ip = trim( (string) ( $_SERVER['HTTP_CF_CONNECTING_IP'] ?? '' ) );
+		if ( filter_var( $cloudflare_ip, FILTER_VALIDATE_IP ) ) return $cloudflare_ip;
+		$forwarded = array();
+		foreach ( explode( ',', (string) ( $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '' ) ) as $candidate ) {
+			$candidate = trim( $candidate );
+			if ( filter_var( $candidate, FILTER_VALIDATE_IP ) ) $forwarded[] = $candidate;
+		}
+		$client = $remote;
+		foreach ( array_reverse( $forwarded ) as $candidate ) {
+			if ( ! self::ip_in_cidrs( $client, $trusted ) ) break;
+			$client = $candidate;
+		}
+		return $client;
+	}
+
+	private static function ip_in_cidrs( $ip, array $cidrs ) {
+		$packed_ip = @inet_pton( (string) $ip );
+		if ( false === $packed_ip ) return false;
+		foreach ( $cidrs as $cidr ) {
+			$parts = explode( '/', trim( (string) $cidr ), 2 );
+			$packed_network = @inet_pton( $parts[0] );
+			if ( false === $packed_network || strlen( $packed_network ) !== strlen( $packed_ip ) ) continue;
+			$max_bits = strlen( $packed_ip ) * 8;
+			$bits = isset( $parts[1] ) && preg_match( '/^\d+$/', $parts[1] ) ? (int) $parts[1] : $max_bits;
+			if ( $bits < 0 || $bits > $max_bits ) continue;
+			$matches = true;
+			for ( $index = 0; $index < strlen( $packed_ip ); ++$index ) {
+				$mask = $bits >= 8 ? 255 : ( $bits > 0 ? ( 255 << ( 8 - $bits ) ) & 255 : 0 );
+				if ( ( ord( $packed_ip[$index] ) & $mask ) !== ( ord( $packed_network[$index] ) & $mask ) ) { $matches = false; break; }
+				$bits = max( 0, $bits - 8 );
+			}
+			if ( $matches ) return true;
+		}
+		return false;
+	}
+
 	private static function consume_registration_rate_limit( $event_id, $email ) {
 		global $wpdb;
 		$identities = array(
-			array( 'ip|' . (string) ( $_SERVER['REMOTE_ADDR'] ?? 'unknown' ), 60 ),
+			array( 'ip|' . self::client_ip(), 60 ),
 			array( 'email|' . strtolower( (string) $email ), 12 ),
 		);
 		foreach ( $identities as $identity ) {
@@ -634,14 +678,14 @@ final class MI_Registration_Service {
 			MI_Sheet_Open::enqueue( (int) $registration['event_id'] );
 			return 'PENDING';
 		}
-		// Ripetere il payload completo: una vecchia ricevuta non prova la replica dei movimenti nuovi.
+		// Inviare il payload completo include tutti i movimenti registrati nella proiezione.
 		$items = $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code, ticket_type_name, quantity, unit_price_cents, options_json FROM {$items_table} WHERE registration_id = %d ORDER BY id", $registration_id ), ARRAY_A );
 		if ( $wpdb->last_error ) return 'PENDING';
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id, ticket_type_code, ticket_index, first_name, last_name, extra_json, room_code, options_json, status, cancelled_at, deposit_due_cents FROM {$participants_table} WHERE registration_id = %d ORDER BY id", $registration_id ), ARRAY_A );
 		if ( $wpdb->last_error ) return 'PENDING';
 		$all_payments = $wpdb->get_results( $wpdb->prepare( "SELECT id AS payment_id, transaction_kind, movement_kind, installment_kind, effective_at, amount_cents, payment_source, external_reference, operator_label, administrative_note, participant_allocations_json, origin_channel FROM {$payments_table} WHERE registration_id = %d ORDER BY effective_at, id", $registration_id ), ARRAY_A );
 		if ( $wpdb->last_error ) return 'PENDING';
-		// I movimenti acquisiti da DB_MODULI sono già nel registro centrale: non rimandarli come nuovi versamenti.
+		// I pagamenti locali alimentano il riepilogo; i movimenti già registrati in Workspace non vengono duplicati.
 		$payments = array_values( array_map( static function ( $payment ) { unset( $payment['origin_channel'] ); return $payment; }, array_filter( $all_payments, static function ( $payment ) { return 'WORKSPACE' !== ( $payment['origin_channel'] ?? '' ); } ) ) );
 		try {
 			$position = MI_Payment_Ledger::position( $registration, MI_Payment_Ledger::net_paid( $registration_id ) );
@@ -831,7 +875,7 @@ final class MI_Registration_Service {
 		}
 	}
 
-	/** Compatibilità dei vecchi chiamanti: il registro MySQL non importa più pagamenti Google. */
+	/** Restituisce i movimenti del registro MySQL senza importazioni da Google. */
 	public static function reconcile_workspace_payments( $requested_order_codes = array() ) { return 0; }
 
 	public static function public_status_token( $registration_id, $order_code, $email ) {
@@ -1353,7 +1397,7 @@ final class MI_Registration_Service {
 		return 'PENDING';
 	}
 
-	/** Mantiene un solo job per iscrizione, ma anticipa un vecchio backoff quando i dati cambiano. */
+	/** Mantiene un solo processo per iscrizione e anticipa l'attesa quando cambiano i dati. */
 	private static function schedule_workspace_registration( $registration_id, $when ) {
 		$args = array( absint( $registration_id ) );
 		$when = max( time(), (int) $when );
@@ -1540,7 +1584,7 @@ final class MI_Registration_Service {
 			$local = DateTimeImmutable::createFromFormat( 'Y-m-d\TH:i', $deadline, wp_timezone() );
 			return $local ? $local->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' ) : null;
 		}
-		// Compatibilità con eventi salvati prima della versione 3.4.9.
+		// Se manca una scadenza esplicita, usa il tempo di prenotazione configurato nell'evento.
 		$minutes = absint( $event['reservation_minutes'] ?? 0 );
 		if ( ! $minutes ) return null;
 		$base = DateTimeImmutable::createFromFormat( 'Y-m-d H:i:s', $now, new DateTimeZone( 'UTC' ) );
