@@ -42,9 +42,16 @@ function eliminaDatiEventoDaWordPress_(payload) {
       job.fileIndex++;
       props.setProperty(key,JSON.stringify(job));
     }
-    job.files.forEach(file=>props.deleteProperty('MI_DIRECT_VIEW_'+file));
+		job.files.forEach(file=>{
+			props.deleteProperty('MI_DIRECT_VIEW_'+file);
+			props.deleteProperty('MI_READ_ONLY_'+file);
+			props.deleteProperty('MI_MONEY_FORMAT_'+file);
+			props.deleteProperty('MI_DIRECT_MANAGEMENT_'+file);
+		});
+		props.deleteProperty('MI_DIRECT_GENERATION_'+id);
     props.deleteProperty('MI_DIRECT_SHEET_'+id);
     job.complete=true; props.setProperty(key,JSON.stringify(job));
     return {ok:true,complete:true,removed:0,sheet_url:sheetUrl};
   } finally {lock.releaseLock();}
 }
+
