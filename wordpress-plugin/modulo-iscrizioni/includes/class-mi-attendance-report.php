@@ -1,7 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-/** Annual attendance: personal mobile numbers identify repeated registrations. */
+/** Il rapporto annuale usa i numeri di cellulare personali per individuare iscrizioni ripetute. */
 final class MI_Attendance_Report {
 	public static function group_period( $group_id ) {
 		return self::period( wp_date( 'Y' ), (string) get_post_meta( $group_id, '_mi_attendance_from_month', true ), (string) get_post_meta( $group_id, '_mi_attendance_to_month', true ) );

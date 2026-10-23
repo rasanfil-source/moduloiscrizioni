@@ -36,9 +36,23 @@ final class MI_Spedizione_Email {
 		$email = sanitize_email( get_option( 'mi_email_segreteria_eventi', '' ) );
 		return is_email( $email ) ? $email : MI_Modello_Email::EMAIL_SEGRETERIA;
 	}
-	public static function destinatari_avvisi_evento( $event_id ) {
+	private static function gestore_assegnato_evento( $event_id ) {
+		$user_id = absint( get_post_meta( $event_id, '_mi_manager_user_id', true ) );
+		$user = $user_id ? get_user_by( 'id', $user_id ) : false;
+		$manager_roles = array( 'mi_group_manager', 'mi_assigned_event_manager' );
+		if ( ! $user instanceof WP_User || ! is_email( $user->user_email ) || ! array_intersect( $manager_roles, (array) $user->roles ) ) return null;
+		if ( class_exists( 'MI_Access' ) && ( MI_Access::is_suspended( $user_id ) || ! MI_Access::can_access_event( $event_id, $user_id ) ) ) return null;
+		return $user;
+	}
+	public static function destinatari_avvisi_evento( $event_id, ?WP_User $gestore = null ) {
+		if ( ! $gestore ) $gestore = self::gestore_assegnato_evento( $event_id );
+		$emails = array( self::destinatario_segreteria(), self::destinatario_evento( $event_id ) );
+		if ( $gestore instanceof WP_User ) $emails[] = $gestore->user_email;
 		$recipients = array();
-		foreach ( array( self::destinatario_segreteria(), self::destinatario_evento( $event_id ) ) as $email ) $recipients[strtolower( $email )] = $email;
+		foreach ( $emails as $email ) {
+			$email = sanitize_email( $email );
+			if ( is_email( $email ) ) $recipients[strtolower( $email )] = $email;
+		}
 		return array_values( $recipients );
 	}
 	public static function rileva_pubblicazione( $new, $old, $post ) {
@@ -184,11 +198,11 @@ final class MI_Spedizione_Email {
 		return array( 'ok' => true, 'count' => $inserted ? 1 : 0, 'mode' => 'TEST_PENDING' === $status ? 'PROVA' : ( 'PENDING' === $status ? 'OPERATIVO' : 'ANTEPRIMA' ) );
 	}
 
-	/** Conferma di attivazione alla segreteria e al recapito del gruppo, senza duplicati. */
+	/** Conferma di attivazione a segreteria, gruppo e operatore assegnato, senza duplicati. */
 	public static function accoda_notifiche_attivazione_evento( $event_id, ?WP_User $gestore, $sheet_url, $email_segreteria ) {
 		$email_segreteria = self::destinatario_segreteria();
 		if ( ! is_email( $email_segreteria ) ) return new WP_Error( 'mi_notifica_segreteria_non_valida', 'L’indirizzo email della parrocchia non è valido.' );
-		$destinatari = self::destinatari_avvisi_evento( $event_id );
+		$destinatari = self::destinatari_avvisi_evento( $event_id, $gestore );
 		$conteggio = 0;
 		$modalita = 'ANTEPRIMA';
 		foreach ( $destinatari as $destinatario ) {
@@ -308,7 +322,7 @@ final class MI_Spedizione_Email {
 		$messaggi = array(
 			'salvato' => array( 'success', 'Impostazioni salvate.' ),
 			'prova_ok' => array( 'success', 'Email sintetica di prova inviata. La modalità operativa può ora essere selezionata.' ),
-			'prova_ko' => array( 'error', $dettaglio_prova ? 'Invio di prova non riuscito: ' . $dettaglio_prova : 'Invio di prova non riuscito tramite MODULI.' ),
+			'prova_ko' => array( 'error', $dettaglio_prova ? 'Invio di prova non riuscito: ' . $dettaglio_prova : 'Invio di prova non riuscito tramite Apps Script.' ),
 			'indirizzo' => array( 'error', 'Inserisci un indirizzo di prova valido.' ),
 			'prova_richiesta' => array( 'error', 'La modalità operativa richiede prima un invio di prova riuscito verso l’indirizzo attuale.' ),
 		);
@@ -370,7 +384,7 @@ final class MI_Spedizione_Email {
 		$corpo = MI_Modello_Email::componi_html( $istantanea );
 		self::$corpo_testo = MI_Modello_Email::componi_testo( $istantanea );
 		add_action( 'phpmailer_init', array( __CLASS__, 'incorpora_codice' ) );
-		// La prova usa esclusivamente il canale firmato del progetto MODULI.
+		// La prova usa esclusivamente il canale firmato verso Apps Script.
 		// La posta generale di WordPress e degli altri plugin resta invariata.
 		$risposta_workspace = MI_Workspace_Client::request( 'INVIA_EMAIL_PROVA', array( 'destinatario' => $destinatario, 'oggetto' => $oggetto, 'html' => $corpo, 'testo' => self::$corpo_testo ) );
 		$inviata = ! is_wp_error( $risposta_workspace ) && ! empty( $risposta_workspace['ok'] );
@@ -464,7 +478,7 @@ final class MI_Spedizione_Email {
 			}
 			$payload = json_decode( (string) $riga['payload_json'], true );
 			$istantanea = is_array( $payload ) && isset( $payload['email_preview'] ) && is_array( $payload['email_preview'] ) ? $payload['email_preview'] : array();
-			// Anche le istantanee storiche già accodate non devono mostrare il codice interno.
+			// Le istantanee in coda non devono mostrare il codice interno.
 			if ( isset( $istantanea['html'] ) ) $istantanea['html'] = (string) preg_replace( '#(?:<br\s*/?>)?\s*<strong>Codice(?: iscrizione)?:</strong>\s*[^<]*(?=<br\s*/?>|</p>)#iu', '', $istantanea['html'] );
 			if ( isset( $istantanea['testo'] ) ) $istantanea['testo'] = (string) preg_replace( '/^Codice(?: iscrizione)?:[^\r\n]*(?:\r?\n)?/imu', '', $istantanea['testo'] );
 			$istantanea['identificativo'] = array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' );
@@ -538,7 +552,7 @@ final class MI_Spedizione_Email {
 		self::$corpo_testo = MI_Modello_Email::componi_testo( $istantanea );
 		$mittente = trim( (string) ( $identita['indirizzo_mittente'] ?? MI_Modello_Email::EMAIL_SEGRETERIA ) );
 		if ( ! is_email( $mittente ) ) return new WP_Error( 'mi_email_sender_invalid', 'Email non inviata: indirizzo mittente del gruppo non valido.' );
-		// Una distribuzione precedente deve rifiutare il nuovo invio, non ignorare il mittente.
+		// Apps Script verifica l'azione con mittente esplicito prima di avviare l'invio.
 		$azione = strtolower( $mittente ) === strtolower( MI_Modello_Email::EMAIL_SEGRETERIA ) ? 'INVIA_EMAIL_CONFERMA' : 'INVIA_EMAIL_CONFERMA_MITTENTE';
 		$inviata = MI_Workspace_Client::request( $azione, array(
 			'indirizzo_mittente' => sanitize_email( $mittente ),

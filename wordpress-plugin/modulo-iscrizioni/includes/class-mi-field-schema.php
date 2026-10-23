@@ -131,12 +131,14 @@ final class MI_Field_Schema {
 		if ( 'AUTOMATICO' !== $stored ) return $stored;
 		$fields = array_map( 'sanitize_key', (array) get_post_meta( $event_id, '_mi_participant_fields', true ) );
 		$document_fields = array( 'birth_date', 'document_type', 'document_number', 'document_issue_date', 'document_expiry_date', 'document_expiry', 'document_country', 'nationality' );
-		if ( array_intersect( $fields, $document_fields ) || '1' === get_post_meta( $event_id, '_mi_overnight_enabled', true ) ) return 'VIAGGIO_COMPLESSO';
-		$pricing = strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) );
 		$options = get_post_meta( $event_id, '_mi_options', true );
 		$options = is_array( $options ) ? $options : array();
-		if ( 'NONE' === $pricing || $options ) return 'SERVIZI_MULTIPLI';
-		if ( 'FIXED' === $pricing ) return 'QUOTA_UNICA';
+		$has_room_option = (bool) array_filter( $options, static function ( $option ) { return 0 === strpos( (string) ( $option['code'] ?? '' ), 'alloggio-' ); } );
+		if ( array_intersect( $fields, $document_fields ) || '1' === get_post_meta( $event_id, '_mi_overnight_enabled', true ) || $has_room_option ) return 'VIAGGIO_COMPLESSO';
+		$pricing = strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) );
+		$has_transport = '1' === get_post_meta( $event_id, '_mi_bus_assignment_enabled', true );
+		if ( $options || $has_transport ) return 'SERVIZI_MULTIPLI';
+		if ( in_array( $pricing, array( 'FIXED', 'CALCULATED' ), true ) ) return 'QUOTA_UNICA';
 		return 'MINIMO';
 	}
 

@@ -1,10 +1,10 @@
 
 
-<!-- ═══════════════════════════════════════════ HTML ═══════════════════════════════════════════ -->
+<!-- ═════════════════════════════════ STRUTTURA DELLA PAGINA ════════════════════════════════ -->
 <div class="page">
   <header class="balance-header"><span class="balance-eyebrow">Segreteria parrocchiale S. Eugenio</span><h1>Servizi e saldo</h1><p><?php echo esc_html( $config['eventTitle'] ); ?></p></header>
 
-  <!-- Stepper 3 passi -->
+  <!-- Indicatore dei tre passaggi -->
   <nav id="stepper" class="stepper" aria-label="Stato procedura">
     <div class="step is-active" data-step="1">
       <div class="step-dot" aria-hidden="true">1</div>
@@ -48,10 +48,10 @@
       </div>
     </div>
 
-    <!-- COLONNA DESTRA (sidebar) -->
+    <!-- COLONNA DESTRA -->
     <aside>
 
-      <!-- Shortcut calcola desktop -->
+      <!-- Scorciatoia di calcolo per schermi ampi -->
       <div id="desktopCalcShortcut">
         <button class="primary" id="calcBtnDesktop" type="button">Conferma le tue scelte</button>
         <div id="resetLink" style="display:none; text-align:center; margin-top:8px; font-size:.8rem; color:#a0aec0;">
@@ -69,7 +69,7 @@
 
       <div id="summaryBox" aria-live="polite">Inserisci cognome per iniziare</div>
 
-      <!-- Breakdown costi: disponibile su richiesta e chiuso inizialmente. -->
+      <!-- Dettaglio dei costi, disponibile su richiesta e inizialmente chiuso. -->
       <details id="breakdownBox">
         <summary>Dettaglio dei costi</summary>
         <div class="breakdown-content">
@@ -88,7 +88,7 @@
         <span id="saldoDaVersare">€ —</span>
       </div>
 
-      <!-- Email per il riepilogo — visibile appena caricata una prenotazione -->
+      <!-- Indirizzo email per il riepilogo, visibile dopo il caricamento della prenotazione -->
       <div id="emailSection" style="display:none; margin-top:14px;">
         <label for="emailInput">La tua email</label>
         <input type="email" id="emailInput" placeholder="email@example.invalid"
@@ -98,10 +98,10 @@
         </div>
       </div>
 
-      <!-- Status globale -->
+      <!-- Stato generale -->
       <div id="globalStatus" class="status" role="status" aria-live="polite" aria-atomic="true"></div>
 
-      <!-- Azioni post-conferma: Paga con carta -->
+      <!-- Azioni dopo la conferma: pagamento con carta -->
       <div id="actionSection" style="display:none; margin-top:12px;">
         <button class="secondary" id="payBtn" type="button" disabled
           style="background:#e67e22; border-color:#e67e22; margin-top:0;">
@@ -113,7 +113,7 @@
   </div>
 </div>
 
-<!-- ═══════════════════ TEMPLATE CARD PERSONA ═══════════════════ -->
+<!-- ═══════════════════ SCHEDA DELLA PERSONA ═══════════════════ -->
 <template id="personCardTemplate">
   <div class="person-card" data-person-index="">
 
@@ -166,24 +166,24 @@
       </div>
     </form>
 
-    <!-- Status singola card -->
+    <!-- Stato della singola scheda -->
     <div class="status person-status" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <!-- Sezione dati caricati -->
+    <!-- Sezione dei dati caricati -->
     <div class="loaded-data-section">
 
       <div class="section-label">Dati prenotazione</div>
 
-      <!-- Box opzioni non modificabili -->
+      <!-- Riquadro delle opzioni non modificabili -->
       <div class="promemoria-bozza"></div>
       <div class="transfer-heading"><div class="section-label" style="margin-top:20px;font-size:1rem;font-weight:600;color:#2d3748;text-transform:none;">🚌 Vuoi aggiungere un trasferimento?</div>
       <div style="font-size:.85rem;color:#718096;margin-bottom:14px;">Seleziona solo i transfer che vuoi aggiungere. Il costo sarà incluso nel saldo.</div></div>
       <div class="transfer-grid"></div>
-    </div><!-- /loaded-data-section -->
-  </div><!-- /person-card -->
+    </div>
+  </div>
 </template>
 
-<!-- ═══════════════════ POPUP: PAGAMENTO CARTA ═══════════════════ -->
+<!-- ═══════════════════ FINESTRA DI PAGAMENTO CON CARTA ═══════════════════ -->
 <div class="popup-overlay" id="payPopup"
      role="dialog" aria-modal="true" aria-labelledby="popupTitle" tabindex="-1">
   <div class="popup-box" role="document">
@@ -211,7 +211,7 @@
   </div>
 </div>
 
-<!-- ═══════════════════ POPUP: CONFERMA CUSTOM ═══════════════════ -->
+<!-- ═══════════════════ FINESTRA DI CONFERMA PERSONALIZZATA ═══════════════════ -->
 <div class="popup-overlay" id="confirmModal"
      role="dialog" aria-modal="true" aria-labelledby="confirmTitle" tabindex="-1">
   <div class="popup-box" role="document" style="max-width:450px;">
@@ -226,7 +226,7 @@
   </div>
 </div>
 
-<!-- ═══════════════════ POPUP: CONFERMA EMAIL / IBAN ═══════════════════ -->
+<!-- ═══════════════════ FINESTRA DI CONFERMA VIA EMAIL O IBAN ═══════════════════ -->
 <div class="popup-overlay" id="ibanPopup"
      role="dialog" aria-modal="true" aria-labelledby="ibanTitle" tabindex="-1">
   <div class="popup-box" role="document">
@@ -264,4 +264,4 @@
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════ JS ════════════════════════════════════════════ -->
+<!-- ═════════════════════════════════════════ JAVASCRIPT ═══════════════════════════════════════ -->

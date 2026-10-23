@@ -1,6 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/class-mi-option-rules.php';
+require_once __DIR__ . '/class-mi-amount.php';
 
 final class MI_Extra_Services {
 	public static function parse( $input ) {
@@ -10,9 +11,9 @@ final class MI_Extra_Services {
 		foreach ( $labels as $i => $label ) {
 			$label = sanitize_text_field( $label );
 			if ( ! $label || mb_strlen( $label ) > 120 ) return new WP_Error( 'mi_extra_label', 'Indica un’etichetta per ogni voce aggiuntiva (massimo 120 caratteri).' );
-			$price = trim( (string) ( $input['extra_service_price'][$i] ?? '' ) );
-			if ( ! preg_match( '/^([0-9]{1,7})(?:[.,]([0-9]{1,2}))?$/', $price, $m ) ) return new WP_Error( 'mi_extra_price', 'Indica una quota valida per ' . $label . '.' );
-			$cents = (int) $m[1] * 100 + (int) str_pad( $m[2] ?? '', 2, '0' );
+			$price = MI_Amount::cents( $input['extra_service_price'][$i] ?? '' );
+			if ( null === $price ) return new WP_Error( 'mi_extra_price', 'Indica una quota valida per ' . $label . '.' );
+			$cents = $price;
 			$code = sanitize_key( $input['extra_service_code'][$i] ?? '' );
 			if ( ! preg_match( '/^extra-[a-z0-9-]{1,50}$/', $code ) ) $code = 'extra-' . str_replace( '-', '', wp_generate_uuid4() );
 			if ( isset( $seen[$code] ) ) return new WP_Error( 'mi_extra_duplicate', 'Voce aggiuntiva duplicata.' );

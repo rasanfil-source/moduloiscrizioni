@@ -5,12 +5,12 @@ require_once __DIR__ . '/class-mi-amount.php';
 
 final class MI_Event_Post_Type {
 	const EVENT_TYPE = 'mi_event';
-	// Il tipo tecnico storico resta invariato per non perdere gli eventi esistenti.
+	// Identificativo del tipo evento usato nelle query e nelle associazioni WordPress.
 	const ACTIVITY_TYPE = 'mi_activity';
 	const GROUP_TYPE = 'mi_activity';
 
 	private static function price_cents( $raw ) {
-		return MI_Amount::cents( $raw ) ?? 0;
+		return MI_Amount::cents( $raw );
 	}
 
 	public static function boot() {
@@ -291,6 +291,25 @@ final class MI_Event_Post_Type {
 			return;
 		}
 		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) || ! current_user_can( 'edit_post', $post_id ) ) {
+			return;
+		}
+		$requested_pricing_mode = strtoupper( sanitize_key( wp_unslash( $_POST['mi_pricing_mode'] ?? 'NONE' ) ) );
+		$requested_economic_mode = strtoupper( sanitize_key( wp_unslash( $_POST['mi_economic_mode'] ?? 'REGISTRATION_ONLY' ) ) );
+		$requested_deposit_mode = 'FIXED' === strtoupper( sanitize_key( wp_unslash( $_POST['mi_deposit_mode'] ?? 'PERCENTAGE' ) ) ) ? 'FIXED' : 'PERCENTAGE';
+		$invalid_amount = false;
+		if ( 'FIXED' === $requested_pricing_mode ) {
+			$fixed_amount = MI_Amount::cents( wp_unslash( $_POST['mi_fixed_price'] ?? '' ) );
+			if ( null === $fixed_amount || $fixed_amount < 1 ) $invalid_amount = true;
+		}
+		if ( 'DEPOSIT_BALANCE' === $requested_economic_mode && 'FIXED' === $requested_deposit_mode ) {
+			$deposit_amount = MI_Amount::cents( wp_unslash( $_POST['mi_deposit_fixed'] ?? '' ) );
+			if ( null === $deposit_amount || $deposit_amount < 1 ) $invalid_amount = true;
+		}
+		foreach ( array( 'mi_ticket_price', 'mi_option_price' ) as $price_field ) foreach ( (array) wp_unslash( $_POST[ $price_field ] ?? array() ) as $raw_amount ) {
+			if ( null === MI_Amount::cents( $raw_amount ) ) $invalid_amount = true;
+		}
+		if ( $invalid_amount ) {
+			set_transient( 'mi_publication_error_' . get_current_user_id(), 'Prezzi non salvati: inserisci importi validi, usando al massimo due cifre decimali. La configurazione dei prezzi precedente è stata conservata.', MINUTE_IN_SECONDS );
 			return;
 		}
 

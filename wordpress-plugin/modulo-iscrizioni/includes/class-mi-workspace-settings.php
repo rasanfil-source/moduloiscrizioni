@@ -40,8 +40,8 @@ final class MI_Workspace_Settings {
 			<?php if ( 'salvato' === $notice ) : ?><div class="notice notice-success"><p>Configurazione salvata.</p></div><?php endif; ?>
 			<?php if ( 'ping_ok' === $notice ) : ?><div class="notice notice-success"><p>Collegamento firmato verificato. Workspace è in modalità ANTEPRIMA.</p></div><?php endif; ?>
 			<?php if ( 'ping_errore' === $notice ) : ?><div class="notice notice-error"><p>Collegamento non riuscito. Codice diagnostico: <code><?php echo esc_html( $error_code ?: 'non_disponibile' ); ?></code>.</p></div><?php endif; ?>
-			<?php if ( 'schema_ok' === $notice ) : ?><div class="notice notice-success"><p>Deployment Apps Script autonomo verificato: proiezione diretta disponibile senza accesso a DB_MODULI.</p></div><?php endif; ?>
-			<?php if ( 'schema_errore' === $notice ) : ?><div class="notice notice-error"><p>Il deployment non conferma il progetto autonomo e il prelievo firmato delle proiezioni. Verifica la nuova Web App prima di scollegare DB_MODULI.</p></div><?php endif; ?>
+			<?php if ( 'schema_ok' === $notice ) : ?><div class="notice notice-success"><p>Progetto Apps Script autonomo verificato: proiezione diretta disponibile.</p></div><?php endif; ?>
+			<?php if ( 'schema_errore' === $notice ) : ?><div class="notice notice-error"><p>La distribuzione non conferma il progetto Apps Script autonomo e il prelievo firmato delle proiezioni. Verifica l’URL e lo stato della configurazione.</p></div><?php endif; ?>
 			<p>Il segreto salvato non viene mai mostrato. Inseriscilo nuovamente soltanto per sostituirlo.</p>
 			<p><strong>URL per la procedura guidata Sheets:</strong><br><code><?php echo esc_html( rest_url( MI_REST_Controller::NAMESPACE . '/workspace/commands' ) ); ?></code></p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
@@ -50,7 +50,7 @@ final class MI_Workspace_Settings {
 				<table class="form-table"><tbody>
 				<tr><th scope="row"><label for="mi_workspace_webapp_url">URL Web App</label></th><td><input class="regular-text code" type="url" id="mi_workspace_webapp_url" name="mi_workspace_webapp_url" value="<?php echo esc_attr( $url ); ?>" required autocomplete="off"></td></tr>
 				<tr><th scope="row"><label for="mi_workspace_shared_secret">Nuovo segreto condiviso</label></th><td><input class="regular-text" type="password" id="mi_workspace_shared_secret" name="mi_workspace_shared_secret" value="" minlength="32" autocomplete="new-password"><p class="description"><?php echo $configured ? 'Un segreto è già configurato.' : 'Configura un segreto casuale di almeno 32 caratteri.'; ?></p></td></tr>
-				<tr><th scope="row"><label for="mi_email_segreteria_eventi">Email segreteria eventi</label></th><td><input class="regular-text" type="email" id="mi_email_segreteria_eventi" name="mi_email_segreteria_eventi" value="<?php echo esc_attr( get_option( 'mi_email_segreteria_eventi', get_option( 'admin_email', '' ) ) ); ?>"><p class="description">Riceve sempre la comunicazione di attivazione dell’evento. Se è assegnato un operatore, la riceve anche lui. Non modifica il mittente del sito né i permessi Google.</p></td></tr>
+				<tr><th scope="row"><label for="mi_email_segreteria_eventi">Email segreteria eventi</label></th><td><input class="regular-text" type="email" id="mi_email_segreteria_eventi" name="mi_email_segreteria_eventi" value="<?php echo esc_attr( get_option( 'mi_email_segreteria_eventi', get_option( 'admin_email', '' ) ) ); ?>"><p class="description">Riceve sempre gli avvisi interni di pubblicazione, annullamento ed eliminazione dell’evento. Li ricevono anche il contatto del gruppo e l’operatore assegnato, se presente; gli indirizzi coincidenti ricevono una sola email. Non modifica il mittente del sito né i permessi Google.</p></td></tr>
 				</tbody></table>
 				<?php submit_button( 'Salva configurazione' ); ?>
 			</form>

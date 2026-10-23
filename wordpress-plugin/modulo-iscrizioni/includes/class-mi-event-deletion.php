@@ -115,8 +115,10 @@ final class MI_Event_Deletion {
 		$counts['Comunicazioni dell’evento'] = count( $event_emails );
 		$data = array( 'title' => $post->post_title, 'status' => $post->post_status, 'counts' => $counts, 'sheet_url' => (string) get_post_meta( $id, '_mi_operational_sheet_url', true ), 'sheet_id' => (string) get_post_meta( $id, '_mi_operational_sheet_id', true ), 'page_id' => absint( get_post_meta( $id, '_mi_registration_page_id', true ) ) );
 		// Includi tutte le righe modificabili, oltre ai conteggi, per rendere visibili le variazioni da verificare.
+		$event_meta = get_post_meta( $id );
+		foreach ( array_keys( $event_meta ) as $meta_key ) if ( 0 !== strpos( $meta_key, '_mi_' ) || preg_match( '/^_mi_(projection_|sheet_|operational_sheet_)/', $meta_key ) ) unset( $event_meta[ $meta_key ] );
 		$hash = hash_init( 'sha256' );
-		hash_update( $hash, wp_json_encode( array( $data, get_post_meta( $id ), $post->post_modified_gmt ) ) );
+		hash_update( $hash, wp_json_encode( array( $data, $event_meta, $post->post_modified_gmt ) ) );
 		foreach ( array_merge( array( 'mi_registrations' ), self::DIRECT ) as $table ) {
 			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}{$table} WHERE event_id=%d", $id ), ARRAY_A );
 			if ( $wpdb->last_error ) throw new RuntimeException( 'Riepilogo non disponibile.' );
