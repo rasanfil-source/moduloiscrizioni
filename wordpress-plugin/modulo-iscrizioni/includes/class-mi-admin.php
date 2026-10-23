@@ -404,7 +404,9 @@ final class MI_Admin {
 		<ul class="subsubsub" aria-label="Riepilogo repliche Workspace"><li><strong><?php echo esc_html( 'Sincronizzate: ' . $workspace_counts['SYNCED'] ); ?></strong> | </li><li><strong><?php echo esc_html( 'In attesa: ' . $workspace_counts['PENDING'] ); ?></strong></li></ul><div class="clear"></div>
 		<?php if ( isset( $_GET['mi_workspace_retry'] ) ) : ?>
 		<?php $retry_result = sanitize_key( wp_unslash( $_GET['mi_workspace_retry'] ) ); ?>
-		<div class="notice <?php echo 'pending' === $retry_result ? 'notice-warning' : 'notice-success'; ?>"><p><?php echo esc_html( 'synced' === $retry_result ? 'Replica Workspace sincronizzata.' : ( 'pending' === $retry_result ? 'Il tentativo immediato non ha completato la replica. Consulta i dettagli tecnici della prenotazione.' : 'Replica Workspace riaccodata. Il registro locale resta autorevole durante il nuovo tentativo.' ) ); ?></p></div>
+		<?php $retry_messages = array( 'synced' => 'Replica Workspace sincronizzata.', 'started' => 'Richiesta di aggiornamento avviata. La proiezione aggregata dell’evento viene elaborata in background; il registro locale resta autorevole fino alla conferma.', 'queued' => 'Replica Workspace riaccodata. Il registro locale resta autorevole durante il nuovo tentativo.', 'pending' => 'Non è stato possibile avviare la replica Workspace. Consulta i dettagli tecnici della prenotazione.' ); ?>
+		<?php $retry_class = in_array( $retry_result, array( 'started', 'queued' ), true ) ? 'notice-info' : ( 'pending' === $retry_result ? 'notice-warning' : 'notice-success' ); ?>
+		<div class="notice <?php echo esc_attr( $retry_class ); ?>"><p><?php echo esc_html( $retry_messages[ $retry_result ] ?? $retry_messages['pending'] ); ?></p></div>
 		<?php endif; ?>
 		<form method="get" class="mi-admin-filters">
 		<input type="hidden" name="post_type" value="<?php echo esc_attr( MI_Event_Post_Type::EVENT_TYPE ); ?>">
@@ -487,7 +489,7 @@ final class MI_Admin {
 		<input type="hidden" name="registration_id" value="<?php echo esc_attr( $detail_id ); ?>">
 		<?php wp_nonce_field( 'mi_retry_workspace_' . $detail_id ); ?>
 		<button class="button button-secondary">Riaccoda replica Workspace</button>
-		<button class="button button-secondary" name="sync_now" value="1">Sincronizza ora questa prenotazione</button>
+		<button class="button button-secondary" name="sync_now" value="1">Avvia aggiornamento Workspace</button>
 		</form>
 		<?php endif; ?>
 		<details class="mi-admin-details"><summary>Storico stato</summary><div class="mi-responsive-table">
@@ -530,12 +532,13 @@ final class MI_Admin {
 		$result = $immediata
 			? MI_Registration_Service::sincronizza_iscrizione_workspace( $registration_id )
 			: MI_Registration_Service::accoda_iscrizione_workspace( $registration_id );
+		$retry_status = 'SYNCED' === $result ? 'synced' : ( 'PENDING' === $result ? ( $immediata ? 'started' : 'queued' ) : 'pending' );
 		$url = add_query_arg(
 			array(
 				'post_type'          => MI_Event_Post_Type::EVENT_TYPE,
 				'page'               => 'mi-registrations',
 				'registration_id'    => $registration_id,
-				'mi_workspace_retry' => 'SYNCED' === $result ? 'synced' : ( $immediata ? 'pending' : 'queued' ),
+				'mi_workspace_retry' => $retry_status,
 			),
 			admin_url( 'edit.php' )
 		);
@@ -904,6 +907,10 @@ final class MI_Admin {
 		$prices = isset( $_POST['mi_ticket_price'] ) ? array_map( array( __CLASS__, 'parse_importo_centesimi' ), (array) wp_unslash( $_POST['mi_ticket_price'] ) ) : array();
 		$option_prices = isset( $_POST['mi_option_price'] ) ? array_map( array( __CLASS__, 'parse_importo_centesimi' ), (array) wp_unslash( $_POST['mi_option_price'] ) ) : array();
 		$all_prices = array_merge( $prices, $option_prices );
+		$valid_posted_amounts = true;
+		foreach ( array( 'mi_ticket_price', 'mi_option_price' ) as $price_field ) foreach ( (array) wp_unslash( $_POST[ $price_field ] ?? array() ) as $raw_amount ) {
+			if ( null === MI_Amount::cents( $raw_amount ) ) $valid_posted_amounts = false;
+		}
 		$payment_methods = isset( $_POST['mi_payment_methods'] ) ? (array) wp_unslash( $_POST['mi_payment_methods'] ) : array();
 		$privacy_version = (string) ( get_post_meta( $post_id, '_mi_privacy_policy_version', true ) ?: wp_date( 'Y-m' ) );
 		$privacy_consent_id = (string) ( get_post_meta( $post_id, '_mi_privacy_consent_id', true ) ?: 'privacy-' . $post_id );
@@ -917,11 +924,13 @@ final class MI_Admin {
 		$fixed_price_valid = $uses_price && 'FIXED' === $pricing_mode && null !== $fixed_price_cents && $fixed_price_cents > 0;
 		$valid_economic = ( $registration_only_price || $calculated_price || $fixed_price_valid ) && ( ! $collects_payment || ! empty( $payment_methods ) );
 		$valid_economic = $valid_economic && self::valid_deposit_configuration( $economic_mode, strtoupper( (string) ( $_POST['mi_deposit_mode'] ?? 'PERCENTAGE' ) ), self::parse_importo_centesimi( wp_unslash( $_POST['mi_deposit_fixed'] ?? '' ) ), (int) ( $_POST['mi_deposit_percentage'] ?? 0 ), $pricing_mode, $fixed_price_cents );
-		if ( ! $activity_id || MI_Event_Post_Type::ACTIVITY_TYPE !== get_post_type( $activity_id ) || ! $activity_stable || ! $valid_dates || ! $has_ticket || ! $valid_economic || ! $privacy_valid || ! $marketing_valid ) {
+		if ( ! $activity_id || MI_Event_Post_Type::ACTIVITY_TYPE !== get_post_type( $activity_id ) || ! $activity_stable || ! $valid_dates || ! $has_ticket || ! $valid_economic || ! $valid_posted_amounts || ! $privacy_valid || ! $marketing_valid ) {
 			$data['post_status'] = 'draft';
 			$message = 'Evento mantenuto in bozza: completa gruppo, date e tipologie.';
 			if ( ! $activity_stable ) {
 				$message = 'Evento mantenuto in bozza: il gruppo non può cambiare dopo la prima iscrizione senza una migrazione amministrativa esplicita.';
+			} elseif ( ! $valid_posted_amounts ) {
+				$message = 'Evento mantenuto in bozza: correggi i prezzi vuoti o non validi prima di pubblicare.';
 			} elseif ( ! $valid_economic ) {
 				$message = 'Evento mantenuto in bozza: “Gratuito” richiede “Nessun pagamento previsto”; le altre modalità richiedono una quota positiva e, quando previsto, almeno una fonte di pagamento.';
 			} elseif ( ! $privacy_valid ) {

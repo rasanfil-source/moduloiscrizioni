@@ -18,8 +18,8 @@ final class MI_Workspace_Client {
 	}
 
 	public static function request( $action, array $payload, $attempt = 0 ) {
-		// La replica torna subito alla coda; la pubblicazione interattiva concede
-		// tre secondi a una replica già in chiusura, evitando falsi "occupato".
+		// La replica torna subito alla coda; la pubblicazione interattiva attende
+		// tre secondi per consentire la chiusura della replica in corso.
 		if ( 'PROIETTA_EVENTO' !== strtoupper( $action ) ) return self::request_unlocked( $action, $payload, $attempt );
 		global $wpdb;
 		$event_id = absint( $payload['event_id'] ?? 0 );
@@ -57,12 +57,10 @@ final class MI_Workspace_Client {
 			),
 			JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
 		);
-		// La prima preparazione del foglio può richiedere più tempo delle normali repliche.
-		// L'operazione remota è idempotente e un nuovo tentativo non duplica il foglio.
-		// La preparazione del foglio comprende formattazione, convalide e schede
-		// economiche. Le esecuzioni reali possono superare i tre minuti; interrompere
-		// a 30 secondi produce un falso "non raggiungibile" mentre Google continua.
-		// La replica gira nella coda: la formattazione Google può superare un minuto.
+		// La prima preparazione comprende formattazione, convalide e schede economiche.
+		// Queste operazioni Google possono durare diversi minuti; la richiesta usa un
+		// timeout esteso e la replica prosegue nella coda. Un nuovo tentativo riusa
+		// lo stesso foglio grazie all'idempotenza dell'operazione remota.
 		$timeout = 'PROIETTA_EVENTO' === $action ? 240 : ( 'ELIMINA_DATI_EVENTO' === $action ? 110 : ( 'LEGGI_MODIFICHE_FOGLIO' === $action ? 45 : ( 'INVIA_EMAIL_PROVA' === $action ? 30 : 15 ) ) );
 		if ( 'CONFERMA_MODIFICHE_FOGLIO' === $action ) $timeout = 180;
 		if ( in_array( $action, array( 'INVIA_EMAIL_PROVA', 'INVIA_EMAIL_CONFERMA', 'INVIA_EMAIL_CONFERMA_MITTENTE' ), true ) ) $timeout = 60;
@@ -83,24 +81,24 @@ final class MI_Workspace_Client {
 			return new WP_Error( 'mi_workspace_unreachable', 'Workspace non raggiungibile.' );
 		}
 		$http_status = (int) wp_remote_retrieve_response_code( $response );
-		if ( in_array( $http_status, array( 301, 302, 303, 307, 308 ), true ) ) {
-			$location = (string) wp_remote_retrieve_header( $response, 'location' );
-			$host = strtolower( (string) wp_parse_url( $location, PHP_URL_HOST ) );
-			$scheme = strtolower( (string) wp_parse_url( $location, PHP_URL_SCHEME ) );
-			$host_google = 'script.googleusercontent.com' === $host || '.googleusercontent.com' === substr( $host, -22 );
-			if ( 'https' !== $scheme || ! $host_google ) {
+		$redirects = 0;
+		while ( in_array( $http_status, array( 301, 302, 303, 307, 308 ), true ) ) {
+			if ( $redirects >= 3 ) return new WP_Error( 'mi_workspace_redirect_invalid', 'Workspace ha superato il numero di reindirizzamenti consentiti.' );
+			$location = trim( (string) wp_remote_retrieve_header( $response, 'location' ) );
+			if ( ! self::is_googleusercontent_redirect( $location ) ) {
 				return new WP_Error( 'mi_workspace_redirect_invalid', 'Workspace ha restituito un reindirizzamento non valido.' );
 			}
-			$response = wp_remote_get( $location, array( 'timeout' => $timeout, 'redirection' => 3 ) );
+			$response = wp_remote_get( $location, array( 'timeout' => $timeout, 'redirection' => 0 ) );
 			if ( is_wp_error( $response ) ) {
 				return new WP_Error( 'mi_workspace_unreachable', 'Workspace non raggiungibile.' );
 			}
+			++$redirects;
 			$http_status = (int) wp_remote_retrieve_response_code( $response );
 		}
-		$decoded = json_decode( wp_remote_retrieve_body( $response ), true );
-		// ContentService può consegnare correttamente il JSON dopo un ponte Google
-		// con uno stato HTTP non canonico. Il contenuto applicativo firmato prevale:
-		// un esito positivo esplicito evita di dichiarare fallita un'email già inviata.
+		$body = wp_remote_retrieve_body( $response );
+		$decoded = json_decode( $body, true );
+		// Il contenuto applicativo firmato è autorevole anche quando il ponte Google
+		// restituisce un codice HTTP diverso da quello canonico per una risposta JSON.
 		if ( is_array( $decoded ) && ! empty( $decoded['ok'] ) ) {
 			return $decoded;
 		}
@@ -113,10 +111,13 @@ final class MI_Workspace_Client {
 		if ( 200 !== $http_status ) {
 			return new WP_Error( 'mi_workspace_http_' . $http_status, 'Workspace ha restituito una risposta HTTP inattesa (' . $http_status . ').' );
 		}
-		if ( ! is_array( $decoded ) || empty( $decoded['ok'] ) ) {
+		if ( ! is_array( $decoded ) ) {
+			return new WP_Error( 'mi_workspace_invalid_response', 'Apps Script ha restituito una pagina HTML o una risposta non JSON. Verifica l’indirizzo e la distribuzione della Web App.' );
+		}
+		if ( empty( $decoded['ok'] ) ) {
 			$remote_code = is_array( $decoded ) ? strtoupper( sanitize_key( (string) ( $decoded['error'] ?? '' ) ) ) : '';
 			$motivi = array(
-				'EMAIL_SENDER_NOT_AUTHORIZED' => 'distribuisci Apps Script con l’account info@parrocchiasanteugenio.it; nessun invio eseguito',
+				'EMAIL_SENDER_NOT_AUTHORIZED' => 'l’account Google che esegue Apps Script non è autorizzato a inviare; nessun invio eseguito',
 				'EMAIL_ALIAS_NOT_AUTHORIZED' => 'il mittente del gruppo non è tra gli indirizzi verificati in «Invia messaggio come» dell’account Google che esegue Apps Script; nessun invio eseguito',
 				'EMAIL_ALIAS_CHECK_FAILED' => 'impossibile verificare i mittenti Google: autorizza il nuovo accesso Gmail nel progetto Apps Script e aggiorna la distribuzione; nessun invio eseguito',
 				'INVALID_SENDER_EMAIL' => 'indirizzo mittente non valido; nessun invio eseguito',
@@ -128,7 +129,7 @@ final class MI_Workspace_Client {
 				'INVALID_DELETION' => 'i parametri della cancellazione non sono validi',
 				'SHARED_EVENT_SHEET' => 'il foglio risulta collegato anche a un altro evento',
 				'ACTION_NOT_ALLOWED' => 'la distribuzione Apps Script non riconosce ancora questa operazione',
-				'USE_STANDALONE_PROJECT' => 'la Web App è ancora collegata al progetto vincolato a DB_MODULI; collega il progetto Apps Script autonomo',
+				'USE_STANDALONE_PROJECT' => 'la Web App non usa il progetto Apps Script operativo MODULI AUTONOMO',
 				'INVALID_SIGNATURE'  => 'la firma condivisa non coincide',
 				'INVALID_PAYLOAD_HASH' => 'il contenuto ricevuto non coincide con quello firmato',
 				'STALE_REQUEST'      => 'la richiesta è arrivata fuori tempo',
@@ -138,8 +139,8 @@ final class MI_Workspace_Client {
 				'REPLAYED_NONCE'     => 'la richiesta risulta già utilizzata',
 				'REQUEST_FAILED'     => 'Apps Script ha incontrato un errore durante l’elaborazione',
 				'EMPTY_PAYLOAD'      => 'la richiesta è arrivata vuota',
-				'TEST_RECIPIENT_NOT_CONFIGURED' => 'il destinatario di prova non è configurato nel progetto MODULI',
-				'TEST_RECIPIENT_MISMATCH' => 'il destinatario non coincide con quello autorizzato nel progetto MODULI',
+				'TEST_RECIPIENT_NOT_CONFIGURED' => 'il destinatario di prova non è configurato nel progetto Apps Script operativo',
+				'TEST_RECIPIENT_MISMATCH' => 'il destinatario non coincide con quello autorizzato nelle impostazioni di prova',
 				'INVALID_EMAIL_PAYLOAD' => 'il contenuto dell’email di prova non è valido',
 			);
 			$detail = $motivi[ $remote_code ] ?? 'la richiesta non è stata accettata';
@@ -154,6 +155,15 @@ final class MI_Workspace_Client {
 
 	private static function webapp_url() {
 		return defined( 'MI_WORKSPACE_WEBAPP_URL' ) ? (string) MI_WORKSPACE_WEBAPP_URL : (string) get_option( 'mi_workspace_webapp_url', '' );
+	}
+
+	private static function is_googleusercontent_redirect( $url ) {
+		$parts = wp_parse_url( (string) $url );
+		if ( ! is_array( $parts ) || isset( $parts['user'] ) || isset( $parts['pass'] ) ) return false;
+		$scheme = strtolower( (string) ( $parts['scheme'] ?? '' ) );
+		$host = strtolower( rtrim( (string) ( $parts['host'] ?? '' ), '.' ) );
+		$port = isset( $parts['port'] ) ? (int) $parts['port'] : 443;
+		return 'https' === $scheme && 443 === $port && (bool) preg_match( '/(?:^|\.)googleusercontent\.com$/D', $host );
 	}
 
 	private static function shared_secret() {

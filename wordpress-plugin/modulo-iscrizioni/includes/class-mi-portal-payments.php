@@ -2,7 +2,7 @@
 defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/class-mi-booking-search.php';
 
-/** Interfaccia privata: WordPress autorizza, DB_MODULI convalida e registra. */
+/** Interfaccia privata: WordPress autorizza, MySQL convalida e registra i pagamenti. */
 final class MI_Portal_Payments {
 	public static function boot() {
 		add_action( 'wp_ajax_mi_portal_payment', array( __CLASS__, 'ajax' ) );

@@ -151,9 +151,9 @@ final class MI_Event_Activity_Migration {
 		}
 
 		$registrations_after = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$registrations_table} WHERE event_id = %d", $event_id ) );
-		if ( $registrations_after < $registrations_before ) {
+		if ( $wpdb->last_error || $registrations_after !== $registrations_before ) {
 			update_post_meta( $event_id, '_mi_activity_id', $current_activity_id );
-			return new WP_Error( 'mi_migration_registration_check_failed', 'Controllo iscrizioni non superato: l’associazione precedente è stata ripristinata.' );
+			return new WP_Error( 'mi_migration_registration_check_failed', 'Il conteggio delle iscrizioni non è rimasto invariato: l’associazione precedente è stata ripristinata.' );
 		}
 
 		update_post_meta( $event_id, '_mi_needs_republish', '1' );

@@ -68,6 +68,11 @@
 @media(max-width:700px){.mi-operators__heading{display:block}.mi-operators__heading p{text-align:left}.mi-operator-grid{grid-template-columns:1fr}.mi-operator-groups{grid-template-columns:1fr 1fr}}
 @media(max-width:440px){.mi-operator-groups{grid-template-columns:1fr}.mi-operator-card>summary{align-items:flex-start;flex-direction:column}}
 
+/* La nota facoltativa resta accanto all'etichetta e si accorcia nei campi stretti. */
+.mi-operator-grid label{container-type:inline-size}.mi-operator-grid .mi-operator-optional{white-space:nowrap}.mi-operator-grid .mi-operator-optional__short{display:none}
+@container (max-width:22rem){.mi-operator-grid .mi-operator-optional__full{display:none}.mi-operator-grid .mi-operator-optional__short{display:inline}}
+@media(max-width:360px){.mi-operator-grid .mi-operator-optional__full{display:none}.mi-operator-grid .mi-operator-optional__short{display:inline}}
+
 /* Gli eventi scaduti sono riconoscibili a colpo d’occhio nello storico. */
 .mi-event-card.is-expired .mi-event-card__status strong{display:inline-flex;align-self:flex-start;padding:.2rem .55rem;border-radius:999px;background:#fff0d6;color:#8a4b00}.mi-event-card.is-expired .mi-event-card__date{background:#645644}
 

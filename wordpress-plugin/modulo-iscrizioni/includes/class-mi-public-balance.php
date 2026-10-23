@@ -51,7 +51,7 @@ final class MI_Public_Balance {
 			if ( strlen( $raw ) > 65536 ) throw new InvalidArgumentException( 'Richiesta troppo grande.' );
 			$data = json_decode( $raw, true );
 			if ( ! is_array( $data ) || ! wp_verify_nonce( $data['nonce'] ?? '', 'mi_public_balance_' . $event ) ) throw new InvalidArgumentException( 'La pagina è scaduta. Ricaricala e riprova.' );
-			$key = 'mi_balance_rate_' . hash_hmac( 'sha256', (string) ( $_SERVER['REMOTE_ADDR'] ?? '' ), wp_salt( 'nonce' ) );
+			$key = 'mi_balance_rate_' . hash_hmac( 'sha256', MI_Registration_Service::client_ip(), wp_salt( 'nonce' ) );
 			$count = (int) get_transient( $key );
 			if ( $count > 120 ) throw new InvalidArgumentException( 'Troppe richieste ravvicinate. Attendi qualche minuto.' );
 			set_transient( $key, $count + 1, 5 * MINUTE_IN_SECONDS );

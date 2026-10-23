@@ -1,7 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-/** Quote individuali e attribuzioni: nessuna ripartizione implicita dei versamenti storici. */
+/** Quote individuali e attribuzioni: i versamenti aggregati restano distinti dalle quote personali. */
 final class MI_Payment_People {
 	/** Conserva le scadenze nelle modifiche logistiche e nelle posizioni economiche invariate. */
 	public static function payment_deadline_changes( array $registration, $covered, $economic_change ) {
@@ -75,7 +75,7 @@ final class MI_Payment_People {
 		foreach ( $remainders as $id => $remainder ) { if ( $assigned >= $target ) break; $deposits[$id]++; $assigned++; }
 		return $deposits;
 	}
-	/** Restituisce true o false quando è nota la copertura personale, null se sono disponibili solo dati aggregati. */
+	/** Restituisce un valore booleano se è nota la copertura personale, null se sono disponibili solo dati aggregati. */
 	public static function covered( array $position, $economic_mode, array $total_deltas = array(), array $projected_deposits = array() ) {
 		if ( empty( $position['quotes_known'] ) || empty( $position['payments_known'] ) ) return null;
 		if ( 'DEPOSIT_BALANCE' === $economic_mode && false === ( $position['deposits_known'] ?? true ) && ! $projected_deposits ) return null;

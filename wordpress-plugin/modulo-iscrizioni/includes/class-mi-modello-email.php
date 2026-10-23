@@ -139,7 +139,7 @@ final class MI_Modello_Email {
 		return $settings;
 	}
 
-	/** Uniforma anche i modelli storici senza modificarne il testo personalizzato. */
+	/** Uniforma la grafica dei modelli senza modificare il testo personalizzato. */
 	private static function uniforma_grafica_corpo( $html ) {
 		$html = (string) $html;
 		$etichette = 'Quando:|Dove:|Codice iscrizione:|Stato:|Partecipazione:';
@@ -530,7 +530,7 @@ final class MI_Modello_Email {
 
 	public static function sanitizza_html_email( $html ) {
 		$allowed = wp_kses_allowed_html( 'post' );
-		// Applichiamo direttamente l'allowlist email: un passaggio preliminare tramite
+		// Applichiamo direttamente l'elenco consentito per le email: un passaggio tramite
 		// wp_kses_post() eliminerebbe gli attributi prima che possano essere autorizzati qui.
 		$allowed['table'] = array_merge( $allowed['table'] ?? array(), array( 'role' => true, 'width' => true, 'cellpadding' => true, 'cellspacing' => true, 'border' => true, 'bgcolor' => true, 'style' => true ) );
 		$allowed['td'] = array_merge( $allowed['td'] ?? array(), array( 'role' => true, 'width' => true, 'align' => true, 'valign' => true, 'bgcolor' => true, 'style' => true ) );
@@ -664,18 +664,20 @@ final class MI_Modello_Email {
 		return implode( "\n", array_unique( array_filter( array( $footer, $firma ), static function ( $value ) { return '' !== $value; } ) ) );
 	}
 
-	/** Ripara modelli e istantanee storiche che contengono a capo o Markdown letterali. */
+	/** Normalizza interruzioni di riga e Markdown nelle istantanee delle email. */
 	public static function ripara_istantanea_codifica( $istantanea ) {
 		$istantanea = is_array( $istantanea ) ? $istantanea : array();
 		foreach ( array( 'html', 'footer' ) as $field ) $istantanea[ $field ] = self::normalizza_interruzioni( $istantanea[ $field ] ?? '' );
 		$originale = (string) ( $istantanea['testo'] ?? '' );
 		$testo = self::ripara_interruzioni_testo( $originale );
 		$markup = false !== strpos( $testo, '**' ) || preg_match( '/\[[^\]]+\]\(https?:\/\/[^)]+\)/u', $testo );
-		$html_corrotto = false !== strpos( (string) ( $istantanea['html'] ?? '' ), '**' );
-		if ( $markup || $html_corrotto || $testo !== $originale ) {
+		$html_originale = (string) ( $istantanea['html'] ?? '' );
+		$html_corrotto = false !== strpos( $html_originale, '**' );
+		$html_ricco = (bool) preg_match( '/<\s*[a-z][^>]*>/i', $html_originale );
+		if ( $html_corrotto || ( ! $html_ricco && ( $markup || $testo !== $originale ) ) ) {
 			$istantanea['html'] = self::testo_email_in_html( $testo );
 		} else {
-			$istantanea['html'] = self::uniforma_grafica_corpo( self::sanitizza_html_email( (string) ( $istantanea['html'] ?? '' ) ) );
+			$istantanea['html'] = self::uniforma_grafica_corpo( self::sanitizza_html_email( $html_originale ) );
 		}
 		$istantanea['testo'] = self::rimuovi_markdown_testo( $testo );
 		// Rimuove il codice soltanto su una riga effettiva, senza interpretare lettere n.
@@ -691,7 +693,10 @@ final class MI_Modello_Email {
 		$originale = (string) ( $settings['text'] ?? '' );
 		$testo = self::ripara_interruzioni_testo( $originale );
 		$markup = false !== strpos( $testo, '**' ) || preg_match( '/\[[^\]]+\]\(https?:\/\/[^)]+\)/u', $testo );
-		if ( $markup || $testo !== $originale || false !== strpos( (string) ( $settings['html'] ?? '' ), '**' ) ) $settings['html'] = self::testo_email_in_html( $testo );
+		$html = (string) ( $settings['html'] ?? '' );
+		$html_ricco = (bool) preg_match( '/<\s*[a-z][^>]*>/i', $html );
+		$html_corrotto = false !== strpos( $html, '**' );
+		if ( $html_corrotto || ( ! $html_ricco && ( $markup || $testo !== $originale ) ) ) $settings['html'] = self::testo_email_in_html( $testo );
 		$settings['text'] = $testo;
 		return $settings;
 	}
@@ -803,15 +808,23 @@ final class MI_Modello_Email {
 		update_post_meta( $post_id, '_mi_email_template', wp_slash( $settings ) );
 	}
 
-	/** Salva dal wizard soltanto oggetto e testo, conservando le altre impostazioni email. */
+	/** Salva dalla procedura guidata soltanto oggetto e testo, conservando le altre impostazioni email. */
 	public static function salva_testo_portale( $event_id, $subject, $text ) {
 		$settings = self::impostazioni( $event_id );
+		$saved = get_post_meta( $event_id, '_mi_email_template', true );
+		$saved = is_array( $saved ) ? $saved : array();
+		$saved_text = self::ripara_interruzioni_testo( (string) ( $saved['text'] ?? '' ) );
+		$saved_html = (string) ( $saved['html'] ?? '' );
+		$generated_saved_html = self::uniforma_grafica_corpo( self::testo_email_in_html( $saved_text ) );
+		$html_is_custom = '' !== trim( $saved_html ) && $saved_html !== $generated_saved_html;
 		$settings['enabled'] = '1';
 		$settings['subject'] = self::pulisci_riga( $subject, 180 );
 		$settings['text'] = mb_substr( sanitize_textarea_field( wp_unslash( $text ) ), 0, 5000 );
 		$settings['text'] = self::ripara_interruzioni_testo( $settings['text'] );
 		if ( 'ZERO' === strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ) ) $settings['text'] = self::rimuovi_riferimenti_pagamento_gratuito( $settings['text'] );
-		$settings['html'] = self::uniforma_grafica_corpo( self::testo_email_in_html( $settings['text'] ) );
+		// La procedura guidata espone solo oggetto e testo. Conserva l'HTML ricco configurato
+		// nell'editor; rigenera il corpo soltanto per i modelli gestiti dal wizard.
+		if ( ! $html_is_custom ) $settings['html'] = self::uniforma_grafica_corpo( self::testo_email_in_html( $settings['text'] ) );
 		if ( ! $settings['subject'] || ! $settings['text'] ) return new WP_Error( 'mi_email_vuota', 'Oggetto e testo dell’email non possono essere vuoti.' );
 		$settings = self::aggiorna_segnaposto( $settings );
 		$unknown = self::trova_segnaposto_non_ammessi( $settings );
