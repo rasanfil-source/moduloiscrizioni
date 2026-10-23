@@ -587,7 +587,12 @@ final class MI_Management_Service {
 			} ) );
 			if ( ! $selected ) continue;
 			$capacity = (int) $type['capacity'];
-			$groups = 1 === $capacity ? array_map( static function ( $person ) { return array( $person ); }, $selected ) : array_chunk( $selected, $capacity );
+			if ( 1 === $capacity ) {
+				$groups = array_map( static function ( $person ) { return array( $person ); }, $selected );
+			} else {
+				if ( count( $selected ) !== $capacity ) continue;
+				$groups = array( $selected );
+			}
 			foreach ( $groups as $persons ) {
 				$group_size = count( $persons );
 				$full_group = $group_size === $capacity;

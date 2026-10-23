@@ -2125,7 +2125,8 @@ test('camere, stampa e filtri seguono la nuova gerarchia operativa', async () =>
   assert.match(css, /details\[data-room-section\]\{[^}]*border-left:5px solid var\(--navy/);
   assert.match(css, /\.mi-room-section-chevron/);
   assert.match(service, /foreach \( self::room_types\(\) as \$code => \$type \)[\s\S]*\$selected = array_values\( array_filter\( \$all/);
-  assert.match(service, /\$groups = 1 === \$capacity \? array_map\([\s\S]*: array_chunk\( \$selected, \$capacity \)/);
+  assert.match(service, /if \( count\( \$selected \) !== \$capacity \) continue/);
+  assert.match(service, /\$groups = array\( \$selected \)/);
 });
 
 test('la variazione distingue checkbox dei servizi e assegnazione della sistemazione', async () => {
