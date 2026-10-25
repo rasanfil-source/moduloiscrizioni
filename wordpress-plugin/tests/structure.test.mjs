@@ -417,7 +417,7 @@ test('il portale resta utilizzabile fra telefono e tablet', async () => {
   assert.match(css, /overflow-x:auto/);
 });
 
-test('WooCommerce viene alleggerito soltanto fuori dai percorsi commerciali', async () => {
+test('WooCommerce viene alleggerito soltanto nel portale Segreteria', async () => {
   const bootstrap = await read('modulo-iscrizioni.php');
   const plugin = await read('includes/class-mi-plugin.php');
   const performance = await read('includes/class-mi-site-performance.php');
@@ -428,15 +428,13 @@ test('WooCommerce viene alleggerito soltanto fuori dai percorsi commerciali', as
   assert.match(performance, /style_loader_tag/);
   assert.match(performance, /script_loader_tag/);
   assert.match(performance, /filter_unused_woocommerce_style/);
-  assert.match(performance, /is_woocommerce/);
-  assert.match(performance, /is_cart/);
-  assert.match(performance, /is_checkout/);
-  assert.match(performance, /is_account_page/);
-  assert.match(performance, /wc-ajax/);
-  assert.match(performance, /wp:woocommerce\//);
+  assert.match(performance, /if \( ! self::is_secretariat_portal\(\) \) return;/);
+  assert.match(performance, /if \( ! self::is_secretariat_portal\(\) \) return \$html;/);
+  assert.match(performance, /if \( ! self::is_secretariat_portal\(\) \) return \$tag;/);
+  assert.match(performance, /MI_Portal_PWA::is_portal\(\)/);
   assert.match(performance, /woocommerce-general/);
   assert.doesNotMatch(performance, /'wc-cart-fragments'|'wc-add-to-cart'|'jquery-blockui'/);
-  assert.match(performance, /et_pb_shop\|et_pb_wc_/);
+  assert.doesNotMatch(performance, /needs_woocommerce_frontend|is_woocommerce/);
   assert.match(performance, /wc-order-attribution/);
 });
 
