@@ -28,7 +28,7 @@ if ( ! str_contains( $sql, "(p.status='CANCELLED' OR r.status='CANCELLED')" ) ) 
 $GLOBALS['wpdb']->queries = array();
 MI_Management_Service::page( 42, array() );
 $sql = implode( "\n", $GLOBALS['wpdb']->queries );
-if ( ! str_contains( $sql, "p.status<>'CANCELLED'" ) ) throw new RuntimeException( 'Open-booking participants used a narrower state filter.' );
+if ( ! str_contains( $sql, "p.status='ACTIVE'" ) ) throw new RuntimeException( 'Open-booking participants must include active participants only.' );
 if ( ! str_contains( $sql, 'ORDER BY r.created_at DESC,r.id DESC,p.id ASC' ) ) throw new RuntimeException( 'Single-event participants must default to newest registrations first.' );
 $GLOBALS['wpdb']->queries = array();
 MI_Management_Service::page( 42, array( 'sort' => 'name' ) );
