@@ -48,7 +48,7 @@ final class MI_Shortcode {
 	public static function validate_public_slug( $raw, $event_id = 0 ) {
 		$slug = strtolower( trim( (string) $raw ) );
 		if ( '' === $slug ) return '';
-		if ( strlen( $slug ) > 60 || ! preg_match( '/^[a-z0-9]+(?:-[a-z0-9]+)*$/D', $slug ) ) return new WP_Error( 'mi_slug_invalid', 'Usa da 1 a 60 lettere senza accenti, numeri o trattini, senza spazi. Inserisci solo il nome abbreviato, non l’indirizzo completo.' );
+		if ( strlen( $slug ) > 60 || ! preg_match( '/^[a-z0-9]+(?:-[a-z0-9]+)*$/D', $slug ) ) return new WP_Error( 'mi_slug_invalid', 'Usa da 1 a 60 caratteri: lettere non accentate e numeri, con trattini singoli tra i gruppi. Non inserire spazi né l’indirizzo completo.' );
 		global $wpdb;
 		$lock = 'mi_slug_' . substr( hash( 'sha256', $wpdb->prefix . $slug ), 0, 48 );
 		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $lock ) ) ) return new WP_Error( 'mi_slug_busy', 'Verifica indirizzo occupata. Riprova tra qualche secondo.' );

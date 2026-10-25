@@ -18,7 +18,8 @@ final class MI_Management_List {
 		};
 		$logistics = static function ( $person ) use ( $context, $option_matches ) {
 			$room = $context['room'] ?? ''; $service = $context['service'] ?? '';
-			return ( ! $room || ( 'unassigned' === $room ? empty( $person['room'] ) : $person['room'] === substr( $room, 5 ) ) ) && ( ! $service || $option_matches( $person['options'] ?? array(), $service ) );
+			$room_code = 0 === strpos( $room, 'room:' ) ? substr( $room, 5 ) : $room;
+			return ( ! $room || ( 'unassigned' === $room ? empty( $person['room'] ) : $person['room'] === $room_code ) ) && ( ! $service || $option_matches( $person['options'] ?? array(), $service ) );
 		};
 		$common = static function ( $row ) use ( $context, $state ) {
 			if ( $state && $row['status'] !== $state ) return false;

@@ -132,6 +132,8 @@ final class MI_Event_Activity_Migration {
 		if ( MI_Event_Post_Type::ACTIVITY_TYPE !== get_post_type( $activity_id ) || ! in_array( get_post_status( $activity_id ), array( 'publish', 'draft', 'private' ), true ) ) {
 			return new WP_Error( 'mi_migration_activity_invalid', 'Gruppo di destinazione non valido. Nessuna modifica eseguita.' );
 		}
+		$lease = MI_Event_Deletion::enter( $event_id );
+		if ( is_wp_error( $lease ) ) return $lease;
 
 		$current_activity_id = absint( get_post_meta( $event_id, '_mi_activity_id', true ) );
 		if ( $current_activity_id === $activity_id ) {
@@ -141,6 +143,7 @@ final class MI_Event_Activity_Migration {
 		global $wpdb;
 		$registrations_table = $wpdb->prefix . 'mi_registrations';
 		$registrations_before = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$registrations_table} WHERE event_id = %d", $event_id ) );
+		if ( $wpdb->last_error ) return new WP_Error( 'mi_migration_registration_check_failed', 'Conteggio iscrizioni non disponibile. Nessuna modifica eseguita.' );
 		if ( $registrations_before < 1 ) {
 			return new WP_Error( 'mi_migration_not_required', 'L’evento non ha iscrizioni: cambia il gruppo dal normale editor.' );
 		}

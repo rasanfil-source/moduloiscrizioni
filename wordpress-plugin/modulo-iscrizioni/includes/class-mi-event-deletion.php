@@ -8,6 +8,16 @@ final class MI_Event_Deletion {
 	private static $finalizing = 0;
 	private const CHILDREN = array( 'mi_registration_items', 'mi_participants', 'mi_payments', 'mi_registration_events', 'mi_email_outbox' );
 	private const DIRECT = array( 'mi_event_counters', 'mi_ticket_counters', 'mi_event_revisions', 'mi_rooms', 'mi_management_state', 'mi_management_requests', 'mi_booking_codes' );
+	private const FINGERPRINT_ORDER = array(
+		'mi_registrations'        => 'id',
+		'mi_event_counters'       => 'event_id',
+		'mi_ticket_counters'      => 'ticket_type_code',
+		'mi_event_revisions'      => 'id',
+		'mi_rooms'                => 'code',
+		'mi_management_state'     => 'event_id',
+		'mi_management_requests'  => 'request_id',
+		'mi_booking_codes'        => 'event_id',
+	);
 
 	public static function boot() {
 		add_filter( 'pre_delete_post', array( __CLASS__, 'guard_delete' ), 10, 3 );
@@ -120,7 +130,8 @@ final class MI_Event_Deletion {
 		$hash = hash_init( 'sha256' );
 		hash_update( $hash, wp_json_encode( array( $data, $event_meta, $post->post_modified_gmt ) ) );
 		foreach ( array_merge( array( 'mi_registrations' ), self::DIRECT ) as $table ) {
-			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}{$table} WHERE event_id=%d", $id ), ARRAY_A );
+			$order_by = self::FINGERPRINT_ORDER[ $table ];
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}{$table} WHERE event_id=%d ORDER BY {$order_by}", $id ), ARRAY_A );
 			if ( $wpdb->last_error ) throw new RuntimeException( 'Riepilogo non disponibile.' );
 			hash_update( $hash, wp_json_encode( $rows ) );
 		}

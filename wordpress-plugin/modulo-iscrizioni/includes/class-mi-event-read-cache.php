@@ -26,8 +26,10 @@ final class MI_Event_Read_Cache {
 	}
 	public static function get( $event_id, $token ) {
 		$cached = get_transient( 'mi_read_226_' . absint( $event_id ) );
-		if ( ! is_array( $cached ) || ( $cached['token'] ?? '' ) !== $token ) return null;
-		$json = gzuncompress( base64_decode( $cached['data'], true ), 32000000 );
+		if ( ! is_array( $cached ) || ( $cached['token'] ?? '' ) !== $token || ! isset( $cached['data'] ) || ! is_string( $cached['data'] ) ) return null;
+		$compressed = base64_decode( $cached['data'], true );
+		if ( false === $compressed ) return null;
+		$json = gzuncompress( $compressed, 32000000 );
 		$result = is_string( $json ) ? json_decode( $json, true ) : null;
 		return is_array( $result ) ? $result : null;
 	}

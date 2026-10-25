@@ -113,8 +113,9 @@ final class MI_Event_Projection {
 				);
 			}
 			foreach ( $registration_payments as $payment ) {
+				$effective_date = ( new DateTimeImmutable( (string) $payment['effective_at'], new DateTimeZone( 'UTC' ) ) )->setTimezone( wp_timezone() )->format( 'Y-m-d' );
 				$payment_rows[] = array(
-					'id_pagamento' => (string) $payment['id'], 'codice_ordine' => $registration['order_code'], 'data_effettiva' => (string) $payment['effective_at'],
+					'id_pagamento' => (string) $payment['id'], 'codice_ordine' => $registration['order_code'], 'data_effettiva' => $effective_date,
 					'tipo_movimento' => 'REFUND' === strtoupper( (string) $payment['transaction_kind'] ) ? 'RIMBORSO' : 'INCASSO',
 					'importo_centesimi' => (int) $payment['amount_cents'],
 					'fonte_pagamento' => array( 'BANK_TRANSFER' => 'BONIFICO', 'CARD' => 'CARTA', 'CASH' => 'CONTANTE' )[ strtoupper( (string) $payment['payment_source'] ) ] ?? strtoupper( (string) $payment['payment_source'] ),

@@ -371,7 +371,7 @@
         requestFilter.value=listContext.requests;deadlineFilter.value=listContext.deadline;
         const requestMatch=x=>!listContext.requests||(String(x.requests||'').trim()&&(listContext.requests==='yes'||(listContext.requests==='reviewed'?x.requests_reviewed:!x.requests_reviewed)));
         const deadlineMatch=x=>{if(!listContext.deadline)return true;if(x.status!=='WAITLIST_OFFERED')return false;const deadline=utc(x.offer_expires_at);if(!deadline)return false;const remaining=deadline.getTime()-Date.now();return listContext.deadline==='expired'?remaining<=0:remaining>0&&remaining<=86400000;};
-        const personLogistics=p=>(!listContext.room||(listContext.room==='unassigned'?!p.room:p.room===listContext.room.slice(5)))&&(!listContext.service||(p.options||[]).some(o=>(o.code||o.name)===listContext.service&&Number(o.quantity)>0));
+        const personLogistics=p=>(!listContext.room||(listContext.room==='unassigned'?!p.room:p.room===(listContext.room.startsWith('room:')?listContext.room.slice(5):listContext.room)))&&(!listContext.service||(p.options||[]).some(o=>(o.code||o.name)===listContext.service&&Number(o.quantity)>0));
         let roomPeople=data.people,admitted=roomPeople.filter(p=>['CONFIRMED','PENDING_PAYMENT'].includes(p.status));
         let rooms=data.rooms||[];
         booking={version:data.rooms_version||''};

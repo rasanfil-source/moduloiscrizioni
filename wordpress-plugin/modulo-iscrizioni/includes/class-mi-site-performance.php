@@ -51,6 +51,8 @@ final class MI_Site_Performance {
 
 	private static function needs_woocommerce_frontend() {
 		if ( is_admin() || wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) return true;
+		// Template globali e widget possono usare WooCommerce senza comparire nel post_content.
+		if ( class_exists( 'WooCommerce' ) || function_exists( 'WC' ) ) return true;
 		if ( isset( $_GET['wc-ajax'] ) || isset( $_GET['add-to-cart'] ) || isset( $_GET['order-pay'] ) || isset( $_GET['order-received'] ) ) return true;
 
 		foreach ( array( 'is_woocommerce', 'is_cart', 'is_checkout', 'is_account_page' ) as $conditional ) {

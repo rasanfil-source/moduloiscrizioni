@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Modulo Iscrizioni
  * Description: Gestione essenziale di gruppi, eventi, capienza e iscrizioni.
- * Version: 3.26.258
+ * Version: 3.26.260
  * Requires at least: 6.4
  * Requires PHP: 7.4
  * Author: HappyDuck
@@ -11,7 +11,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'MI_VERSION', '3.26.258' );
+define( 'MI_VERSION', '3.26.260' );
 define( 'MI_PLUGIN_FILE', __FILE__ );
 define( 'MI_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MI_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -61,4 +61,3 @@ register_activation_hook( __FILE__, array( 'MI_Activator', 'activate' ) );
 register_deactivation_hook( __FILE__, array( 'MI_Activator', 'deactivate' ) );
 
 MI_Plugin::instance()->boot();
-add_action( 'template_redirect', array( 'MI_Public_Balance', 'route' ), -110 );
