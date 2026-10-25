@@ -339,6 +339,8 @@ document.addEventListener('DOMContentLoaded', () => {
 	}
     const economic = form.querySelector('[data-mi-economic]');
     const payment = form.querySelector('[data-mi-payment]');
+	const reopenedPaymentSetting = form.querySelector('[data-mi-reopened-payment-setting]');
+	const reopenedPaymentHours = form.querySelector('[name="reopened_payment_hours"]');
 	let deposit = form.querySelector('[data-mi-deposit]');
 	if (deposit && deposit.tagName === 'LABEL') {
 	  deposit.firstChild.textContent = 'Percentuale caparra (%)';
@@ -375,6 +377,12 @@ document.addEventListener('DOMContentLoaded', () => {
 	  if (economicLabel) economicLabel.hidden = !paidEvent;
 	  const collects = paidEvent && ['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(economic?.value);
       if (payment) payment.hidden = !collects;
+	  const pricedServiceInputs = Array.from(form.querySelectorAll('input[name^="accommodation_price["],input[name^="service_price["],input[name="bus_route_price[]"],input[name="extra_service_price[]"]'));
+	  const hasPricedService = pricedServiceInputs.some((input) => Number(String(input.value).replace(',', '.')) > 0);
+	  const serviceBasedPricing = pricing?.value === 'NONE' || (pricing?.value === 'CALCULATED' && form.dataset.miServicePricingSaved === '1');
+	  const showReopenedHours = collects && serviceBasedPricing && hasPricedService;
+	  if (reopenedPaymentSetting) reopenedPaymentSetting.hidden = !showReopenedHours;
+	  if (reopenedPaymentHours) reopenedPaymentHours.disabled = !showReopenedHours;
       if (deposit) deposit.hidden = economic?.value !== 'DEPOSIT_BALANCE';
 	  updateDeposit();
     };
@@ -400,6 +408,8 @@ document.addEventListener('DOMContentLoaded', () => {
 	};
     pricing?.addEventListener('change', updatePricing);
     economic?.addEventListener('change', updateEconomic);
+	form.addEventListener('input', (event) => { if (event.target.matches('input[name^="accommodation_price["],input[name^="service_price["],input[name="bus_route_price[]"],input[name="extra_service_price[]"]')) updateEconomic(); });
+	form.addEventListener('change', (event) => { if (event.target.matches('input[name^="accommodation_price["],input[name^="service_price["],input[name="bus_route_price[]"],input[name="extra_service_price[]"],input[name="overnight"],[data-mi-accommodation],[data-mi-service-fee]')) updateEconomic(); });
 	depositMode?.addEventListener('change', updateDeposit);
     updatePricing();
     const opensAt = form.querySelector('[data-mi-opens]');

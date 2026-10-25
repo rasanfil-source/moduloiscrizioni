@@ -35,6 +35,8 @@ Il portale offre elenchi filtrabili, riepiloghi economici e report configurabili
 
 WordPress compone e conserva i messaggi nella coda. Il servizio email registra l'intento prima dell'invio e rende visibili alla segreteria gli esiti che richiedono una decisione. La modalità di anteprima permette di controllare le comunicazioni prima dell'invio operativo.
 
+I gestori possono attivare le notifiche Web Push sul singolo dispositivo dal portale. Gli avvisi riguardano gli eventi accessibili al loro account e mostrano il nome del gruppo e il suo logo, senza dati personali dell'iscritto.
+
 ## Configurazione tecnica
 
 Il plugin richiede WordPress 6.4 o successivo e PHP 7.4 o successivo. Il progetto Apps Script usa proprietà private per l'indirizzo del servizio e la chiave condivisa. La distribuzione collega la Web App al sito WordPress e autorizza i servizi Google richiesti.

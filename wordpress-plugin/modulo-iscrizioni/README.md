@@ -9,6 +9,7 @@ Plugin WordPress per creare e pubblicare moduli di iscrizione e gestire le attiv
 - Gestione di prenotazioni, partecipanti, presenze, sistemazioni e lista d'attesa.
 - Registro di incassi, rimborsi e saldi conservato in MySQL.
 - Comunicazioni email con modelli configurabili, anteprima e coda di invio.
+- Notifiche push per le nuove iscrizioni, attivabili per dispositivo e caratterizzate dal logo del gruppo.
 - Collegamenti pubblici per iscriversi e consultare prenotazione e saldo.
 - Foglio operativo Workspace associato a ogni evento.
 - Accessi al portale regolati da ruoli, gruppi e autorizzazioni sull'evento.

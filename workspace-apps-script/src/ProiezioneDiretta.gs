@@ -39,7 +39,7 @@ function generaVistaDaProiezioneDiretta_(projection) {
   const cache=creaCacheDecodificaVista_();
   const evento=projection.event, idEvento=String(evento.id_evento), iscrizioni=projection.registrations, partecipanti=projection.participants, pagamenti=projection.payments;
   const iscrizioniPerCodice=iscrizioni.reduce((index,row)=>{index[String(row.codice_ordine)]=row;return index;},{});
-  const attive=partecipanti.filter(row=>iscrizioniPerCodice[String(row.codice_ordine)] && !['ANNULLATO','SCADUTO','CANCELLED','EXPIRED'].includes(String(iscrizioniPerCodice[String(row.codice_ordine)].stato).toUpperCase()) && String(row.stato_partecipante||'ACTIVE').toUpperCase()!=='CANCELLED');
+  const attive=partecipanti.filter(row=>iscrizioniPerCodice[String(row.codice_ordine)] && !['ANNULLATO','SCADUTO','CANCELLED','EXPIRED'].includes(String(iscrizioniPerCodice[String(row.codice_ordine)].stato).toUpperCase()) && String(row.stato_partecipante||'ACTIVE').toUpperCase()==='ACTIVE');
   const profilo=determinaProfiloVistaOperativa_(iscrizioni,attive,evento.profilo_operativo,cache);
   const catalogo=campiElencoOperativo_(true,attive,cache).reduce((index,field)=>{index[field.key]=field;return index;},{});
   const colonne=profilo.campi.filter(key=>!!catalogo[key]).map(key=>({key:key,label:catalogo[key].label,gruppo:gruppoCampoVistaOperativa_(key),comprimibile:['paid_cash','paid_transfer','paid_card'].includes(key)}));

@@ -8,6 +8,8 @@ MySQL in WordPress è il registro autorevole per prenotazioni, partecipanti, imp
 
 WordPress verifica sul server l’account, il ruolo e l’ambito di gruppo o evento per ogni operazione. La visibilità di un comando non sostituisce il controllo dei permessi. Il progetto Apps Script destinato all’uso operativo è MODULI AUTONOMO.
 
+La consultazione del saldo tramite il collegamento previsto resta accessibile senza login WordPress. Non aggiungere un passaggio di autenticazione per la sola visualizzazione del saldo; i controlli di ruolo riguardano le operazioni gestionali.
+
 Le operazioni che interessano più righe vengono applicate in transazione: l’intero gruppo di modifiche è confermato insieme. Gli invii ripetuti con la stessa identità di richiesta non duplicano l’operazione.
 
 ## Navigazione e ricerca
@@ -42,7 +44,11 @@ Le registrazioni storiche prive di attribuzione non vengono ripartite automatica
 
 L’assegnazione a una camera è distinta dal servizio di alloggio richiesto. Il sistema verifica capienza e tipologia prima di salvare uno scambio. Codici S e M identificano persone singole; DM e DS identificano camere a due posti; T identifica camere a tre posti. I progressivi già assegnati vengono conservati.
 
-La numerazione automatica si applica a una prenotazione ammessa quando numero di persone e richiesta di sistemazione corrispondono a una configurazione condivisibile. Non sovrascrive codici esistenti e non abbina prenotazioni diverse. Il salvataggio delle assegnazioni è esplicito e atomico.
+Le assegnazioni automatiche raggruppano, entro la capienza della camera, le persone attive della stessa prenotazione che hanno scelto la stessa sistemazione: una coppia che chiede una doppia resta insieme, sia con letti uniti sia separati, e tre persone che chiedono una tripla restano insieme. Una camera occupata non viene completata con persone di un’altra prenotazione.
+
+Un gruppo che riempie la camera viene assegnato a una camera vuota compatibile; se non ce n’è una che possa contenere tutto il gruppo, il sistema apre una camera nuova per quel gruppo anche quando un’altra camera dello stesso tipo ha posti liberi insufficienti. Per esempio, una coppia della stessa prenotazione apre una nuova doppia se l’unica doppia incompleta ha un solo posto libero.
+
+Una persona sola che ha scelto doppia o tripla resta «da assegnare» se esiste una camera di quel tipo con posti liberi; non viene inserita nella camera di un’altra prenotazione. Quando tutte le camere compatibili sono piene, o non ne esiste ancora una, il sistema apre una camera del tipo scelto e vi assegna la persona. I codici già assegnati vengono conservati e il salvataggio delle assegnazioni è esplicito e atomico.
 
 Il cambio della sistemazione mostra l’anteprima delle differenze di camera e quota. La conferma aggiorna servizio, camera e dovuto insieme; non registra incassi o rimborsi. Le altre variazioni economiche usano le funzioni dedicate.
 
@@ -72,3 +78,9 @@ Select e date picker usano i controlli nativi del browser. Dialog e avvisi sono 
 | Variazioni operative | `MI_Management_Service` | Stato gestionale MySQL |
 | Interfaccia portale | `MI_Portal_Management` | Servizi applicativi WordPress |
 | Proiezione Google | Apps Script MODULI AUTONOMO | Dati WordPress confermati |
+
+## Scadenze e pagamenti di gruppo
+
+  Una rettifica economica non crea una scadenza se la prenotazione non aveva un termine comune. Se il termine esiste ancora nel futuro, resta valido; se è trascorso o troppo vicino, la rettifica concede almeno il tempo configurato. L’offerta della lista d’attesa dà un tempo limitato per decidere: scade al primo tra il termine configurato e la scadenza comune dell’evento. Se la scadenza comune è già trascorsa, non si inviano nuove offerte. Quando un’offerta viene accettata e manca un termine comune ancora valido, l’accettazione assegna il termine di pagamento previsto per quella lista.
+
+Alla scadenza di una prenotazione di gruppo, i versamenti attribuiti vengono confrontati con il dovuto di ogni partecipante. Decadono soltanto le persone non coperte; quelle che hanno versato quanto richiesto conservano il posto. I pagamenti delle persone decadute restano registrati come crediti da restituire e non generano rimborsi automatici. Se quote o versamenti non sono attribuibili con certezza, il sistema non fa decadere nessuno e richiede una verifica manuale.

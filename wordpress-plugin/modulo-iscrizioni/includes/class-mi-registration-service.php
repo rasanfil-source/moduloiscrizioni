@@ -6,21 +6,49 @@ require_once __DIR__ . '/class-mi-payment-people.php';
 
 final class MI_Registration_Service {
 	/**
-	 * Calcola una scadenza UTC quando una posizione già confermata torna in attesa
-	 * di pagamento. La finestra dedicata alle rettifiche è indipendente dalle offerte
-	 * della lista d'attesa. Se manca un termine valido, usa il valore dell'evento
-	 * oppure 48 ore.
+	 * Calcola una scadenza UTC quando una posizione torna in attesa di pagamento.
+	 * La rettifica non crea una scadenza individuale se l'evento non ne aveva una
+	 * comune. Quando la scadenza comune è trascorsa o troppo vicina, concede almeno
+	 * la finestra configurata per la rettifica; le offerte della lista d'attesa restano separate.
 	 */
 	public static function reopened_payment_deadline( array $registration, $now = null ) {
 		$now = null === $now ? time() : (int) $now;
 		$deadline = trim( (string) ( $registration['payment_deadline_at'] ?? '' ) );
 		$deadline_timestamp = '' === $deadline ? false : strtotime( $deadline . ' UTC' );
-		if ( false !== $deadline_timestamp && $deadline_timestamp > $now ) return $deadline;
 		$snapshot = json_decode( (string) ( $registration['snapshot_json'] ?? '' ), true );
+		$event_snapshot = is_array( $snapshot ) ? (array) ( $snapshot['event'] ?? array() ) : array();
+		$common_deadline = trim( (string) ( $event_snapshot['payment_deadline_at'] ?? '' ) );
+		$reservation_minutes = min( 10080, absint( $event_snapshot['reservation_minutes'] ?? 0 ) );
+		// Le versioni precedenti potevano trasformare un termine mancante in 48 ore.
+		// Il riepilogo originario distingue quel timer artificiale da una scadenza comune.
+		$deadline_source = self::has_payment_deadline_source( $registration );
+		if ( null === $deadline_source ) return false !== $deadline_timestamp ? $deadline : null;
+		if ( ! $deadline_source ) return null;
+		if ( false === $deadline_timestamp && $common_deadline && preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $common_deadline ) && function_exists( 'wp_timezone' ) ) {
+			$local_deadline = DateTimeImmutable::createFromFormat( 'Y-m-d\\TH:i', $common_deadline, wp_timezone() );
+			if ( $local_deadline ) $deadline_timestamp = $local_deadline->getTimestamp();
+		}
+		if ( false === $deadline_timestamp && $reservation_minutes && ! empty( $registration['created_at'] ) ) {
+			$created_timestamp = strtotime( (string) $registration['created_at'] . ' UTC' );
+			if ( false !== $created_timestamp ) $deadline_timestamp = $created_timestamp + $reservation_minutes * 60;
+		}
+		if ( false === $deadline_timestamp ) return null;
 		$snapshot_hours = is_array( $snapshot ) ? absint( $snapshot['event']['reopened_payment_hours'] ?? 0 ) : 0;
 		$stored_hours = function_exists( 'get_post_meta' ) ? absint( get_post_meta( (int) ( $registration['event_id'] ?? 0 ), '_mi_reopened_payment_hours', true ) ) : 0;
 		$hours = min( 168, max( 1, $snapshot_hours ?: ( $stored_hours ?: 48 ) ) );
-		return gmdate( 'Y-m-d H:i:s', $now + $hours * 3600 );
+		$minimum_deadline = $now + $hours * 3600;
+		return gmdate( 'Y-m-d H:i:s', max( $deadline_timestamp, $minimum_deadline ) );
+	}
+
+	/** Una scadenza può derivare dall'evento, dal timer di prenotazione o dall'accettazione di un posto in lista d'attesa. Null indica che la verifica del registro eventi non è riuscita. */
+	private static function has_payment_deadline_source( array $registration ) {
+		$snapshot = json_decode( (string) ( $registration['snapshot_json'] ?? '' ), true );
+		$event = is_array( $snapshot ) ? (array) ( $snapshot['event'] ?? array() ) : array();
+		if ( trim( (string) ( $event['payment_deadline_at'] ?? '' ) ) || absint( $event['reservation_minutes'] ?? 0 ) > 0 ) return true;
+		if ( empty( $registration['id'] ) ) return false;
+		global $wpdb;
+		$accepted = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}mi_registration_events WHERE registration_id=%d AND event_type='WAITLIST_ACCEPTED' LIMIT 1", (int) $registration['id'] ) );
+		return $wpdb->last_error ? null : (bool) $accepted;
 	}
 
 	private static function payment_coverage( array $registration ) {
@@ -547,6 +575,9 @@ final class MI_Registration_Service {
 				throw new RuntimeException( 'Notifica alla segreteria non salvata.' );
 			}
 			if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma non ricevuta.' );
+			if ( class_exists( 'MI_Web_Push' ) ) {
+				try { MI_Web_Push::schedule_registration( $registration_id, $event_id ); } catch ( Throwable $ignored ) {}
+			}
 			if ( MI_Spedizione_Email::email_da_spedire( $email_status ) || MI_Spedizione_Email::email_da_spedire( $secretariat_status ) ) {
 				self::schedule_email_safely();
 			}
@@ -829,7 +860,7 @@ final class MI_Registration_Service {
 			return 'PENDING';
 		}
 		if ( class_exists( 'MI_Event_Deletion' ) && is_wp_error( MI_Event_Deletion::enter( (int) $registration['event_id'] ) ) ) return 'PENDING';
-		$marked = $wpdb->query( $wpdb->prepare( "UPDATE {$registrations_table} SET workspace_status = 'SYNCED', workspace_attempts = workspace_attempts + 1, workspace_next_attempt_at = NULL, workspace_last_error = NULL, workspace_synced_at = %s WHERE id = %d AND workspace_revision = %d", current_time( 'mysql', true ), $registration_id, $registration['workspace_revision'] ) );
+		$marked = $wpdb->query( $wpdb->prepare( "UPDATE {$registrations_table} SET workspace_status = 'SYNCED', workspace_attempts = workspace_attempts + 1, workspace_next_attempt_at = NULL, workspace_last_error = IF(workspace_last_error IN ('payment_expiry_review_required','payment_deadline_review_required'),workspace_last_error,NULL), workspace_synced_at = %s WHERE id = %d AND workspace_revision = %d", current_time( 'mysql', true ), $registration_id, $registration['workspace_revision'] ) );
 		if ( 1 !== $marked ) return 'PENDING';
 		if ( class_exists( 'MI_Sheet_Open' ) ) MI_Sheet_Open::enqueue( (int) $registration['event_id'] );
 		return 'SYNCED';
@@ -889,7 +920,7 @@ final class MI_Registration_Service {
 		$first_name = trim( sanitize_text_field( (string) $first_name ) );
 		$last_name = trim( sanitize_text_field( (string) $last_name ) );
 		if ( ! $event_id || 'publish' !== get_post_status( $event_id ) || ! $last_name ) return new WP_Error( 'mi_status_not_found', 'Indica il cognome nella pagina dell’evento.' );
-		$sql = "SELECT p.id,r.id registration_id,r.order_code,r.buyer_email FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d AND p.last_name=%s AND p.status <> 'CANCELLED' AND r.status NOT IN ('CANCELLED','EXPIRED')";
+		$sql = "SELECT p.id,r.id registration_id,r.order_code,r.buyer_email FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d AND p.last_name=%s AND p.status='ACTIVE' AND r.status NOT IN ('CANCELLED','EXPIRED')";
 		$args = array( $event_id, $last_name );
 		if ( $first_name ) { $sql .= ' AND p.first_name=%s'; $args[] = $first_name; }
 		$matches = $wpdb->get_results( $wpdb->prepare( $sql . ' LIMIT 2', $args ), ARRAY_A );
@@ -923,7 +954,7 @@ final class MI_Registration_Service {
 		$deposit_missing = $individual['deposit_missing'];
 		$managed = in_array( $registration['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 		$collectible = $managed && in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true );
-		$status_labels = array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'Da pagare', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto', 'CANCELLED' => 'Annullata', 'EXPIRED' => 'Scaduta' );
+		$status_labels = array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'Da pagare', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto', 'CANCELLED' => 'Annullata', 'EXPIRED' => 'Scaduta per mancato pagamento' );
 		if ( 'WAITLISTED' === $registration['status'] ) $payment_label = 'Nessun pagamento richiesto durante la lista d’attesa';
 		elseif ( 'WAITLIST_OFFERED' === $registration['status'] ) $payment_label = 'Nessun pagamento richiesto prima dell’accettazione';
 		elseif ( in_array( $registration['status'], array( 'CANCELLED', 'EXPIRED' ), true ) ) $payment_label = 'Prenotazione chiusa: contatta l’organizzazione per eventuali rimborsi';
@@ -1051,9 +1082,19 @@ final class MI_Registration_Service {
 				$formats = array_merge( $formats, array( '%s', '%s', '%s', '%s', '%s' ) );
 			} elseif ( in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) && in_array( $registration['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) {
 				$coverage = self::payment_coverage( $registration );
-				$registration_update['status'] = $coverage['covered'] ? 'CONFIRMED' : 'PENDING_PAYMENT';
-				$registration_update['expires_at'] = $coverage['covered'] ? null : self::reopened_payment_deadline( $registration );
-				$registration_update['payment_deadline_at'] = $coverage['covered'] ? $registration['payment_deadline_at'] : $registration_update['expires_at'];
+				$position = $coverage['position'] ?? array();
+				$known = ! empty( $position['quotes_known'] ) && ! empty( $position['payments_known'] );
+				if ( 'DEPOSIT_BALANCE' === ( $registration['economic_mode'] ?? '' ) ) $known = $known && ! empty( $position['deposits_known'] );
+				if ( ! $known ) {
+					$registration_update['status'] = 'PENDING_PAYMENT';
+					$registration_update['expires_at'] = self::reopened_payment_deadline( $registration );
+					$registration_update['payment_deadline_at'] = $registration_update['expires_at'];
+					$registration_update['workspace_last_error'] = 'payment_expiry_review_required';
+				} else {
+					$registration_update['status'] = $coverage['covered'] ? 'CONFIRMED' : 'PENDING_PAYMENT';
+					$registration_update['expires_at'] = $coverage['covered'] ? null : self::reopened_payment_deadline( $registration );
+					$registration_update['payment_deadline_at'] = $coverage['covered'] ? $registration['payment_deadline_at'] : $registration_update['expires_at'];
+				}
 				$formats = array_merge( $formats, array( '%s', '%s', '%s' ) );
 			}
 			if ( false === $wpdb->update( $registrations, $registration_update, array( 'id' => $registration['id'] ), $formats, array( '%d' ) ) ) throw new RuntimeException( 'Prenotazione non aggiornata.' );
@@ -1120,14 +1161,35 @@ final class MI_Registration_Service {
 					if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma non ricevuta.' );
 					return $registration['status'];
 				}
+				$deadline_source = self::has_payment_deadline_source( $registration );
+				if ( null === $deadline_source ) {
+					$updated = $wpdb->update( $registrations, array( 'expires_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_deadline_review_required' ), array( 'id' => $registration_id, 'status' => 'PENDING_PAYMENT' ), array( '%s', '%s', '%s' ), array( '%d', '%s' ) );
+					if ( false === $updated || ! self::append_registration_event( $registration_id, 'PAYMENT_DEADLINE_REVIEW_REQUIRED', 'PENDING_PAYMENT', 'PENDING_PAYMENT', $actor_label, array( 'reason' => 'DEADLINE_SOURCE_UNAVAILABLE' ) ) ) throw new RuntimeException( 'Verifica della scadenza non registrata.' );
+					self::mark_workspace_changed_locked( $registration_id );
+					if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma non ricevuta.' );
+					self::accoda_sincronizzazione_workspace( $registration_id, 'PENDING' );
+					return 'PENDING_PAYMENT';
+				}
+				if ( ! $deadline_source ) {
+					$updated = $wpdb->update( $registrations, array( 'expires_at' => null, 'payment_deadline_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_deadline_removed_no_common_term' ), array( 'id' => $registration_id, 'status' => 'PENDING_PAYMENT' ), array( '%s', '%s', '%s', '%s' ), array( '%d', '%s' ) );
+					if ( false === $updated || ! self::append_registration_event( $registration_id, 'PAYMENT_DEADLINE_CLEARED', 'PENDING_PAYMENT', 'PENDING_PAYMENT', $actor_label, array( 'reason' => 'NO_COMMON_DEADLINE' ) ) ) throw new RuntimeException( 'Rimozione della scadenza non registrata.' );
+					self::mark_workspace_changed_locked( $registration_id );
+					if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma non ricevuta.' );
+					self::accoda_sincronizzazione_workspace( $registration_id, 'PENDING' );
+					return 'PENDING_PAYMENT';
+				}
 				$coverage = self::payment_coverage( $registration );
-				if ( $coverage['covered'] ) {
+				$position = $coverage['position'] ?? array();
+				$individual_coverage_known = ! empty( $position['quotes_known'] ) && ! empty( $position['payments_known'] );
+				if ( 'DEPOSIT_BALANCE' === ( $registration['economic_mode'] ?? '' ) ) $individual_coverage_known = $individual_coverage_known && ! empty( $position['deposits_known'] );
+				if ( $individual_coverage_known && $coverage['covered'] ) {
 					if ( false === $wpdb->update( $registrations, array( 'status' => 'CONFIRMED', 'expires_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_status_changed' ), array( 'id' => $registration_id ), array( '%s', '%s', '%s', '%s' ), array( '%d' ) ) ) throw new RuntimeException( 'Stato pagamento non aggiornato.' );
 					self::mark_workspace_changed_locked( $registration_id );
 					if ( 'CONFIRMED' !== $registration['status'] && ! self::append_registration_event( $registration_id, 'PAYMENT_STATUS_CHANGED', $registration['status'], 'CONFIRMED', $actor_label, array( 'net_paid_cents' => (int) $coverage['paid'], 'initial_due_cents' => (int) $registration['initial_due_cents'] ) ) ) throw new RuntimeException( 'Audit pagamento non aggiornato.' );
 					if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma non ricevuta.' );
 					return 'CONFIRMED';
 				}
+				return self::expire_unpaid_participants_locked( $registration, $coverage, $actor_label, $promote_waitlist );
 			}
 			$event_id = (int) $registration['event_id'];
 			$counter_field = in_array( $registration['status'], array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLIST_OFFERED' ), true ) ? 'confirmed_count' : 'waitlisted_count';
@@ -1161,6 +1223,102 @@ final class MI_Registration_Service {
 		}
 	}
 
+	/** Scade soltanto le persone con pagamento individuale attribuibile; in caso contrario sospende la scadenza per verifica. Va chiamata con la transazione e il lock della prenotazione già aperti. */
+	private static function expire_unpaid_participants_locked( array $registration, array $coverage, $actor_label, $promote_waitlist ) {
+		global $wpdb;
+		$registration_id = (int) $registration['id'];
+		$event_id = (int) $registration['event_id'];
+		$mode = (string) ( $registration['economic_mode'] ?? '' );
+		$position = $coverage['position'] ?? array();
+		$known = ! empty( $position['quotes_known'] ) && ! empty( $position['payments_known'] );
+		if ( 'DEPOSIT_BALANCE' === $mode ) $known = $known && ! empty( $position['deposits_known'] );
+		$has_active_person = count( array_filter( (array) ( $position['people'] ?? array() ), static function ( $person ) { return ! empty( $person['active'] ); } ) ) > 0;
+		if ( ! $known || ! $has_active_person || ! in_array( $mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) {
+			$updated = $wpdb->update( $wpdb->prefix . 'mi_registrations', array( 'expires_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_expiry_review_required' ), array( 'id' => $registration_id, 'status' => 'PENDING_PAYMENT' ), array( '%s', '%s', '%s' ), array( '%d', '%s' ) );
+			if ( false === $updated || ! self::append_registration_event( $registration_id, 'PAYMENT_EXPIRY_REVIEW_REQUIRED', 'PENDING_PAYMENT', 'PENDING_PAYMENT', $actor_label, array( 'reason' => 'INDIVIDUAL_PAYMENT_ATTRIBUTION_UNAVAILABLE' ) ) ) throw new RuntimeException( 'Verifica delle quote individuali non registrata.' );
+			self::mark_workspace_changed_locked( $registration_id );
+			if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma non ricevuta.' );
+			self::accoda_sincronizzazione_workspace( $registration_id, 'PENDING' );
+			return 'PENDING_PAYMENT';
+		}
+
+		$required_field = 'DEPOSIT_BALANCE' === $mode ? 'deposit' : 'total';
+		$unpaid = array();
+		foreach ( (array) ( $position['people'] ?? array() ) as $person ) {
+			if ( empty( $person['active'] ) ) continue;
+			$required = max( 0, (int) ( $person[$required_field] ?? 0 ) );
+			if ( (int) ( $person['paid'] ?? 0 ) < $required ) $unpaid[(int) $person['id']] = array( 'total' => max( 0, (int) ( $person['total'] ?? 0 ) ), 'deposit' => max( 0, (int) ( $person['deposit'] ?? 0 ) ), 'paid' => (int) ( $person['paid'] ?? 0 ) );
+		}
+		if ( ! $unpaid ) {
+			$updated = $wpdb->update( $wpdb->prefix . 'mi_registrations', array( 'status' => 'CONFIRMED', 'expires_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_status_changed' ), array( 'id' => $registration_id, 'status' => 'PENDING_PAYMENT' ), array( '%s', '%s', '%s', '%s' ), array( '%d', '%s' ) );
+			if ( false === $updated ) throw new RuntimeException( 'Stato pagamento non aggiornato.' );
+			self::mark_workspace_changed_locked( $registration_id );
+			if ( ! self::append_registration_event( $registration_id, 'PAYMENT_STATUS_CHANGED', 'PENDING_PAYMENT', 'CONFIRMED', $actor_label, array( 'net_paid_cents' => (int) $coverage['paid'], 'initial_due_cents' => (int) $registration['initial_due_cents'] ) ) ) throw new RuntimeException( 'Audit pagamento non aggiornato.' );
+			if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma non ricevuta.' );
+			self::accoda_sincronizzazione_workspace( $registration_id, 'PENDING' );
+			return 'CONFIRMED';
+		}
+
+		$participants_table = $wpdb->prefix . 'mi_participants';
+		$active_rows = $wpdb->get_results( $wpdb->prepare( "SELECT id,ticket_type_code FROM {$participants_table} WHERE registration_id=%d AND status='ACTIVE' ORDER BY id FOR UPDATE", $registration_id ), ARRAY_A );
+		if ( $wpdb->last_error || count( $active_rows ) !== count( array_filter( (array) $position['people'], static function ( $person ) { return ! empty( $person['active'] ); } ) ) ) throw new RuntimeException( 'Partecipanti cambiati durante la scadenza.' );
+		$active_ids = array_map( 'intval', wp_list_pluck( $active_rows, 'id' ) );
+		if ( array_diff( array_keys( $unpaid ), $active_ids ) ) throw new RuntimeException( 'Stato dei partecipanti cambiato durante la scadenza.' );
+		$expired_by_ticket = array();
+		foreach ( $active_rows as $row ) if ( isset( $unpaid[(int) $row['id']] ) ) $expired_by_ticket[$row['ticket_type_code']] = (int) ( $expired_by_ticket[$row['ticket_type_code']] ?? 0 ) + 1;
+		$expired_rows = array_filter( $active_rows, static function ( $row ) use ( $unpaid ) { return isset( $unpaid[(int) $row['id']] ); } );
+		if ( count( $expired_rows ) !== count( $unpaid ) ) throw new RuntimeException( 'Tipologie dei partecipanti non disponibili.' );
+
+		$counters = $wpdb->prefix . 'mi_event_counters';
+		$ticket_counters = $wpdb->prefix . 'mi_ticket_counters';
+		if ( ! $wpdb->get_row( $wpdb->prepare( "SELECT event_id FROM {$counters} WHERE event_id=%d FOR UPDATE", $event_id ), ARRAY_A ) ) throw new RuntimeException( 'Contatore evento non disponibile.' );
+		foreach ( array_keys( $expired_by_ticket ) as $ticket_code ) if ( ! $wpdb->get_row( $wpdb->prepare( "SELECT event_id FROM {$ticket_counters} WHERE event_id=%d AND ticket_type_code=%s FOR UPDATE", $event_id, $ticket_code ), ARRAY_A ) ) throw new RuntimeException( 'Contatore tipologia non disponibile.' );
+
+		$now = current_time( 'mysql', true );
+		foreach ( array_keys( $unpaid ) as $participant_id ) {
+			$changed = $wpdb->update( $participants_table, array( 'status' => 'EXPIRED', 'deposit_due_cents' => 0, 'cancellation_token_hash' => null ), array( 'id' => $participant_id, 'registration_id' => $registration_id, 'status' => 'ACTIVE' ), array( '%s', '%d', '%s' ), array( '%d', '%d', '%s' ) );
+			if ( 1 !== $changed ) throw new RuntimeException( 'Partecipante non scaduto.' );
+		}
+
+		$adjustments = json_decode( (string) ( $registration['quote_adjustments_json'] ?? '{}' ), true );
+		if ( ! is_array( $adjustments ) ) $adjustments = array();
+		$removed_total = 0;
+		$removed_initial = 0;
+		foreach ( $unpaid as $participant_id => $amounts ) {
+			$adjustments[$participant_id] = (int) ( $adjustments[$participant_id] ?? 0 ) - $amounts['total'];
+			$removed_total += $amounts['total'];
+			$removed_initial += 'FULL_PAYMENT' === $mode ? $amounts['total'] : $amounts['deposit'];
+		}
+		$new_total = max( 0, (int) $registration['total_cents'] - $removed_total );
+		$new_initial = min( $new_total, max( 0, (int) $registration['initial_due_cents'] - $removed_initial ) );
+		$new_balance = $new_total - $new_initial;
+		$remaining_qty = count( $active_rows ) - count( $unpaid );
+		$next_status = $remaining_qty > 0 ? 'CONFIRMED' : 'EXPIRED';
+		$released_at = $remaining_qty > 0 ? null : $now;
+		$adjustments_json = wp_json_encode( $adjustments );
+		if ( false === $adjustments_json ) throw new RuntimeException( 'Rettifica quote non codificabile.' );
+		$updated = $wpdb->update(
+			$wpdb->prefix . 'mi_registrations',
+			array( 'status' => $next_status, 'total_qty' => $remaining_qty, 'total_cents' => $new_total, 'initial_due_cents' => $new_initial, 'balance_cents' => $new_balance, 'quote_adjustments_json' => $adjustments_json, 'capacity_released_at' => $released_at, 'waitlist_offer_token_hash' => null, 'waitlist_offer_expires_at' => null, 'expires_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'payment_deadline_expired' ),
+			array( 'id' => $registration_id, 'status' => 'PENDING_PAYMENT' ),
+			array( '%s', '%d', '%d', '%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s' ),
+			array( '%d', '%s' )
+		);
+		if ( 1 !== $updated ) throw new RuntimeException( 'Scadenza della prenotazione non registrata.' );
+		if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$counters} SET confirmed_count=GREATEST(0,confirmed_count-%d),updated_at=%s WHERE event_id=%d", count( $unpaid ), $now, $event_id ) ) ) throw new RuntimeException( 'Contatore evento non aggiornato.' );
+		foreach ( $expired_by_ticket as $ticket_code => $quantity ) if ( false === $wpdb->query( $wpdb->prepare( "UPDATE {$ticket_counters} SET confirmed_count=GREATEST(0,confirmed_count-%d),updated_at=%s WHERE event_id=%d AND ticket_type_code=%s", $quantity, $now, $event_id, $ticket_code ) ) ) throw new RuntimeException( 'Contatore tipologia non aggiornato.' );
+		$event_type = $remaining_qty > 0 ? 'PAYMENT_PARTICIPANTS_EXPIRED' : 'EXPIRED';
+		$detail = array( 'expired_participants' => array_keys( $unpaid ), 'released_places' => count( $unpaid ), 'removed_quote_cents' => $removed_total, 'removed_initial_due_cents' => $removed_initial );
+		if ( ! self::append_registration_event( $registration_id, $event_type, 'PENDING_PAYMENT', $next_status, $actor_label, $detail ) ) throw new RuntimeException( 'Audit scadenza non aggiornato.' );
+		self::mark_workspace_changed_locked( $registration_id );
+		$promoted = $promote_waitlist ? self::promote_waitlisted_locked( $event_id, $now ) : array();
+		if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma non ricevuta.' );
+		self::accoda_sincronizzazione_workspace( $registration_id, 'PENDING' );
+		foreach ( $promoted as $promoted_id ) self::accoda_sincronizzazione_workspace( $promoted_id, 'PENDING' );
+		if ( $promoted ) self::schedule_email_safely();
+		return $next_status;
+	}
+
 	public static function waitlist_offer_from_token( $registration_id, $token ) {
 		global $wpdb;
 		$registration_id = absint( $registration_id );
@@ -1170,6 +1328,9 @@ final class MI_Registration_Service {
 		if ( ! $row || empty( $row['waitlist_offer_token_hash'] ) || ! hash_equals( (string) $row['waitlist_offer_token_hash'], hash( 'sha256', $token ) ) ) return new WP_Error( 'mi_waitlist_offer_invalid', 'Collegamento non valido o non più utilizzabile.' );
 		if ( 'WAITLIST_OFFERED' !== $row['status'] ) return new WP_Error( 'mi_waitlist_offer_closed', 'Questa proposta è già stata conclusa.' );
 		$expires = strtotime( (string) $row['waitlist_offer_expires_at'] . ' UTC' );
+		$common_deadline_timestamp = self::common_payment_deadline_timestamp( array( 'payment_deadline_at' => get_post_meta( (int) $row['event_id'], '_mi_payment_deadline_at', true ) ) );
+		if ( false === $common_deadline_timestamp ) return new WP_Error( 'mi_waitlist_offer_invalid_deadline', 'La scadenza comune dell’evento non è valida.' );
+		if ( null !== $common_deadline_timestamp ) $expires = $expires ? min( $expires, $common_deadline_timestamp ) : $common_deadline_timestamp;
 		if ( ! $expires || $expires <= time() ) return new WP_Error( 'mi_waitlist_offer_expired', 'Il tempo per rispondere è scaduto.' );
 		unset( $row['waitlist_offer_token_hash'] );
 		$row['event_title'] = get_the_title( (int) $row['event_id'] );
@@ -1197,9 +1358,12 @@ final class MI_Registration_Service {
 			if ( get_post_meta( (int) $row['event_id'], '_mi_event_cancellation_job', true ) ) throw new RuntimeException( 'Annullamento evento in corso.' );
 			if ( ! $system_expiry && ( ! preg_match( '/^[a-f0-9]{64}$/', (string) $token ) || ! hash_equals( (string) $row['waitlist_offer_token_hash'], hash( 'sha256', (string) $token ) ) ) ) throw new RuntimeException( 'Collegamento non valido.' );
 			$expires_at = ! empty( $row['waitlist_offer_expires_at'] ) ? strtotime( $row['waitlist_offer_expires_at'] . ' UTC' ) : false;
-			if ( 'EXPIRE' === $decision && $expires_at && $expires_at > time() ) throw new RuntimeException( 'Proposta non ancora scaduta.' );
-			if ( ! $expires_at || $expires_at <= time() ) $decision = 'EXPIRE';
 			$event_id = (int) $row['event_id'];
+			$common_deadline_timestamp = self::common_payment_deadline_timestamp( array( 'payment_deadline_at' => get_post_meta( $event_id, '_mi_payment_deadline_at', true ) ) );
+			if ( false === $common_deadline_timestamp || ( null !== $common_deadline_timestamp && $common_deadline_timestamp <= time() ) ) $system_expiry = true;
+			if ( null !== $common_deadline_timestamp && false !== $common_deadline_timestamp ) $expires_at = $expires_at ? min( $expires_at, $common_deadline_timestamp ) : $common_deadline_timestamp;
+			if ( 'EXPIRE' === $decision && $expires_at && $expires_at > time() && ! $system_expiry ) throw new RuntimeException( 'Proposta non ancora scaduta.' );
+			if ( ! $expires_at || $expires_at <= time() || $system_expiry ) $decision = 'EXPIRE';
 			$now = current_time( 'mysql', true );
 			$items = $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code,COUNT(*) quantity FROM {$participants} WHERE registration_id=%d AND status='ACTIVE' GROUP BY ticket_type_code ORDER BY ticket_type_code", $registration_id ), ARRAY_A );
 			if ( $wpdb->last_error ) throw new RuntimeException( 'Partecipanti non disponibili.' );
@@ -1277,8 +1441,16 @@ final class MI_Registration_Service {
 	public static function expire_due_waitlist_offers() {
 		global $wpdb;
 		$now = current_time( 'mysql', true );
-		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}mi_registrations WHERE status='WAITLIST_OFFERED' AND waitlist_offer_expires_at IS NOT NULL AND waitlist_offer_expires_at<=%s ORDER BY waitlist_offer_expires_at,id LIMIT 50", $now ) );
-		foreach ( $ids as $id ) self::respond_waitlist_offer( (int) $id, '', 'EXPIRE', true );
+		$now_timestamp = strtotime( $now . ' UTC' );
+		$offers = $wpdb->get_results( "SELECT id,event_id,waitlist_offer_expires_at FROM {$wpdb->prefix}mi_registrations WHERE status='WAITLIST_OFFERED' ORDER BY (waitlist_offer_expires_at IS NULL),waitlist_offer_expires_at,id LIMIT 200", ARRAY_A );
+		foreach ( $offers as $offer ) {
+			$offer_expires = ! empty( $offer['waitlist_offer_expires_at'] ) ? strtotime( $offer['waitlist_offer_expires_at'] . ' UTC' ) : false;
+			$common_deadline = self::common_payment_deadline_timestamp( array( 'payment_deadline_at' => get_post_meta( (int) $offer['event_id'], '_mi_payment_deadline_at', true ) ) );
+			if ( false === $common_deadline ) $offer_expires = $now_timestamp;
+			elseif ( null !== $common_deadline && ( false === $offer_expires || $common_deadline < $offer_expires ) ) $offer_expires = $common_deadline;
+			elseif ( false === $offer_expires ) $offer_expires = $now_timestamp;
+			if ( $offer_expires && $now_timestamp && $offer_expires <= $now_timestamp ) self::respond_waitlist_offer( (int) $offer['id'], '', 'EXPIRE', true );
+		}
 	}
 
 	private static function promote_waitlisted_locked( $event_id, $now ) {
@@ -1291,6 +1463,10 @@ final class MI_Registration_Service {
 		$outbox = $wpdb->prefix . 'mi_email_outbox';
 		$event = self::public_event( $event_id, 'publish' !== get_post_status( $event_id ) );
 		if ( is_wp_error( $event ) || empty( $event['waitlist_enabled'] ) ) return array();
+		$common_deadline_timestamp = self::common_payment_deadline_timestamp( $event );
+		if ( false === $common_deadline_timestamp ) throw new RuntimeException( 'Scadenza comune del pagamento non valida.' );
+		$now_timestamp = strtotime( $now . ' UTC' );
+		if ( null !== $common_deadline_timestamp && ( false === $now_timestamp || $common_deadline_timestamp <= $now_timestamp ) ) return array();
 		$counter = $wpdb->get_row( $wpdb->prepare( "SELECT confirmed_count, waitlisted_count FROM {$counters} WHERE event_id = %d FOR UPDATE", $event_id ), ARRAY_A );
 		if ( $wpdb->last_error ) throw new RuntimeException( 'Contatore evento non disponibile.' );
 		if ( ! $counter ) return array();
@@ -1318,7 +1494,10 @@ final class MI_Registration_Service {
 			$offer_hours = min( 168, max( 1, absint( $event['waitlist_offer_hours'] ?? 48 ) ) );
 			$base = DateTimeImmutable::createFromFormat( 'Y-m-d H:i:s', $now, new DateTimeZone( 'UTC' ) );
 			if ( ! $base ) throw new RuntimeException( 'Scadenza proposta non calcolabile.' );
-			$offer_expires = $base->modify( '+' . $offer_hours . ' hours' )->format( 'Y-m-d H:i:s' );
+			$offer_expires_timestamp = $base->getTimestamp() + $offer_hours * HOUR_IN_SECONDS;
+			if ( null !== $common_deadline_timestamp ) $offer_expires_timestamp = min( $offer_expires_timestamp, $common_deadline_timestamp );
+			if ( $offer_expires_timestamp <= $base->getTimestamp() ) continue;
+			$offer_expires = gmdate( 'Y-m-d H:i:s', $offer_expires_timestamp );
 			$updated_offer = $wpdb->update( $registrations, array( 'status' => 'WAITLIST_OFFERED', 'waitlist_offer_token_hash' => hash( 'sha256', $offer_token ), 'waitlist_offered_at' => $now, 'waitlist_offer_expires_at' => $offer_expires, 'expires_at' => $offer_expires, 'payment_deadline_at' => null, 'workspace_status' => 'PENDING', 'workspace_last_error' => 'waitlist_offer_created' ), array( 'id' => $candidate['id'], 'status' => 'WAITLISTED' ), array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' ), array( '%d', '%s' ) );
 			if ( 1 !== $updated_offer ) throw new RuntimeException( 'Proposta lista d’attesa non salvata.' );
 			self::mark_workspace_changed_locked( (int) $candidate['id'] );
@@ -1589,6 +1768,18 @@ final class MI_Registration_Service {
 		if ( ! $minutes ) return null;
 		$base = DateTimeImmutable::createFromFormat( 'Y-m-d H:i:s', $now, new DateTimeZone( 'UTC' ) );
 		return $base ? $base->modify( '+' . $minutes . ' minutes' )->format( 'Y-m-d H:i:s' ) : null;
+	}
+
+	/** Scadenza comune dei pagamenti dell’evento, convertita dal fuso locale a UTC. Null indica che non è impostata; false che è malformata. */
+	private static function common_payment_deadline_timestamp( $event ) {
+		$deadline = trim( (string) ( $event['payment_deadline_at'] ?? '' ) );
+		if ( '' === $deadline ) return null;
+		if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $deadline ) ) return false;
+		$timezone = function_exists( 'wp_timezone' ) ? wp_timezone() : new DateTimeZone( 'UTC' );
+		$local = DateTimeImmutable::createFromFormat( 'Y-m-d\\TH:i', $deadline, $timezone );
+		$errors = DateTimeImmutable::getLastErrors();
+		if ( ! $local || ( is_array( $errors ) && ( $errors['warning_count'] || $errors['error_count'] ) ) ) return false;
+		return $local->setTimezone( new DateTimeZone( 'UTC' ) )->getTimestamp();
 	}
 
 	private static function registration_request_hash( $payload ) {

@@ -6,8 +6,8 @@
   },
   "admin.js": {
     "file": "min/admin.js",
-    "source": "214d61f945b3e1c1f8b43c496cba83659d7ffd4b51aacda57ecea1a4a1fa90b7",
-    "hash": "6d3b06396db06a284a6ef1d823822f5123b854d0771de727867b21522812133b"
+    "source": "46f748ca97b1a69b4f913c44bf1bfaa4e0c029eca00d9f0e64839ac55de24446",
+    "hash": "618ba4e1f2f7ce40987e24db1355bcacca75030af4464fd6b885e76ad08f6848"
   },
   "core.js": {
     "file": "min/core.js",
@@ -26,8 +26,8 @@
   },
   "portal-management.js": {
     "file": "min/portal-management.js",
-    "source": "e253d59d3b4e91024cdf0bdb33d707bb73a6ca1d23acdc41fb6f21cfff164bc4",
-    "hash": "866b34f08aa9929e8e9c9ef42bc89c13928d165e74653631a3c0f726e58230fb"
+    "source": "d2f1d3ea22f900c6376ff8e825cdc75004d415f56ea53c1c01538d96e302a1e1",
+    "hash": "74c7521990c0cfa699e3b67285412d61d092b86e93e43ef4bbbe5059cbfa7c73"
   },
   "portal-payments.css": {
     "file": "min/portal-payments.css",
@@ -39,20 +39,30 @@
     "source": "972b59847102c129b92e92c32280f88841c6c9bd5a7975bc8766eee96071aa50",
     "hash": "7658b6b4421f1fd6121c91d7162806e98d7fd558e43ed3e2f8a368b916add1ab"
   },
+  "portal-push-sw.js": {
+    "file": "min/portal-push-sw.js",
+    "source": "7b603d54913a962f1964088a26db2d61024ddecb3308ee23e8073492ac805e08",
+    "hash": "b366e950efde8febc9adb55ec79bccfd3e61a78529aec01efb1ae1b7d4fc751e"
+  },
+  "portal-push.js": {
+    "file": "min/portal-push.js",
+    "source": "9144a50f41acd0e798bef2ed8d51ceed0e68e3fd5fd3aac0c570e7ca2a5fa90f",
+    "hash": "883055d0bd3615a84d5b67ad5c163748e6a4763fd3469af095083b9c2dbb9a7c"
+  },
   "portal-pwa.js": {
     "file": "min/portal-pwa.js",
-    "source": "29a6628ad1f4856382c2addbd325765ca650c489fcddee4d44bba99e18511cd4",
+    "source": "7cbbb3613ef72a449616b0cf214dbdaf5dba7b9a029f9d4ca2fa062d5e3d2993",
     "hash": "816109ce2659b37badfeb173c921966114de86e6c0506a25d961408ec392cb88"
   },
   "portal.css": {
     "file": "min/portal.css",
-    "source": "0ae7cdea1181e114d39acb0beedf9b60920d3949ba08ac7f0e932eff5d5407cd",
-    "hash": "4504d7b0270cdebfe8357390abf74b81645ba71633b5ab9a5466a05fd5fa9be4"
+    "source": "bef0f027089ac802e19debd34e45b86b353a6fdfdbc67759640637933b869293",
+    "hash": "88850a79326539b93dbaac9bc77c872360bf1836c52c99759a9d5d0b5813d19a"
   },
   "portal.js": {
     "file": "min/portal.js",
-    "source": "89dc36c749ea9ebaf06ff3c6e66572694bd22bd148068ce058b1d5018a6be7d6",
-    "hash": "ff3722b6c51c2be0ef0cd91454d89d9b872b1f7350814f2ad724c97550a15165"
+    "source": "0b88199d83589c5c530323824ad7f0489d47c7d70ba15867245c66b17e8b3720",
+    "hash": "7ffed1cee681fe8c1b2c8cea278304aa385f72788a099807e4ef72f3359c9efe"
   },
   "public-balance.css": {
     "file": "min/public-balance.css",

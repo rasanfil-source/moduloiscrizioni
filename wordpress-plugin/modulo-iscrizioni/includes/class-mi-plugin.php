@@ -31,6 +31,7 @@ final class MI_Plugin {
 		MI_Portal::boot();
 		add_action( 'template_redirect', array( 'MI_Public_Balance', 'route' ), -95 );
 		MI_Portal_PWA::boot();
+		MI_Web_Push::boot();
 		MI_Portal_Payments::boot();
 		MI_Portal_Management::boot();
 		MI_Sheet_Open::boot();

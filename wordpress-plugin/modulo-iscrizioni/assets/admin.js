@@ -171,11 +171,19 @@
   const riquadroCaparraFissa = document.querySelector('[data-mi-deposit-fixed]');
   const riquadroPagamenti = document.querySelector('[data-mi-economic-payments]');
 	const riquadroPrezzoFisso = document.querySelector('[data-mi-fixed-price]');
+  const impostazioneOreRettifica = document.querySelector('[data-mi-reopened-payment-setting]');
+  const inputOreRettifica = document.getElementById('mi_reopened_payment_hours');
   const aiutoEconomico = document.querySelector('[data-mi-economic-help]');
   if (modalitaEconomica && modalitaPrezzo && riquadroCaparra && riquadroPagamenti && aiutoEconomico) {
     const aggiornaConfigurazioneEconomica = () => {
       const modalita = modalitaEconomica.value;
       const incassa = ['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(modalita);
+	  const hasPricedOptions = Array.from(document.querySelectorAll('#mi-options input[name="mi_option_price[]"]')).some((input) => Number(input.value) > 0);
+	  const ticketPricesAreZero = Array.from(document.querySelectorAll('#mi-ticket-types input[name="mi_ticket_price[]"]')).every((input) => Number(input.value) === 0);
+	  const servicePricing = hasPricedOptions && (modalitaPrezzo.value === 'NONE' || (modalitaPrezzo.value === 'CALCULATED' && ticketPricesAreZero));
+	  const showReopenedHours = incassa && servicePricing;
+	  if (impostazioneOreRettifica) impostazioneOreRettifica.hidden = !showReopenedHours;
+	  if (inputOreRettifica) inputOreRettifica.disabled = !showReopenedHours;
 	  const prezzoCoerente = modalita === 'REGISTRATION_ONLY' ? ['NONE', 'ZERO'].includes(modalitaPrezzo.value) : ['FIXED', 'CALCULATED'].includes(modalitaPrezzo.value);
 	  if (riquadroPrezzoFisso) {
 		riquadroPrezzoFisso.hidden = modalitaPrezzo.value !== 'FIXED';
@@ -202,6 +210,8 @@
     modalitaEconomica.addEventListener('change', aggiornaConfigurazioneEconomica);
     modalitaPrezzo.addEventListener('change', aggiornaConfigurazioneEconomica);
 	modalitaCaparra?.addEventListener('change', aggiornaConfigurazioneEconomica);
+	document.addEventListener('input', (event) => { if (event.target.matches('#mi-options input[name="mi_option_price[]"],#mi-ticket-types input[name="mi_ticket_price[]"]')) aggiornaConfigurazioneEconomica(); });
+	document.querySelectorAll('#mi-options tbody,#mi-ticket-types tbody').forEach((tableBody) => new MutationObserver(aggiornaConfigurazioneEconomica).observe(tableBody, { childList: true }));
     aggiornaConfigurazioneEconomica();
   }
 

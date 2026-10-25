@@ -2,7 +2,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-/** Installazione facoltativa del portale online, senza cache dei dati o service worker. */
+/** Installazione facoltativa del portale online, senza cache dei dati. */
 final class MI_Portal_PWA {
 	const OPTION = 'mi_portal_pwa_enabled';
 	private static $selected_group_id = null;

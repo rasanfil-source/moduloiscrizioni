@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class MI_Activator {
-	const SCHEMA_REVISION = 1;
+	const SCHEMA_REVISION = 2;
 	public static function activate() {
 		self::create_tables();
 		self::add_roles_and_capabilities();
@@ -95,6 +95,7 @@ final class MI_Activator {
 		$rooms = $wpdb->prefix . 'mi_rooms';
 		$management_state = $wpdb->prefix . 'mi_management_state';
 		$management_requests = $wpdb->prefix . 'mi_management_requests';
+		$push_subscriptions = $wpdb->prefix . 'mi_web_push_subscriptions';
 
 		dbDelta( "CREATE TABLE {$registrations} (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -290,6 +291,20 @@ final class MI_Activator {
 			created_at datetime NOT NULL,
 			PRIMARY KEY  (request_id),
 			KEY event_requests (event_id,created_at)
+		) ENGINE=InnoDB {$charset};" );
+
+		dbDelta( "CREATE TABLE {$push_subscriptions} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			user_id bigint(20) unsigned NOT NULL,
+			endpoint_hash char(64) NOT NULL,
+			endpoint text NOT NULL,
+			p256dh varchar(128) NOT NULL,
+			auth varchar(128) NOT NULL,
+			created_at datetime NOT NULL,
+			updated_at datetime NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY endpoint_hash (endpoint_hash),
+			KEY user_id (user_id)
 		) ENGINE=InnoDB {$charset};" );
 		dbDelta( "CREATE TABLE {$wpdb->prefix}mi_booking_codes (
 			event_id bigint(20) unsigned NOT NULL,

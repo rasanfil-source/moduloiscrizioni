@@ -29,6 +29,14 @@ Prima di generare un pacchetto distribuibile, impostare lo stesso identificativo
 
 Il protocollo firmato tra WordPress e Apps Script è condiviso dai due componenti. La configurazione del canale email è descritta in [Comunicazioni tramite Apps Script](ATTIVAZIONE_EMAIL_GAS.md).
 
+## Integrità della configurazione evento
+
+Editor WordPress, portale e Workspace operano sugli stessi metadati dell'evento. Quando il portale salva o duplica un evento, deve modificare i campi che gestisce e conservare quelli avanzati che non mostra, comprese tipologie multiple, opzioni aggiuntive, domande e relative scelte e regole di conservazione. La modalità di quota o un importo non valido non deve trasformarsi silenziosamente in zero né cancellare impostazioni esistenti: la validazione deve avvenire prima delle scritture e l'errore deve essere comprensibile.
+
+## Rate limit dietro proxy
+
+Il limite per indirizzo IP usa `REMOTE_ADDR` come valore attendibile. Gli header `CF-Connecting-IP` e `X-Forwarded-For` vengono letti solo quando `REMOTE_ADDR` appartiene a una rete proxy configurata in `MI_TRUSTED_PROXY_CIDRS` (array di reti CIDR in `wp-config.php`) o nel filtro `mi_trusted_proxy_cidrs`. Inserire soltanto le reti reali dei proxy che si controllano; senza questa configurazione gli header inoltrati vengono ignorati.
+
 ## Dati temporanei
 
 Gli strumenti locali possono usare servizi e database sintetici. Verificare la configurazione richiesta da ciascun comando prima di avviarlo e mantenere i dati di esempio separati da quelli operativi. Non cancellare in blocco le cartelle temporanee: possono contenere runtime o database necessari alle attività locali.

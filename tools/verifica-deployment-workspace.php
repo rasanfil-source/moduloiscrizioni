@@ -93,7 +93,7 @@ function mi_workspace_preflight_main(array $argv): int {
 			fwrite(STDERR, "Deployment NON idoneo:\n- " . implode("\n- ", $errors) . "\n");
 			return 5;
 		}
-		fwrite(STDOUT, sprintf("Deployment idoneo: schema %s, autonomo, proiezione diretta, DB_MODULI escluso.\n", (string) ($decoded['schema_version'] ?? 'non dichiarato')));
+		fwrite(STDOUT, sprintf("Distribuzione idonea: schema %s, progetto Apps Script autonomo, proiezione diretta.\n", (string) ($decoded['schema_version'] ?? 'non dichiarato')));
 		return 0;
 	} catch (Throwable $error) {
 		fwrite(STDERR, 'Controllo non completato: ' . $error->getMessage() . "\n");

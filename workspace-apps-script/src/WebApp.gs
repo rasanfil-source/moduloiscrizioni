@@ -48,7 +48,7 @@ function statoReplicaIscrizione_(payload) {
     return String(item.codice_ordine) === orderCode;
   });
 	const registrationClosed = ['CANCELLED', 'EXPIRED', 'ANNULLATO', 'SCADUTO'].indexOf(String(registration.stato || '').toUpperCase()) >= 0;
-	const activeParticipantCount = registrationClosed ? 0 : participantRows.filter(function (item) { return String(item.stato_partecipante || 'ACTIVE').toUpperCase() !== 'CANCELLED'; }).length;
+	const activeParticipantCount = registrationClosed ? 0 : participantRows.filter(function (item) { return String(item.stato_partecipante || 'ACTIVE').toUpperCase() === 'ACTIVE'; }).length;
 	const centralComplete = participantRows.length > 0 && activeParticipantCount === expected;
   let eventSheetComplete = false;
   if (centralComplete) {
@@ -169,7 +169,7 @@ function registraIscrizioneCentrale_(payload) {
 	const revisionId = normalizzaTesto_(payload.event_revision_id, 40);
 	const revisionHash = normalizzaTesto_(payload.event_revision_hash, 64);
 	const registrationStatus = normalizzaValoreElenco_(payload.status, ['PENDING_PAYMENT', 'CONFIRMED', 'WAITLISTED', 'CANCELLED', 'EXPIRED']);
-	const activeParticipantCount = ['CANCELLED', 'EXPIRED'].indexOf(registrationStatus) >= 0 ? 0 : participants.filter(function (participant) { return normalizzaValoreElenco_(participant.status, ['ACTIVE', 'CANCELLED']) !== 'CANCELLED'; }).length;
+	const activeParticipantCount = ['CANCELLED', 'EXPIRED'].indexOf(registrationStatus) >= 0 ? 0 : participants.filter(function (participant) { return 'ACTIVE' === normalizzaValoreElenco_(participant.status, ['ACTIVE', 'CANCELLED', 'EXPIRED']); }).length;
 	const economicMode = normalizzaValoreElenco_(payload.economic_mode, ['REGISTRATION_ONLY', 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE']);
   if (!/^[A-Za-z0-9_-]{3,64}$/.test(orderCode) || !/^\d+$/.test(eventId) || !/^[A-Za-z0-9_-]{16,64}$/.test(idempotencyKey) || !registrationStatus || !economicMode || participants.length < 1 || participants.length > 20) return { ok: false, error: 'INVALID_REGISTRATION' };
 	if (!/^\d+$/.test(revisionId) || !/^[a-f0-9]{64}$/i.test(revisionHash) || !normalizzaTesto_(payload.privacy_consent_id, 100) || !normalizzaTesto_(payload.privacy_policy_version, 64) || !normalizzaTesto_(payload.privacy_accepted_at, 40)) return { ok: false, error: 'INVALID_REVISION_OR_CONSENT' };
@@ -265,7 +265,7 @@ function registraIscrizioneCentrale_(payload) {
         neutralizzaFormula_((correzioni[orderCode + '|' + (index + 1)] || {}).last_name || participant.last_name, 80),
         JSON.stringify(participant.fields || {}),
         JSON.stringify(participant.options || []),
-        normalizzaValoreElenco_(participant.status, ['ACTIVE', 'CANCELLED']) || 'ACTIVE',
+		normalizzaValoreElenco_(participant.status, ['ACTIVE', 'CANCELLED', 'EXPIRED']) || 'ACTIVE',
         normalizzaTesto_(participant.cancelled_at, 40),
 		participant.total_cents == null ? '' : Math.max(0, Math.round(Number(participant.total_cents) || 0)),
 		participant.paid_cents == null ? '' : Math.max(0, Math.round(Number(participant.paid_cents) || 0)),

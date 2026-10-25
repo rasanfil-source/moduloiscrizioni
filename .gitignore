@@ -44,3 +44,25 @@ desktop.ini
 
 # Pacchetti installabili generati localmente.
 dist/*.zip
+
+# Backup, esportazioni e audit locali: le fonti operative restano nelle cartelle sorgente.
+.codex-base-*/
+backup/
+gemini-skills-export/
+premium-audit.json
+/[[]0-9]+
+
+# Esportazioni Workspace generate o storiche, non fonti operative.
+dist/Codice-Workspace*.gs
+dist/Codice-Workspace*.gs.sha256
+dist/Codice.gs-*.txt
+dist/Segreteria.html-*.txt
+dist/Segreteria eventi.url
+dist/Workspace-*.zip.sha256
+dist/codice*.js
+
+# Helper di confezionamento usa-e-getta; il processo del rilascio corrente resta tracciato.
+tools/package-3.26.*.ps1
+!tools/package-3.26.258.ps1
+tools/package-sheet-ui-*.ps1
+tools/package-workspace-*.mjs

@@ -1,4 +1,4 @@
-// Installazione online: nessun service worker, cache persistente o richiesta applicativa.
+// Installazione online: nessuna cache persistente o richiesta applicativa.
 (() => {
   let installPrompt = null;
   let justInstalled = false;
