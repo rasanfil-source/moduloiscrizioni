@@ -124,9 +124,10 @@ foreach(['START TRANSACTION','COMMIT','people_count','event_lock','ticket_lock',
  check_case($success?$result==='CANCELLED'&&$wpdb->commits===1:is_wp_error($result)&&$wpdb->writes===0,'cancel participant '.$failure);
 }
 foreach(['START TRANSACTION','COMMIT','people_read','scheduler','none'] as $failure){
- $wpdb=new FaultDatabase();$wpdb->registration=array_replace($stored,['status'=>'WAITLIST_OFFERED','waitlist_offer_expires_at'=>'2099-01-01 12:00:00']);
+ $token='synthetic-waitlist-token';
+ $wpdb=new FaultDatabase();$wpdb->registration=array_replace($stored,['status'=>'WAITLIST_OFFERED','waitlist_offer_expires_at'=>'2099-01-01 12:00:00','waitlist_offer_token_hash'=>hash('sha256',$token)]);
  $wpdb->failure=$failure;$GLOBALS['fail_schedule']=$failure==='scheduler';
- $result=MI_Registration_Service::respond_waitlist_offer(1,'','DECLINE',true);
+ $result=MI_Registration_Service::respond_waitlist_offer(1,$token,'DECLINE');
  $success=in_array($failure,['scheduler','none'],true);
  check_case($success?$result==='DECLINED'&&$wpdb->commits===1:is_wp_error($result)&&$wpdb->writes===0,'waitlist decline '.$failure);
 }
