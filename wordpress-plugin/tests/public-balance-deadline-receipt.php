@@ -5,6 +5,7 @@ $fixture=explode('function check_balance(',file_get_contents($testDir.'/public-b
 $fixture=str_replace('__DIR__',var_export($testDir,true),$fixture);
 $fixture=preg_replace('/static function reopened_payment_deadline\(.*?\}static function mark_workspace_changed_locked/s','static function reopened_payment_deadline($registration,$now=null){return AuditRealRegistration::reopened_payment_deadline($registration,$now??$GLOBALS["audit_now"]);}static function mark_workspace_changed_locked',$fixture,1);
 eval('?>'.$fixture);
+function wp_timezone(){return new DateTimeZone('UTC');}
 $source=file_get_contents(dirname($testDir).'/modulo-iscrizioni/includes/class-mi-registration-service.php');
 $source=str_replace('__DIR__',var_export(dirname($testDir).'/modulo-iscrizioni/includes',true),$source);
 $source=str_replace('final class MI_Registration_Service','final class AuditRealRegistration',$source);
@@ -17,6 +18,7 @@ $passed=true;
 foreach(['2020-01-01 12:00:00',null] as $old){
     $GLOBALS['audit_now']=time();
     $wpdb=new AuditDeadlineDB(); $wpdb->reg['expires_at']=$old; $wpdb->reg['payment_deadline_at']=$old;
+    $snapshot=json_decode($wpdb->reg['snapshot_json'],true); $snapshot['event']['payment_deadline_at']='2020-01-01T12:00'; $wpdb->reg['snapshot_json']=json_encode($snapshot);
     $view=MI_Public_Balance::lookup(42,['action'=>'lookupByCognome','cognome'=>'decclesia']);
     $data=['persone'=>[['row'=>1,'token'=>$view['persona']['token'],'version'=>$view['persona']['version'],'services'=>['pullman-a'=>1]]],'email'=>'','requestId'=>'12345678-1234-4234-8234-123456789d01'];
     $preview=MI_Public_Balance::save(42,$data,true); $data['fingerprint']=$preview['fingerprint'];
