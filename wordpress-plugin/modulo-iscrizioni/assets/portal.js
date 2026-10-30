@@ -302,7 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
       management.querySelector('input[value="'+mode+'"]').checked = true;
     }
     const updateOvernight = () => {
-	  const servicePricing = pricing?.value === 'NONE';
+      const servicePricing = pricing?.value === 'CALCULATED';
       rooms.hidden = !servicePricing || !overnight.checked;
       if (!overnight.checked) rooms.querySelectorAll('input').forEach((input) => { input.checked = false; });
 	  rooms.querySelectorAll('[data-mi-accommodation]').forEach((accommodation) => {
@@ -324,7 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	  const price = service.closest('.mi-service-fee')?.querySelector('input[name^="service_price"]');
 	  const updateService = () => {
 		if (!price) return;
-		const active = pricing?.value === 'NONE' && service.checked;
+		const active = pricing?.value === 'CALCULATED' && service.checked;
 		price.disabled = !active;
 		price.required = active;
 		if (!service.checked) price.value = '';
@@ -337,7 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	const busRoutesList = form.querySelector('[data-mi-bus-routes-list]');
 	const busRouteTemplate = form.querySelector('[data-mi-bus-route-template]');
 	const updateBusRoutes = () => {
-	  const active = pricing?.value === 'NONE';
+	  const active = pricing?.value === 'CALCULATED';
 	  const extra = form.querySelector('[data-mi-extra-services]');
 	  if(extra){extra.hidden=!active;extra.querySelectorAll('input,select').forEach(input=>{input.disabled=!active;});}
 	  if (busRoutes) busRoutes.hidden = !active;
@@ -369,6 +369,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const required = form.querySelector(`[data-mi-required="${enabled.dataset.miField}"]`);
       if (!enabled.checked && required) required.checked = false;
     }));
+    const fixedFee = form.querySelector('[data-mi-fixed-price]');
+    const fixedPrice = form.querySelector('[data-mi-fixed-price-input]');
     const participationFee = form.querySelector('[data-mi-participation-fee]');
     const participationPrice = form.querySelector('[data-mi-participation-price]');
     const pricingLabel = pricing?.closest('label');
@@ -381,7 +383,8 @@ document.addEventListener('DOMContentLoaded', () => {
 	  step?.insertBefore(pricingLabel, overnight.closest('label'));
 	  const pricingHelp = form.querySelector('#mi-pricing-help');
 	  if (pricingHelp) pricingLabel.after(pricingHelp);
-	  if (participationFee && pricingHelp) pricingHelp.after(participationFee);
+	  if (fixedFee && pricingHelp) pricingHelp.after(fixedFee);
+	  if (participationFee && fixedFee) fixedFee.after(participationFee);
 	}
     const economic = form.querySelector('[data-mi-economic]');
     const payment = form.querySelector('[data-mi-payment]');
@@ -424,9 +427,9 @@ document.addEventListener('DOMContentLoaded', () => {
 	  const collects = paidEvent && ['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(economic?.value);
       if (payment) payment.hidden = !collects;
 	  const pricedServiceInputs = Array.from(form.querySelectorAll('input[name="participation_price"],input[name^="accommodation_price["],input[name^="service_price["],input[name="bus_route_price[]"],input[name="extra_service_price[]"]'));
-	  const hasPricedService = pricedServiceInputs.some((input) => Number(String(input.value).replace(',', '.')) > 0);
-	  const serviceBasedPricing = pricing?.value === 'NONE';
-	  const showReopenedHours = collects && serviceBasedPricing && hasPricedService;
+	  const hasServicePrice = pricedServiceInputs.some((input) => !input.disabled && Number(String(input.value).replace(',', '.')) > 0);
+	  const hasFixedPrice = pricing?.value === 'FIXED' && Number(String(fixedPrice?.value || '').replace(',', '.')) > 0;
+	  const showReopenedHours = collects && (hasFixedPrice || (pricing?.value === 'CALCULATED' && hasServicePrice));
 	  if (reopenedPaymentSetting) reopenedPaymentSetting.hidden = !showReopenedHours;
 	  if (reopenedPaymentHours) reopenedPaymentHours.disabled = !showReopenedHours;
       if (deposit) deposit.hidden = economic?.value !== 'DEPOSIT_BALANCE';
@@ -437,12 +440,15 @@ document.addEventListener('DOMContentLoaded', () => {
 	  const pricingHelp = form.querySelector('#mi-pricing-help');
 	  const pricingMessages = {
 	    ZERO: 'Il modulo raccoglie i dati senza calcolare importi. Scegli questa modalità se l’evento è gratuito o se quote e pagamenti si gestiscono fuori dal modulo, per esempio con un’agenzia.',
-	    NONE: 'Il totale comprende la quota di partecipazione, se indicata, e i servizi a pagamento selezionati. La quota di partecipazione si applica a ogni iscritto.'
+	    FIXED: 'La stessa quota si applica a ogni iscritto. Inserisci l’importo per persona; caparra e modalità di pagamento si configurano separatamente.',
+	    CALCULATED: 'Il totale dipende dai servizi scelti. Se prevista, la quota di partecipazione si aggiunge per ogni iscritto; caparra e modalità di pagamento si configurano separatamente.'
 	  };
 	  if (pricingHelp) pricingHelp.textContent = pricingMessages[pricing.value] || 'Scegli come calcolare gli importi dell’iscrizione.';
-	  if (participationFee) participationFee.hidden = pricing.value === 'ZERO';
-	  if (participationPrice) participationPrice.disabled = pricing.value === 'ZERO';
-	  servicePricingNodes.forEach((node) => { node.hidden = pricing.value !== 'NONE'; });
+	  if (fixedFee) fixedFee.hidden = pricing.value !== 'FIXED';
+	  if (fixedPrice) { fixedPrice.disabled = pricing.value !== 'FIXED'; fixedPrice.required = pricing.value === 'FIXED'; }
+	  if (participationFee) participationFee.hidden = pricing.value !== 'CALCULATED';
+	  if (participationPrice) participationPrice.disabled = pricing.value !== 'CALCULATED';
+	  servicePricingNodes.forEach((node) => { node.hidden = pricing.value !== 'CALCULATED'; });
 	  updateOvernight();
 	  serviceUpdaters.forEach((updateService) => updateService());
 	  updateBusRoutes();
@@ -461,8 +467,8 @@ document.addEventListener('DOMContentLoaded', () => {
 	};
     pricing?.addEventListener('change', updatePricing);
     economic?.addEventListener('change', updateEconomic);
-	form.addEventListener('input', (event) => { if (event.target.matches('input[name^="accommodation_price["],input[name^="service_price["],input[name="bus_route_price[]"],input[name="extra_service_price[]"]')) updateEconomic(); });
-	form.addEventListener('change', (event) => { if (event.target.matches('input[name^="accommodation_price["],input[name^="service_price["],input[name="bus_route_price[]"],input[name="extra_service_price[]"],input[name="overnight"],[data-mi-accommodation],[data-mi-service-fee]')) updateEconomic(); });
+	form.addEventListener('input', (event) => { if (event.target.matches('input[name="fixed_price"],input[name="participation_price"],input[name^="accommodation_price["],input[name^="service_price["],input[name="bus_route_price[]"],input[name="extra_service_price[]"]')) updateEconomic(); });
+	form.addEventListener('change', (event) => { if (event.target.matches('input[name="fixed_price"],input[name="participation_price"],input[name^="accommodation_price["],input[name^="service_price["],input[name="bus_route_price[]"],input[name="extra_service_price[]"],input[name="overnight"],[data-mi-accommodation],[data-mi-service-fee]')) updateEconomic(); });
 	depositMode?.addEventListener('change', updateDeposit);
     updatePricing();
     const opensAt = form.querySelector('[data-mi-opens]');

@@ -1825,15 +1825,18 @@ test('le quote accessorie usano righe compatte senza grandi spazi vuoti', async 
   assert.match(script, /data-mi-bus-routes/);
 });
 
-test('la scelta economica mostra due modalità e include la quota nella seconda', async () => {
+test('la scelta economica mostra le tre modalità richieste nell ordine stabilito', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const start = portal.indexOf('Come sarà l’evento?');
   const free = portal.indexOf('Iscrizione senza quote nel modulo', start);
+  const fixed = portal.indexOf('Quota uguale per tutti', start);
   const services = portal.indexOf('In base ai servizi scelti', start);
   const participation = portal.indexOf('Quota di partecipazione per persona', services);
   const selectEnd = portal.indexOf('</select>', start);
-  assert.ok(start >= 0 && free > start && services > free && participation > services && selectEnd > services);
-  assert.doesNotMatch(portal.slice(start, selectEnd), /Quota uguale per tutti/);
+  const fixedPrice = portal.indexOf('name="fixed_price"', selectEnd);
+  assert.ok(start >= 0 && free > start && fixed > free && services > fixed && participation > services && selectEnd > services && fixedPrice > selectEnd);
+  assert.match(portal.slice(start, selectEnd), /value="ZERO"[\s\S]*Iscrizione senza quote nel modulo[\s\S]*value="FIXED"[\s\S]*Quota uguale per tutti[\s\S]*value="CALCULATED"[\s\S]*In base ai servizi scelti/);
+  assert.doesNotMatch(portal.slice(start, selectEnd), /Ticket|Nessuna quota base/);
 });
 
 test('Crea evento apre un wizard nuovo e non eredita la bozza precedente', async () => {
@@ -1865,12 +1868,14 @@ test('il wizard mostra soltanto i costi coerenti con il tipo di evento', async (
   const pricingEnd = portal.indexOf('</select>', pricingStart);
   const pricingSelect = portal.slice(pricingStart, pricingEnd);
   assert.ok(pricingStart >= 0 && pricingEnd > pricingStart);
-  assert.match(pricingSelect, /Iscrizione senza quote nel modulo[\s\S]*In base ai servizi scelti/);
-  assert.doesNotMatch(pricingSelect, /Quota uguale per tutti/);
-  assert.match(portal, /Quota di partecipazione per persona[\s\S]*Si applica automaticamente a ogni iscritto/);
+  assert.match(pricingSelect, /Iscrizione senza quote nel modulo[\s\S]*Quota uguale per tutti[\s\S]*In base ai servizi scelti/);
+  assert.match(portal, /data-mi-fixed-price[\s\S]*name="fixed_price"/);
+  assert.match(portal, /Quota di partecipazione per persona[\s\S]*Si aggiunge alle quote dei servizi scelti e si applica a ogni iscritto/);
   assert.doesNotMatch(portal.match(/Modalità di pagamento richiesta<select[\s\S]*?<\/select>/)[0], /PRICE_ONLY|Prezzo solamente informativo|Nessun pagamento previsto/);
   assert.match(portal, />Unica soluzione<\/option>[\s\S]*>Caparra e saldo<\/option>/);
-  assert.match(script, /servicePricingNodes\.forEach\(\(node\) => \{ node\.hidden = pricing\.value !== 'NONE'; \}\)/);
+  assert.match(script, /servicePricingNodes\.forEach\(\(node\) => \{ node\.hidden = pricing\.value !== 'CALCULATED'; \}\)/);
+  assert.match(script, /fixedFee\.hidden = pricing\.value !== 'FIXED'/);
+  assert.match(script, /participationFee\.hidden = pricing\.value !== 'CALCULATED'/);
   assert.match(script, /economicLabel\.hidden = !paidEvent/);
 });
 
@@ -2457,10 +2462,10 @@ test('la Segreteria autentica nella propria pagina senza usare wp-login.php', as
 test('un evento gratuito nasconde realmente pernottamento e quote accessorie', async () => {
   const script = await read('assets/portal.js');
   const css = await read('assets/portal.css');
-  assert.match(script, /node\.hidden = pricing\.value !== 'NONE'/);
+  assert.match(script, /node\.hidden = pricing\.value !== 'CALCULATED'/);
   assert.match(css, /\.mi-event-wizard \[hidden\]\{display:none!important\}/);
   assert.match(script, /const active = servicePricing && overnight\.checked && accommodation\.checked/);
-  assert.match(script, /const active = pricing\?\.value === 'NONE' && service\.checked/);
+  assert.match(script, /const active = pricing\?\.value === 'CALCULATED' && service\.checked/);
   assert.match(script, /serviceUpdaters\.forEach/);
 });
 

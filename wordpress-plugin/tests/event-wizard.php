@@ -24,11 +24,16 @@ function check_wizard($ok,$msg){if(!$ok)throw new RuntimeException($msg);}
 check_wizard(str_contains($html,'name="capacity" value="77"'),'Capacity not copied');
 check_wizard(str_contains($html,'name="max_per_order" min="2" max="20" value="8"'),'Multiple limit not copied');
 check_wizard(str_contains($html,'value="Allergie"')&&str_contains($html,'value="42,00"'),'Questions or price not copied');
+check_wizard(str_contains($html,'>Iscrizione senza quote nel modulo</option>')&&str_contains($html,'>Quota uguale per tutti</option>')&&str_contains($html,'>In base ai servizi scelti</option>'),'Pricing modes not rendered with the requested labels');
+check_wizard(str_contains($html,'name="participation_price"')&&str_contains($html,'name="fixed_price"'),'Per-person pricing fields are missing');
 check_wizard(str_contains($html,'value="Oggetto copiato"'),'Email not copied');
 check_wizard(str_contains($html,'name="closes_at" value=""'),'Old dates copied');
 check_wizard(str_contains($html,'name="event_id" value="0"'),'Source event edited');
 check_wizard(str_contains($html,'data-mi-accommodation-management-mode="PREBOOKED"'),'Accommodation mode not copied');
 check_wizard(str_contains($html,'name="reopened_payment_hours" min="1" max="168" value="72"'),'Dedicated payment window not copied from model');
+$GLOBALS['meta'][42]['_mi_pricing_mode']='FIXED';$GLOBALS['meta'][42]['_mi_fixed_price_cents']=4200;ob_start();$render->invoke(null);$fixed_html=ob_get_clean();
+check_wizard(str_contains($fixed_html,'name="fixed_price" data-mi-fixed-price-input value="42,00"'),'Fixed per-person quota not loaded');
+check_wizard(str_contains($fixed_html,'value="FIXED" selected'),'Fixed pricing mode not selected');
 $_GET['mi_copy_from']=99;ob_start();$render->invoke(null);$denied=ob_get_clean();
 check_wizard(!str_contains($denied,'value="Allergie"')&&str_contains($denied,'data-mi-participant-scope hidden disabled'),'Foreign model read or single scope visible');
 check_wizard(str_contains($denied,'name="reopened_payment_hours" min="1" max="168" value="48"'),'Default payment window is not 48 hours');
