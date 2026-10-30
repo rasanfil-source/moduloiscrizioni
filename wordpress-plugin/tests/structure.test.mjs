@@ -1825,13 +1825,15 @@ test('le quote accessorie usano righe compatte senza grandi spazi vuoti', async 
   assert.match(script, /data-mi-bus-routes/);
 });
 
-test('la scelta della quota usa tre opzioni chiare nell ordine richiesto', async () => {
+test('la scelta economica mostra due modalità e include la quota nella seconda', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const start = portal.indexOf('Come sarà l’evento?');
   const free = portal.indexOf('Iscrizione senza quote nel modulo', start);
-  const fixed = portal.indexOf('Quota uguale per tutti', start);
   const services = portal.indexOf('In base ai servizi scelti', start);
-  assert.ok(start >= 0 && free > start && fixed > free && services > fixed);
+  const participation = portal.indexOf('Quota di partecipazione per persona', services);
+  const selectEnd = portal.indexOf('</select>', start);
+  assert.ok(start >= 0 && free > start && services > free && participation > services && selectEnd > services);
+  assert.doesNotMatch(portal.slice(start, selectEnd), /Quota uguale per tutti/);
 });
 
 test('Crea evento apre un wizard nuovo e non eredita la bozza precedente', async () => {
@@ -1859,8 +1861,13 @@ test('ogni sistemazione dispone di un costo che entra nelle opzioni economiche',
 test('il wizard mostra soltanto i costi coerenti con il tipo di evento', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const script = await read('assets/portal.js');
-  assert.match(portal, /Come sarà l’evento\?/);
-  assert.match(portal, /Iscrizione senza quote nel modulo[\s\S]*Quota uguale per tutti[\s\S]*In base ai servizi scelti/);
+  const pricingStart = portal.indexOf('Come sarà l’evento?');
+  const pricingEnd = portal.indexOf('</select>', pricingStart);
+  const pricingSelect = portal.slice(pricingStart, pricingEnd);
+  assert.ok(pricingStart >= 0 && pricingEnd > pricingStart);
+  assert.match(pricingSelect, /Iscrizione senza quote nel modulo[\s\S]*In base ai servizi scelti/);
+  assert.doesNotMatch(pricingSelect, /Quota uguale per tutti/);
+  assert.match(portal, /Quota di partecipazione per persona[\s\S]*Si applica automaticamente a ogni iscritto/);
   assert.doesNotMatch(portal.match(/Modalità di pagamento richiesta<select[\s\S]*?<\/select>/)[0], /PRICE_ONLY|Prezzo solamente informativo|Nessun pagamento previsto/);
   assert.match(portal, />Unica soluzione<\/option>[\s\S]*>Caparra e saldo<\/option>/);
   assert.match(script, /servicePricingNodes\.forEach\(\(node\) => \{ node\.hidden = pricing\.value !== 'NONE'; \}\)/);
