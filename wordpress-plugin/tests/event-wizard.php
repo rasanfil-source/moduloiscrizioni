@@ -16,7 +16,7 @@ class MI_Field_Schema {static function catalog(){return ['email'=>['label'=>'Ema
 class MI_Extra_Services {static function render($options){}}
 class MI_Modello_Email {static function impostazioni($id){return ['subject'=>$id?'Oggetto copiato':'Oggetto nuovo','text'=>'Testo'];}static function stile_risolto($id){return self::stile_default();}static function stile_default(){return ['primary_color'=>'#123456','secondary_color'=>'#654321'];}}
 require __DIR__.'/../modulo-iscrizioni/includes/class-mi-portal.php';
-$GLOBALS['meta']=[42=>['_mi_reopened_payment_hours'=>72,'_mi_waitlist_offer_hours'=>2,'_mi_capacity'=>77,'_mi_ticket_types'=>[['max_per_order'=>8]],'_mi_custom_participant_fields'=>[['key'=>'custom_allergie','label'=>'Allergie','type'=>'text']], '_mi_pricing_mode'=>'FIXED','_mi_fixed_price_cents'=>4200,'_mi_registration_closes_at'=>'2027-01-01T12:00','_mi_participant_extra_scope'=>'ALL','_mi_accommodation_management'=>'PREBOOKED']];
+$GLOBALS['meta']=[42=>['_mi_reopened_payment_hours'=>72,'_mi_waitlist_offer_hours'=>2,'_mi_capacity'=>77,'_mi_ticket_types'=>[['max_per_order'=>8,'price_cents'=>4200]],'_mi_custom_participant_fields'=>[['key'=>'custom_allergie','label'=>'Allergie','type'=>'text']], '_mi_pricing_mode'=>'CALCULATED','_mi_registration_closes_at'=>'2027-01-01T12:00','_mi_participant_extra_scope'=>'ALL','_mi_accommodation_management'=>'PREBOOKED']];
 $_GET['mi_copy_from']=isset($argv[1])?(int)$argv[1]:42;
 $render=new ReflectionMethod(MI_Portal::class,'create_view');ob_start();$render->invoke(null);$html=ob_get_clean();
 if(in_array('--html',$argv,true)){echo $html;exit;}
