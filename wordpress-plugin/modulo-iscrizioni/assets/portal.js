@@ -82,6 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
         option.hidden = foreign;
       });
       if (select.selectedOptions[0] && select.selectedOptions[0].disabled) select.value = '';
+      select.required = Array.from(select.options).some(option => option.value && option.dataset.group === group.value);
     };
     group.addEventListener('change', refresh);
     refresh();

@@ -76,6 +76,13 @@ final class MI_Group_Links {
 		return $slug;
 	}
 
+	public static function has_enabled_links( $group_id ) {
+		foreach ( self::links( $group_id ) as $link ) {
+			if ( ! empty( $link['enabled'] ) ) return true;
+		}
+		return false;
+	}
+
 	/** Date della revisione pubblicata; nessun filtro sull'apertura delle iscrizioni. */
 	public static function next_event( $group_id, $slug ) {
 		$ids = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'publish', 'numberposts' => -1, 'fields' => 'ids', 'orderby' => 'ID', 'order' => 'ASC', 'meta_query' => array(
@@ -164,7 +171,7 @@ final class MI_Group_Links {
 	}
 
 	public static function event_field( $groups, $selected ) { ?>
-		<label>Categoria / link permanente <small>(facoltativo)</small><select name="group_link" data-mi-event-group-link><option value="">Nessuno — solo il link di questo evento</option><?php foreach ( $groups as $group ) : foreach ( self::links( $group->ID ) as $slug => $link ) : if ( empty( $link['enabled'] ) && $slug !== $selected ) continue; ?><option value="<?php echo esc_attr( $slug ); ?>" data-group="<?php echo esc_attr( $group->ID ); ?>" <?php selected( $slug, $selected ); ?>><?php echo esc_html( $link['label'] . ' — /' . $slug . ( empty( $link['enabled'] ) ? ' (disattivato)' : '' ) ); ?></option><?php endforeach; endforeach; ?></select><small>Collega l’evento a una categoria del gruppo. Il link individuale dell’evento resta disponibile.</small></label>
+		<label>Categoria / link permanente<select name="group_link" data-mi-event-group-link><option value="">Scegli una categoria, oppure nessuna se il gruppo non usa link permanenti</option><?php foreach ( $groups as $group ) : foreach ( self::links( $group->ID ) as $slug => $link ) : if ( empty( $link['enabled'] ) && $slug !== $selected ) continue; ?><option value="<?php echo esc_attr( $slug ); ?>" data-group="<?php echo esc_attr( $group->ID ); ?>" <?php selected( $slug, $selected ); ?>><?php echo esc_html( $link['label'] . ' — /' . $slug . ( empty( $link['enabled'] ) ? ' (disattivato)' : '' ) ); ?></option><?php endforeach; endforeach; ?></select><small>Se il gruppo ha link permanenti, scegli quello corretto: solo gli eventi associati appariranno su quel link. Il link individuale dell’evento resta disponibile.</small></label>
 		<?php
 	}
 }

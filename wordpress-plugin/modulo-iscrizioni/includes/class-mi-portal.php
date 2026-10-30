@@ -258,6 +258,7 @@ final class MI_Portal {
 		$previous_group_link = $existing_event ? (string) get_post_meta( $existing_event_id, MI_Group_Links::EVENT_META, true ) : '';
 		$group_link = MI_Group_Links::validate_event_link( $activity_id, wp_unslash( $_POST['group_link'] ?? ( $keeps_assigned_activity ? $previous_group_link : '' ) ), $keeps_assigned_activity ? $previous_group_link : '' );
 		if ( is_wp_error( $group_link ) ) return self::redirect_result( $group_link->get_error_message(), true, $existing_event_id );
+		if ( '' === $group_link && MI_Group_Links::has_enabled_links( $activity_id ) ) return self::redirect_result( 'Scegli la categoria del link permanente del gruppo: senza questa associazione il link non può trovare l’evento.', true, $existing_event_id );
 		$public_slug = MI_Shortcode::validate_public_slug( wp_unslash( $_POST['public_slug'] ?? '' ), $existing_event_id );
 		if ( is_wp_error( $public_slug ) ) return self::redirect_result( $public_slug->get_error_message(), true, $existing_event_id );
 		if ( $existing_event ) {
