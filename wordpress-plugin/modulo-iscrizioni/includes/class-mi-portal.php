@@ -388,8 +388,6 @@ final class MI_Portal {
 			$accommodations = array();
 			update_post_meta( $event_id, '_mi_overnight_enabled', '0' );
 			update_post_meta( $event_id, '_mi_accommodations', array() );
-		} elseif ( $priced_options ) {
-			$pricing_mode = 'CALCULATED';
 		}
 		update_post_meta( $event_id, '_mi_pricing_mode', $pricing_mode );
 		update_post_meta( $event_id, '_mi_fixed_price_cents', 'FIXED' === $pricing_mode && ! is_wp_error( $fixed_price ) ? $fixed_price : 0 );
