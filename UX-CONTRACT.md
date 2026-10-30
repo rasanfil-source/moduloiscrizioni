@@ -18,9 +18,13 @@ La navigazione presenta solo le sezioni consentite al ruolo. Su mobile il menu r
 
 Gestione iscrizioni mostra una riga per persona. La prenotazione comune resta consultabile dalla scheda e il suo codice identifica il contesto nelle ricerche e nelle comunicazioni. Ricerca, filtri, paginazione, stampa ed esportazione condividono la stessa selezione di risultati.
 
+Nei «Rapporti partecipanti», la colonna «Stato» è disponibile solo per gli eventi con pagamenti previsti. Alla prima apertura, «Stato» e «Eventi futuri» sono deselezionati; le scelte già salvate per evento vengono mantenute.
+
 L’ordinamento predefinito usa la data di iscrizione più recente. Se l’operatore seleziona un altro criterio, il portale conserva la scelta. La ricerca e i filtri non espongono nomi personali nei parametri dell’indirizzo web.
 
 ## Iscrizioni e lista d’attesa
+
+Ogni gruppo può configurare più link permanenti, ciascuno per una categoria di eventi, sia in creazione sia in gestione. Nell'evento la categoria si sceglie dopo il gruppo e può restare vuota. Ogni link seleziona il prossimo evento pubblico della propria categoria usando la data pubblicata e includendo l'intera giornata corrente nel fuso orario del sito. Bozze, eventi annullati, archiviati o passati sono esclusi. Le iscrizioni non ancora aperte o già chiuse mantengono il comportamento del modulo esistente; la pagina con immagine e messaggio di attesa compare soltanto quando non ci sono prossimi eventi pubblici della categoria. I link individuali restano distinti. Gli indirizzi permanenti salvati rimangono riservati al gruppo e possono essere disattivati e riattivati.
 
 Una prenotazione può contenere una o più persone. Gli importi della prenotazione vengono sommati una volta sola nei riepiloghi; le quote attribuite ai singoli partecipanti restano visibili nella scheda.
 

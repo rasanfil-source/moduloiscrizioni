@@ -9,7 +9,7 @@ $option = ['code'=>'pranzo','name'=>'Pranzo','scope'=>'TICKET','price_cents'=>20
 $method = new ReflectionMethod(MI_Management_Service::class, 'options_plan');
 foreach (['NONE', 'ZERO'] as $mode) {
     $price = $mode === 'NONE' ? 2000 : 0;
-    $wpdb = new AuditDatabase();
+    $wpdb = new class extends AuditDatabase { function get_var($sql) { return null; } };
     $wpdb->order = ['id'=>1,'event_id'=>42,'order_code'=>'TEST','status'=>'PENDING_PAYMENT','buyer_first_name'=>'Persona','buyer_last_name'=>'Esempio','buyer_email'=>'','buyer_phone'=>'','total_cents'=>$price,'initial_due_cents'=>$price,'economic_mode'=>'FULL_PAYMENT','snapshot_json'=>json_encode(['event'=>['pricing_mode'=>$mode,'options'=>[$option]]]),'order_options_json'=>'[]'];
     $selected = [['code'=>'pranzo','name'=>'Pranzo','quantity'=>1,'unit_price_cents'=>$price]];
     $wpdb->people = [['id'=>1,'registration_id'=>1,'ticket_type_code'=>'base','first_name'=>'Persona','last_name'=>'Esempio','status'=>'ACTIVE','room_code'=>'','extra_json'=>'{}','options_json'=>json_encode($selected),'deposit_due_cents'=>$price]];

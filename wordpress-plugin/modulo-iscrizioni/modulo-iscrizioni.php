@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Modulo Iscrizioni
  * Description: Gestione essenziale di gruppi, eventi, capienza e iscrizioni.
- * Version: 3.26.261
+ * Version: 3.26.267
  * Requires at least: 6.4
  * Requires PHP: 7.4
  * Author: HappyDuck
@@ -11,7 +11,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'MI_VERSION', '3.26.261' );
+define( 'MI_VERSION', '3.26.267' );
 define( 'MI_PLUGIN_FILE', __FILE__ );
 define( 'MI_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MI_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -40,6 +40,8 @@ require_once MI_PLUGIN_DIR . 'includes/class-mi-event-projection.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-event-read-cache.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-rest-controller.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-shortcode.php';
+require_once MI_PLUGIN_DIR . 'includes/class-mi-group-links.php';
+MI_Group_Links::boot();
 require_once MI_PLUGIN_DIR . 'includes/class-mi-portal-payments.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-payment-ledger.php';
 require_once MI_PLUGIN_DIR . 'includes/class-mi-portal.php';

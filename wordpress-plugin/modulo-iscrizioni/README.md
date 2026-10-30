@@ -11,6 +11,7 @@ Plugin WordPress per creare e pubblicare moduli di iscrizione e gestire le attiv
 - Comunicazioni email con modelli configurabili, anteprima e coda di invio.
 - Notifiche push per le nuove iscrizioni, attivabili per dispositivo e caratterizzate dal logo del gruppo.
 - Collegamenti pubblici per iscriversi e consultare prenotazione e saldo.
+- Più link permanenti per gruppo, uno per categoria di eventi, con passaggio automatico al prossimo evento pubblicato e pagina di attesa personalizzabile.
 - Foglio operativo Workspace associato a ogni evento.
 - Accessi al portale regolati da ruoli, gruppi e autorizzazioni sull'evento.
 
@@ -31,3 +32,11 @@ Il plugin richiede WordPress 6.4 o successivo e PHP 7.4 o successivo.
 5. Per incorporare il modulo in una pagina, usa lo shortcode `[modulo_iscrizioni event="ID"]` con l'identificativo dell'evento.
 
 Le impostazioni dell'evento includono la modalità delle quote, i servizi disponibili, la capienza, le domande e le comunicazioni. I dettagli economici e le autorizzazioni vengono verificati dal server.
+
+## Link permanenti
+
+In creazione o configurazione del gruppo, apri **Link permanenti per le iscrizioni** e aggiungi le categorie (per esempio Catechesi e Gite) con indirizzi distinti. Ogni categoria può avere titolo, messaggio e immagine di attesa. Il collegamento si copia dalla stessa sezione.
+
+Nella creazione o modifica completa dell'evento, scegli **Categoria / link permanente** dopo il gruppo. Il link apre il prossimo evento pubblicato della categoria, mantenendolo disponibile per tutta la giornata di inizio. La data usata è quella pubblicata. Il modulo dell'evento conserva la gestione attuale delle iscrizioni, comprese quelle non ancora aperte. Quando non ci sono prossimi eventi pubblici, appare la pagina di attesa.
+
+Gli indirizzi salvati sono riservati e possono essere disattivati e riattivati. Un eventuale vecchio redirect del server sullo stesso percorso deve essere rimosso dopo la configurazione: il plugin gestisce il percorso tramite WordPress e non modifica il `.htaccess`. Le normali regole WordPress devono restare attive. Eventuali cache esterne devono escludere questi percorsi.

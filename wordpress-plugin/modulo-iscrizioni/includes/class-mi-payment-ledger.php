@@ -165,9 +165,13 @@ final class MI_Payment_Ledger {
 				$individual_covered = MI_Payment_People::covered( $updated_individual, $r['economic_mode'] );
 				if ( null !== $individual_covered ) $covered = $individual_covered;
 				$status = $covered ? 'CONFIRMED' : 'PENDING_PAYMENT';
-				$deadline = 'CONFIRMED' === $status ? null : MI_Registration_Service::reopened_payment_deadline( $r );
-				$changes['status'] = $status; $changes['expires_at'] = $deadline;
-				if ( null !== $deadline ) $changes['payment_deadline_at'] = $deadline;
+				$changes['status'] = $status;
+				if ( 'CONFIRMED' === $status ) $changes['expires_at'] = null;
+				elseif ( 'PENDING_PAYMENT' !== $r['status'] ) {
+					$deadline = MI_Registration_Service::reopened_payment_deadline( $r );
+					$changes['expires_at'] = $deadline;
+					$changes['payment_deadline_at'] = $deadline;
+				}
 			}
 			if ( false === $wpdb->update( $table, $changes, array( 'id' => $id ) ) || ! MI_Registration_Service::append_registration_event( $id, 'PAYMENT_RECORDED', $r['status'], $status, $actor, array( 'payment_id' => $payment_id, 'net_paid_cents' => $paid ) ) ) throw new RuntimeException( 'Registrazione incompleta.' );
 			if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma non ricevuta.' );

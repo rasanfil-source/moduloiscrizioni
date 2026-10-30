@@ -1,7 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-/** Il rapporto annuale usa i numeri di cellulare personali per individuare iscrizioni ripetute. */
+/** Il rapporto annuale unisce le iscrizioni tramite collegamenti di identità confermati. */
 final class MI_Attendance_Report {
 	public static function group_period( $group_id ) {
 		return self::period( wp_date( 'Y' ), (string) get_post_meta( $group_id, '_mi_attendance_from_month', true ), (string) get_post_meta( $group_id, '_mi_attendance_to_month', true ) );
@@ -18,7 +18,7 @@ final class MI_Attendance_Report {
 	public static function render_group( $group_id ) {
 		if ( '1' !== get_post_meta( $group_id, '_mi_annual_attendance_report', true ) || ! MI_Portal_Management::allowed() || ! MI_Access::can_access_activity( $group_id ) ) return;
 		try { list( $from, $to ) = self::group_period( $group_id ); } catch ( InvalidArgumentException $e ) { return; }
-		?><details class="mi-management" data-group-attendance data-group="<?php echo esc_attr( $group_id ); ?>" data-endpoint="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'mi_portal_management' ) ); ?>"><summary>Rapporto presenze del gruppo</summary><p>Periodo salvato: <?php echo esc_html( $from . ' — ' . $to ); ?>, estremi inclusi. Conta le presenze effettive negli eventi accessibili del gruppo, riconoscendo la persona dal cellulare personale.</p><label>Numero minimo di eventi frequentati<input data-annual-minimum type="number" min="1" max="1000" value="2" required></label><button type="button" data-load-annual>Genera rapporto</button><p data-annual-status role="status"></p><div data-annual-results></div></details><?php
+		?><details class="mi-management" data-group-attendance data-group="<?php echo esc_attr( $group_id ); ?>" data-endpoint="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'mi_portal_management' ) ); ?>"><summary>Rapporto presenze del gruppo</summary><p>Periodo salvato: <?php echo esc_html( $from . ' — ' . $to ); ?>, estremi inclusi. Conta le presenze effettive negli eventi accessibili del gruppo, unendo le iscrizioni della stessa persona solo tramite i collegamenti di identità confermati.</p><label>Numero minimo di eventi frequentati<input data-annual-minimum type="number" min="1" max="1000" value="2" required></label><button type="button" data-load-annual>Genera rapporto</button><p data-annual-status role="status"></p><div data-annual-results></div></details><?php
 	}
 	private static function mobile( $person ) {
 		$fields = json_decode( (string) ( $person['extra_json'] ?? '{}' ), true ) ?: array();
@@ -57,12 +57,7 @@ final class MI_Attendance_Report {
 		}
 		// La ricerca per dimezzamento accorcia le consultazioni ripetute senza cambiare l'identità selezionata.
 		$root = static function ( $id ) use ( &$parents ) { while ( $parents[$id] !== $id ) { $parents[$id] = $parents[$parents[$id]]; $id = $parents[$id]; } return $id; };
-		$mobiles = array(); $by_mobile = array();
-		foreach ( $people as $person ) {
-			$id = (int) $person['id']; $mobile = self::mobile( $person ); $mobiles[$id] = $mobile;
-			if ( ! $mobile ) continue;
-			if ( isset( $by_mobile[$mobile] ) ) $parents[$id] = $root( $by_mobile[$mobile] ); else $by_mobile[$mobile] = $id;
-		}
+		// Un recapito condiviso non dimostra l'identità: unisci solo i collegamenti confermati.
 		// I collegamenti espliciti e registrati nel log associano anche record senza cellulare o con un numero diverso.
 		foreach ( $links as $id => $target ) if ( $target && isset( $parents[$target] ) ) { $left = $root( $id ); $right = $root( $target ); if ( $left !== $right ) $parents[max( $left, $right )] = min( $left, $right ); }
 		$groups = array(); $unrecorded = 0;

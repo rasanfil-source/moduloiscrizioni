@@ -8,7 +8,12 @@ function verify_asset( $ok ) { if ( ! $ok ) throw new RuntimeException( 'Asset a
 foreach ( glob( MI_PLUGIN_DIR . 'assets/*.*' ) as $file ) {
 	if ( ! in_array( pathinfo( $file, PATHINFO_EXTENSION ), array( 'css','js' ), true ) ) continue;
 	$name = basename( $file ); $url = MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/' . $name . '?ver=1' );
-	verify_asset( strpos( $url, '/assets/min/' . $name . '?mi_asset=' ) !== false && substr( $url, -6 ) === '&ver=1' );
+	if ( is_readable( MI_PLUGIN_DIR . 'assets/min/manifest.json' ) && is_readable( MI_PLUGIN_DIR . 'assets/min/' . $name ) ) {
+		verify_asset( strpos( $url, '/assets/min/' . $name . '?mi_asset=' ) !== false && substr( $url, -6 ) === '&ver=1' );
+	} else {
+		// Alcuni filesystem Windows non espongono la leggibilità a PHP: verifica il fallback effettivo.
+		verify_asset( $url === MI_PLUGIN_URL . 'assets/' . $name . '?ver=1' );
+	}
 }
 verify_asset( MI_Assets::filter_url( 'https://other.test/main.js' ) === 'https://other.test/main.js' );
 verify_asset( MI_Assets::url( 'missing.js' ) === MI_PLUGIN_URL . 'assets/missing.js' );

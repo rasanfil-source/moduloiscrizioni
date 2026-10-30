@@ -9,8 +9,8 @@ function check( $actual, $expected ) {
 }
 $parser = new ReflectionMethod( MI_Event_Post_Type::class, 'price_cents' );
 $parser->setAccessible( true );
-foreach ( array( '12,50' => 1250, '12.50' => 1250, '12,5' => 1250, '0' => 0, '-5' => 0, '12abc' => 0, '1.234' => 123400, '1e3' => 0 ) as $raw => $expected ) check( $parser->invoke( null, $raw ), $expected );
-check( $parser->invoke( null, array() ), 0 );
+foreach ( array( '12,50' => 1250, '12.50' => 1250, '12,5' => 1250, '0' => 0, '-5' => null, '12abc' => null, '1.234' => 123400, '1e3' => null ) as $raw => $expected ) check( $parser->invoke( null, $raw ), $expected );
+check( $parser->invoke( null, array() ), null );
 $wpdb = new class {
 	public $prefix = 'wp_';
 	public $last_error = '';

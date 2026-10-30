@@ -86,3 +86,10 @@
 
 /* Le categorie dei servizi condividono una tavolozza blu discreta. */
 .mi-registration [data-service-category]{border-left:0;background:#fff}
+/* Pagina pubblica quando una categoria non ha prossimi eventi. */
+.mi-group-waiting{box-sizing:border-box;width:min(720px,calc(100% - 32px));margin:48px auto;background:#fff;border:1px solid #e2e8f0;border-radius:20px;overflow:hidden;box-shadow:0 12px 40px #15203812;color:#151b38;font-family:system-ui,sans-serif}
+.mi-group-waiting__image{display:block;width:100%;max-height:440px;object-fit:contain;background:#f8fafc}
+.mi-group-waiting__body{padding:clamp(24px,5vw,48px)}
+.mi-group-waiting__body>p:first-child{font-size:14px;color:#475569}
+.mi-group-waiting h1{font-size:clamp(26px,5vw,38px);line-height:1.2;margin:18px 0}
+.mi-group-waiting__text{white-space:pre-line;overflow-wrap:anywhere;font-size:18px;line-height:1.65}

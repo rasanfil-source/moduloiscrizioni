@@ -46,6 +46,46 @@ function miPanelCache(load, { ttl = 30000, limit = 12 } = {}) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('[data-mi-group-links]').forEach(panel => {
+    const rows = panel.querySelector('[data-mi-link-rows]'), add = panel.querySelector('[data-mi-add-link]');
+    let next = rows.children.length;
+    const refresh = () => { add.disabled = rows.children.length >= 20; };
+    add.addEventListener('click', () => {
+      if (rows.children.length >= 20) return;
+      const fragment = panel.querySelector('template').content.cloneNode(true);
+      fragment.querySelectorAll('[name]').forEach(input => { input.name = input.name.replace('__INDEX__', String(next)); });
+      next++;
+      rows.append(fragment);
+      refresh();
+      rows.lastElementChild.querySelector('input:not([type="hidden"])').focus();
+    });
+    panel.addEventListener('click', event => {
+      const remove = event.target.closest('[data-mi-remove-link]');
+      if (remove) { remove.closest('[data-mi-link-row]').remove(); refresh(); }
+    });
+    panel.addEventListener('input', event => {
+      if (event.target.name && event.target.name.endsWith('[slug]')) event.target.closest('[data-mi-link-row]').querySelector('[data-mi-link-slug]').textContent = event.target.value.toLowerCase() || 'nome-del-link';
+    });
+    // I campi obbligatori devono poter ricevere il focus anche nei pannelli richiusi.
+    panel.closest('form').addEventListener('invalid', event => {
+      let parent = event.target.parentElement;
+      while (parent && parent !== panel.parentElement) { if (parent.tagName === 'DETAILS') parent.open = true; parent = parent.parentElement; }
+    }, true);
+  });
+  document.querySelectorAll('[data-mi-event-group-link]').forEach(select => {
+    const group = select.form.querySelector('[name="activity_id"]');
+    if (!group) return;
+    const refresh = () => {
+      Array.from(select.options).forEach(option => {
+        const foreign = !!option.value && option.dataset.group !== group.value;
+        option.disabled = foreign;
+        option.hidden = foreign;
+      });
+      if (select.selectedOptions[0] && select.selectedOptions[0].disabled) select.value = '';
+    };
+    group.addEventListener('change', refresh);
+    refresh();
+  });
   // Sposta la navigazione esistente e i relativi collegamenti autorizzati, senza duplicare le azioni.
   document.querySelectorAll('.mi-portal').forEach((portal, index) => {
     const header=portal.querySelector('.mi-portal-header'), nav=portal.querySelector('.mi-portal-switcher[aria-label="Segreteria eventi"]');

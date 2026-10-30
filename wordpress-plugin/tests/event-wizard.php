@@ -11,7 +11,7 @@ function esc_attr($v){return htmlspecialchars((string)$v,ENT_QUOTES,'UTF-8');}fu
 function selected($a,$b,$echo=true){$s=(string)$a===(string)$b?'selected':'';if($echo)echo $s;return $s;}function checked($a,$b=true,$echo=true){$s=$a==$b?'checked':'';if($echo)echo $s;return $s;}function disabled($a,$b=true,$echo=true){$s=$a==$b?'disabled':'';if($echo)echo $s;return $s;}
 function home_url($path=''){return 'https://example.test'.$path;}function get_the_title($id){return 'Gruppo';}function get_post_thumbnail_id($id){return 0;}
 class MI_Event_Post_Type {const EVENT_TYPE='mi_event';const ACTIVITY_TYPE='mi_activity';}
-class MI_Access {static function can_access_event($id){return $id===42;}static function activity_ids(){return 'ALL';}}
+class MI_Access {static function is_suspended(){return false;}static function can_access_event($id){return $id===42;}static function activity_ids(){return 'ALL';}}
 class MI_Field_Schema {static function catalog(){return ['email'=>['label'=>'Email']];}}
 class MI_Extra_Services {static function render($options){}}
 class MI_Modello_Email {static function impostazioni($id){return ['subject'=>$id?'Oggetto copiato':'Oggetto nuovo','text'=>'Testo'];}static function stile_risolto($id){return self::stile_default();}static function stile_default(){return ['primary_color'=>'#123456','secondary_color'=>'#654321'];}}

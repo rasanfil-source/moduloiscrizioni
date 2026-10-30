@@ -30,7 +30,7 @@ $mobile_people[1]['extra_json']=json_encode(['participant_phone'=>'0039 31234567
 $mobile_people[2]['extra_json']=json_encode(['participant_phone'=>'3123456789']);
 $mobile_audit=[];foreach([1,2,3] as $id)$mobile_audit[]=['registration_id'=>$id,'event_type'=>'MANAGEMENT_attendance','detail_json'=>json_encode(['participant_id'=>$id,'attendance'=>'PRESENT'])];
 $mobile_report=MI_Attendance_Report::aggregate($mobile_people,$mobile_audit,$events,2026,2);
-check_report(count($mobile_report['items'])===1&&$mobile_report['items'][0]['count']===2,'Cellulare normalizzato o deduplica evento errati');
+check_report(count($mobile_report['items'])===0,'Cellulare condiviso unisce persone senza conferma');
 $mobile_people[1]['extra_json']=json_encode(['participant_phone'=>'3123456780']);$mobile_people[2]['extra_json']='{}';
 check_report(count(MI_Attendance_Report::aggregate($mobile_people,$mobile_audit,$events,2026,2)['items'])===0,'Cellulari diversi o assenti uniti');
 define('ARRAY_A','ARRAY_A');
@@ -57,6 +57,7 @@ foreach ( $cycle_people as &$p ) $p['extra_json'] = json_encode(['participant_ph
 unset($p);
 $cycle_events = [10=>['date'=>'2025-09-01','title'=>'Inizio'],11=>['date'=>'2026-06-30','title'=>'Fine'],12=>['date'=>'2026-07-01','title'=>'Escluso']];
 $cycle_audit=[];foreach([1,2,3,4] as $id)$cycle_audit[]=['registration_id'=>$id,'event_type'=>'MANAGEMENT_attendance','detail_json'=>json_encode(['participant_id'=>$id,'attendance'=>'PRESENT'])];
+foreach([2,3,4] as $id)$cycle_audit[]=['registration_id'=>$id,'event_type'=>'MANAGEMENT_identity_link','detail_json'=>json_encode(['participant_id'=>$id,'target_id'=>1])];
 $cycle=MI_Attendance_Report::aggregate($cycle_people,$cycle_audit,$cycle_events,2026,2,'2025-09','2026-06');
 check_report(count($cycle['items'])===1&&$cycle['items'][0]['count']===2,'Ciclo a cavallo di due anni o estremi inclusivi errati');
 check_report($cycle['from_month']==='2025-09'&&$cycle['to_month']==='2026-06','Periodo non riportato');

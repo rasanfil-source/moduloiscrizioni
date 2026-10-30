@@ -69,9 +69,9 @@ $initialExpiry = (new ReflectionMethod(AuditRealRegistration::class, 'registrati
 $saved = audit_public_save(['pullman-a' => 0], '12345678-1234-4234-8234-123456789a04');
 audit_public_result('unchanged_summary_introduces_expiry', $initialExpiry === null && $saved['success'] && $wpdb->reg['expires_at'] === null, ['creation_expiry' => $initialExpiry, 'deadline_before' => null, 'deadline_after' => $wpdb->reg['expires_at'], 'services_unchanged' => $wpdb->persons[0]['options_json'] === '[]']);
 
-// Un aumento effettivo apre una finestra di pagamento senza prolungare una scadenza futura.
+// Un aumento senza fonte di scadenza non deve inventare un termine.
 $saved=audit_public_save(['pullman-a'=>1],'12345678-1234-4234-8234-123456789a05');
-audit_public_result('economic_increase_reopens_payment',$wpdb->reg['total_cents']===51000&&strtotime($wpdb->reg['expires_at'].' UTC')>time()+47*3600,[]);
+audit_public_result('economic_increase_without_deadline_source',$wpdb->reg['total_cents']===51000&&$wpdb->reg['expires_at']===null,[]);
 $future=$wpdb->reg['expires_at'];
 audit_public_save(['pullman-a'=>1],'12345678-1234-4234-8234-123456789a06');
 audit_public_result('future_deadline_preserved',$wpdb->reg['expires_at']===$future,[]);
