@@ -111,8 +111,7 @@ final class MI_Group_Links {
 		$group = get_post( $group_id );
 		$link = self::links( $group_id )[ $slug ] ?? null;
 		if ( ! $group || MI_Event_Post_Type::GROUP_TYPE !== $group->post_type || 'publish' !== $group->post_status || ! $link || empty( $link['enabled'] ) ) return;
-		if ( ! defined( 'DONOTCACHEPAGE' ) ) define( 'DONOTCACHEPAGE', true );
-		nocache_headers();
+		self::prevent_caching();
 		header( 'X-Robots-Tag: noindex, nofollow, noarchive', true );
 		$event_id = self::next_event( $group_id, $slug );
 		if ( $event_id ) { wp_safe_redirect( MI_Shortcode::url_iscrizione( $event_id ), 302 ); exit; }
@@ -120,6 +119,19 @@ final class MI_Group_Links {
 		wp_enqueue_style( 'mi-public', MI_PLUGIN_URL . 'assets/public.css', array(), MI_VERSION );
 		?><!doctype html><html <?php language_attributes(); ?>><head><meta charset="<?php bloginfo( 'charset' ); ?>"><meta name="viewport" content="width=device-width, initial-scale=1"><title><?php echo esc_html( $group->post_title . ' — ' . $link['label'] ); ?></title><?php wp_print_styles( 'mi-public' ); ?></head><body class="mi-focused-page"><?php echo self::waiting_content( $group_id, $link ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- renderer con escaping. ?></body></html><?php
 		exit;
+	}
+
+	/** Il resolver deve essere rivalutato a ogni accesso, anche da cache condivise e proxy. */
+	private static function prevent_caching() {
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) define( 'DONOTCACHEPAGE', true );
+		nocache_headers();
+		if ( headers_sent() ) return;
+		header( 'Cache-Control: private, no-store, no-cache, must-revalidate, max-age=0, s-maxage=0', true );
+		header( 'CDN-Cache-Control: no-store', true );
+		header( 'Surrogate-Control: no-store', true );
+		header( 'X-Accel-Expires: 0', true );
+		header( 'X-LiteSpeed-Cache-Control: no-cache', true );
+		do_action( 'litespeed_control_set_nocache', 'MI group link resolver' );
 	}
 
 	public static function waiting_content( $group_id, $link ) {
