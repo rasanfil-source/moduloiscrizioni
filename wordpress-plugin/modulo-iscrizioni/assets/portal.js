@@ -429,6 +429,14 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 	const updatePricing = () => {
 	  if (!pricing) return;
+	  const pricingHelp = form.querySelector('#mi-pricing-help');
+	  const pricingMessages = {
+	    ZERO: 'Il modulo raccoglie solo l’iscrizione, senza calcolare importi. Scegli questa modalità se quote, pagamenti e alloggi sono gestiti fuori dal modulo, per esempio da un’agenzia.',
+	    FIXED: 'A ogni partecipante si applica la stessa quota base. I servizi a pagamento selezionati possono aggiungersi al totale.',
+	    NONE: 'Non c’è una quota base: il totale dipende dai servizi a pagamento selezionati.',
+	    CALCULATED: 'Il totale somma il prezzo del ticket scelto, se previsto, e i servizi o le opzioni a pagamento selezionati. Qui si calcola l’importo; la modalità di pagamento si sceglie separatamente.'
+	  };
+	  if (pricingHelp) pricingHelp.textContent = pricingMessages[pricing.value] || 'Scegli come calcolare gli importi dell’iscrizione.';
 	  if (fixedPrice) fixedPrice.hidden = pricing.value !== 'FIXED';
 	  servicePricingNodes.forEach((node) => { node.hidden = pricing.value !== 'NONE'; });
 	  updateOvernight();
