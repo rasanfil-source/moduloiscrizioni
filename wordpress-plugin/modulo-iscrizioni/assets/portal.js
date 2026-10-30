@@ -369,14 +369,19 @@ document.addEventListener('DOMContentLoaded', () => {
       const required = form.querySelector(`[data-mi-required="${enabled.dataset.miField}"]`);
       if (!enabled.checked && required) required.checked = false;
     }));
-    const fixedPrice = form.querySelector('[data-mi-fixed-price]');
+    const participationFee = form.querySelector('[data-mi-participation-fee]');
+    const participationPrice = form.querySelector('[data-mi-participation-price]');
     const pricingLabel = pricing?.closest('label');
     const serviceFees = [...form.querySelectorAll('.mi-service-fee')];
     const serviceIntroduction = serviceFees.length ? [serviceFees[0].previousElementSibling, serviceFees[0].previousElementSibling?.previousElementSibling] : [];
-	const servicePricingNodes = [overnight?.closest('label'), rooms, ...serviceIntroduction, ...serviceFees, busRoutes].filter(Boolean);
+	const servicePricingNodes = [overnight?.closest('label'), rooms, ...serviceIntroduction, ...serviceFees, busRoutes, participationFee].filter(Boolean);
     if (pricingLabel && overnight?.closest('label')) {
 	  pricingLabel.firstChild.textContent = 'Come sarà l’evento?';
-	  overnight.closest('.mi-wizard-step')?.insertBefore(pricingLabel, overnight.closest('label'));
+	  const step = overnight.closest('.mi-wizard-step');
+	  step?.insertBefore(pricingLabel, overnight.closest('label'));
+	  const pricingHelp = form.querySelector('#mi-pricing-help');
+	  if (pricingHelp) pricingLabel.after(pricingHelp);
+	  if (participationFee && pricingHelp) pricingHelp.after(participationFee);
 	}
     const economic = form.querySelector('[data-mi-economic]');
     const payment = form.querySelector('[data-mi-payment]');
@@ -418,9 +423,9 @@ document.addEventListener('DOMContentLoaded', () => {
 	  if (economicLabel) economicLabel.hidden = !paidEvent;
 	  const collects = paidEvent && ['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(economic?.value);
       if (payment) payment.hidden = !collects;
-	  const pricedServiceInputs = Array.from(form.querySelectorAll('input[name^="accommodation_price["],input[name^="service_price["],input[name="bus_route_price[]"],input[name="extra_service_price[]"]'));
+	  const pricedServiceInputs = Array.from(form.querySelectorAll('input[name="participation_price"],input[name^="accommodation_price["],input[name^="service_price["],input[name="bus_route_price[]"],input[name="extra_service_price[]"]'));
 	  const hasPricedService = pricedServiceInputs.some((input) => Number(String(input.value).replace(',', '.')) > 0);
-	  const serviceBasedPricing = pricing?.value === 'NONE' || (pricing?.value === 'CALCULATED' && form.dataset.miServicePricingSaved === '1');
+	  const serviceBasedPricing = pricing?.value === 'NONE';
 	  const showReopenedHours = collects && serviceBasedPricing && hasPricedService;
 	  if (reopenedPaymentSetting) reopenedPaymentSetting.hidden = !showReopenedHours;
 	  if (reopenedPaymentHours) reopenedPaymentHours.disabled = !showReopenedHours;
@@ -431,13 +436,12 @@ document.addEventListener('DOMContentLoaded', () => {
 	  if (!pricing) return;
 	  const pricingHelp = form.querySelector('#mi-pricing-help');
 	  const pricingMessages = {
-	    ZERO: 'Il modulo raccoglie solo l’iscrizione, senza calcolare importi. Scegli questa modalità se quote, pagamenti e alloggi sono gestiti fuori dal modulo, per esempio da un’agenzia.',
-	    FIXED: 'A ogni partecipante si applica la stessa quota base. I servizi a pagamento selezionati possono aggiungersi al totale.',
-	    NONE: 'Non c’è una quota base: il totale dipende dai servizi a pagamento selezionati.',
-	    CALCULATED: 'Il totale somma il prezzo del ticket scelto, se previsto, e i servizi o le opzioni a pagamento selezionati. Qui si calcola l’importo; la modalità di pagamento si sceglie separatamente.'
+	    ZERO: 'Il modulo raccoglie i dati senza calcolare importi. Scegli questa modalità se l’evento è gratuito o se quote e pagamenti si gestiscono fuori dal modulo, per esempio con un’agenzia.',
+	    NONE: 'Il totale comprende la quota di partecipazione, se indicata, e i servizi a pagamento selezionati. La quota di partecipazione si applica a ogni iscritto.'
 	  };
 	  if (pricingHelp) pricingHelp.textContent = pricingMessages[pricing.value] || 'Scegli come calcolare gli importi dell’iscrizione.';
-	  if (fixedPrice) fixedPrice.hidden = pricing.value !== 'FIXED';
+	  if (participationFee) participationFee.hidden = pricing.value === 'ZERO';
+	  if (participationPrice) participationPrice.disabled = pricing.value === 'ZERO';
 	  servicePricingNodes.forEach((node) => { node.hidden = pricing.value !== 'NONE'; });
 	  updateOvernight();
 	  serviceUpdaters.forEach((updateService) => updateService());
