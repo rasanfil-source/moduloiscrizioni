@@ -44,5 +44,6 @@ Tutti i pacchetti precedenti restano invariati, incluso 3.26.226. Le modifiche s
 - Sintassi PHP, asset minificati, controllo di sanitizzazione e `git diff --check`.
 - Due suite InnoDB locali: `accommodation-change-innodb.php` (include gestione, concorrenza, automatismi e nuovi casi multiple) e `audit-275-innodb.php` (include eliminazione, filtro JSON, rigenerazione email e rollback).
 - Corretto l'adattatore `do_action()` nel test dei link di gruppo, con controllo dell'hook anticache. Inclusa nella verifica ordinaria la suite della migrazione di gruppo.
+- Corretto l'avvio del processo PHP nella fixture InnoDB dell'eliminazione: su Linux usa le estensioni configurate dal sistema, su Windows il runtime locale. La modifica riguarda esclusivamente i test e non altera gli ZIP.
 
 I test usano dati sintetici; nessuna email, notifica push o richiesta Google reale. Non eseguito un collaudo interattivo sul sito di produzione.
