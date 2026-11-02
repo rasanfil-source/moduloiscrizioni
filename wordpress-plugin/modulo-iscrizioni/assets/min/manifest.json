@@ -6,8 +6,8 @@
   },
   "admin.js": {
     "file": "min/admin.js",
-    "source": "46f748ca97b1a69b4f913c44bf1bfaa4e0c029eca00d9f0e64839ac55de24446",
-    "hash": "618ba4e1f2f7ce40987e24db1355bcacca75030af4464fd6b885e76ad08f6848"
+    "source": "f4b3426d1d82551078e8099f3d8c974aaf09b1d9dea2f7d0b02f6b3e60a61b3e",
+    "hash": "945b15111831765ebc3559298624f37935c99c67738e8e8ff7948b0310a11704"
   },
   "core.js": {
     "file": "min/core.js",

@@ -114,9 +114,14 @@ final class MI_Event_Projection {
 			}
 			foreach ( $registration_payments as $payment ) {
 				$effective_date = ( new DateTimeImmutable( (string) $payment['effective_at'], new DateTimeZone( 'UTC' ) ) )->setTimezone( wp_timezone() )->format( 'Y-m-d' );
+				$transaction_kind = strtoupper( (string) $payment['transaction_kind'] );
+				$movement_kind = strtoupper( (string) ( $payment['movement_kind'] ?? '' ) );
+				$movement_label = 'REFUND' === $transaction_kind
+					? ( in_array( $movement_kind, array( 'RIMBORSO', 'STORNO' ), true ) ? $movement_kind : 'RIMBORSO' )
+					: 'INCASSO';
 				$payment_rows[] = array(
 					'id_pagamento' => (string) $payment['id'], 'codice_ordine' => $registration['order_code'], 'data_effettiva' => $effective_date,
-					'tipo_movimento' => 'REFUND' === strtoupper( (string) $payment['transaction_kind'] ) ? 'RIMBORSO' : 'INCASSO',
+					'tipo_movimento' => $movement_label,
 					'importo_centesimi' => (int) $payment['amount_cents'],
 					'fonte_pagamento' => array( 'BANK_TRANSFER' => 'BONIFICO', 'CARD' => 'CARTA', 'CASH' => 'CONTANTE' )[ strtoupper( (string) $payment['payment_source'] ) ] ?? strtoupper( (string) $payment['payment_source'] ),
 					'riferimento_esterno' => (string) $payment['external_reference'], 'etichetta_operatore' => (string) $payment['operator_label'], 'nota_amministrativa' => (string) $payment['administrative_note'],

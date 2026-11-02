@@ -807,6 +807,7 @@ final class MI_Admin {
 		<div class="notice <?php echo 'riaccodata' === $retry_result ? 'notice-success' : 'notice-warning'; ?>"><p><?php echo esc_html( $retry_messages[$retry_result] ); ?></p></div>
 		<?php endif; ?>
 		<?php if ( current_user_can( 'manage_options' ) ) : ?>
+		<?php $regeneration_message = get_transient( 'mi_rigenerazione_email_' . get_current_user_id() ); if ( $regeneration_message ) : ?><div class="notice notice-info"><p><?php echo esc_html( $regeneration_message ); ?></p></div><?php delete_transient( 'mi_rigenerazione_email_' . get_current_user_id() ); endif; ?>
 		<?php $recovery_message = get_transient( 'mi_recupero_pubblicazione_' . get_current_user_id() ); if ( $recovery_message ) : ?><div class="notice notice-info"><p><?php echo esc_html( $recovery_message ); ?></p></div><?php delete_transient( 'mi_recupero_pubblicazione_' . get_current_user_id() ); endif; ?>
 		<details><summary>Recupera notifica di pubblicazione</summary><p>Prepara l’email di congratulazioni al recapito del gruppo e alla segreteria per l’evento selezionato, con lo stile stabilito e la modalità email attuale. Le notifiche già presenti non vengono duplicate.</p>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="mi_recupera_pubblicazione"><?php wp_nonce_field( 'mi_recupera_pubblicazione' ); ?><label for="mi-recovery-event">Evento pubblicato</label> <select id="mi-recovery-event" name="event_id" required><option value="">Seleziona evento</option>
@@ -819,6 +820,16 @@ final class MI_Admin {
 		</tbody></table></div>
 		<?php if ( $detail ) : ?><?php $payload = json_decode( (string) $detail['payload_json'], true ); $preview = is_array( $payload ) && isset( $payload['email_preview'] ) && is_array( $payload['email_preview'] ) ? $payload['email_preview'] : array(); ?>
 		<hr><h2>Anteprima email conservata</h2>
+		<?php if ( current_user_can( 'manage_options' ) && in_array( $detail['status'], array( 'FAILED', 'TEST_FAILED' ), true ) ) : ?>
+		<details><summary>Rigenera una consegna dopo verifica del mancato invio</summary>
+		<p>Se Workspace segnala un esito incerto, verifica i messaggi inviati e il riscontro del destinatario. La normale riaccodatura mantiene la protezione dai duplicati; questa azione crea una nuova consegna e conserva quella precedente nel registro.</p>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+		<input type="hidden" name="action" value="mi_rigenera_email"><input type="hidden" name="email_id" value="<?php echo esc_attr( $detail['id'] ); ?>"><?php wp_nonce_field( 'mi_rigenera_email' ); ?>
+		<p><label><input type="checkbox" name="verified_not_sent" value="1" required> Ho verificato che questa email non è stata consegnata.</label></p>
+		<p><label>Esito della verifica e motivo<br><textarea name="reason" required maxlength="500" rows="3" cols="70"></textarea></label></p>
+		<button class="button">Rigenera consegna</button></form></details>
+		<?php endif; ?>
+		<?php if ( ! empty( $payload['delivery_regeneration'] ) && is_array( $payload['delivery_regeneration'] ) ) : ?><p><strong>Verifica amministrativa:</strong> <?php echo esc_html( wp_json_encode( $payload['delivery_regeneration'], JSON_UNESCAPED_UNICODE ) ); ?></p><?php endif; ?>
 		<?php $economic_summary = is_array( $payload ) && isset( $payload['economic_summary'] ) && is_array( $payload['economic_summary'] ) ? $payload['economic_summary'] : array(); ?>
 		<?php if ( $economic_summary ) : ?><div class="card" style="max-width:900px"><h3>Riepilogo economico conservato</h3><p><strong>Totale:</strong> <?php echo esc_html( number_format_i18n( (int) $economic_summary['total_cents'] / 100, 2 ) ); ?> €</p><p><strong>Primo versamento:</strong> <?php echo esc_html( number_format_i18n( (int) $economic_summary['initial_due_cents'] / 100, 2 ) ); ?> €</p><p><strong>Saldo successivo:</strong> <?php echo esc_html( number_format_i18n( (int) $economic_summary['balance_cents'] / 100, 2 ) ); ?> €</p></div><?php endif; ?>
 		<?php if ( ! $preview ) : ?><p>Questa voce precede l’introduzione delle anteprime complete.</p><?php else : ?>
@@ -889,6 +900,8 @@ final class MI_Admin {
 		}
 		$activity_id = isset( $_POST['mi_activity_id'] ) ? absint( $_POST['mi_activity_id'] ) : 0;
 		$post_id = absint( $postarr['ID'] ?? 0 );
+		// save_event rifiuta tutti i nuovi metadati: conserva la pubblicazione precedente.
+		if ( $post_id && function_exists( 'get_post_status' ) && 'publish' === get_post_status( $post_id ) && ! MI_Amount::valid_event_prices( $_POST ) ) return $data;
 		$current_activity_id = $post_id ? absint( get_post_meta( $post_id, '_mi_activity_id', true ) ) : 0;
 		$activity_stable = true;
 		if ( $post_id && $current_activity_id && $activity_id !== $current_activity_id ) {

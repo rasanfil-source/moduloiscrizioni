@@ -147,7 +147,7 @@ final class MI_Event_Deletion {
 	private static function event_emails( $id ) {
 		global $wpdb;
 		// Gli avvisi evento usano registration_id=0 e un contenuto strutturato.
-		$rows = $wpdb->get_results( "SELECT id,payload_json FROM {$wpdb->prefix}mi_email_outbox WHERE registration_id=0 ORDER BY id", ARRAY_A );
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id,payload_json FROM {$wpdb->prefix}mi_email_outbox WHERE registration_id=0 AND CASE WHEN JSON_VALID(payload_json) THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.event_id')) AS UNSIGNED) ELSE 0 END=%d ORDER BY id", $id ), ARRAY_A );
 		if ( $wpdb->last_error ) throw new RuntimeException( 'Comunicazioni non disponibili.' );
 		return array_values( array_filter( $rows, static function ( $row ) use ( $id ) { $payload = json_decode( $row['payload_json'], true ); return (int) ( $payload['event_id'] ?? 0 ) === (int) $id; } ) );
 	}

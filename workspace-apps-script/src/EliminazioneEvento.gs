@@ -20,7 +20,8 @@ function eliminaDatiEventoDaWordPress_(payload) {
     if (job && job.request !== request) return {ok:false,error:'DELETION_CONFLICT'};
     if (job && job.mode !== mode) {
       // Solo una decisione amministrativa firmata da WordPress può interrompere i tentativi di cestinamento.
-      if (job.mode!=='trash' || mode!=='keep' || payload.preserve_file!==true || String(payload.id_foglio||'')!==String(job.files[0]||'')) return {ok:false,error:'DELETION_CONFLICT'};
+      const supplied=String(payload.id_foglio||''), registered=String(props.getProperty('MI_DIRECT_SHEET_'+id)||'');
+      if (job.mode!=='trash' || mode!=='keep' || payload.preserve_file!==true || (supplied||registered)!==String(job.files[0]||'')) return {ok:false,error:'DELETION_CONFLICT'};
       job.previous_mode=job.mode;job.mode='keep';job.preserve_file=true;
       props.setProperty(key,JSON.stringify(job));
     }

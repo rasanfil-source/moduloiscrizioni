@@ -5,6 +5,28 @@ import test from 'node:test';
 const c=vm.createContext({});vm.runInContext(await readFile(new URL('../src/Core.gs',import.meta.url),'utf8')+'\n'+await readFile(new URL('../src/SincronizzazioneManuale.gs',import.meta.url),'utf8'),c);
 const base={'["MI-1",1]':{first_name:'Anna',room:'A',balance:'100'},'["MI-1",2]':{first_name:'Maria',room:'B',balance:'100'}};
 const rows=()=>[{order:'MI-1',number:2,values:{first_name:'Maria',room:'B',balance:'100'}},{order:'MI-1',number:1,values:{first_name:'Anna',room:'A',balance:'100'}}];
+
+test('currency display changes preserve exact cents; actual, ambiguous and textual edits remain blocked',()=>{
+ const keys=['total','paid','balance','paid_cash','paid_transfer','paid_card'];
+ const columns={_ordine:1,_numero:2,...Object.fromEntries(keys.map((key,i)=>[key,i+3]))};
+ const context=vm.createContext({});
+ vm.runInContext(c.centesimiBaseFoglio_.toString()+'\n'+c.confrontaModificheFoglio_.toString()+'\n'+c.modificheCorrentiFoglio_.toString(),context);
+ context.campoLocaleFoglio_=()=>false;
+ context.campoModificabileFoglio_=()=>false;
+ context.mappaColonneEvento_=()=>columns;
+ function read(before,display,raw){
+  context.leggiBaseFoglio_=()=>({'["MI-1",1]':Object.fromEntries(keys.map(key=>[key,before]))});
+  return context.modificheCorrentiFoglio_({getParent:()=>({}),getLastRow:()=>2,getLastColumn:()=>8,getRange:()=>({getDisplayValues:()=>[['MI-1','1',...keys.map(()=>display)]],getValues:()=>[['MI-1',1,...keys.map(()=>raw)]]})});
+ }
+ for(const before of ['1.250,00','1250,00','1,250.00','1250'])for(const display of ['1250.00','1,250.00','1.250,00']){
+  const result=read(before,display,1250);assert.equal(result.errors.length,0,`${before} → ${display}`);assert.equal(result.changes.length,0);
+ }
+ for(const raw of [1250.01,1250.001,1249.99,'1250',NaN,Infinity])assert.equal(read('1.250,00','1250,00',raw).errors.length,6);
+ assert.equal(read('1.250,00','1.250,00',1250.001).errors.length,6,'Formatting hid a real sub-cent edit');
+ for(const ambiguous of ['1.250','1,250','1e3','12,34,56','1.250,000','1000000.01'])assert.equal(context.centesimiBaseFoglio_(ambiguous),null);
+ assert.equal(context.centesimiBaseFoglio_('-1.250,50'),-125050);
+ assert.equal(read('-1.250,50','-1250.50',-1250.50).errors.length,0);
+});
 test('ordinamento righe non genera cambiamenti, due camere scambiate restano due modifiche',()=>{
  assert.equal(c.confrontaModificheFoglio_(base,rows()).changes.length,0);
  const changed=rows();changed[0].values.room='A';changed[1].values.room='B';

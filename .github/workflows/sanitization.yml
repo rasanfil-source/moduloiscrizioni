@@ -19,7 +19,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          extensions: mbstring
+          extensions: mbstring, openssl
           coverage: none
       - name: Verify Workspace and WordPress behavior
         run: node --test workspace-apps-script/tests/*.test.mjs wordpress-plugin/tests/*.test.mjs
@@ -51,6 +51,18 @@ jobs:
           php wordpress-plugin/tests/code-image.php
           php wordpress-plugin/tests/registration-failures.php
           php wordpress-plugin/tests/email-transaction-failures.php
+
+      - name: Verify consolidated audit regressions
+        env:
+          OPENSSL_CONF: wordpress-plugin/tests/openssl.cnf
+        run: |
+          php wordpress-plugin/tests/audit-275-rooms.php
+          php wordpress-plugin/tests/audit-275-email-waitlist.php
+          php wordpress-plugin/tests/audit-275-editor.php
+          php wordpress-plugin/tests/audit-275-push.php
+          php wordpress-plugin/tests/email-regeneration.php
+          php wordpress-plugin/tests/php-event-activity-migration.php
+          php wordpress-plugin/tests/group-links.php
 
   economic-innodb:
     runs-on: ubuntu-latest
@@ -86,6 +98,7 @@ jobs:
           php wordpress-plugin/tests/percentage-deposit-unit.php
           php wordpress-plugin/tests/sheet-receipts-innodb.php
           php wordpress-plugin/tests/room-postcommit-innodb.php
+          php wordpress-plugin/tests/audit-275-innodb.php
 
   sanitization:
     runs-on: ubuntu-latest

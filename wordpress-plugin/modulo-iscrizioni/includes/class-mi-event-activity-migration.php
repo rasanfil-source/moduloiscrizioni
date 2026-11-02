@@ -148,6 +148,7 @@ final class MI_Event_Activity_Migration {
 			return new WP_Error( 'mi_migration_not_required', 'L’evento non ha iscrizioni: cambia il gruppo dal normale editor.' );
 		}
 
+		$previous_group_link = (string) get_post_meta( $event_id, '_mi_group_link', true );
 		$updated = update_post_meta( $event_id, '_mi_activity_id', $activity_id );
 		if ( false === $updated || $activity_id !== absint( get_post_meta( $event_id, '_mi_activity_id', true ) ) ) {
 			return new WP_Error( 'mi_migration_update_failed', 'Associazione non aggiornata. Nessuna iscrizione è stata modificata.' );
@@ -159,6 +160,12 @@ final class MI_Event_Activity_Migration {
 			return new WP_Error( 'mi_migration_registration_check_failed', 'Il conteggio delle iscrizioni non è rimasto invariato: l’associazione precedente è stata ripristinata.' );
 		}
 
+		// Solo dopo il controllo dei conteggi: un rollback conserva anche la categoria.
+		update_post_meta( $event_id, '_mi_group_link', '' );
+		if ( '' !== (string) get_post_meta( $event_id, '_mi_group_link', true ) ) {
+			update_post_meta( $event_id, '_mi_activity_id', $current_activity_id );
+			return new WP_Error( 'mi_migration_link_failed', 'Categoria non rimossa: il gruppo precedente è stato ripristinato.' );
+		}
 		update_post_meta( $event_id, '_mi_needs_republish', '1' );
 		add_post_meta(
 			$event_id,
@@ -166,6 +173,7 @@ final class MI_Event_Activity_Migration {
 			array(
 				'from_activity_id'   => $current_activity_id,
 				'to_activity_id'     => $activity_id,
+				'previous_group_link' => $previous_group_link,
 				'registration_count' => $registrations_after,
 				'user_id'            => get_current_user_id(),
 				'migrated_at'        => current_time( 'mysql', true ),

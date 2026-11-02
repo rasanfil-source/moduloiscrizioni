@@ -42,6 +42,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Sintassi PHP non valida: $file" }
     }
     $phpTests = @(
+        'audit-275-rooms.php', 'audit-275-email-waitlist.php', 'audit-275-editor.php', 'email-regeneration.php', 'php-event-activity-migration.php',
         'group-links.php', 'public-slug.php',
         'audit-263-regressions.php', 'event-first-save.php', 'email-logo-override.php', 'deletion-preserve-file.php', 'event-qr.php', 'operational-email-deadline.php',
         'room-swap-entitlement.php', 'payment-history-date.php',
@@ -65,6 +66,20 @@ try {
         & $phpExecutable @phpArguments (Join-Path 'wordpress-plugin/tests' $test) | Out-Host
         if ($LASTEXITCODE -ne 0) { throw "Test PHP non superato: $test" }
     }
+    # La regressione push esegue la cifratura reale, con trasporto HTTP simulato.
+    $pushArguments = @($phpArguments)
+    $effectiveModules = & $phpExecutable @phpArguments -m
+    if ($effectiveModules -notcontains 'openssl') {
+        $extensionDirectory = Join-Path (Split-Path -Parent $phpExecutable) 'ext'
+        if (-not (Test-Path -LiteralPath (Join-Path $extensionDirectory 'php_openssl.dll'))) { throw 'Estensione PHP openssl richiesta per verificare i retry push.' }
+        $pushArguments += @('-d', "extension_dir=$extensionDirectory", '-d', 'extension=openssl')
+    }
+    $previousOpenSslConf = $env:OPENSSL_CONF
+    try {
+        $env:OPENSSL_CONF = Join-Path $root 'wordpress-plugin/tests/openssl.cnf'
+        & $phpExecutable @pushArguments 'wordpress-plugin/tests/audit-275-push.php' | Out-Host
+        if ($LASTEXITCODE -ne 0) { throw 'Regressione push non superata.' }
+    } finally { $env:OPENSSL_CONF = $previousOpenSslConf }
     Write-Output 'Verifica locale completata.'
 } finally {
     Pop-Location

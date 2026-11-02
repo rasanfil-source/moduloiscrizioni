@@ -10,17 +10,17 @@ final class WP_Error {
 }
 
 final class Fake_WPDB {
-	public $prefix = 'wp_';
+	public $prefix = 'wp_', $last_error = '', $counts = [], $fail_clear = false;
 	public $registration_count = 3;
 	public function prepare( $query, ...$arguments ) { return array( $query, $arguments ); }
-	public function get_var( $prepared ) { return $this->registration_count; }
+	public function get_var( $prepared ) { return $this->counts ? array_shift($this->counts) : $this->registration_count; }
 }
 
 $wpdb = new Fake_WPDB();
 $mi_test_can_manage = true;
 $mi_test_types = array( 7342 => 'mi_event', 7000 => 'mi_activity', 7428 => 'mi_activity', 9000 => 'post' );
 $mi_test_statuses = array( 7342 => 'draft', 7000 => 'publish', 7428 => 'draft', 9000 => 'publish' );
-$mi_test_meta = array( 7342 => array( '_mi_activity_id' => 7000 ) );
+$mi_test_meta = array( 7342 => array( '_mi_activity_id' => 7000, '_mi_group_link' => 'old-category' ) );
 $mi_test_logs = array();
 
 function absint( $value ) { return abs( (int) $value ); }
@@ -28,12 +28,13 @@ function current_user_can( $capability ) { global $mi_test_can_manage; return 'm
 function get_post_type( $post_id ) { global $mi_test_types; return $mi_test_types[ $post_id ] ?? false; }
 function get_post_status( $post_id ) { global $mi_test_statuses; return $mi_test_statuses[ $post_id ] ?? false; }
 function get_post_meta( $post_id, $key, $single = false ) { global $mi_test_meta; return $mi_test_meta[ $post_id ][ $key ] ?? ''; }
-function update_post_meta( $post_id, $key, $value ) { global $mi_test_meta; $mi_test_meta[ $post_id ][ $key ] = $value; return true; }
+function update_post_meta( $post_id, $key, $value ) { global $mi_test_meta,$wpdb; if($wpdb->fail_clear&&$key==='_mi_group_link')return false; $mi_test_meta[ $post_id ][ $key ] = $value; return true; }
 function add_post_meta( $post_id, $key, $value ) { global $mi_test_logs; $mi_test_logs[] = array( $post_id, $key, $value ); return count( $mi_test_logs ); }
 function get_current_user_id() { return 11; }
 function current_time( $type, $gmt = false ) { return '2026-08-26 20:00:00'; }
 function is_wp_error( $value ) { return $value instanceof WP_Error; }
 
+class MI_Event_Deletion {static function enter($id){return true;}}
 final class MI_Event_Post_Type {
 	const EVENT_TYPE = 'mi_event';
 	const ACTIVITY_TYPE = 'mi_activity';
@@ -58,7 +59,13 @@ expect( 3 === $result['registrations_before'] && 3 === $result['registrations_af
 expect( $registrations_before === serialize( $registrations_snapshot ), 'iscrizioni modificate' );
 expect( 1 === count( $mi_test_logs ) && 7000 === $mi_test_logs[0][2]['from_activity_id'] && 7428 === $mi_test_logs[0][2]['to_activity_id'], 'audit migrazione non scritto' );
 
+expect($mi_test_meta[7342]['_mi_group_link']===''&&$mi_test_logs[0][2]['previous_group_link']==='old-category','Old category not cleared and logged');
 $mi_test_meta[7342]['_mi_activity_id'] = 7000;
+$mi_test_meta[7342]['_mi_group_link']='old-category';$wpdb->counts=[3,4];
+$failed=MI_Event_Activity_Migration::migrate(7342,7428,'MIGRA 7342 A 7428');
+expect(is_wp_error($failed)&&$mi_test_meta[7342]['_mi_group_link']==='old-category'&&$mi_test_meta[7342]['_mi_activity_id']===7000,'Count rollback lost old association');
+$wpdb->fail_clear=true;$failed=MI_Event_Activity_Migration::migrate(7342,7428,'MIGRA 7342 A 7428');
+expect(is_wp_error($failed)&&$mi_test_meta[7342]['_mi_activity_id']===7000,'Clear failure did not restore group');$wpdb->fail_clear=false;
 $bad_confirmation = MI_Event_Activity_Migration::migrate( 7342, 7428, 'MIGRA 7342 A 7000' );
 expect( is_wp_error( $bad_confirmation ) && 'mi_migration_confirmation_invalid' === $bad_confirmation->code, 'conferma errata accettata' );
 expect( 7000 === $mi_test_meta[7342]['_mi_activity_id'], 'conferma errata ha modificato attività' );

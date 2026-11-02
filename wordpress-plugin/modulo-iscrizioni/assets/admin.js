@@ -242,7 +242,7 @@
   const optionTable = document.querySelector('#mi-options tbody');
   document.querySelector('#mi-add-option')?.addEventListener('click', () => {
     const row = document.createElement('tr');
-    row.innerHTML = '<td><input name="mi_option_code[]" pattern="[a-z0-9-]+" required></td><td><input name="mi_option_name[]" required></td><td><select name="mi_option_scope[]"><option value="ORDER">Ordine</option><option value="TICKET">Partecipante</option></select></td><td><input name="mi_option_price[]" type="number" min="0" step="0.01" value="0.00"></td><td><input name="mi_option_max[]" type="number" min="1" max="20" value="1"></td><td><button type="button" class="button mi-remove-option">Rimuovi</button></td>';
+    row.innerHTML = '<td><input name="mi_option_code[]" pattern="[a-z0-9-]+" required></td><td><input name="mi_option_name[]" required></td><td><select name="mi_option_scope[]"><option value="ORDER">Ordine</option><option value="TICKET">Partecipante</option></select></td><td><input name="mi_option_price[]" type="number" min="0" step="0.01" required value="0.00"></td><td><input name="mi_option_max[]" type="number" min="1" max="20" value="1"></td><td><button type="button" class="button mi-remove-option">Rimuovi</button></td>';
     optionTable?.append(row);
   });
   optionTable?.addEventListener('click', (event) => {
