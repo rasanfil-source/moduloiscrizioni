@@ -78,6 +78,18 @@ function riparaProgressivoSuIdentitaLegacy_(sheet) {
   } finally { proteggiProiezione_(sheet,editable); }
   return true;
 }
+/** Importi testuali non ambigui; un numero con tre decimali non è una valuta. */
+function centesimiBaseFoglio_(value) {
+  let text=String(value??'').trim(), sign=1;
+  if(text.startsWith('-')){sign=-1;text=text.slice(1);}
+  // Con separatori delle migliaia richiediamo anche la parte decimale.
+  if(/^\d{1,3}(?:\.\d{3})+,\d{1,2}$/.test(text))text=text.replace(/\./g,'').replace(',','.');
+  else if(/^\d{1,3}(?:,\d{3})+\.\d{1,2}$/.test(text))text=text.replace(/,/g,'');
+  else if(/^\d+(?:[.,]\d{1,2})?$/.test(text))text=text.replace(',','.');
+  else return null;
+  const parts=text.split('.'), cents=Number(parts[0])*100+Number((parts[1]||'').padEnd(2,'0'));
+  return Number.isSafeInteger(cents)&&cents<=100000000 ? sign*cents : null;
+}
 function modificheCorrentiFoglio_(sheet) {
   const base = leggiBaseFoglio_(sheet.getParent());
   if (!base) return {changes:[],errors:[],initialized:false};
@@ -94,10 +106,14 @@ function modificheCorrentiFoglio_(sheet) {
     const original=base[JSON.stringify([String(row[columns._ordine-1]),Number(row[columns._numero-1])])];
     if(original)['total','paid','balance','paid_cash','paid_transfer','paid_card'].forEach(key=>{
       const before=String(original[key]??'');
-      if(!Object.prototype.hasOwnProperty.call(values,key)||before===values[key]||! /^-?\d+(?:[.,]\d{1,2})?$/.test(before))return;
+      if(!Object.prototype.hasOwnProperty.call(values,key))return;
+      const cents=centesimiBaseFoglio_(before);if(cents===null)return;
       if(!raw)raw=sheet.getRange(2,1,rows.length,sheet.getLastColumn()).getValues();
       const value=raw[index][columns[key]-1];
-      if(typeof value==='number'&&Number.isFinite(value)&&Number(before.replace(',','.'))===value)values[key]=before;
+      if(typeof value==='number'){
+        if(Number.isFinite(value)&&value===cents/100)values[key]=before;
+        else values[key]=String(value); // Anche differenze nascoste dall'arrotondamento del formato.
+      }
     });
     return {order:String(row[columns._ordine-1]),number:Number(row[columns._numero-1]),values:values};
   }).filter(Boolean);

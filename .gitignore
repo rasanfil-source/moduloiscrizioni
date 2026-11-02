@@ -74,5 +74,6 @@ tools/package-3.26.*.ps1
 !tools/package-3.26.271.ps1
 !tools/package-3.26.272.ps1
 !tools/package-3.26.273.ps1
+!tools/package-3.26.275.ps1
 tools/package-sheet-ui-*.ps1
 tools/package-workspace-*.mjs

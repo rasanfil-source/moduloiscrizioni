@@ -32,6 +32,7 @@ function checked($a,$b=true){echo $a==$b?'checked':'';}function disabled($a,$b=t
 function get_the_title($id){return $GLOBALS['posts'][$id]->post_title??'Gruppo dimostrativo';}
 function get_post_thumbnail_id($id){return 0;}function wp_get_attachment_image_url($id,$size){return $id?'/fixture-image.svg':false;}
 function nocache_headers(){$GLOBALS['no_cache']=true;}function wp_safe_redirect($url,$status){throw new RedirectResult($url,$status);}
+function do_action($hook,...$args){$GLOBALS['mi_test_actions'][$hook]=$args;}
 require __DIR__.'/../modulo-iscrizioni/includes/class-mi-group-links.php';
 function check_links($ok,$message){if(!$ok)throw new RuntimeException($message);}
 function row_link($slug,$label='Catechesi'){return ['slug'=>$slug,'label'=>$label,'enabled'=>1,'title'=>'Ci ritroviamo presto','text'=>'Torna qui per il prossimo incontro.'];}
@@ -88,6 +89,7 @@ unset($posts[110]);
 $_SERVER['REQUEST_URI']='/12cesteroma?mi_iscrizione=999';
 try{MI_Group_Links::route();throw new RuntimeException('Redirect mancante');}catch(RedirectResult $e){check_links($e->url==='https://example.invalid/?mi_iscrizione=101'&&$e->status===302&&$no_cache,'Redirect temporaneo senza cache e senza query estranee');}
 $posts[12]->post_status='draft';check_links(MI_Group_Links::route()===null,'Gruppo non pubblico non esposto');$posts[12]->post_status='publish';
+check_links(isset($GLOBALS['mi_test_actions']['litespeed_control_set_nocache']),'Hook che esclude la cache non invocato');
 $meta[12]['_mi_group_links']['12cesteroma']['enabled']=false;check_links(MI_Group_Links::route()===null,'Link disattivato non risolve');$meta[12]['_mi_group_links']['12cesteroma']['enabled']=true;
 $meta[101]['_mi_event_cancelled_at']='yes';check_links(MI_Group_Links::next_event(12,'12cesteroma')===100,'Passaggio al successivo dopo annullamento');
 $posts[100]->post_status='trash';check_links(MI_Group_Links::next_event(12,'12cesteroma')===0,'Nessun futuro pubblicato');

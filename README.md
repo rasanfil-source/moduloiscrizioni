@@ -21,6 +21,7 @@ Le richieste tra WordPress e Apps Script sono firmate. MySQL conserva il registr
 
 ## Documentazione
 
+- [Rilascio 3.26.275: audit, correzioni e aggiornamento GAS](docs/rilascio-3.26.275.md)
 - [Plugin WordPress](wordpress-plugin/modulo-iscrizioni/README.md)
 - [Progetto Apps Script MODULI AUTONOMO](workspace-apps-script/README.md)
 - [Architettura e flussi operativi](PROGETTO.md)

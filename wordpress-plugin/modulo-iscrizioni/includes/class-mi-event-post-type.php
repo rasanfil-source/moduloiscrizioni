@@ -236,7 +236,7 @@ final class MI_Event_Post_Type {
 		<h3>Opzioni</h3>
 		<div class="mi-responsive-table mi-config-table" tabindex="0" role="region" aria-label="Opzioni"><table class="widefat striped" id="mi-options"><thead><tr><th scope="col">Codice</th><th scope="col">Etichetta</th><th scope="col">Ambito</th><th scope="col">Prezzo €</th><th scope="col">Massimo</th><th scope="col"></th></tr></thead><tbody>
 		<?php foreach ( $options as $option ) : ?>
-		<tr><td><input name="mi_option_code[]" value="<?php echo esc_attr( $option['code'] ); ?>" pattern="[a-z0-9-]+" required></td><td><input name="mi_option_name[]" value="<?php echo esc_attr( $option['name'] ); ?>" required></td><td><select name="mi_option_scope[]"><option value="ORDER" <?php selected( $option['scope'], 'ORDER' ); ?>>Ordine</option><option value="TICKET" <?php selected( $option['scope'], 'TICKET' ); ?>>Partecipante</option></select></td><td><input name="mi_option_price[]" type="number" min="0" step="0.01" value="<?php echo esc_attr( number_format( (int) $option['price_cents'] / 100, 2, '.', '' ) ); ?>"></td><td><input name="mi_option_max[]" type="number" min="1" max="20" value="<?php echo esc_attr( absint( $option['max_quantity'] ?? 1 ) ); ?>"></td><td><button type="button" class="button mi-remove-option">Rimuovi</button></td></tr>
+		<tr><td><input name="mi_option_code[]" value="<?php echo esc_attr( $option['code'] ); ?>" pattern="[a-z0-9-]+" required></td><td><input name="mi_option_name[]" value="<?php echo esc_attr( $option['name'] ); ?>" required></td><td><select name="mi_option_scope[]"><option value="ORDER" <?php selected( $option['scope'], 'ORDER' ); ?>>Ordine</option><option value="TICKET" <?php selected( $option['scope'], 'TICKET' ); ?>>Partecipante</option></select></td><td><input name="mi_option_price[]" type="number" min="0" step="0.01" required value="<?php echo esc_attr( number_format( (int) $option['price_cents'] / 100, 2, '.', '' ) ); ?>"></td><td><input name="mi_option_max[]" type="number" min="1" max="20" value="<?php echo esc_attr( absint( $option['max_quantity'] ?? 1 ) ); ?>"></td><td><button type="button" class="button mi-remove-option">Rimuovi</button></td></tr>
 		<?php endforeach; ?>
 		</tbody></table></div><p><button type="button" class="button" id="mi-add-option">Aggiungi opzione</button></p>
 		<p class="description">Il totale sarà sempre ricalcolato sul server. La spedizione delle conferme dipende dalla modalità email scelta dall’amministratore.</p>
@@ -297,23 +297,8 @@ final class MI_Event_Post_Type {
 		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) || ! current_user_can( 'edit_post', $post_id ) ) {
 			return;
 		}
-		$requested_pricing_mode = strtoupper( sanitize_key( wp_unslash( $_POST['mi_pricing_mode'] ?? 'NONE' ) ) );
-		$requested_economic_mode = strtoupper( sanitize_key( wp_unslash( $_POST['mi_economic_mode'] ?? 'REGISTRATION_ONLY' ) ) );
-		$requested_deposit_mode = 'FIXED' === strtoupper( sanitize_key( wp_unslash( $_POST['mi_deposit_mode'] ?? 'PERCENTAGE' ) ) ) ? 'FIXED' : 'PERCENTAGE';
-		$invalid_amount = false;
-		if ( 'FIXED' === $requested_pricing_mode ) {
-			$fixed_amount = MI_Amount::cents( wp_unslash( $_POST['mi_fixed_price'] ?? '' ) );
-			if ( null === $fixed_amount || $fixed_amount < 1 ) $invalid_amount = true;
-		}
-		if ( 'DEPOSIT_BALANCE' === $requested_economic_mode && 'FIXED' === $requested_deposit_mode ) {
-			$deposit_amount = MI_Amount::cents( wp_unslash( $_POST['mi_deposit_fixed'] ?? '' ) );
-			if ( null === $deposit_amount || $deposit_amount < 1 ) $invalid_amount = true;
-		}
-		foreach ( array( 'mi_ticket_price', 'mi_option_price' ) as $price_field ) foreach ( (array) wp_unslash( $_POST[ $price_field ] ?? array() ) as $raw_amount ) {
-			if ( null === MI_Amount::cents( $raw_amount ) ) $invalid_amount = true;
-		}
-		if ( $invalid_amount ) {
-			set_transient( 'mi_publication_error_' . get_current_user_id(), 'Prezzi non salvati: inserisci importi validi, usando al massimo due cifre decimali. La configurazione dei prezzi precedente è stata conservata.', MINUTE_IN_SECONDS );
+		if ( ! MI_Amount::valid_event_prices( $_POST ) ) {
+			set_transient( 'mi_publication_error_' . get_current_user_id(), 'Metadati dell’evento non salvati: correggi gli importi vuoti o non validi. Tutte le impostazioni precedenti sono state conservate, non soltanto i prezzi.', MINUTE_IN_SECONDS );
 			return;
 		}
 

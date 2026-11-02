@@ -12,7 +12,7 @@ final class MI_Web_Push {
 	public static function boot() {
 		add_action( 'template_redirect', array( __CLASS__, 'serve_worker' ), -130 );
 		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( __CLASS__, 'save_subscription' ) );
-		add_action( self::CRON_HOOK, array( __CLASS__, 'send_registration' ), 10, 2 );
+		add_action( self::CRON_HOOK, array( __CLASS__, 'send_registration' ), 10, 3 );
 	}
 
 	private static function table() {
@@ -269,7 +269,7 @@ final class MI_Web_Push {
 		) );
 	}
 
-	public static function send_registration( $registration_id, $attempt = 1 ) {
+	public static function send_registration( $registration_id, $attempt = 1, $subscription_ids = null ) {
 		$registration_id = absint( $registration_id );
 		$attempt = max( 1, absint( $attempt ) );
 		$keys = self::vapid_keys();
@@ -298,8 +298,14 @@ final class MI_Web_Push {
 		) );
 		if ( false === $payload ) return;
 		$table = self::table();
-		$subscriptions = $wpdb->get_results( "SELECT id,user_id,endpoint,p256dh,auth FROM {$table}", ARRAY_A );
-		$retry = false;
+		$where = '';
+		if ( null !== $subscription_ids ) {
+			$ids = array_values( array_unique( array_filter( array_map( 'absint', (array) $subscription_ids ) ) ) );
+			if ( ! $ids ) return;
+			$where = ' WHERE id IN (' . implode( ',', $ids ) . ')';
+		}
+		$subscriptions = $wpdb->get_results( "SELECT id,user_id,endpoint,p256dh,auth FROM {$table}{$where}", ARRAY_A );
+		$retry = array();
 		$eligible = 0;
 		$accepted = 0;
 		$failed = 0;
@@ -312,7 +318,7 @@ final class MI_Web_Push {
 				$failed++;
 				$error_message = preg_replace( '~https?://\S+~i', '[push endpoint]', $response->get_error_message() );
 				self::log_diagnostic( 'registration=' . $registration_id . ' user=' . $user_id . ' delivery_error=' . $response->get_error_code() . ' ' . $error_message );
-				$retry = true;
+				$retry[] = absint( $subscription['id'] );
 				continue;
 			}
 			$status = wp_remote_retrieve_response_code( $response );
@@ -323,7 +329,7 @@ final class MI_Web_Push {
 			} elseif ( $status >= 500 || 429 === $status ) {
 				$failed++;
 				self::log_diagnostic( 'registration=' . $registration_id . ' user=' . $user_id . ' delivery_http=' . $status . ' retry=1' );
-				$retry = true;
+				$retry[] = absint( $subscription['id'] );
 			} elseif ( $status >= 200 && $status < 300 ) {
 				$accepted++;
 			} else {
@@ -335,7 +341,7 @@ final class MI_Web_Push {
 		if ( ! $eligible ) self::log_diagnostic( 'registration=' . $registration_id . ' dispatched=0 reason=no_eligible_subscriptions' );
 		else self::log_diagnostic( 'registration=' . $registration_id . ' eligible=' . $eligible . ' accepted=' . $accepted . ' failed=' . $failed );
 		if ( $retry && $attempt < 3 ) {
-			$scheduled = wp_schedule_single_event( time() + 60 * $attempt, self::CRON_HOOK, array( $registration_id, $attempt + 1 ), true );
+			$scheduled = wp_schedule_single_event( time() + 60 * $attempt, self::CRON_HOOK, array( $registration_id, $attempt + 1, $retry ), true );
 			if ( is_wp_error( $scheduled ) ) self::log_diagnostic( 'registration=' . $registration_id . ' retry_queued=0 reason=' . $scheduled->get_error_code() );
 			elseif ( ! $scheduled ) self::log_diagnostic( 'registration=' . $registration_id . ' retry_queued=0 reason=scheduler_rejected' );
 		}

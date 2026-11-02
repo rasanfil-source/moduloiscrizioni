@@ -60,3 +60,19 @@ test('Drive failure retains the tombstone job and a retry completes',()=>{
 test('a busy direct deletion does not create a tombstone',()=>{
  const x=setup();x.busy(true);assert.equal(x.c.eliminaDatiEventoDaWordPress_(x.payload).error,'EVENT_BUSY');assert.equal(x.c.eventoInEliminazione_('42'),false);
 });
+
+test('preserve with missing WordPress sheet id requires the original Apps Script registry and request',()=>{
+ const x=setup();const sheet=x.payload.id_foglio;x.props.MI_DIRECT_SHEET_42=sheet;x.payload.id_foglio='';x.deny(true);
+ assert.throws(()=>x.c.eliminaDatiEventoDaWordPress_(x.payload),/Access denied/);
+ const preserve={...x.payload,mode:'keep',preserve_file:true};
+ assert.equal(x.c.eliminaDatiEventoDaWordPress_({...preserve,request_id:'22345678-1234-4234-8234-123456789abc'}).error,'DELETION_CONFLICT');
+ assert.equal(x.c.eliminaDatiEventoDaWordPress_({...preserve,preserve_file:false}).error,'DELETION_CONFLICT');
+ delete x.props.MI_DIRECT_SHEET_42;
+ assert.equal(x.c.eliminaDatiEventoDaWordPress_(preserve).error,'DELETION_CONFLICT');
+ x.props.MI_DIRECT_SHEET_42='another-sheet';
+ assert.equal(x.c.eliminaDatiEventoDaWordPress_(preserve).error,'DELETION_CONFLICT');
+ x.props.MI_DIRECT_SHEET_42=sheet;
+ assert.equal(x.c.eliminaDatiEventoDaWordPress_(preserve).complete,true);
+ assert.equal(x.c.eliminaDatiEventoDaWordPress_(preserve).complete,true);
+ assert.equal(x.accessed.length,0);assert.equal(x.props.MI_DIRECT_SHEET_42,undefined);
+});

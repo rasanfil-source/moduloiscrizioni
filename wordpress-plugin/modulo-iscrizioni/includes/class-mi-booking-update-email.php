@@ -38,7 +38,8 @@ final class MI_Booking_Update_Email {
 			foreach ( $common as $option ) if ( ! empty( $option['quantity'] ) ) $lines[] = '- ' . ( $option['name'] ?? $option['code'] ) . ' × ' . (int) $option['quantity'];
 		}
 		if ( $managed ) {
-			$lines[] = ''; $lines[] = 'Quota complessiva della prenotazione: ' . $money( (int) $r['total_cents'] );
+			$summary = MI_Payment_People::summary( $position );
+			$lines[] = ''; $lines[] = $summary['totals_known'] ? 'Quota complessiva dei partecipanti attivi: ' . $money( $summary['total'] ) : 'Quota complessiva da verificare con la segreteria.';
 			if ( ! $position['quotes_known'] || ! $position['payments_known'] ) $lines[] = 'La situazione individuale dei versamenti è in verifica presso la segreteria.';
 		}
 		$lines[] = ''; $lines[] = 'Per chiarimenti sui servizi o sui versamenti contatta la segreteria.';

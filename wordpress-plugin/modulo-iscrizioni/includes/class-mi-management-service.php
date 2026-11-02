@@ -451,7 +451,7 @@ final class MI_Management_Service {
 		$type = self::room_types()[$data['type'] ?? ''] ?? null;
 		$number = $data['number'] ?? '';
 		if ( ! $type || ! is_string( $number ) || ( '' !== $number && ! preg_match( '/^[1-9][0-9]{0,5}$/', $number ) ) ) throw new InvalidArgumentException( 'Sistemazione o numero non valido.' );
-		if ( 1 === $type['capacity'] && count( $data['people'] ) > 1 && '' !== $number ) throw new InvalidArgumentException( 'Per più singole o multiple lascia il numero automatico: ciascuna persona ha un codice distinto.' );
+		if ( 1 === $type['capacity'] && empty( $type['individual'] ) && count( $data['people'] ) > 1 && '' !== $number ) throw new InvalidArgumentException( 'Per più singole lascia il numero automatico: ciascuna persona ha un codice distinto.' );
 		$grouped = array(); $seen = array();
 		foreach ( $data['people'] as $person ) {
 			if ( ! is_array( $person ) || ! is_string( $person['code'] ?? null ) || ! is_int( $person['number'] ?? null ) || $person['number'] < 1 ) throw new InvalidArgumentException( 'Persona non valida.' );
@@ -461,6 +461,7 @@ final class MI_Management_Service {
 		ksort( $grouped ); $rooms = self::rooms( $event_id ); $inventory = array_column( $rooms, null, 'code' ); $next = 1;
 		foreach ( $rooms as $room ) if ( preg_match( '/^' . $type['prefix'] . '([1-9][0-9]*)$/', $room['code'], $match ) ) $next = max( $next, (int) $match[1] + 1 );
 		$shared = '' !== $number ? $type['prefix'] . $number : $type['prefix'] . $next;
+		if ( ! empty( $type['individual'] ) && count( $data['people'] ) > 1 && '' !== $number && ( ! isset( $inventory[$shared] ) || (int) $inventory[$shared]['capacity'] < 2 ) ) throw new InvalidArgumentException( 'Per assegnare più persone indica una camera multipla condivisa già presente nell’inventario, con capienza superiore a uno.' );
 		$automatic_index = 0;
 		$plan = array( 'reason' => sanitize_textarea_field( $data['reason'] ?? '' ), 'people' => array(), 'orders' => array(), 'new_rooms' => array() );
 		$fingerprint = array( $data, $rooms ); $occupancy = array_column( $rooms, 'occupied', 'code' );
@@ -496,7 +497,7 @@ final class MI_Management_Service {
 				$change = 'ZERO' === $pricing ? 0 : (int) $target['price_cents'] - (int) $old[0]['unit_price_cents']; $delta += $change;
 				$new_room = '' === $number ? $type['prefix'] . ( $next + intdiv( $automatic_index++, $type['capacity'] ) ) : $shared;
 				if ( ! preg_match( '/^' . $type['prefix'] . '[1-9][0-9]{0,5}$/', $new_room ) ) throw new InvalidArgumentException( 'Numerazione esaurita.' );
-				if ( isset( $inventory[$new_room] ) && $inventory[$new_room]['capacity'] !== $type['capacity'] ) throw new InvalidArgumentException( 'Capienza incompatibile per ' . $new_room );
+				if ( isset( $inventory[$new_room] ) && ! self::room_compatible_with_type( $type, $inventory[$new_room] ) ) throw new InvalidArgumentException( 'Capienza incompatibile per ' . $new_room );
 				if ( ! isset( $inventory[$new_room] ) ) $plan['new_rooms'][$new_room] = array( 'code' => $new_room, 'name' => $new_room, 'capacity' => $type['capacity'] );
 				if ( $person['room'] ) $occupancy[$person['room']] = ( $occupancy[$person['room']] ?? 0 ) - 1;
 				$occupancy[$new_room] = ( $occupancy[$new_room] ?? 0 ) + 1;

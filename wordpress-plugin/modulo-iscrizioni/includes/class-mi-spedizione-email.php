@@ -18,6 +18,7 @@ final class MI_Spedizione_Email {
 		add_action( 'admin_post_mi_salva_spedizione_email', array( __CLASS__, 'salva_impostazioni' ) );
 		add_action( 'admin_post_mi_invia_email_prova', array( __CLASS__, 'invia_prova' ) );
 		add_action( 'admin_post_mi_riaccoda_email', array( __CLASS__, 'riaccoda_email' ) );
+		add_action( 'admin_post_mi_rigenera_email', array( __CLASS__, 'rigenera_email' ) );
 		add_action( 'admin_post_mi_recupera_pubblicazione', array( __CLASS__, 'recupera_pubblicazione' ) );
 		add_action( 'mi_riprova_notifica_pubblicazione', array( __CLASS__, 'riprova_pubblicazione' ), 10, 2 );
 		add_action( 'transition_post_status', array( __CLASS__, 'rileva_pubblicazione' ), 10, 3 );
@@ -414,6 +415,68 @@ final class MI_Spedizione_Email {
 		}
 		wp_safe_redirect( add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox', 'email_id' => $id, 'mi_esito' => $esito ), admin_url( 'edit.php' ) ) );
 		exit;
+	}
+
+	public static function rigenera_email() {
+		self::verifica_amministratore( 'mi_rigenera_email' );
+		$id = absint( $_POST['email_id'] ?? 0 );
+		$result = self::rigenera_consegna( $id, sanitize_textarea_field( wp_unslash( $_POST['reason'] ?? '' ) ), '1' === ( $_POST['verified_not_sent'] ?? '' ) );
+		set_transient( 'mi_rigenerazione_email_' . get_current_user_id(), is_wp_error( $result ) ? $result->get_error_message() : 'Nuova consegna #' . $result . ' preparata. La consegna precedente resta conservata nel registro.', MINUTE_IN_SECONDS );
+		wp_safe_redirect( add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox', 'email_id' => is_wp_error( $result ) ? $id : $result ), admin_url( 'edit.php' ) ) );
+		exit;
+	}
+
+	/** Nuova identità di consegna solo dopo verifica umana: i retry ordinari conservano la vecchia. */
+	public static function rigenera_consegna( $id, $reason, $verified ) {
+		if ( ! current_user_can( 'manage_options' ) || MI_Access::is_suspended() ) return new WP_Error( 'mi_forbidden', 'Operazione non consentita.' );
+		$reason = trim( sanitize_textarea_field( $reason ) );
+		if ( true !== $verified || '' === $reason || mb_strlen( $reason ) > 500 ) return new WP_Error( 'mi_verification_required', 'Conferma il mancato invio e indica il motivo della verifica (massimo 500 caratteri).' );
+		global $wpdb;
+		$table = $wpdb->prefix . 'mi_email_outbox';
+		$id = absint( $id );
+		$origin = hash( 'sha256', 'manual-email-regeneration|' . $id );
+		$seed = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ), ARRAY_A );
+		if ( $wpdb->last_error || ! $seed ) return new WP_Error( 'mi_regeneration_failed', 'Email non disponibile.' );
+		$seed_payload = json_decode( (string) $seed['payload_json'], true );
+		$lease_id = ! empty( $seed['registration_id'] ) ? MI_Event_Deletion::registration_event( $seed['registration_id'] ) : absint( $seed_payload['event_id'] ?? 0 );
+		if ( ! $lease_id || ! MI_Access::can_access_event( $lease_id ) ) return new WP_Error( 'mi_forbidden', 'Evento non accessibile.' );
+		if ( in_array( $seed['template_type'], array( 'EVENT_DELETED_NOTICE', 'EVENT_DELETED_SECRETARIAT' ), true ) ) {
+			if ( 'done' !== ( MI_Event_Deletion::job( $lease_id )['stage'] ?? '' ) ) return new WP_Error( 'mi_deletion_pending', 'Attendi il completamento dell’eliminazione.' );
+			$lease_id = 0;
+		} else {
+			$lease = MI_Event_Deletion::enter( $lease_id );
+			if ( is_wp_error( $lease ) ) { MI_Event_Deletion::release( $lease_id ); return $lease; }
+		}
+		try {
+			if ( false === $wpdb->query( 'START TRANSACTION' ) ) throw new RuntimeException( 'Impossibile avviare la rigenerazione.' );
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d FOR UPDATE", $id ), ARRAY_A );
+			if ( $wpdb->last_error || ! $row ) throw new RuntimeException( 'Email non disponibile.' );
+			$payload = json_decode( (string) $row['payload_json'], true );
+			if ( ! is_array( $payload ) ) throw new RuntimeException( 'Contenuto email non valido: rigenerazione annullata.' );
+			$event_id = ! empty( $row['registration_id'] ) ? MI_Event_Deletion::registration_event( $row['registration_id'] ) : absint( $payload['event_id'] ?? 0 );
+			if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) throw new RuntimeException( 'Evento non accessibile.' );
+			$existing = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE origin_key = %s", $origin ) );
+			if ( $wpdb->last_error ) throw new RuntimeException( 'Verifica della consegna precedente non riuscita.' );
+			if ( $existing ) {
+				if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma della rigenerazione non riuscita.' );
+				return (int) $existing;
+			}
+			if ( ! in_array( $row['status'], array( 'FAILED', 'TEST_FAILED' ), true ) ) throw new RuntimeException( 'Rigenerazione disponibile soltanto per email in stato FAILED o TEST_FAILED. Attendi la conclusione dei tentativi in corso.' );
+			$audit = array( 'source_id' => $id, 'operator_id' => get_current_user_id(), 'verified_at' => gmdate( 'Y-m-d H:i:s' ), 'reason' => $reason );
+			$payload['delivery_regeneration'] = $audit;
+			if ( false === $wpdb->insert( $table, array( 'registration_id' => (int) $row['registration_id'], 'recipient' => $row['recipient'], 'template_type' => $row['template_type'], 'payload_json' => wp_json_encode( $payload ), 'status' => 'TEST_FAILED' === $row['status'] ? 'TEST_PENDING' : 'PENDING', 'origin_key' => $origin, 'created_at' => gmdate( 'Y-m-d H:i:s' ) ) ) ) throw new RuntimeException( 'Creazione della nuova consegna non riuscita.' );
+			$new_id = (int) $wpdb->insert_id;
+			$payload['delivery_regeneration']['replacement_id'] = $new_id;
+			if ( 1 !== $wpdb->update( $table, array( 'status' => 'SUPERSEDED', 'payload_json' => wp_json_encode( $payload ), 'last_error' => 'Mancato invio verificato: sostituita dalla consegna #' . $new_id, 'processing_started_at' => null ), array( 'id' => $id, 'status' => $row['status'] ) ) ) throw new RuntimeException( 'Registrazione della sostituzione non riuscita.' );
+			if ( false === $wpdb->query( 'COMMIT' ) ) throw new RuntimeException( 'Conferma della rigenerazione non riuscita.' );
+		} catch ( Throwable $error ) {
+			$wpdb->query( 'ROLLBACK' );
+			return new WP_Error( 'mi_regeneration_failed', $error->getMessage() );
+		} finally {
+			if ( $lease_id ) MI_Event_Deletion::release( $lease_id );
+		}
+		try { self::pianifica_spedizione(); } catch ( Throwable $error ) { /* Il cron recupera la coda persistente. */ }
+		return $new_id;
 	}
 
 	public static function spedisci_coda() {

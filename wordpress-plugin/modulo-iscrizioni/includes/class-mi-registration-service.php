@@ -1442,15 +1442,22 @@ final class MI_Registration_Service {
 		global $wpdb;
 		$now = current_time( 'mysql', true );
 		$now_timestamp = strtotime( $now . ' UTC' );
-		$offers = $wpdb->get_results( "SELECT id,event_id,waitlist_offer_expires_at FROM {$wpdb->prefix}mi_registrations WHERE status='WAITLIST_OFFERED' ORDER BY (waitlist_offer_expires_at IS NULL),waitlist_offer_expires_at,id LIMIT 200", ARRAY_A );
+		// La scadenza comune può anticipare quella individuale: visita anche le pagine successive.
+		$cursor = absint( get_option( 'mi_waitlist_expiry_cursor', 0 ) );
+		$offers = $wpdb->get_results( $wpdb->prepare( "SELECT id,event_id,waitlist_offer_expires_at FROM {$wpdb->prefix}mi_registrations WHERE status='WAITLIST_OFFERED' AND id>%d ORDER BY id LIMIT 200", $cursor ), ARRAY_A );
+		if ( $wpdb->last_error ) return;
 		foreach ( $offers as $offer ) {
 			$offer_expires = ! empty( $offer['waitlist_offer_expires_at'] ) ? strtotime( $offer['waitlist_offer_expires_at'] . ' UTC' ) : false;
 			$common_deadline = self::common_payment_deadline_timestamp( array( 'payment_deadline_at' => get_post_meta( (int) $offer['event_id'], '_mi_payment_deadline_at', true ) ) );
 			if ( false === $common_deadline ) $offer_expires = $now_timestamp;
 			elseif ( null !== $common_deadline && ( false === $offer_expires || $common_deadline < $offer_expires ) ) $offer_expires = $common_deadline;
 			elseif ( false === $offer_expires ) $offer_expires = $now_timestamp;
-			if ( $offer_expires && $now_timestamp && $offer_expires <= $now_timestamp ) self::respond_waitlist_offer( (int) $offer['id'], '', 'EXPIRE', true );
+			if ( $offer_expires && $now_timestamp && $offer_expires <= $now_timestamp ) {
+				try { self::respond_waitlist_offer( (int) $offer['id'], '', 'EXPIRE', true ); }
+				finally { if ( class_exists( 'MI_Event_Deletion' ) ) MI_Event_Deletion::release( (int) $offer['event_id'] ); }
+			}
 		}
+		update_option( 'mi_waitlist_expiry_cursor', count( $offers ) === 200 ? (int) end( $offers )['id'] : 0, false );
 	}
 
 	private static function promote_waitlisted_locked( $event_id, $now ) {

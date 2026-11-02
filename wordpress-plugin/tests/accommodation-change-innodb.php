@@ -48,3 +48,15 @@ check(isset($preview['version'])&&$preview['orders'][0]['after_total']===6000,'T
 sleep(2);
 $saved=MI_Management_Service::change_accommodation(42,$data,$preview['version'],'wp_7_12345678-1234-4234-8234-123456781006');
 check(!empty($saved['saved']),'Il trascorrere dei secondi invalida una anteprima invariata');
+
+// Cambio esplicito di due iscrizioni nella stessa multipla già presente.
+$wpdb->query("INSERT INTO wp_mi_rooms (event_id,code,name,capacity) VALUES (42,'M999','Multipla condivisa',4)");
+foreach([30,31]as $id)$wpdb->query($wpdb->prepare("UPDATE wp_mi_registrations SET snapshot_json=%s WHERE id=%d",$snapshot,$id));
+$data=['people'=>[['code'=>'AUTO30','number'=>1],['code'=>'AUTO31','number'=>1]],'type'=>'alloggio-multipla','number'=>'999','reason'=>'Multipla condivisa'];
+$preview=MI_Management_Service::change_accommodation(42,$data);
+check(isset($preview['version'])&&array_column($preview['people'],'after_room')===['M999','M999'],'Multipla condivisa rifiutata');
+$saved=MI_Management_Service::change_accommodation(42,$data,$preview['version'],'wp_7_12345678-1234-4234-8234-123456781007');
+check(!empty($saved['saved']),'Cambio multipla condivisa non salvato');
+check((int)$wpdb->get_var("SELECT COUNT(*) FROM wp_mi_participants WHERE registration_id IN (30,31) AND room_code='M999'")===2,'Persone non assegnate alla multipla');
+check((int)$wpdb->get_var("SELECT capacity FROM wp_mi_rooms WHERE event_id=42 AND code='M999'")===4,'Capienza reale sovrascritta');
+echo "PASS InnoDB: due iscrizioni cambiano sistemazione verso una multipla condivisa esistente.\n";
