@@ -872,8 +872,15 @@ final class MI_Registration_Service {
 		$now = current_time( 'mysql', true );
 		if ( class_exists( 'MI_Event_Projection' ) && class_exists( 'MI_Sheet_Open' ) ) {
 		// L'aggiornamento dell'evento comprende tutte le iscrizioni e le relative operazioni pendenti.
-			$events = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT event_id FROM {$table} WHERE workspace_status = 'PENDING' AND (workspace_next_attempt_at IS NULL OR workspace_next_attempt_at <= %s) ORDER BY event_id LIMIT 10", $now ) );
+			$cursor = absint( get_option( 'mi_workspace_pending_event_cursor', 0 ) );
+			$events = (array) $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT event_id FROM {$table} WHERE workspace_status = 'PENDING' AND (workspace_next_attempt_at IS NULL OR workspace_next_attempt_at <= %s) AND event_id > %d ORDER BY event_id LIMIT 10", $now, $cursor ) );
+			if ( count( $events ) < 10 ) {
+				$remaining = 10 - count( $events );
+				$events = array_merge( $events, (array) $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT event_id FROM {$table} WHERE workspace_status = 'PENDING' AND (workspace_next_attempt_at IS NULL OR workspace_next_attempt_at <= %s) AND event_id <= %d ORDER BY event_id LIMIT %d", $now, $cursor, $remaining ) ) );
+			}
 			foreach ( $events as $event_id ) MI_Sheet_Open::enqueue( (int) $event_id );
+			// Ruota tra gli eventi pendenti: un gruppo bloccato non occupa sempre i primi posti.
+			if ( $events ) update_option( 'mi_workspace_pending_event_cursor', (int) end( $events ), false );
 			return;
 		}
 		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$table} WHERE workspace_status = 'PENDING' AND (workspace_next_attempt_at IS NULL OR workspace_next_attempt_at <= %s) ORDER BY workspace_attempts,id LIMIT 10", $now ) );

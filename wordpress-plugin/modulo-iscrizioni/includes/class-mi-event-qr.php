@@ -24,9 +24,14 @@ final class MI_Event_QR {
 
 	public static function render( $event_id ) {
 		if ( 'publish' !== get_post_status( $event_id ) || '1' !== get_post_meta( $event_id, '_mi_event_qr_enabled', true ) ) return;
-		self::assets();
+		// Nell'editor classico gli asset servono subito. Nel portale il componente
+		// può arrivare da una scheda caricata dopo l'interazione: portal.js li
+		// richiede solo quando trova questo markup.
+		if ( is_admin() ) self::assets();
 		$url = add_query_arg( array( 'action' => 'mi_event_qr', 'event_id' => $event_id, '_ajax_nonce' => wp_create_nonce( 'mi_event_qr_' . $event_id ) ), admin_url( 'admin-ajax.php' ) );
-		echo '<div data-mi-event-qr="' . esc_url( $url ) . '"><p><strong>QR per le iscrizioni</strong></p><img data-mi-qr-preview hidden alt="QR con il link pubblico di iscrizione" width="240" height="240" style="max-width:100%;height:auto"><p data-mi-qr-status role="status">Preparazione del PNG…</p><button type="button" class="mi-secondary" data-mi-qr-download disabled>Scarica QR in PNG</button><noscript>Attiva JavaScript per generare il PNG.</noscript></div>';
+		$generator = MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/qrcode-generator-2.0.4.js?ver=' . rawurlencode( MI_VERSION ) );
+		$script = MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/event-qr.js?ver=' . rawurlencode( MI_VERSION ) );
+		echo '<div data-mi-event-qr="' . esc_url( $url ) . '" data-mi-qr-generator-src="' . esc_url( $generator ) . '" data-mi-event-qr-src="' . esc_url( $script ) . '"><p><strong>QR per le iscrizioni</strong></p><img data-mi-qr-preview hidden alt="QR con il link pubblico di iscrizione" width="240" height="240" style="max-width:100%;height:auto"><p data-mi-qr-status role="status">Preparazione del PNG…</p><button type="button" class="mi-secondary" data-mi-qr-download disabled>Scarica QR in PNG</button><noscript>Attiva JavaScript per generare il PNG.</noscript></div>';
 	}
 
 	public static function data() {

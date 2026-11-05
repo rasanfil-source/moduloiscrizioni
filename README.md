@@ -27,6 +27,7 @@ Le richieste tra WordPress e Apps Script sono firmate. MySQL conserva il registr
 - [Architettura e flussi operativi](PROGETTO.md)
 - [Schema dei dati](docs/SCHEMA_DATI.md)
 - [Contratto dell'interfaccia](UX-CONTRACT.md) e [sistema grafico](DESIGN.md)
+- [Icona del portale: asset, manifest, trasparenza e avvio PWA](docs/ICONA_PORTALE_E_PWA.md)
 - [Manuale della segreteria](docs/manuale-segretario/Manuale_del_segretario.docx)
 - [Sicurezza](SECURITY.md)
 

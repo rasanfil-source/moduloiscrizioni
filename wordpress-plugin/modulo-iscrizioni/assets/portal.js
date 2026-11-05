@@ -128,6 +128,19 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   const form = document.querySelector('.mi-event-wizard');
   if (form) {
+    form.querySelectorAll('.mi-custom-question').forEach((row) => {
+      const type = row.querySelector('select[name="custom_question_type[]"]');
+      const options = row.querySelector('[data-mi-custom-question-options]');
+      const input = options?.querySelector('textarea');
+      if (!type || !options || !input) return;
+      const updateOptions = () => {
+        const enabled = type.value === 'select';
+        options.hidden = !enabled;
+        input.disabled = !enabled;
+      };
+      type.addEventListener('change', updateOptions);
+      updateOptions();
+    });
     const steps = [...form.querySelectorAll('.mi-wizard-step')];
     const back = form.querySelector('[data-mi-back]');
     const next = form.querySelector('[data-mi-next]');
@@ -1111,3 +1124,44 @@ document.querySelectorAll('[name="mi_annual_attendance_report"]').forEach(toggle
  const update=()=>fields.forEach(field=>{field.disabled=!toggle.checked;field.required=toggle.checked;});
  toggle.addEventListener('change',update);update();
 });
+
+// Il generatore QR amministrativo arriva solo quando viene aperta una scheda
+// che contiene il controllo, anche se quella scheda è stata caricata via AJAX.
+(() => {
+  let loadPromise = null;
+  const loadScript = (source) => new Promise((resolve, reject) => {
+    if (!source) { reject(new Error('Sorgente QR non disponibile.')); return; }
+    const script = document.createElement('script');
+    script.src = source;
+    script.async = true;
+    script.addEventListener('load', resolve, { once: true });
+    script.addEventListener('error', () => reject(new Error('Caricamento QR non riuscito.')), { once: true });
+    document.head.append(script);
+  });
+  const scan = () => {
+    const root = document.querySelector('[data-mi-event-qr]');
+    if (!root || loadPromise) return;
+    loadPromise = (async () => {
+      if (typeof globalThis.qrcode !== 'function') await loadScript(root.dataset.miQrGeneratorSrc || '');
+      await loadScript(root.dataset.miEventQrSrc || '');
+    })().catch((error) => {
+      loadPromise = null;
+      const status = root.querySelector('[data-mi-qr-status]');
+      const button = root.querySelector('[data-mi-qr-download]');
+      if (status) status.textContent = error instanceof Error ? error.message : 'Il controllo QR non è disponibile.';
+      if (button) {
+        button.disabled = false;
+        button.textContent = 'Riprova a caricare il QR';
+        button.addEventListener('click', () => {
+          loadPromise = null;
+          button.disabled = true;
+          button.textContent = 'Caricamento QR…';
+          scan();
+        }, { once: true });
+      }
+    });
+  };
+  const observer = new MutationObserver(scan);
+  if (document.body) observer.observe(document.body, { childList: true, subtree: true });
+  scan();
+})();
