@@ -296,9 +296,10 @@
       };
       const buyerName = [buyerFirstName.value, buyerLastName.value].filter(Boolean).join(' ');
       const total = totalCents();
+      let pendingTravelNote = '';
       summary.classList.toggle('is-free', total === 0);
       if (config.event.travel?.enabled) {
-        if (travelPending()) {
+        if (travelPending() && total !== 0) {
           const pending = document.createElement('p');
           pending.textContent = 'La partecipazione è subordinata al passaggio. Il posto all’evento resta riservato fino al termine delle assegnazioni. Nessun pagamento dell’evento è richiesto durante l’attesa.';
           summary.append(pending);
@@ -318,7 +319,13 @@
           };
           detail.textContent = names[travel.mode] || '';
           if (travel.mode === 'NEED' && travel.fallback === 'REQUIRED') detail.textContent += ' · Partecipazione subordinata al passaggio';
-          summary.append(detail);
+          if (total === 0 && travel.mode === 'NEED' && !travel.driver_id) {
+            pendingTravelNote = travel.fallback === 'REQUIRED'
+              ? ' (Richiesta di passaggio in attesa · Partecipazione subordinata al passaggio)'
+              : ' (Richiesta di passaggio in attesa)';
+          } else {
+            summary.append(detail);
+          }
         }
       }
       if (total === 0) {
@@ -327,6 +334,7 @@
         const freeRegistrationText = document.createElement('strong');
         freeRegistrationText.textContent = `Iscrizione di ${buyerName}`;
         freeRegistration.append(freeRegistrationText);
+        if (pendingTravelNote) freeRegistration.append(document.createTextNode(pendingTravelNote));
         summary.append(freeRegistration);
         return;
       }

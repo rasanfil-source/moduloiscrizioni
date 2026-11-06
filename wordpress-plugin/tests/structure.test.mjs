@@ -2066,7 +2066,7 @@ test('il riepilogo di un evento gratuito mostra soltanto il nome dell iscrizione
   const publicScript = await read('assets/public.js');
   const publicCss = await read('assets/public.css');
   assert.match(publicScript, /summary\.classList\.toggle\('is-free', total === 0\)/);
-  assert.match(publicScript, /if \(total === 0\)[\s\S]*freeRegistrationText\.textContent = `Iscrizione di \$\{buyerName\}`[\s\S]*summary\.append\(freeRegistration\);[\s\S]*return;/);
+  assert.match(publicScript, /if \(travelPending\(\) && total !== 0\)[\s\S]*pendingTravelNote = travel\.fallback === 'REQUIRED'[\s\S]*Richiesta di passaggio in attesa · Partecipazione subordinata al passaggio[\s\S]*freeRegistrationText\.textContent = `Iscrizione di \$\{buyerName\}`[\s\S]*freeRegistration\.append\(document\.createTextNode\(pendingTravelNote\)\)[\s\S]*summary\.append\(freeRegistration\);[\s\S]*return;/);
   assert.match(publicCss, /\.mi-registration__confirmation-summary\.is-free/);
 });
 
