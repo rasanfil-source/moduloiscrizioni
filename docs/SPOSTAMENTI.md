@@ -2,6 +2,10 @@
 
 La funzione è indipendente dal gruppo, dal profilo dei dati e dalla modalità economica dell’evento. Il contributo al conducente comprende andata e ritorno e non attraversa il registro dei pagamenti.
 
+Nel wizard **Spostamenti** è il passaggio 4, prima di **Date e posti**. Si può lasciare l'organizzazione autonoma, prevedere pullman, condividere passaggi in auto oppure combinare pullman e passaggi. Le impostazioni dei passaggi si aprono solo attivandoli; una spiegazione distingue l'attesa di un passaggio dalla lista per partecipare all'evento, configurata nel passaggio 5 accanto alla capienza. Le regole dell'attesa dei passaggi sono consultabili nello stesso passaggio Spostamenti.
+
+Le tratte pullman si configurano in Spostamenti. I supplementi si applicano con **Quote in base ai servizi scelti**; con **Quota uguale per tutti** il trasporto è incluso e con **Iscrizione senza quote nel modulo** non vengono calcolati importi. Le tratte restano selezionabili anche in queste ultime due modalità. Il controllo finale riassume trasporti, modalità delle quote e lista d'attesa dell'evento.
+
 ## Dati e concorrenza
 
 La configurazione è nel metadato `_mi_travel` e nella revisione pubblicata dell’evento. La tabella InnoDB `mi_travel` contiene una riga per partecipante, identificata da `participant_id`, con `registration_id` ed `event_id` indicizzati. Sono conservati modalità, posti offerti, contributo in centesimi, punto e orario di partenza UTC, località richiesta, dipendenza dal passaggio, stato, conducente assegnato, scadenza della proposta e data di ingresso in coda.

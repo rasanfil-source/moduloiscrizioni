@@ -44,6 +44,12 @@ final class MI_Shortcode {
 		return add_query_arg( 'mi_iscrizione', absint( $event_id ), home_url( '/' ) );
 	}
 
+	private static function format_description( $description ) {
+		$escaped = esc_html( (string) $description );
+		$formatted = preg_replace( '/\*\*([\s\S]+?)\*\*/u', '<strong>$1</strong>', $escaped );
+		return nl2br( null === $formatted ? $escaped : $formatted, false );
+	}
+
 	/** Mantiene il lock del namespace durante la creazione dell'evento e l'assegnazione dell'alias. */
 	public static function validate_public_slug( $raw, $event_id = 0 ) {
 		$slug = strtolower( trim( (string) $raw ) );
@@ -152,7 +158,7 @@ final class MI_Shortcode {
 					<?php if ( $event['activity_logo'] ) : ?><img class="mi-registration__logo" src="<?php echo esc_url( $event['activity_logo'] ); ?>" alt="<?php echo esc_attr( $event['activity_logo_alt'] ); ?>" width="180" height="80"><?php endif; ?>
 					<p class="mi-registration__eyebrow"><?php echo esc_html( $event['activity'] ); ?></p><h1 class="mi-registration__title"><?php echo esc_html( $event['title'] ); ?></h1>
 					<?php if ( $formatted_date || $event['event_location'] ) : ?><dl class="mi-registration__facts"><?php if ( $formatted_date ) : ?><div><dt>Quando</dt><dd><?php echo esc_html( $formatted_date ); ?></dd></div><?php endif; ?><?php if ( $event['event_location'] ) : ?><div><dt>Dove</dt><dd><?php echo esc_html( $event['event_location'] ); ?></dd></div><?php endif; ?></dl><?php endif; ?>
-					<?php if ( $event['description'] ) : ?><p class="mi-registration__lead"><?php echo nl2br( esc_html( $event['description'] ) ); ?></p><?php endif; ?>
+					<?php if ( $event['description'] ) : ?><p class="mi-registration__lead"><?php echo wp_kses( self::format_description( $event['description'] ), array( 'strong' => array(), 'br' => array() ) ); ?></p><?php endif; ?>
 				</div>
 			</header>
 			<?php if ( 'OPEN' !== $config['state'] ) : ?><p class="mi-registration__notice" role="status"><?php echo esc_html( self::state_message( $config['state'], $formatted_opens ) ); ?></p><?php else : ?>

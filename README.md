@@ -21,6 +21,9 @@ Le richieste tra WordPress e Apps Script sono firmate. MySQL conserva il registr
 
 ## Documentazione
 
+- [Rilascio 3.26.282: affinamento creazione evento](docs/rilascio-3.26.282.md)
+
+- [Rilascio 3.26.280: revisione del flusso di creazione evento](docs/rilascio-3.26.280.md)
 - [Rilascio 3.26.279: spostamenti e passaggi privati](docs/rilascio-3.26.279.md)
 - [Gestione degli spostamenti](docs/SPOSTAMENTI.md)
 - [Rilascio 3.26.275: audit, correzioni e aggiornamento GAS](docs/rilascio-3.26.275.md)

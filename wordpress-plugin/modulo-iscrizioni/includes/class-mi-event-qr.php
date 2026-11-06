@@ -49,10 +49,16 @@ final class MI_Event_QR {
 
 	public static function logo( $group_id ) {
 		$missing = new WP_Error( 'mi_qr_logo', 'Aggiungi un logo JPG, PNG o WebP al gruppo per generare il QR, poi riprova.' );
-		if ( ! $group_id ) return $missing;
 		$id = get_post_thumbnail_id( $group_id );
 		$url = $id ? wp_get_attachment_image_url( $id, 'medium' ) : get_post_meta( $group_id, '_mi_group_logo_url', true );
-		if ( ! $url ) return $missing;
+		if ( ! $url && function_exists( 'get_theme_mod' ) ) {
+			$parish_logo = absint( get_theme_mod( 'custom_logo' ) );
+			if ( $parish_logo ) $url = wp_get_attachment_image_url( $parish_logo, 'medium' );
+		}
+		if ( ! $url ) {
+			$bytes = file_get_contents( __DIR__ . '/../assets/portal-icon-192.png' );
+			return 'data:image/png;base64,' . base64_encode( $bytes );
+		}
 		// La richiesta HTTP validata controlla destinazioni e reindirizzamenti; incorpora i byte per evitare errori CORS nel canvas.
 		$response = wp_safe_remote_get( $url, array( 'timeout' => 10, 'redirection' => 3, 'limit_response_size' => 2097153 ) );
 		if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) return new WP_Error( 'mi_qr_logo_load', 'Il logo del gruppo non è raggiungibile. Controlla il logo e riprova.' );

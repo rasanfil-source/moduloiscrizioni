@@ -56,13 +56,13 @@
   },
   "portal.css": {
     "file": "min/portal.css",
-    "source": "fd16d425ddc013968674591041e3f7deb5f13b370d099a887c391e27a00b3578",
-    "hash": "87fbd5231ea235c87292264318a9fb48347e29409d82f622de1cafa4865ba861"
+    "source": "01e4a060ec15d5a803ddb6a1f3370e069e8dd72b455ccd7cac7080e31573649d",
+    "hash": "04552baccc9edbd80b44bdfda1738c571bf0a9ce221b07d71f63669f827db344"
   },
   "portal.js": {
     "file": "min/portal.js",
-    "source": "2157269ec77880720968ce1fb87fdd543632ebc6000ca1275bd2c4a4c59834a1",
-    "hash": "b8dcf37ef630fdca0aaf95da179270392e0fb417399987320097a686a2df43ac"
+    "source": "647f391def8944b365b185d6ee19d0784d42363a28806118a361069c393b6498",
+    "hash": "19127fb04444bb4f262cae9f97fa25d39ceb1bdb4711223a66be5b00a5b776b6"
   },
   "public-balance.css": {
     "file": "min/public-balance.css",
@@ -76,13 +76,13 @@
   },
   "public.css": {
     "file": "min/public.css",
-    "source": "c3d78f297d784087292a86f0a4294968fe78ece1198f8dac7d2d43ce99afe05c",
-    "hash": "8a626881fabc4086421a8a7baef948c858866cb7f6ec1fe81d7e842826af80cc"
+    "source": "9fa594492caceb70d87efef0b46505a7494041f0ebfc80de1c520aa55280489c",
+    "hash": "5aaad73b30c05afe8e3c40e0fee1f251950775b5b8de843bbaba877c73b3560e"
   },
   "public.js": {
     "file": "min/public.js",
-    "source": "977b376c30786c87bca738848ababe6b28a91a31ddf763e3afde7da4131a1d35",
-    "hash": "dbd2fb31df447229177aba279d38022c256beac89abb102fb12de410c7c3aa9b"
+    "source": "971180b77ccbe98e5450bf29f4466bd11a7a4b92749181b0234c8bc46cd09274",
+    "hash": "c6ffa4a460e304abce34a37ff93a0b95d69c948016acbd9ab07cfe175b0ca29c"
   },
   "qrcode-generator-2.0.4.js": {
     "file": "min/qrcode-generator-2.0.4.js",
@@ -91,7 +91,7 @@
   },
   "travel.js": {
     "file": "min/travel.js",
-    "source": "51b0a1ef1fe6c922277636024ebe5a4e68ec67652c678e5617c47c7f08d847d9",
-    "hash": "49f5b405180eaacb0661443cfdeb554b6f66966ff676ac5ba832c4fa1a167b44"
+    "source": "16cb428d2992b287cf141b0c30747294aff82083679d3181a03429f0dce547f6",
+    "hash": "77fc32c3cf36a77cfc1c22b8f6b1b876724ea7f67fb686da08d7bfe9c90d91f8"
   }
 }

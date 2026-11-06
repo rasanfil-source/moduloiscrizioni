@@ -367,7 +367,7 @@ final class MI_Registration_Service {
 			return $buyer;
 		}
 		if ( class_exists( 'MI_Travel' ) ) {
-			$participants = MI_Travel::validate_people( $event, $participants, $payload['participants'] ?? array(), $buyer['email'] );
+			$participants = MI_Travel::validate_people( $event, $participants, $payload['participants'] ?? array(), $buyer['email'], $payload['travel_booking'] ?? null );
 			if ( is_wp_error( $participants ) ) return $participants;
 		}
 		$special_requests = ! empty( $event['special_requests_enabled'] ) ? sanitize_textarea_field( $payload['special_requests'] ?? '' ) : '';

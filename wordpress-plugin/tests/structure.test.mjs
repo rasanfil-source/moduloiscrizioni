@@ -460,8 +460,8 @@ test('i dati dimostrativi sono riservati a bozze, amministratori ed email in ant
 test('il wizard guidato crea solo bozze e rende gli alloggi condizionali', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const script = await read('assets/portal.js');
-  assert.match(portal, /1 di 8/);
-  assert.match(portal, /8 di 8/);
+  assert.match(portal, /1 di 9/);
+  assert.match(portal, /9 di 9/);
   assert.match(portal, /post_status' => 'draft'/);
   assert.match(portal, /Vuoi partire dalla configurazione di un evento precedente/);
 	assert.match(portal, /array_merge\( \$current_models, array_slice\( \$past_models, 0, 10 \) \)/);
@@ -1513,7 +1513,7 @@ test('gli eventi annullati restano nella gestione come tessere compatte', async 
 test('il wizard crea una bozza completa e mostra collegamenti espliciti', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const script = await read('assets/portal.js');
-  assert.match(portal, /1 di 8/);
+  assert.match(portal, /1 di 9/);
   assert.match(portal, /name="description"/);
   assert.match(portal, /name="cover_image"/);
 	assert.match(portal, /data-mi-max-bytes="2097152"/);
@@ -1692,7 +1692,7 @@ test('presentazione e operatori usano testi sintetici e informazioni concrete', 
   assert.match(portal, /data-mi-max-lines="6"/);
   assert.doesNotMatch(portal, /Gli a capo saranno mantenuti nel modulo/);
   assert.match(portal, /self::limit_text_lines/);
-  assert.match(shortcode, /nl2br\( esc_html\( \$event\['description'\] \) \)/);
+  assert.match(shortcode, /wp_kses\( self::format_description\( \$event\['description'\] \), array\( 'strong' => array\(\), 'br' => array\(\) \) \)/);
   assert.match(script, /textarea\[data-mi-max-lines\]/);
   assert.match(portal, /\$selected_group_names/);
   assert.match(portal, /\$selected_event_names/);
@@ -1827,7 +1827,7 @@ test('le quote accessorie usano righe compatte senza grandi spazi vuoti', async 
 
 test('la scelta economica mostra le tre modalità richieste nell ordine stabilito', async () => {
   const portal = await read('includes/class-mi-portal.php');
-  const start = portal.indexOf('Come sarà l’evento?');
+  const start = portal.indexOf('Come sono determinate le quote?');
   const free = portal.indexOf('Iscrizione senza quote nel modulo', start);
   const fixed = portal.indexOf('Quota uguale per tutti', start);
   const services = portal.indexOf('Quote in base ai servizi scelti', start);
@@ -1850,6 +1850,24 @@ test('il wizard non mostra la nota ridondante sull email del referente', async (
   assert.doesNotMatch(schema, /Può essere diversa dall’email del referente/);
 });
 
+test('la presentazione evento offre un grassetto semplice e sicuro', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  const shortcode = await read('includes/class-mi-shortcode.php');
+  assert.match(portal, /data-mi-description-bold aria-label="Applica o togli il grassetto"/);
+  assert.match(portal, /Seleziona il testo e premi B o Ctrl\+B/);
+  assert.match(script, /descriptionField\.addEventListener\('keydown'/);
+  assert.match(script, /before \+ '\*\*' \+ selected \+ '\*\*'/);
+  assert.match(shortcode, /esc_html\( \(string\) \$description \)/);
+  assert.match(shortcode, /wp_kses\( self::format_description\( \$event\['description'\] \), array\( 'strong' => array\(\), 'br' => array\(\) \) \)/);
+});
+
+test('il riepilogo finale del wizard evita dettagli superflui sulle due liste', async () => {
+  const script = await read('assets/portal.js');
+  assert.match(script, /Lista d’attesa per partecipare all’evento/);
+  assert.doesNotMatch(script, /Attesa di un passaggio: disponibile anche se la lista d’attesa dell’evento non è attiva/);
+});
+
 test('ogni sistemazione dispone di un costo che entra nelle opzioni economiche', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const script = await read('assets/portal.js');
@@ -1864,7 +1882,7 @@ test('ogni sistemazione dispone di un costo che entra nelle opzioni economiche',
 test('il wizard mostra soltanto i costi coerenti con il tipo di evento', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const script = await read('assets/portal.js');
-  const pricingStart = portal.indexOf('Come sarà l’evento?');
+  const pricingStart = portal.indexOf('Come sono determinate le quote?');
   const pricingEnd = portal.indexOf('</select>', pricingStart);
   const pricingSelect = portal.slice(pricingStart, pricingEnd);
   assert.ok(pricingStart >= 0 && pricingEnd > pricingStart);
@@ -1929,6 +1947,10 @@ test('la conferma multipersona anticipa il riepilogo e richiude il dettaglio dei
   assert.match(script, /heading\.textContent = `\$\{cost\.participant\.firstName\} \$\{cost\.participant\.lastName\}`/);
   assert.match(script, /amount\.className = 'mi-registration__booking-amount'/);
   assert.match(script, /amount\.textContent = formatCurrency\(cost\.subtotal\)/);
+  assert.match(script, /offeredSeats === 1 \? 'posto' : 'posti'/);
+  assert.match(script, /pluralBooking \? 'Offrite' : 'Offri'/);
+  assert.match(script, /amountCents\(travel\.price\)/);
+  assert.match(script, /riceverete.*da ciascun passeggero che accetterà il passaggio/);
   assert.match(script, /compactDescription\(cost\)/);
   assert.match(script, /detailsSummary\.textContent = 'Dettaglio dei costi'/);
   assert.match(script, /line\(parent, 'Totale'/);
@@ -1941,6 +1963,12 @@ test('la conferma multipersona anticipa il riepilogo e richiude il dettaglio dei
   assert.match(css, /\.mi-registration__cost-details/);
   assert.match(script, /specialRequestsInput\.rows = 3/);
   assert.match(css, /\.mi-registration__special-requests\{display:block;width:min\(100%,560px\);margin:1rem auto 1\.25rem\}/);
+});
+
+test('la scelta senza passaggio descrive l esito delle persone rimaste senza auto', async () => {
+  const script = await read('assets/travel.js');
+  assert.match(script, /party\.length > 1 \? 'Annulla la partecipazione delle persone senza passaggio'/);
+  assert.match(script, /party\.length > 1 \? 'Parteciperanno comunque e si organizzeranno diversamente'/);
 });
 
 test('la scheda iscritto omette i controlli economici della prenotazione', async () => {

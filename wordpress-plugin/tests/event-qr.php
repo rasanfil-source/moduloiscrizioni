@@ -44,7 +44,7 @@ foreach(['draft','private','trash','mi_archived'] as $state) { expect_qr(request
 $state='publish'; $meta['_mi_event_qr_enabled']='0'; expect_qr(request_qr()->status===409,'disabled');
 ob_start(); MI_Event_QR::render(42); expect_qr(ob_get_clean()==='','no disabled UI');
 $meta['_mi_event_qr_enabled']='1'; $type='page'; expect_qr(request_qr()->status===409,'wrong type'); $type='mi_event';
-$logo_id=0; expect_qr(request_qr()->status===422,'missing logo'); $logo_id=9;
+$logo_id=0; expect_qr(request_qr()->status===200,'default parish logo'); $logo_id=9;
 $response=['code'=>200,'body'=>'<svg></svg>']; expect_qr(request_qr()->status===422,'reject SVG');
 $response=['code'=>200,'body'=>str_repeat('x',2097153)]; expect_qr(request_qr()->status===422,'oversize');
 $response=['code'=>404,'body'=>'']; expect_qr(request_qr()->status===422,'failed logo');

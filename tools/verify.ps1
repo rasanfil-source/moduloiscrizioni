@@ -59,7 +59,7 @@ try {
         'option-rules.php', 'sheet-open.php', 'event-projection-transfer.php', 'rest-projection.php', 'workspace-schema.php', 'attendance-report.php',
 		'group-attendance.php', 'sheet-organization.php', 'audit-regressions.php', 'audit-dates-access-cache.php',
 		'reopened-payment-deadline.php', 'management-cross-event.php', 'percentage-deposit-unit.php',
-        'event-wizard.php', 'management-list.php', 'management-page-sql.php', 'payment-counts.php', 'code-image.php', 'assets.php',
+        'event-wizard.php', 'event-transport-save.php', 'management-list.php', 'management-page-sql.php', 'payment-counts.php', 'code-image.php', 'assets.php',
         'registration-failures.php', 'email-transaction-failures.php', 'event-cancellation-retry.php', 'attendance-idempotency.php', 'publication-stored-config.php',
         'audit-registration-regressions.php', 'audit-outbox-recovery.php', 'audit-publication-regressions.php', 'payment-ledger.php'
     )

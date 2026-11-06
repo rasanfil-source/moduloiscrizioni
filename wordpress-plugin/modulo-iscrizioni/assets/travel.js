@@ -6,65 +6,81 @@
     if (!host) return undefined;
     const value = key => host.querySelector(`[data-travel="${key}"]`)?.value || '';
     const select = host.querySelector('[data-travel="driver_id"]');
-    return { mode: value('mode'), seats: value('seats'), origin: value('mode') === 'NEED' ? value('wanted_origin') : value('origin'), departure: value('departure'), price: value('price'), fallback: value('fallback'), driver_id: Number(value('driver_id')) || 0, price_cents: Number(select?.selectedOptions[0]?.dataset.priceCents) || 0, waitlist: Boolean(host.querySelector('[data-travel="waitlist"]')?.checked) };
+    const assignments = Array.from(host.querySelectorAll('[data-travel="ride_offer"]:checked')).map(input => ({ driver_id: Number(input.dataset.driverId), seats: Number(input.dataset.seats), price_cents: Number(input.dataset.priceCents) }));
+    return { mode: value('mode'), seats: value('seats'), origin: value('mode') === 'NEED' ? '' : value('origin'), departure: value('departure'), price: value('price'), fallback: value('fallback'), driver_id: Number(value('driver_id')) || 0, price_cents: Number(select?.selectedOptions[0]?.dataset.priceCents) || 0, assignments, waitlist: Boolean(host.querySelector('[data-travel="waitlist"]')?.checked) };
   }
-  function render(config, previous = {}, index) {
+  function render(config, previous = {}, index, party = []) {
     const host = document.createElement('fieldset');
     host.dataset.miTravel = '';
     host.className = 'mi-registration__travel';
-    const legend = document.createElement('legend'); legend.textContent = 'Come raggiungerai l’evento?'; host.append(legend);
+    const legend = document.createElement('legend'); legend.textContent = party.length > 1 ? 'Come raggiungerete l’evento?' : 'Come raggiungerai l’evento?'; host.append(legend);
+    if (party.length > 1) note('Una sola modalità di viaggio per la prenotazione. Puoi selezionare più auto: assegneremo un posto a ogni persona.');
     function note(text, parent = host) { const p = document.createElement('p'); p.textContent = text; parent.append(p); return p; }
     function field(label, key, type = 'text', parent = host) {
-      const wrap = document.createElement('label'); wrap.append(document.createTextNode(label));
+      const wrap = document.createElement('label');
       const input = document.createElement(type === 'select' ? 'select' : 'input');
       if (type !== 'select') input.type = type;
       input.dataset.travel = key; input.name = `travel-${index}-${key}`;
-      wrap.append(input); parent.append(wrap); return input;
+      if (type === 'checkbox') { wrap.className = 'mi-registration__travel-checkbox'; wrap.append(input, document.createTextNode(label)); }
+      else { wrap.append(document.createTextNode(label), input); }
+      parent.append(wrap); return input;
     }
     function option(select, value, label) { const o = document.createElement('option'); o.value = value; o.textContent = label; select.append(o); return o; }
     const mode = field('Modalità di spostamento', 'mode', 'select');
-    [['', 'Scegli come viaggiare'], ['OWN', 'Mi organizzo autonomamente'], ['PUBLIC', 'Utilizzo i mezzi pubblici'], ['DRIVER', 'Vengo in auto: indica quanti posti offri, anche zero'], ['NEED', 'Cerco un passaggio in auto']].forEach(([v, t]) => option(mode, v, t));
+    const plural = party.length > 1;
+    [['', 'Scegli come viaggiare'], ['OWN', plural ? 'Ci organizziamo autonomamente' : 'Mi organizzo autonomamente'], ['DRIVER', plural ? 'Veniamo in auto' : 'Vengo in auto'], ['NEED', plural ? 'Cerchiamo un passaggio in auto' : 'Cerco un passaggio in auto']].forEach(([v, t]) => option(mode, v, t));
     mode.value = previous.mode || ''; mode.required = true;
     if (config.event.travel.instructions) note(config.event.travel.instructions);
-    note('I passaggi comprendono andata e ritorno. Il contributo si versa direttamente al conducente ed è separato dalle quote dell’evento.');
     const driver = document.createElement('div'); host.append(driver);
     const seats = field('Posti disponibili per altri iscritti, esclusi conducente e accompagnatori già previsti', 'seats', 'select', driver);
     for (let n = 0; n <= 8; n++) option(seats, String(n), n === 0 ? '0 — Non offro posti' : String(n));
     seats.value = String(previous.seats || 0);
     const details = document.createElement('div'); driver.append(details);
+    const eventOrigin = String(config.event.event_location || '').trim();
     const origin = field('Località e punto di partenza', 'origin', 'text', details); origin.maxLength = 180; origin.value = previous.mode === 'DRIVER' ? previous.origin || '' : '';
+    if (eventOrigin) note('Facoltativo: se lasci vuoto, useremo la località dell’evento.', details);
+    note(plural ? 'Segnaleremo che offrite posti in auto e comunicheremo i vostri recapiti a chi riceverà un’offerta, così potrete accordarvi sui dettagli del viaggio.' : 'Segnaleremo che offri posti in auto e comunicheremo i tuoi recapiti a chi riceverà un’offerta, così potrete accordarvi sui dettagli del viaggio.', details);
     const departure = field('Data e ora di partenza (gg/mm/aaaa hh:mm)', 'departure', 'text', details); departure.placeholder = 'gg/mm/aaaa hh:mm'; departure.value = previous.departure || '';
+    note('Facoltativo: se lasci vuoto, useremo data e ora dell’evento.', details);
     const price = field('Contributo per persona, andata e ritorno (€)', 'price', 'text', details); price.inputMode = 'decimal'; price.value = config.event.travel.price_mode === 'FIXED' ? String(config.event.travel.price_cents / 100).replace('.', ',') : previous.price || '0'; price.readOnly = config.event.travel.price_mode === 'FIXED';
     const need = document.createElement('div'); host.append(need);
-    const rides = field('Passaggi disponibili', 'driver_id', 'select', need);
+    note('I passaggi comprendono andata e ritorno. L’eventuale contributo si versa direttamente al conducente ed è separato dalle eventuali quote.', need);
+    if (party.length > 1) note(`Si richiede un posto per ciascuna delle ${party.length} persone. Le proposte sono individuali e possono riguardare auto diverse.`, need);
+    const ridesLabel = document.createElement('strong'); ridesLabel.textContent = 'Passaggi disponibili'; need.append(ridesLabel);
+    const rides = document.createElement('div'); rides.dataset.travelOffers = ''; need.append(rides);
     const status = note('', need); status.setAttribute('role', 'status');
-    const reload = document.createElement('button'); reload.type = 'button'; reload.textContent = 'Aggiorna disponibilità'; need.append(reload);
-    const wait = field('Se non scelgo un passaggio, desidero entrare nella lista d’attesa auto', 'waitlist', 'checkbox', need); wait.checked = Boolean(previous.waitlist);
-    const wantedOrigin = field('Località da cui cerchi il passaggio (per l’abbinamento automatico usa la stessa località indicata dai conducenti)', 'wanted_origin', 'text', need); wantedOrigin.maxLength = 180; wantedOrigin.value = previous.mode === 'NEED' ? previous.origin || '' : '';
-    const fallback = field('Se non si trova un passaggio', 'fallback', 'select', need);
-    option(fallback, '', 'Scegli come partecipare'); option(fallback, 'REQUIRED', 'Parteciperò solo se trovo un passaggio'); option(fallback, 'ANYWAY', 'Parteciperò comunque e mi organizzerò diversamente'); fallback.value = previous.fallback || '';
-    note('Le proposte successive riservano il posto per 24 ore dall’invio. Ti saranno comunicati partenza e contributo prima dell’accettazione. L’attesa auto è distinta dalla lista d’attesa dell’evento.', need);
-    let loading = false;
+    const reload = document.createElement('button'); reload.type = 'button'; reload.textContent = 'Riprova'; reload.hidden = true; need.append(reload);
+    const wait = field('Desidero essere avvisato quando si trova un passaggio', 'waitlist', 'checkbox', need); wait.checked = Boolean(previous.waitlist);
+    const fallback = field(party.length > 1 ? 'Se una o più persone non trovano un passaggio' : 'Se non si trova un passaggio', 'fallback', 'select', need);
+    option(fallback, '', party.length > 1 ? 'Scegli cosa fare' : 'Scegli come partecipare');
+    option(fallback, 'REQUIRED', party.length > 1 ? 'Annulla la partecipazione delle persone senza passaggio' : 'Parteciperò solo se trovo un passaggio');
+    option(fallback, 'ANYWAY', party.length > 1 ? 'Parteciperanno comunque e si organizzeranno diversamente' : 'Parteciperò comunque e mi organizzerò diversamente'); fallback.value = previous.fallback || '';
+    note('Ogni proposta riserva il posto per 24 ore. Le proposte automatiche ti arrivano via email: partenza e contributo sono indicati nell’email e nella pagina personale del passaggio, prima di accettare. L’attesa auto è distinta dalla lista d’attesa dell’evento.', need);
+    let loading = false; let loadedOnce = false;
     async function load() {
       if (loading) return;
-      loading = true; reload.disabled = true;
-      const selected = rides.value || String(previous.driver_id || 0);
+      loading = true; reload.disabled = true; reload.hidden = true;
+      const selected = new Set(Array.from(rides.querySelectorAll('[data-travel="ride_offer"]:checked')).map(input => input.dataset.driverId));
+      if (!loadedOnce) for (const item of previous.assignments || []) selected.add(String(item.driver_id));
       status.textContent = 'Caricamento dei passaggi…';
       try {
         const endpoint = config.endpoint.replace(/\/registrations\/?$/, '/travel');
         const response = await fetch(endpoint, { cache: 'no-store', credentials: 'same-origin' });
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || 'Disponibilità non disponibile.');
-        rides.replaceChildren(); option(rides, '0', 'Non scelgo un passaggio disponibile');
-        for (const ride of data.rides || []) {
-          const o = option(rides, String(ride.id), `${ride.origin} · ${ride.departure} · ${ride.seats} posti · ${money(ride.price_cents)} A/R per persona`);
-          o.dataset.priceCents = String(ride.price_cents);
+        rides.replaceChildren();
+        const available = (data.rides || []).filter(ride => Number(ride.seats) > 0);
+        for (const ride of available) {
+          const label = document.createElement('label'); label.className = 'mi-registration__travel-checkbox mi-registration__travel-offer';
+          const input = document.createElement('input'); input.type = 'checkbox'; input.dataset.travel = 'ride_offer'; input.dataset.driverId = String(ride.id); input.dataset.seats = String(ride.seats); input.dataset.priceCents = String(ride.price_cents); input.checked = selected.has(String(ride.id));
+          label.append(input, document.createTextNode(`${ride.origin} · ${ride.departure} · ${ride.seats} ${Number(ride.seats) === 1 ? 'posto' : 'posti'} · ${money(ride.price_cents)} A/R per persona`)); rides.append(label);
         }
-        if (Array.from(rides.options).some(o => o.value === selected)) rides.value = selected;
-        status.textContent = data.rides?.length ? 'La disponibilità sarà verificata al momento dell’iscrizione.' : 'Al momento non ci sono posti disponibili. Puoi chiedere di entrare in lista d’attesa auto.';
+        status.textContent = available.length ? (party.length > 1 ? 'Seleziona una o più auto: distribuiremo i posti tra le persone della prenotazione.' : 'Seleziona un passaggio oppure chiedi di entrare in lista d’attesa auto.') : 'Al momento non ci sono passaggi disponibili. Puoi chiedere di entrare in lista d’attesa auto.';
+        loadedOnce = true;
       } catch (error) {
-        rides.replaceChildren(); option(rides, '0', 'Nessun passaggio selezionato');
-        status.textContent = `${error.message} Puoi riprovare o richiedere la lista d’attesa auto.`;
+        rides.replaceChildren();
+        status.textContent = `${error.message} Puoi riprovare oppure chiedere di entrare in lista d’attesa auto.`;
+        reload.hidden = false;
       } finally { loading = false; reload.disabled = false; update(); }
     }
     function toggle(parent, visible) {
@@ -73,14 +89,22 @@
     }
     function update() {
       toggle(driver, mode.value === 'DRIVER'); toggle(details, mode.value === 'DRIVER' && Number(seats.value) > 0); toggle(need, mode.value === 'NEED');
-      origin.required = departure.required = price.required = mode.value === 'DRIVER' && Number(seats.value) > 0;
-      fallback.required = mode.value === 'NEED';
-      wantedOrigin.required = mode.value === 'NEED' && !Number(rides.value);
-      wait.required = mode.value === 'NEED' && !Number(rides.value);
+      origin.required = mode.value === 'DRIVER' && Number(seats.value) > 0 && !eventOrigin;
+      price.required = mode.value === 'DRIVER' && Number(seats.value) > 0;
+      departure.required = false;
+      const selectedSeats = Array.from(host.querySelectorAll('[data-travel="ride_offer"]:checked')).reduce((sum, input) => sum + Number(input.dataset.seats || 0), 0);
+      const unassigned = Math.max(0, (party.length || 1) - selectedSeats);
+      if (mode.value === 'NEED' && rides.childElementCount && selectedSeats > 0) status.textContent = party.length > 1
+        ? `Hai selezionato posti per ${Math.min(selectedSeats, party.length)} persone su ${party.length}.${unassigned ? ' Seleziona altre auto o chiedi di entrare in lista d’attesa per le persone rimanenti.' : ' Tutte le persone hanno un posto selezionato.'}`
+        : 'Passaggio selezionato. La disponibilità sarà verificata al momento dell’iscrizione.';
+      fallback.required = mode.value === 'NEED' && unassigned > 0;
+      fallback.closest('label').hidden = mode.value !== 'NEED' || unassigned === 0;
+      wait.required = mode.value === 'NEED' && unassigned > 0;
+      wait.closest('label').hidden = mode.value !== 'NEED' || unassigned === 0;
     }
     mode.addEventListener('change', () => { update(); if (mode.value === 'NEED') load(); });
     seats.addEventListener('change', update); rides.addEventListener('change', update); reload.addEventListener('click', load);
-    option(rides, '0', 'Non scelgo un passaggio disponibile'); update();
+    update();
     if (mode.value === 'NEED') load();
     return host;
   }

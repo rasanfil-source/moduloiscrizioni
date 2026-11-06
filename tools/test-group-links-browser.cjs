@@ -43,7 +43,7 @@ const server=http.createServer((req,res)=>{
   await edit.locator('[data-mi-link-row]').first().locator('textarea').fill('Ci vediamo al prossimo incontro.');
   const group=page.locator('#event-form [name=activity_id]'),category=page.locator('#event-form [name=group_link]');
   assert.equal(await category.inputValue(),'12cesteroma');
-  await group.selectOption('13');assert.equal(await category.inputValue(),'');
+  await group.selectOption('13');assert.equal(await category.inputValue(),'altragita');
   assert.deepEqual(await category.locator('option[value="12cesteroma"]').evaluate(option=>({disabled:option.disabled,hidden:option.hidden})),{disabled:true,hidden:true});
   await category.selectOption('altragita');await group.selectOption('12');assert.equal(await category.inputValue(),'');
   await category.selectOption('12cesteeventi');
