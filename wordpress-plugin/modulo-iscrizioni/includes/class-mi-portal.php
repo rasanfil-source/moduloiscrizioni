@@ -672,7 +672,6 @@ final class MI_Portal {
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,buyer_email,total_cents,economic_mode FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status IN ('CONFIRMED','PENDING_PAYMENT') AND capacity_released_at IS NULL ORDER BY id LIMIT 1001", $event_id ), ARRAY_A );
 		if ( $wpdb->last_error || ! is_array( $rows ) ) return self::redirect_portal_result( 'Destinatari non disponibili. Nessun invio preparato.', true, 'communications' );
 		if ( count( $rows ) > 1000 ) return self::redirect_portal_result( 'Oltre 1000 prenotazioni: invio non disponibile da questa schermata.', true, 'communications' );
-		if ( $wpdb->last_error || ! is_array( $rows ) ) return self::redirect_result( 'Iscrizioni non disponibili. Annullamento non eseguito.', true, $event_id );
 		$recipients = array();
 		try { $positions = MI_Payment_Ledger::positions( $rows ); }
 		catch ( Throwable $error ) { return self::redirect_portal_result( 'Saldo non disponibile. Nessuna comunicazione preparata.', true, 'communications' ); }

@@ -1596,7 +1596,6 @@ final class MI_Registration_Service {
 			MI_Sheet_Open::enqueue( (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$wpdb->prefix}mi_registrations WHERE id=%d", $registration_id ) ) );
 			return 'PENDING';
 		}
-		$args = array( $registration_id );
 		if ( $registration_id ) self::schedule_workspace_registration( $registration_id, time() );
 		if ( class_exists( 'MI_Sheet_Open' ) ) {
 			global $wpdb;
