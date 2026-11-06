@@ -42,11 +42,15 @@ function applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, 
   aggiungiColonneDomande_(result, {domande_json:'[]'}, iscrizioni, partecipanti, cache);
   if (schema.room) add('room');
   if (schema.transport) add('transport');
-  if (iscrizioni.some(r=>['WAITLISTED','WAITLIST_OFFERED','LISTA_ATTESA','POSTO_PROPOSTO'].includes(String(r.stato).toUpperCase()))) add('status');
+  if (iscrizioni.some(r=>['TRAVEL_PENDING','WAITLISTED','WAITLIST_OFFERED','LISTA_ATTESA','POSTO_PROPOSTO'].includes(String(r.stato).toUpperCase()))) add('status');
   aggiungiColonneServizi_(result, schema.options);
   partecipanti.forEach(person=>{
     const options=cache?cache.list(person.opzioni_json):decodificaElenco_(person.opzioni_json);
     aggiungiColonneServizi_(result, options.filter(option=>Number(option.quantity)>0).map(option=>Object.assign({},option,{scope:'TICKET'})));
+  });
+  const travelLabels = {travel_mode:'Spostamento',travel_seats:'Posti auto offerti',travel_origin:'Partenza',travel_departure:'Orario partenza',travel_state:'Stato passaggio',travel_driver:'Conducente',travel_required:'Partecipa solo con passaggio',travel_contribution:'Contributo al conducente A/R',travel_offer_expiry:'Scadenza proposta auto'};
+  Object.keys(travelLabels).forEach(key=>{
+    if (schema.travel || partecipanti.some(p=>Object.prototype.hasOwnProperty.call(cache?cache.object(p.dati_aggiuntivi_json):decodificaOggetto_(p.dati_aggiuntivi_json),key))) add(key,travelLabels[key]);
   });
   if (schema.special_requests) add('special_requests');
   const codes = new Set(iscrizioni.map(r=>String(r.codice_ordine)));

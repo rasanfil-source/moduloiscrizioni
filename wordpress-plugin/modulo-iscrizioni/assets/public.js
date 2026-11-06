@@ -177,6 +177,13 @@
       return Object.fromEntries(Array.from(root.querySelectorAll('[data-mi-order-option]')).map((input) => [input.dataset.miOrderOption, core.clampQuantity(input.value, input.max)]));
     }
 
+    function travelPending() {
+      return Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).some(row => {
+        const travel = globalThis.MITravel?.capture(row);
+        return travel?.mode === 'NEED' && travel.fallback === 'REQUIRED' && !travel.driver_id;
+      });
+    }
+
     function renderEconomicSummary() {
       if (!economicSummary) return;
       const total = totalCents();
@@ -191,7 +198,10 @@
       balanceRow.hidden = mode !== 'DEPOSIT_BALANCE';
       paymentMethodsRow.hidden = !['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(mode) || paymentMethods.length === 0;
       economicSummary.querySelector('[data-mi-payment-methods]').textContent = paymentMethods.join(', ');
-      if (mode === 'FULL_PAYMENT') {
+      if (travelPending()) {
+        initialRow.hidden = balanceRow.hidden = paymentMethodsRow.hidden = true;
+        economicSummary.querySelector('[data-mi-economic-note]').textContent = 'Quota prevista dell’evento. Nessun pagamento è richiesto finché non sono assegnati tutti i passaggi necessari.';
+      } else if (mode === 'FULL_PAYMENT') {
         economicSummary.querySelector('[data-mi-initial-label]').textContent = 'Versamento previsto:';
         economicSummary.querySelector('[data-mi-initial]').textContent = formatCurrency(total);
         economicSummary.querySelector('[data-mi-economic-note]').textContent = 'Il modulo registra l’iscrizione; il versamento sarà registrato manualmente dall’organizzazione.';
@@ -231,7 +241,7 @@
 	  backButton.hidden = currentStep === 1;
 	  nextButton.hidden = currentStep === 3;
 	  submitButton.hidden = currentStep !== 3;
-      paymentInstructionsNote.hidden = currentStep !== 3 || totalCents() <= 0 || !['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(config.event.economic_mode);
+      paymentInstructionsNote.hidden = currentStep !== 3 || travelPending() || totalCents() <= 0 || !['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(config.event.economic_mode);
       paymentInstructionsNote.textContent = `Nell’email di conferma ${totalQuantity() > 1 ? 'delle prenotazioni' : 'della prenotazione'} riceverai le istruzioni per il pagamento.`;
 	  nextButton.textContent = currentStep === 2 ? 'Vai alla conferma' : 'Continua';
 	  updateStickySummary();
@@ -260,6 +270,21 @@
       const buyerName = [buyerFirstName.value, buyerLastName.value].filter(Boolean).join(' ');
       const total = totalCents();
       summary.classList.toggle('is-free', total === 0);
+      if (config.event.travel?.enabled) {
+        if (travelPending()) {
+          const pending = document.createElement('p');
+          pending.textContent = 'La partecipazione è subordinata al passaggio. Il posto all’evento resta riservato fino al termine delle assegnazioni. Nessun pagamento dell’evento è richiesto durante l’attesa.';
+          summary.append(pending);
+        }
+        participantValues.forEach(person => {
+          const travel = person.travel;
+          if (!travel) return;
+          const detail = document.createElement('p');
+          const names = { OWN: 'Viaggio autonomo', PUBLIC: 'Mezzi pubblici', DRIVER: 'In auto, posti offerti: ' + travel.seats, NEED: travel.driver_id ? 'Passaggio scelto: ' + formatCurrency(travel.price_cents) + ' A/R, direttamente al conducente' : 'Lista d’attesa auto da ' + travel.origin };
+          detail.textContent = person.firstName + ' ' + person.lastName + ': ' + (names[travel.mode] || '') + (travel.fallback === 'REQUIRED' ? ' · Partecipa solo con passaggio' : '');
+          summary.append(detail);
+        });
+      }
       if (total === 0) {
         const freeRegistration = document.createElement('p');
         freeRegistration.className = 'mi-registration__free-confirmation';
@@ -278,7 +303,7 @@
       });
       const orderSelection = orderOptionSelection();
       const selectedOrderOptions = options.filter((option) => option.scope === 'ORDER').map((option) => ({ option, quantity: Number(orderSelection[option.code]) || 0 })).filter((item) => item.quantity > 0).map((item) => ({ ...item, cost: item.quantity * (Number(item.option.price_cents) || 0) }));
-      const deposit = total > 0 && config.event.economic_mode === 'DEPOSIT_BALANCE'
+      const deposit = !travelPending() && total > 0 && config.event.economic_mode === 'DEPOSIT_BALANCE'
         ? (config.event.deposit_mode === 'FIXED' ? Math.min(total, (Number(config.event.deposit_fixed_cents) || 0) * totalQuantity()) : Math.round(total * Number(config.event.deposit_percentage || 30) / 100))
         : 0;
       const optionCategory = (option) => {
@@ -408,6 +433,7 @@
         lastName: row.querySelector('[data-mi-last-name]')?.value || '',
 		fields: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-field]')).map((input) => [input.dataset.miParticipantField, input.type === 'tel' ? core.normalizePhone(input.value) : input.value.trim()])),
 		options: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-option]')).map((input) => [input.dataset.miParticipantOption, String(participantOptionQuantity(input))])),
+		travel: globalThis.MITravel?.capture(row) || previous.travel,
 		noAccommodation: Boolean(row.querySelector('[data-mi-no-accommodation]')?.checked)
 		};
 	  });
@@ -466,6 +492,7 @@
 		  grid.append(answers);
 		}
 		appendParticipantOptionGroups(grid, (config.event.options || []).filter((option) => option.scope === 'TICKET'), previous, index);
+        if (config.event.travel?.enabled) grid.append(globalThis.MITravel.render(config, previous.travel, index));
         row.append(legend, grid);
 		participantsRoot.append(row);
       });
@@ -661,6 +688,7 @@
 		first_name: participant.firstName.trim(),
 		last_name: participant.lastName.trim(),
 		fields: participant.fields || {},
+		travel: participant.travel,
 		options: participant.options || {}
 		};
 	  });
@@ -759,6 +787,13 @@
       return true;
     }
     participantsRoot.addEventListener('input', () => accommodationNotice?.remove());
+    participantsRoot.addEventListener('change', () => {
+      renderEconomicSummary();
+      if (buyerEmail) buyerEmail.required = Boolean(config.event.availability?.full && config.event.waitlist_enabled) || Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).some(row => {
+        const travel = globalThis.MITravel?.capture(row);
+        return travel?.mode === 'NEED' || (travel?.mode === 'DRIVER' && Number(travel.seats) > 0);
+      });
+    });
 	nextButton.addEventListener('click', () => {
 	  if (!currentStepIsValid()) return;
 	  if (currentStep === 2 && confirmMissingAccommodation()) return;
@@ -824,12 +859,14 @@
 		  .map((value) => String(value || '').trim())
 		  .filter(Boolean)
 		  .join(' ');
-		const successText = result.status === 'WAITLISTED'
+		const successText = result.status === 'TRAVEL_PENDING'
+          ? 'Richiesta registrata: la partecipazione è subordinata al passaggio. Il posto all’evento è riservato fino al termine dei passaggi e non è richiesto alcun pagamento durante l’attesa. Riceverai per email il collegamento per gestire gli spostamenti.'
+          : result.status === 'WAITLISTED'
 		  ? `Richiesta inserita in lista d’attesa. Riceverai gli aggiornamenti alla casella: ${confirmationEmail}`
 		  : result.status === 'PENDING_PAYMENT'
 			? pendingPaymentConfirmation(confirmationName, result.economic_summary)
 			: '';
-        if (result.status === 'WAITLISTED' || result.status === 'PENDING_PAYMENT') {
+        if (result.status === 'WAITLISTED' || result.status === 'PENDING_PAYMENT' || result.status === 'TRAVEL_PENDING') {
           successBox.textContent = successText;
         } else {
           const successHeading = document.createElement('h2');

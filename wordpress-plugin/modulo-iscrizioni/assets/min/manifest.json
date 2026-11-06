@@ -26,8 +26,8 @@
   },
   "portal-management.js": {
     "file": "min/portal-management.js",
-    "source": "383b45f25c1cecfe99fbfc087ce4c3e415ca68f9f249dad2b51489b8af8d4070",
-    "hash": "0b3a7814acf07d3d695a8b658c3e10aa87103525197fa144d6705494d286282a"
+    "source": "7b7aa4b1c8bcacf6f8e0d81fc5bb88b2f421861f8ce879b908df3a56ab7a666a",
+    "hash": "211cd3c80a8f8c85e03053f8cf499b657c16660f93d4faf76bc8dc22f8d37c43"
   },
   "portal-payments.css": {
     "file": "min/portal-payments.css",
@@ -76,17 +76,22 @@
   },
   "public.css": {
     "file": "min/public.css",
-    "source": "ba137252f9d89252c2a0b9d8a847f1c0d2aa21058a5636dd344537f831d76ec3",
-    "hash": "15c748531bd6fd23502b7d1cd5d961c4d078f75925ceedfb116ea3385a465dcd"
+    "source": "c3d78f297d784087292a86f0a4294968fe78ece1198f8dac7d2d43ce99afe05c",
+    "hash": "8a626881fabc4086421a8a7baef948c858866cb7f6ec1fe81d7e842826af80cc"
   },
   "public.js": {
     "file": "min/public.js",
-    "source": "d9630ee386ffe314076e0b2e96e673079647135b76acfdd26c6def345cc880cb",
-    "hash": "023e193c06b1c4123c5f5605e5a46bae8980bde69e4440f640ec15ce0b5f2bbe"
+    "source": "977b376c30786c87bca738848ababe6b28a91a31ddf763e3afde7da4131a1d35",
+    "hash": "dbd2fb31df447229177aba279d38022c256beac89abb102fb12de410c7c3aa9b"
   },
   "qrcode-generator-2.0.4.js": {
     "file": "min/qrcode-generator-2.0.4.js",
     "source": "d7b28c149212ffed35751e69f672a1d1718d0e6b22e492b5ac801942ed75535a",
     "hash": "aa16820550b1b326bbc221383bf89de4eef7d5688874cf34fb9769c3fb0eab3f"
+  },
+  "travel.js": {
+    "file": "min/travel.js",
+    "source": "51b0a1ef1fe6c922277636024ebe5a4e68ec67652c678e5617c47c7f08d847d9",
+    "hash": "49f5b405180eaacb0661443cfdeb554b6f66966ff676ac5ba832c4fa1a167b44"
   }
 }

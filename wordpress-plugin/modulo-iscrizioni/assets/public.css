@@ -93,3 +93,9 @@
 .mi-group-waiting__body>p:first-child{font-size:14px;color:#475569}
 .mi-group-waiting h1{font-size:clamp(26px,5vw,38px);line-height:1.2;margin:18px 0}
 .mi-group-waiting__text{white-space:pre-line;overflow-wrap:anywhere;font-size:18px;line-height:1.65}
+
+.mi-registration__travel { grid-column: 1 / -1; min-width: 0; padding: 16px; border: 1px solid #d5dce5; border-radius: 8px; }
+.mi-registration__travel > div { display: grid; gap: 12px; }
+.mi-registration__travel [hidden] { display: none !important; }
+.mi-registration__travel p { white-space: pre-line; font-size: .92em; }
+.mi-registration__travel input[type="checkbox"] { width: auto; }

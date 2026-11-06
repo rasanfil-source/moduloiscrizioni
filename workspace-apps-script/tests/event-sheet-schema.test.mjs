@@ -54,3 +54,13 @@ test('historical answers and purchased services survive removal from current sch
  assert.ok(keys.includes('custom_old'));assert.ok(keys.includes('option_old-service'));
  assert.ok(!keys.includes('document_number'));
 });
+
+test('private rides have distinct columns and waiting status even in free events',()=>{
+ const {c,rows}=fixture({...free,travel:true});
+ let view=c.generaVistaOperativaEvento_('42');
+ for(const key of ['travel_mode','travel_seats','travel_origin','travel_state','travel_driver','travel_contribution'])assert.ok(view.colonne.some(x=>x.key===key),key);
+ assert.ok(!view.colonne.some(x=>x.key==='total'),'Direct driver contributions must not enable event payments');
+ rows.orders.push({id_evento:'42',codice_ordine:'A',stato:'TRAVEL_PENDING'});
+ rows.people.push({codice_ordine:'A',numero_partecipante:1,dati_aggiuntivi_json:JSON.stringify({travel_mode:'Cerca passaggio',travel_state:'In attesa di passaggio',travel_contribution:'12,00 € al conducente (A/R)'})});
+ view=c.generaVistaOperativaEvento_('42');assert.equal(view.righe[0].valori.status,'In attesa di passaggio');assert.equal(view.righe[0].valori.travel_state,'In attesa di passaggio');assert.ok(!view.colonne.some(x=>x.key==='total'));
+});

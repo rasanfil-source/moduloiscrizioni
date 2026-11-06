@@ -446,6 +446,8 @@ function campiElencoOperativo_(includiDinamici, partecipantiLetti, cache) {
     { key: 'email', label: 'Email' }, { key: 'phone', label: 'Cellulare' }, { key: 'birth_date', label: 'Data di nascita' }, { key: 'document_type', label: 'Tipo documento' }, { key: 'document_number', label: 'Numero documento' }, { key: 'document_issue_date', label: 'Data di rilascio del documento' }, { key: 'document_expiry', label: 'Scadenza documento' }, { key: 'document_country', label: 'Paese di rilascio' }, { key: 'nationality', label: 'Nazionalità' }, { key: 'room', label: 'Alloggio' }, { key: 'transport', label: 'Pullman/trasporto' }, { key: 'breakfast', label: 'Colazione' },
     { key: 'lunch', label: 'Pranzo' }, { key: 'insurance', label: 'Assicurazione' }, { key: 'emergency_contact', label: 'Contatto di emergenza' }, { key: 'options', label: 'Altre opzioni' }, { key: 'total', label: 'Totale' }, { key: 'paid', label: 'Incassato' }, { key: 'paid_cash', label: 'Contanti (prenotazione)' }, { key: 'paid_transfer', label: 'Bonifico (prenotazione)' }, { key: 'paid_card', label: 'Carta/PayPal (prenotazione)' }, { key: 'balance', label: 'Da incassare' }, { key: 'special_requests', label: 'Richieste particolari' }
   ];
+  const travelLabels={travel_mode:'Spostamento',travel_seats:'Posti auto offerti',travel_origin:'Partenza',travel_departure:'Orario partenza',travel_state:'Stato passaggio',travel_driver:'Conducente',travel_required:'Partecipa solo con passaggio',travel_contribution:'Contributo al conducente A/R',travel_offer_expiry:'Scadenza proposta auto'};
+  Object.keys(travelLabels).forEach(key=>fields.push({key:key,label:travelLabels[key]}));
 	if (includiDinamici === false) return fields.concat([{key:'document_expiry_date',label:'Scadenza documento'}]);
   const known = fields.reduce(function (result, field) { result[field.key] = true; return result; }, {});
   (partecipantiLetti || convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS))).forEach(function (participant) {
@@ -493,7 +495,7 @@ function valoreCampoElenco_(field, event, registration, participant, data, payme
 }
 
 function etichettaStatoIscrizione_(value) {
-  const labels = { PENDING_PAYMENT: 'Da pagare', IN_ATTESA_PAGAMENTO: 'Da pagare', CONFIRMED: 'Confermata', CONFERMATA: 'Confermata', WAITLISTED: 'Lista d’attesa', WAITLIST_OFFERED: 'Posto proposto', CANCELLED: 'Annullata', EXPIRED: 'Scaduta per mancato pagamento', ACTIVE: 'Attiva', CANCELLED_PARTICIPANT: 'Annullata' };
+  const labels = { PENDING_PAYMENT: 'Da pagare', IN_ATTESA_PAGAMENTO: 'Da pagare', CONFIRMED: 'Confermata', CONFERMATA: 'Confermata', TRAVEL_PENDING: 'In attesa di passaggio', WAITLISTED: 'Lista d’attesa', WAITLIST_OFFERED: 'Posto proposto', CANCELLED: 'Annullata', EXPIRED: 'Scaduta per mancato pagamento', ACTIVE: 'Attiva', CANCELLED_PARTICIPANT: 'Annullata' };
   return labels[String(value || '').toUpperCase()] || String(value || '');
 }
 

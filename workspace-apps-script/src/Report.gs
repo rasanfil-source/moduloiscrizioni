@@ -68,7 +68,7 @@ function normalizzaFiltriEsecuzioneReport_(raw) {
   if (Object.keys(raw).some(function (key) { return allowed.indexOf(key) < 0; })) throw new Error('Filtro report non disponibile.');
   const result = {};
   allowed.forEach(function (key) { result[key] = normalizzaTesto_(raw[key] || '', 120); });
-  if (['', 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'WAITLIST_OFFERED'].indexOf(result.status) < 0) throw new Error('Stato report non valido.');
+  if (['', 'CONFIRMED', 'PENDING_PAYMENT', 'TRAVEL_PENDING', 'WAITLISTED', 'WAITLIST_OFFERED'].indexOf(result.status) < 0) throw new Error('Stato report non valido.');
   return result;
 }
 

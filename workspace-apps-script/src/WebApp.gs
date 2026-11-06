@@ -168,7 +168,7 @@ function registraIscrizioneCentrale_(payload) {
   const snapshotJson = String(payload.snapshot_json || '');
 	const revisionId = normalizzaTesto_(payload.event_revision_id, 40);
 	const revisionHash = normalizzaTesto_(payload.event_revision_hash, 64);
-	const registrationStatus = normalizzaValoreElenco_(payload.status, ['PENDING_PAYMENT', 'CONFIRMED', 'WAITLISTED', 'CANCELLED', 'EXPIRED']);
+	const registrationStatus = normalizzaValoreElenco_(payload.status, ['PENDING_PAYMENT', 'CONFIRMED', 'TRAVEL_PENDING', 'WAITLISTED', 'CANCELLED', 'EXPIRED']);
 	const activeParticipantCount = ['CANCELLED', 'EXPIRED'].indexOf(registrationStatus) >= 0 ? 0 : participants.filter(function (participant) { return 'ACTIVE' === normalizzaValoreElenco_(participant.status, ['ACTIVE', 'CANCELLED', 'EXPIRED']); }).length;
 	const economicMode = normalizzaValoreElenco_(payload.economic_mode, ['REGISTRATION_ONLY', 'PRICE_ONLY', 'FULL_PAYMENT', 'DEPOSIT_BALANCE']);
   if (!/^[A-Za-z0-9_-]{3,64}$/.test(orderCode) || !/^\d+$/.test(eventId) || !/^[A-Za-z0-9_-]{16,64}$/.test(idempotencyKey) || !registrationStatus || !economicMode || participants.length < 1 || participants.length > 20) return { ok: false, error: 'INVALID_REGISTRATION' };
@@ -292,11 +292,11 @@ function registraIscrizioneCentrale_(payload) {
     const message = convertiRigheInOggetti_(outbox).find(function (row) { return String(row.codice_ordine) === orderCode && String(row.tipo_modello) === 'REGISTRATION_CONFIRMATION'; });
     const snapshotBuyer = snapshotData && snapshotData.buyer ? snapshotData.buyer : buyer;
     const originalRecipient = normalizzaTesto_(snapshotBuyer.email || buyer.email, 254);
-    const currentStatus = normalizzaValoreElenco_(payload.status, ['PENDING_PAYMENT', 'CONFIRMED', 'WAITLISTED']);
+    const currentStatus = normalizzaValoreElenco_(payload.status, ['PENDING_PAYMENT', 'CONFIRMED', 'TRAVEL_PENDING', 'WAITLISTED']);
     // Una promozione aggiorna lo stato corrente pur conservando l'istantanea
     // originaria WAITLISTED. Le cancellazioni continuano invece a usare lo
     // stato dell'istantanea per non generare una nuova conferma.
-    const originalStatus = ['CONFIRMED', 'PENDING_PAYMENT'].indexOf(currentStatus) >= 0 ? currentStatus : normalizzaValoreElenco_(snapshotData && snapshotData.status, ['PENDING_PAYMENT', 'CONFIRMED', 'WAITLISTED']) || currentStatus || 'CONFIRMED';
+    const originalStatus = ['CONFIRMED', 'PENDING_PAYMENT'].indexOf(currentStatus) >= 0 ? currentStatus : normalizzaValoreElenco_(snapshotData && snapshotData.status, ['PENDING_PAYMENT', 'CONFIRMED', 'TRAVEL_PENDING', 'WAITLISTED']) || currentStatus || 'CONFIRMED';
     const messageValues = [message ? message.id_messaggio : creaIdentificativoOpaco_('msg'), neutralizzaFormula_(orderCode, 64), neutralizzaFormula_(originalRecipient, 254), 'REGISTRATION_CONFIRMATION', JSON.stringify({ order_code: orderCode, status: originalStatus }), message ? message.stato : 'PREVIEW', message && message.data_creazione ? message.data_creazione : new Date()];
     const outboxRow = message ? message._row : outbox.getLastRow() + 1;
     outbox.getRange(outboxRow, 1, 1, messageValues.length).setValues([messageValues]);

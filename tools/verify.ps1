@@ -42,6 +42,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Sintassi PHP non valida: $file" }
     }
     $phpTests = @(
+        'travel.php',
         'audit-275-rooms.php', 'audit-275-email-waitlist.php', 'audit-275-editor.php', 'email-regeneration.php', 'php-event-activity-migration.php',
         'group-links.php', 'public-slug.php',
         'audit-263-regressions.php', 'event-first-save.php', 'email-logo-override.php', 'deletion-preserve-file.php', 'event-qr.php', 'operational-email-deadline.php',

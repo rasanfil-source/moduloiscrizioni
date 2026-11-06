@@ -15,6 +15,7 @@ class MI_Access {static function is_suspended(){return false;}static function ca
 class MI_Field_Schema {static function catalog(){return ['email'=>['label'=>'Email']];}}
 class MI_Extra_Services {static function render($options){}}
 class MI_Modello_Email {static function impostazioni($id){return ['subject'=>$id?'Oggetto copiato':'Oggetto nuovo','text'=>'Testo'];}static function stile_risolto($id){return self::stile_default();}static function stile_default(){return ['primary_color'=>'#123456','secondary_color'=>'#654321'];}}
+require __DIR__.'/../modulo-iscrizioni/includes/class-mi-travel.php';
 require __DIR__.'/../modulo-iscrizioni/includes/class-mi-portal.php';
 $GLOBALS['meta']=[42=>['_mi_reopened_payment_hours'=>72,'_mi_waitlist_offer_hours'=>2,'_mi_capacity'=>77,'_mi_ticket_types'=>[['max_per_order'=>8,'price_cents'=>4200]],'_mi_custom_participant_fields'=>[['key'=>'custom_allergie','label'=>'Allergie','type'=>'text']], '_mi_pricing_mode'=>'CALCULATED','_mi_registration_closes_at'=>'2027-01-01T12:00','_mi_participant_extra_scope'=>'ALL','_mi_accommodation_management'=>'PREBOOKED']];
 $_GET['mi_copy_from']=isset($argv[1])?(int)$argv[1]:42;
@@ -24,8 +25,9 @@ function check_wizard($ok,$msg){if(!$ok)throw new RuntimeException($msg);}
 check_wizard(str_contains($html,'name="capacity" value="77"'),'Capacity not copied');
 check_wizard(str_contains($html,'name="max_per_order" min="2" max="20" value="8"'),'Multiple limit not copied');
 check_wizard(str_contains($html,'value="Allergie"')&&str_contains($html,'value="42,00"'),'Questions or price not copied');
-check_wizard(str_contains($html,'>Iscrizione senza quote nel modulo</option>')&&str_contains($html,'>Quota uguale per tutti</option>')&&str_contains($html,'>In base ai servizi scelti</option>'),'Pricing modes not rendered with the requested labels');
+check_wizard(str_contains($html,'>Iscrizione senza quote nel modulo</option>')&&str_contains($html,'>Quota uguale per tutti</option>')&&str_contains($html,'>Quote in base ai servizi scelti</option>'),'Pricing modes not rendered with the requested labels');
 check_wizard(str_contains($html,'name="participation_price"')&&str_contains($html,'name="fixed_price"'),'Per-person pricing fields are missing');
+check_wizard(str_contains($html,'name="travel_enabled"')&&str_contains($html,'name="travel_price_mode"')&&str_contains($html,'name="travel_deadline"'),'Travel configuration is missing from event wizard');
 check_wizard(str_contains($html,'value="Oggetto copiato"'),'Email not copied');
 check_wizard(str_contains($html,'name="closes_at" value=""'),'Old dates copied');
 check_wizard(str_contains($html,'name="event_id" value="0"'),'Source event edited');

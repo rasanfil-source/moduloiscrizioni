@@ -7,7 +7,7 @@ final class MI_Event_Deletion {
 	private static $leases = array();
 	private static $finalizing = 0;
 	private const CHILDREN = array( 'mi_registration_items', 'mi_participants', 'mi_payments', 'mi_registration_events', 'mi_email_outbox' );
-	private const DIRECT = array( 'mi_event_counters', 'mi_ticket_counters', 'mi_event_revisions', 'mi_rooms', 'mi_management_state', 'mi_management_requests', 'mi_booking_codes' );
+	private const DIRECT = array( 'mi_event_counters', 'mi_ticket_counters', 'mi_event_revisions', 'mi_rooms', 'mi_management_state', 'mi_management_requests', 'mi_booking_codes', 'mi_travel' );
 	private const FINGERPRINT_ORDER = array(
 		'mi_registrations'        => 'id',
 		'mi_event_counters'       => 'event_id',
@@ -17,6 +17,7 @@ final class MI_Event_Deletion {
 		'mi_management_state'     => 'event_id',
 		'mi_management_requests'  => 'request_id',
 		'mi_booking_codes'        => 'event_id',
+		'mi_travel'               => 'participant_id',
 	);
 
 	public static function boot() {

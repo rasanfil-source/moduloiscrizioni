@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class MI_Activator {
-	const SCHEMA_REVISION = 2;
+	const SCHEMA_REVISION = 3;
 	public static function activate() {
 		self::create_tables();
 		self::add_roles_and_capabilities();
@@ -82,6 +82,7 @@ final class MI_Activator {
 		global $wpdb;
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
+		if ( class_exists( 'MI_Travel' ) ) MI_Travel::create_table();
 		$charset = $wpdb->get_charset_collate();
 		$registrations = $wpdb->prefix . 'mi_registrations';
 		$items = $wpdb->prefix . 'mi_registration_items';
@@ -329,7 +330,7 @@ final class MI_Activator {
 			$wpdb->prepare(
 				"INSERT INTO {$ticket_counters} (event_id, ticket_type_code, confirmed_count, waitlisted_count, updated_at)
 				 SELECT r.event_id, i.ticket_type_code,
-				 SUM(CASE WHEN r.status IN ('CONFIRMED','PENDING_PAYMENT','WAITLIST_OFFERED') AND r.capacity_released_at IS NULL THEN i.quantity ELSE 0 END),
+				 SUM(CASE WHEN r.status IN ('CONFIRMED','PENDING_PAYMENT','WAITLIST_OFFERED','TRAVEL_PENDING') AND r.capacity_released_at IS NULL THEN i.quantity ELSE 0 END),
 				 SUM(CASE WHEN r.status = 'WAITLISTED' AND r.capacity_released_at IS NULL THEN i.quantity ELSE 0 END), %s
 				 FROM {$items} i INNER JOIN {$registrations} r ON r.id = i.registration_id
 				 GROUP BY r.event_id, i.ticket_type_code

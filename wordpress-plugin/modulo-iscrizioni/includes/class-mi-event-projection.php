@@ -101,6 +101,7 @@ final class MI_Event_Projection {
 				$fields = self::decode_list( $person['extra_json'] ?? '' );
 				if ( ! empty( $person['room_code'] ) ) $fields['room'] = (string) $person['room_code'];
 				if ( isset( $attendance[(int) $person['id']] ) ) $fields['attendance'] = strtoupper( $attendance[(int) $person['id']] );
+				if ( class_exists( 'MI_Travel' ) ) $fields = array_merge( $fields, MI_Travel::projection_fields( $person['id'], $event_id ) );
 				$economic = $individual_by_id[(int) $person['id']] ?? array();
 				$participant_rows[] = array(
 					'id_partecipante' => (int) $person['id'], 'codice_ordine' => $registration['order_code'], 'numero_partecipante' => $number + 1,

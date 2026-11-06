@@ -13,7 +13,7 @@ final class MI_Management_Service {
 		$event_ids = array_values( array_filter( array_map( 'intval', $event_ids ), array( 'MI_Access', 'can_access_event' ) ) );
 		if ( ! $event_ids ) return array( 'items' => array(), 'more' => false );
 		$where = 'r.event_id IN (' . implode( ',', $event_ids ) . ')';
-		$allowed_statuses = array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'WAITLIST_OFFERED', 'CANCELLED', 'EXPIRED' );
+		$allowed_statuses = array( 'CONFIRMED', 'PENDING_PAYMENT', 'TRAVEL_PENDING', 'WAITLISTED', 'WAITLIST_OFFERED', 'CANCELLED', 'EXPIRED' );
 		if ( in_array( $status, $allowed_statuses, true ) ) {
 			if ( 'CANCELLED' === $status ) $where .= " AND (p.status='CANCELLED' OR r.status='CANCELLED')";
 			elseif ( 'EXPIRED' === $status ) $where .= " AND (p.status='EXPIRED' OR r.status='EXPIRED')";
@@ -202,7 +202,7 @@ final class MI_Management_Service {
 			if ( $individual ) $where[] = "p.status='ACTIVE'";
 		}
 		$state = strtoupper( sanitize_key( (string) ( $context['state'] ?? '' ) ) );
-		if ( in_array( $state, array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'WAITLIST_OFFERED', 'CANCELLED', 'EXPIRED' ), true ) ) {
+		if ( in_array( $state, array( 'CONFIRMED', 'PENDING_PAYMENT', 'TRAVEL_PENDING', 'WAITLISTED', 'WAITLIST_OFFERED', 'CANCELLED', 'EXPIRED' ), true ) ) {
 			if ( $individual && 'CANCELLED' === $state ) $where[] = "(p.status='CANCELLED' OR r.status='CANCELLED')";
 			elseif ( $individual && 'EXPIRED' === $state ) $where[] = "(p.status='EXPIRED' OR r.status='EXPIRED')";
 			else $where[] = $wpdb->prepare( 'r.status=%s', $state );

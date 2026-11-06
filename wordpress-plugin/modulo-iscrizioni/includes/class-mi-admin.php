@@ -765,7 +765,7 @@ final class MI_Admin {
 	}
 
 	private static function etichetta_stato( $status ) {
-		$labels = array( 'PENDING_PAYMENT' => 'Da pagare', 'CONFIRMED' => 'Confermata', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto', 'CANCELLED' => 'Annullata', 'EXPIRED' => 'Scaduta per mancato pagamento' );
+		$labels = array( 'PENDING_PAYMENT' => 'Da pagare', 'CONFIRMED' => 'Confermata', 'TRAVEL_PENDING' => 'In attesa di passaggio', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto', 'CANCELLED' => 'Annullata', 'EXPIRED' => 'Scaduta per mancato pagamento' );
 		return $labels[ $status ] ?? (string) $status;
 	}
 
