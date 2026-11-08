@@ -690,9 +690,20 @@ final class MI_Modello_Email {
 			$istantanea['html'] = self::uniforma_grafica_corpo( self::sanitizza_html_email( $html_originale ) );
 		}
 		$istantanea['testo'] = self::rimuovi_markdown_testo( $testo );
-		// Rimuove il codice soltanto su una riga effettiva, senza interpretare lettere n.
-		$istantanea['testo'] = (string) preg_replace( '/^Codice(?: iscrizione)?:[^\r\n]*(?:\r?\n)?/imu', '', $istantanea['testo'] );
-		$istantanea['html'] = (string) preg_replace( '#(?:<br\s*/?>)?\s*(?:<strong>)?Codice(?: iscrizione)?:(?:</strong>)?\s*[^<]*(?=<br\s*/?>|</p>)#iu', '', $istantanea['html'] );
+		// Nasconde solo la riga che contiene esattamente il codice ordine interno.
+		// Il testo libero dell’organizzatore può legittimamente iniziare con “Codice:”;
+		// Il confronto esatto limita la rimozione al codice, senza interpretare lettere n o altre parole.
+		$order_code = trim( (string) ( $istantanea['identificativo']['codice'] ?? '' ) );
+		if ( '' !== $order_code ) {
+			$plain_code = preg_quote( $order_code, '/' );
+			$istantanea['testo'] = (string) preg_replace( '/^Codice(?: iscrizione)?:[\t ]*' . $plain_code . '[\t ]*(?:\r?\n)?/imu', '', $istantanea['testo'] );
+			$html_code = preg_quote( esc_html( $order_code ), '#' );
+			$istantanea['html'] = (string) preg_replace( '#(?:<br\s*/?>)?\s*(?:<strong>)?Codice(?: iscrizione)?:(?:</strong>)?\s*' . $html_code . '\s*(?=<br\s*/?>|</p>)#iu', '', $istantanea['html'] );
+		}
+		// Le vecchie istantanee possono non avere metadati identificativi. Rimuovi
+		// comunque l'etichetta non ambigua "Codice iscrizione", mai il generico "Codice".
+		$istantanea['testo'] = (string) preg_replace( '/^Codice iscrizione:[\t ]*[^\r\n]*(?:\r?\n)?/imu', '', $istantanea['testo'] );
+		$istantanea['html'] = (string) preg_replace( '#(?:<br\s*/?>)?\s*(?:<strong>)?Codice iscrizione:(?:</strong>)?[^<]*(?=<br\s*/?>|</p>)#iu', '', $istantanea['html'] );
 		return $istantanea;
 	}
 

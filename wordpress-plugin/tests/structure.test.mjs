@@ -848,8 +848,10 @@ test('le email non mostrano identificativi testuali o grafici', async () => {
   assert.match(model, /payload_qr/);
   assert.match(model, /'modalita' => 'NONE'/);
   assert.match(sender, /identificativo/);
-  assert.match(sender, /Le istantanee in coda non devono mostrare il codice interno/);
-  assert.match(sender, /Codice\(\?: iscrizione\)\?/);
+  assert.match(sender, /Normalizza prima di azzerare i metadati dell’identificativo/);
+  assert.match(model, /Nasconde solo la riga che contiene esattamente il codice ordine interno/);
+  assert.match(model, /preg_quote\( \$order_code/);
+  assert.doesNotMatch(sender, /preg_replace\( '\/\^Codice/);
   assert.doesNotMatch(model, /buyer_email/);
 });
 
@@ -864,7 +866,10 @@ test('il QR grafico usa una libreria locale MIT senza servizi esterni', async ()
   assert.match(script, /createSvgTag/);
   assert.match(script, /window\.qrcode/);
   assert.match(library, /qrcode/);
-  assert.match(licence, /MIT/i);
+  assert.match(licence, /Copyright \(c\) 2009 Kazuhiko Arase/i);
+  assert.match(licence, /Permission is hereby granted, free of charge/i);
+  assert.match(licence, /THE SOFTWARE IS PROVIDED "AS IS"/i);
+  assert.doesNotMatch(licence, /texto integrale.*in questo file/i);
   assert.doesNotMatch(script.replaceAll('http://www.w3.org/2000/svg', ''), /https?:\/\//);
 });
 
@@ -880,6 +885,12 @@ test('la gestione economica distingue i quattro casi senza attivare riscossioni'
   assert.match(eventType, /CASH/);
   assert.match(service, /deposit_percentage/);
   assert.doesNotMatch(eventType, /IBAN|numero della carta|payment_url/i);
+});
+
+test('la caparra fissa del riepilogo usa la ripartizione individuale', async () => {
+  const script = await read('assets/public.js');
+  assert.match(script, /fixedDeposit \? fixedDepositEstimate\(total\)/);
+  assert.match(script, /core\.fixedDepositCents\(participantCosts\.map\(\(\{ subtotal \}\)/);
 });
 
 test('la pubblicazione richiede una configurazione economica coerente', async () => {

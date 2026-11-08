@@ -543,9 +543,9 @@ final class MI_Spedizione_Email {
 			}
 			$payload = json_decode( (string) $riga['payload_json'], true );
 			$istantanea = is_array( $payload ) && isset( $payload['email_preview'] ) && is_array( $payload['email_preview'] ) ? $payload['email_preview'] : array();
-			// Le istantanee in coda non devono mostrare il codice interno.
-			if ( isset( $istantanea['html'] ) ) $istantanea['html'] = (string) preg_replace( '#(?:<br\s*/?>)?\s*<strong>Codice(?: iscrizione)?:</strong>\s*[^<]*(?=<br\s*/?>|</p>)#iu', '', $istantanea['html'] );
-			if ( isset( $istantanea['testo'] ) ) $istantanea['testo'] = (string) preg_replace( '/^Codice(?: iscrizione)?:[^\r\n]*(?:\r?\n)?/imu', '', $istantanea['testo'] );
+			// Normalizza prima di azzerare i metadati dell’identificativo: il filtro
+			// rimuove soltanto il codice ordine interno, mai una riga di testo libera.
+			$istantanea = MI_Modello_Email::ripara_istantanea_codifica( $istantanea );
 			$istantanea['identificativo'] = array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' );
 			if ( 'REGISTRATION_SECRETARIAT_NOTIFICATION' === $riga['template_type'] ) {
 				foreach ( array( 'html', 'testo' ) as $campo ) if ( isset( $istantanea[ $campo ] ) ) $istantanea[ $campo ] = str_replace( array( '<strong>Referente:</strong>', 'Referente:' ), array( '<strong>Iscrizione a nome di:</strong>', 'Iscrizione a nome di:' ), $istantanea[ $campo ] );

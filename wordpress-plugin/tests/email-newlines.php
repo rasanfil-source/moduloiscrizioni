@@ -72,6 +72,15 @@ expect(!str_contains($snapshot['html'], '.nn'), 'HTML storico non riparato insie
 $literal = 'IscrizionennConserva anno quando nessuno saranno. nnQuando: n**Dove:**';
 $snapshot = MI_Modello_Email::ripara_istantanea_codifica(['testo' => $literal, 'html' => '']);
 expect($snapshot['testo'] === str_replace('**', '', $literal), 'lettere n interpretate semanticamente');
+$internalCode = MI_Modello_Email::ripara_istantanea_codifica([
+    'identificativo' => ['codice' => 'ORD-4521'],
+    'testo' => "Codice: ORD-4521\nCodice: 4521 per il cancello\nCodice iscrizione: ORD-4521\nNota: resta",
+    'html' => '<p><strong>Codice:</strong> ORD-4521</p><p><strong>Codice:</strong> 4521 per il cancello</p>',
+]);
+expect(!str_contains($internalCode['testo'], 'ORD-4521') && !str_contains($internalCode['html'], 'ORD-4521'), 'codice interno non rimosso');
+expect(str_contains($internalCode['testo'], 'Codice: 4521 per il cancello') && str_contains($internalCode['html'], 'Codice:</strong> 4521 per il cancello'), 'riga libera “Codice” rimossa');
+$freeCodeLine = MI_Modello_Email::ripara_istantanea_codifica(['testo' => 'Codice: 4521 per il cancello', 'html' => '<p><strong>Codice:</strong> 4521 per il cancello</p>']);
+expect(str_contains($freeCodeLine['testo'], 'Codice: 4521 per il cancello') && str_contains($freeCodeLine['html'], 'Codice:</strong> 4521 per il cancello'), 'testo libero senza identificativo rimosso');
 foreach (["\n", "\r\n", "\r", '\n', '\r\n', "\\\n", "\\\r\n", '&#10;'] as $separator) {
     $marked = '**Voce:** uno' . $separator . '**Altra:** due' . $separator . $separator . 'Ultima riga';
     $snapshot = MI_Modello_Email::ripara_istantanea_codifica(['testo' => $marked, 'html' => '']);

@@ -204,6 +204,25 @@
       return Object.fromEntries(Array.from(root.querySelectorAll('[data-mi-order-option]')).map((input) => [input.dataset.miOrderOption, core.clampQuantity(input.value, input.max)]));
     }
 
+    function fixedDepositEstimate(total) {
+      const rows = Array.from(participantsRoot.querySelectorAll('.mi-registration__participant'));
+      const fixed = Math.max(0, Number(config.event.deposit_fixed_cents) || 0);
+      if (!rows.length) return Math.min(total, fixed * totalQuantity());
+      const options = config.event.pricing_mode === 'ZERO' ? [] : (config.event.options || []);
+      const optionPrices = Object.fromEntries(options.map((option) => [option.code, Number(option.price_cents) || 0]));
+      const ticketTypes = Object.fromEntries((config.event.ticket_types || []).map((ticket) => [ticket.code, ticket]));
+      const personTotals = rows.map((row) => {
+        const ticket = ticketTypes[row.dataset.miTicketType];
+        const base = config.event.pricing_mode === 'FIXED'
+          ? Number(config.event.fixed_price_cents) || 0
+          : (config.event.pricing_mode === 'CALCULATED' ? Number(ticket?.price_cents) || 0 : 0);
+        const selected = Array.from(row.querySelectorAll('[data-mi-participant-option]')).reduce((sum, input) => sum + (optionPrices[input.dataset.miParticipantOption] || 0) * participantOptionQuantity(input), 0);
+        return base + selected;
+      });
+      const sharedTotal = Object.entries(orderOptionSelection()).reduce((sum, [code, quantity]) => sum + quantity * (optionPrices[code] || 0), 0);
+      return Math.min(total, core.fixedDepositCents(personTotals, sharedTotal, fixed));
+    }
+
     function travelPending() {
       return Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).some(row => {
         const travel = travelForRow(row);
@@ -234,7 +253,7 @@
         economicSummary.querySelector('[data-mi-economic-note]').textContent = 'Il modulo registra l’iscrizione; il versamento sarà registrato manualmente dall’organizzazione.';
       } else if (mode === 'DEPOSIT_BALANCE') {
 		const fixedDeposit = config.event.deposit_mode === 'FIXED';
-		const initial = fixedDeposit ? Math.min(total, Number(config.event.deposit_fixed_cents || 0) * totalQuantity()) : Math.round(total * Number(config.event.deposit_percentage || 30) / 100);
+		const initial = fixedDeposit ? fixedDepositEstimate(total) : Math.round(total * Number(config.event.deposit_percentage || 30) / 100);
 		economicSummary.querySelector('[data-mi-initial-label]').textContent = fixedDeposit ? 'Caparra fissa:' : `Caparra (${config.event.deposit_percentage}%):`;
         economicSummary.querySelector('[data-mi-initial]').textContent = formatCurrency(initial);
         economicSummary.querySelector('[data-mi-balance]').textContent = formatCurrency(total - initial);
@@ -355,7 +374,7 @@
         && participantCosts.every(({ base, selected }) => base === participantCosts[0].base && selected.length === 0)
         && selectedOrderOptions.length === 0;
       const deposit = !travelPending() && total > 0 && config.event.economic_mode === 'DEPOSIT_BALANCE'
-        ? (config.event.deposit_mode === 'FIXED' ? Math.min(total, (Number(config.event.deposit_fixed_cents) || 0) * totalQuantity()) : Math.round(total * Number(config.event.deposit_percentage || 30) / 100))
+		? (config.event.deposit_mode === 'FIXED' ? Math.min(total, core.fixedDepositCents(participantCosts.map(({ subtotal }) => subtotal), selectedOrderOptions.reduce((sum, item) => sum + item.cost, 0), Number(config.event.deposit_fixed_cents) || 0)) : Math.round(total * Number(config.event.deposit_percentage || 30) / 100))
         : 0;
       const optionCategory = (option) => {
         const code = String(option.code || ''), name = String(option.name || ''), category = String(option.category || '');

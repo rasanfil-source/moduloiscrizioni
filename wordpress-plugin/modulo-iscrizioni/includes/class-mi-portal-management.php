@@ -99,7 +99,12 @@ final class MI_Portal_Management {
 				$result = MI_Management_Service::save( (int) $row['id'], $operation, $data, $payload['version'], $payload['request_id'] );
 			} else { wp_send_json_error( array( 'message' => 'Operazione non valida.' ), 400 ); }
 		}
-		if ( is_wp_error( $result ) ) wp_send_json_error( array( 'message' => $result->get_error_message() ), 502 );
+		if ( is_wp_error( $result ) ) {
+			$error_data = $result->get_error_data();
+			$status = is_array( $error_data ) && isset( $error_data['status'] ) ? absint( $error_data['status'] ) : 500;
+			if ( $status < 400 || $status > 599 ) $status = 500;
+			wp_send_json_error( array( 'message' => $result->get_error_message() ), $status );
+		}
 		$result['sheet_url'] = get_post_meta( $event_id, '_mi_operational_sheet_url', true ) ? MI_Sheet_Open::url( $event_id ) : '';
 		$result['report_url'] = current_user_can( 'mi_view_registrations' ) || current_user_can( 'manage_options' ) ? MI_Portal_Payments::report_url( $event_id ) : '';
 		wp_send_json_success( $result );

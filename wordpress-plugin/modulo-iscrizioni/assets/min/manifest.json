@@ -11,8 +11,8 @@
   },
   "core.js": {
     "file": "min/core.js",
-    "source": "fb6e08eac7b616f637139852ee681b190091bf796ef64f3c46b7b3a1d0d86969",
-    "hash": "9357f935c40b372d8a04e6e5647c4103378924cd03681fb6c00a10c818cf3ca4"
+    "source": "ea173849bf102fe98ea50632ea24beb4bdd49f57ba7c95fb05e3a45276a37611",
+    "hash": "432a6f495072bfe25bcd2026b1a8ab8d66975c71dbe48e68b6a976a0302d3a1d"
   },
   "event-qr.js": {
     "file": "min/event-qr.js",
@@ -81,8 +81,8 @@
   },
   "public.js": {
     "file": "min/public.js",
-    "source": "400a0bee57195f05ad948d260acd7868180b95151722ada7a7ed01a60ba04553",
-    "hash": "4b6eac24be3a56addd7865a8fbe0b4c15c8aeb037e8871388b1780819078ce7c"
+    "source": "2c2a494c63c144ad4a41f93dd12c58ddc6eb38b476aa1896cd6fe3aa4039c23b",
+    "hash": "07913ca152fc531f63c6888bd7eb724b5a069b96c2335873ea46670e3b9543dc"
   },
   "qrcode-generator-2.0.4.js": {
     "file": "min/qrcode-generator-2.0.4.js",

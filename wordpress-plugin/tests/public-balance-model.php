@@ -47,4 +47,20 @@ $data['persone'][0]['version']=$lookup['persona']['version'];$quote=MI_Public_Ba
 $data['persone'][0]['services']=['alloggio-singola'=>1];
 try{MI_Public_Balance::save(42,$data,true);throw new RuntimeException('Opzione bloccata accettata');}catch(InvalidArgumentException $e){}
 $data['persone'][0]['token']='bad';try{MI_Public_Balance::save(42,$data,true);throw new RuntimeException('Token estraneo accettato');}catch(InvalidArgumentException $e){}
+// Il preventivo non richiede un destinatario email; la conferma sì.
+$wpdb=new BalanceDB();$wpdb->reg['buyer_email']='';$wpdb->persons[0]['extra_json']='{}';
+$lookup=MI_Public_Balance::lookup(42,['action'=>'lookupByCognome','cognome'=>'decclesia']);
+$withoutEmail=['persone'=>[['row'=>1,'token'=>$lookup['persona']['token'],'version'=>$lookup['persona']['version'],'services'=>[]]],'email'=>'','requestId'=>'32345678-1234-4234-8234-123456789abc'];
+$preview=MI_Public_Balance::save(42,$withoutEmail,true);
+check_balance($preview['success']&&isset($preview['fingerprint'])&&$preview['email_masked']===''&&$wpdb->writes===0,'Anteprima con persona senza email valida');
+$withoutEmail['fingerprint']=$preview['fingerprint'];$rejected=false;
+try{MI_Public_Balance::save(42,$withoutEmail);}
+catch(InvalidArgumentException $error){$rejected=str_contains($error->getMessage(),'email valida');}
+check_balance($rejected&&$wpdb->writes===0,'Conferma senza email valida respinta senza scritture');
+$wpdb=new BalanceDB();$wpdb->persons[0]['extra_json']=json_encode(['participant_email'=>'persona@example.invalid']);
+$lookup=MI_Public_Balance::lookup(42,['action'=>'lookupByCognome','cognome'=>'decclesia']);
+check_balance($lookup['persona']['email_masked']==='pe*****na@e***.invalid','Lookup legge participant_email');
+$withParticipantEmail=['persone'=>[['row'=>1,'token'=>$lookup['persona']['token'],'version'=>$lookup['persona']['version'],'services'=>[]]],'email'=>'','requestId'=>'42345678-1234-4234-8234-123456789abc'];
+$preview=MI_Public_Balance::save(42,$withParticipantEmail,true);
+check_balance($preview['email_masked']==='pe*****na@e***.invalid','Anteprima usa participant_email come destinatario predefinito');
 echo "Saldo pubblico: ricerca, omonimi, caparra assente/parziale/versata, rimborsi, preventivo, salvataggio, replay e conflitti verificati.\n";

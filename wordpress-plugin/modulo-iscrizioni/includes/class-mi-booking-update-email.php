@@ -10,12 +10,18 @@ final class MI_Booking_Update_Email {
 		if ( ! $r || ! in_array( $r['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) || ! is_email( $r['buyer_email'] ) ) return null;
 		$payments = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}mi_payments WHERE registration_id=%d ORDER BY id", $id ), ARRAY_A );
 		if ( $wpdb->last_error ) throw new RuntimeException( 'Pagamenti non disponibili per la comunicazione.' );
-		$position = MI_Payment_People::read( $r, $payments );
+		$position = null;
+		try {
+			$position = MI_Payment_People::read( $r, $payments );
+		} catch ( InvalidArgumentException $error ) {
+			// Una ripartizione storica incoerente non deve annullare una modifica
+			// gestionale: accodiamo l’email senza importi e chiediamo verifica.
+		}
 		$people = $wpdb->get_results( $wpdb->prepare( "SELECT id,first_name,last_name,options_json,room_code,extra_json,status FROM {$wpdb->prefix}mi_participants WHERE registration_id=%d ORDER BY id", $id ), ARRAY_A );
 		if ( $wpdb->last_error ) throw new RuntimeException( 'Partecipanti non disponibili per la comunicazione.' );
 		$title = get_the_title( $r['event_id'] );
 		$lines = array( 'La segreteria ha aggiornato la tua prenotazione per ' . $title . '.', 'Di seguito la situazione attuale.' );
-		$individual = array_column( $position['people'], null, 'id' );
+		$individual = is_array( $position ) ? array_column( $position['people'], null, 'id' ) : array();
 		$managed = in_array( $r['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 		$money = static function ( $cents ) { return number_format( $cents / 100, 2, ',', '.' ) . ' EUR'; };
 		foreach ( $people as $person ) {
@@ -37,10 +43,12 @@ final class MI_Booking_Update_Email {
 			$lines[] = ''; $lines[] = 'Servizi comuni della prenotazione:';
 			foreach ( $common as $option ) if ( ! empty( $option['quantity'] ) ) $lines[] = '- ' . ( $option['name'] ?? $option['code'] ) . ' × ' . (int) $option['quantity'];
 		}
-		if ( $managed ) {
+		if ( $managed && is_array( $position ) ) {
 			$summary = MI_Payment_People::summary( $position );
 			$lines[] = ''; $lines[] = $summary['totals_known'] ? 'Quota complessiva dei partecipanti attivi: ' . $money( $summary['total'] ) : 'Quota complessiva da verificare con la segreteria.';
 			if ( ! $position['quotes_known'] || ! $position['payments_known'] ) $lines[] = 'La situazione individuale dei versamenti è in verifica presso la segreteria.';
+		} elseif ( $managed ) {
+			$lines[] = ''; $lines[] = 'La situazione economica è da verificare con la segreteria.';
 		}
 		$lines[] = ''; $lines[] = 'Per chiarimenti sui servizi o sui versamenti contatta la segreteria.';
 		$snapshot = MI_Modello_Email::crea_istantanea( (int) $r['event_id'], array() );
