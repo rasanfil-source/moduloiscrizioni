@@ -41,7 +41,8 @@ final class MI_Group_Links {
 			$original = (string) ( $row['original'] ?? '' );
 			if ( $original && ( $original !== $slug || ! isset( $existing[ $original ] ) ) ) return new WP_Error( 'mi_links_immutable', 'Un indirizzo già salvato resta permanente. Aggiungi un nuovo link per usare un altro indirizzo.' );
 			$reserved = array( 'v', 'wp-admin', 'wp-login', 'wp-json', 'wp-content', 'wp-includes', 'feed', 'comments', 'author', 'category', 'tag', 'search', 'page', 'embed', 'attachment', 'index', 'xmlrpc', 'robots', 'sitemap', 'favicon', 'wp-sitemap' );
-			if ( in_array( $slug, $reserved, true ) || 0 === strpos( $slug, 'wp-' ) || get_page_by_path( $slug, OBJECT, get_post_types( array( 'public' => true ) ) ) ) return new WP_Error( 'mi_links_reserved', 'L’indirizzo /' . $slug . ' è riservato o già utilizzato da una pagina del sito.' );
+			$page_collision = ! isset( $existing[ $slug ] ) && get_page_by_path( $slug, OBJECT, get_post_types( array( 'public' => true ) ) );
+			if ( in_array( $slug, $reserved, true ) || 0 === strpos( $slug, 'wp-' ) || $page_collision ) return new WP_Error( 'mi_links_reserved', 'L’indirizzo /' . $slug . ' è riservato o già utilizzato da una pagina del sito.' );
 			$owner = absint( get_option( 'mi_group_link_' . $slug, 0 ) );
 			if ( $owner && $owner !== (int) $group_id ) return new WP_Error( 'mi_links_taken', 'L’indirizzo /' . $slug . ' è già riservato a un altro gruppo.' );
 			$links[ $slug ] = array(

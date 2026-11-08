@@ -99,9 +99,6 @@ function verificaBusta_(envelope) {
   const digest = Utilities.computeHmacSha256Signature(message, ottieniSegretoScript_());
   const expected = Utilities.base64EncodeWebSafe(digest).replace(/=+$/, '');
   if (!confrontaInTempoCostante_(expected, signature)) return { ok: false, error: 'INVALID_SIGNATURE' };
-  // Solo una richiesta autenticata può sospendere le proiezioni automatiche. Un lock breve
-  // lascia spazio all'apertura interattiva dopo la conclusione della scrittura in corso.
-  if (envelope.action === 'PROIETTA_EVENTO' && (envelope.payload || {}).background !== true) PropertiesService.getScriptProperties().setProperty('MI_INTERACTIVE_OPEN_UNTIL', String(Date.now()+90000));
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return {ok:false,error:'WORKSPACE_BUSY'};
   try {
@@ -120,6 +117,12 @@ function verificaBusta_(envelope) {
 	if(encoded.length>8000)return {ok:false,error:'WORKSPACE_BUSY'};
 	properties.setProperty(bucketKey,encoded);
 	cache.put('nonce_'+nonce,'1',250);
+    // La pausa interattiva vale solo per una richiesta autenticata e nuova,
+    // dopo lock, controllo replay e registrazione durevole del nonce.
+    if (envelope.action === 'PROIETTA_EVENTO' && (envelope.payload || {}).background !== true) {
+      try { properties.setProperty('MI_INTERACTIVE_OPEN_UNTIL', String(Date.now()+90000)); }
+      catch (error) { console.warn('INTERACTIVE_PAUSE_UNAVAILABLE', String(error)); }
+    }
   } finally {
     lock.releaseLock();
   }

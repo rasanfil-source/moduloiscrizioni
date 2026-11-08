@@ -83,6 +83,8 @@ function verificaMittentiEmailAutorizzati() {
 /** Invia soltanto la prova del Modulo Iscrizioni richiesta da WordPress. */
 function inviaEmailProvaDaWordPress_(payload) {
   payload = payload && typeof payload === 'object' ? payload : {};
+  const sender = statoCanaleEmail_();
+  if (!sender.ok) return sender;
   const destinatarioConfigurato = String(PropertiesService.getScriptProperties().getProperty(MI_TEST_EMAIL_PROPERTY) || '').trim().toLowerCase();
   const destinatario = normalizzaTesto_(payload.destinatario, 254).trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destinatarioConfigurato)) return { ok: false, error: 'TEST_RECIPIENT_NOT_CONFIGURED' };
@@ -91,7 +93,9 @@ function inviaEmailProvaDaWordPress_(payload) {
   const testo = String(payload.testo || '').slice(0, 12000);
   const html = String(payload.html || '').slice(0, 60000);
   if (!oggetto || !testo || !html) return { ok: false, error: 'INVALID_EMAIL_PAYLOAD' };
-  MailApp.sendEmail({ to: destinatarioConfigurato, subject: oggetto, body: testo, htmlBody: html, name: 'Modulo Iscrizioni' });
+  if (MailApp.getRemainingDailyQuota() < 1) return { ok: false, error: 'EMAIL_QUOTA_EXCEEDED' };
+  try { MailApp.sendEmail({ to: destinatarioConfigurato, subject: oggetto, body: testo, htmlBody: html, name: 'Modulo Iscrizioni' }); }
+  catch (error) { console.error('EMAIL_TEST_SEND_FAILED', String(error)); return { ok: false, error: 'EMAIL_DELIVERY_UNCERTAIN' }; }
   return { ok: true, channel: 'GOOGLE_WORKSPACE' };
 }
 

@@ -48,6 +48,7 @@ function eliminaDatiEventoDaWordPress_(payload) {
 			props.deleteProperty('MI_READ_ONLY_'+file);
 			props.deleteProperty('MI_MONEY_FORMAT_'+file);
 			props.deleteProperty('MI_DIRECT_MANAGEMENT_'+file);
+			props.deleteProperty('MI_WRITE_'+file);
 		});
 		props.deleteProperty('MI_DIRECT_GENERATION_'+id);
     props.deleteProperty('MI_DIRECT_SHEET_'+id);

@@ -21,16 +21,18 @@ function setup(){
 
 test('direct deletion trashes only the event sheet and is idempotent without DB_MODULI',()=>{
  const x=setup();x.props.MI_DIRECT_SHEET_42=x.payload.id_foglio;x.props['MI_DIRECT_VIEW_'+x.payload.id_foglio]='fingerprint';
+ x.props['MI_WRITE_'+x.payload.id_foglio]='READY';
  const first=x.c.eliminaDatiEventoDaWordPress_(x.payload);
  assert.equal(first.complete,true);assert.equal(first.removed,0);assert.equal(x.files.get(x.payload.id_foglio).trashed,true);
- assert.equal(x.props.MI_DIRECT_SHEET_42,undefined);assert.equal(x.props['MI_DIRECT_VIEW_'+x.payload.id_foglio],undefined);
+ assert.equal(x.props.MI_DIRECT_SHEET_42,undefined);assert.equal(x.props['MI_DIRECT_VIEW_'+x.payload.id_foglio],undefined);assert.equal(x.props['MI_WRITE_'+x.payload.id_foglio],undefined);
  assert.equal(x.c.eliminaDatiEventoDaWordPress_(x.payload).complete,true);assert.equal(x.accessed.length,1);assert.equal(x.locked(),false);
 });
 
 test('keep detaches the direct association without trashing the document',()=>{
- const x=setup();x.payload.mode='keep';x.props.MI_DIRECT_SHEET_42=x.payload.id_foglio;
+ const x=setup();x.payload.mode='keep';x.props.MI_DIRECT_SHEET_42=x.payload.id_foglio;x.props['MI_WRITE_'+x.payload.id_foglio]='READY';
  const result=x.c.eliminaDatiEventoDaWordPress_(x.payload);
  assert.equal(result.complete,true);assert.equal(x.accessed.length,0);assert.equal(x.files.has(x.payload.id_foglio),false);
+ assert.equal(x.props['MI_WRITE_'+x.payload.id_foglio],undefined);
 });
 
 test('keep succeeds even when Drive is inaccessible; explicit signed override is resumable',()=>{

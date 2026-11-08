@@ -6,11 +6,11 @@ const source=fs.readFileSync(new URL('../src/Email.gs',import.meta.url),'utf8');
 function setup({sender='info@parrocchiasanteugenio.it',quota=10,fail=false,aliases=[],aliasFailure=false}={}) {
  const sent=[],properties={MI_EMAIL_SENDER:'info@parrocchiasanteugenio.it',MI_EMAIL_TEST_RECIPIENT:'test@example.invalid'};
  const props={getProperty:key=>properties[key]||null,setProperty:(key,value)=>{properties[key]=value;},deleteProperty:key=>{delete properties[key];},getProperties:()=>({...properties})};
- const ctx={Session:{getEffectiveUser:()=>({getEmail:()=>sender})},PropertiesService:{getScriptProperties:()=>props},LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock:()=>{}})},MailApp:{getRemainingDailyQuota:()=>quota,sendEmail:o=>{sent.push(o);if(fail)throw Error('uncertain');}},console:{error:()=>{}}};
+ const ctx={normalizzaTesto_:(value,max)=>String(value??'').slice(0,max),Session:{getEffectiveUser:()=>({getEmail:()=>sender})},PropertiesService:{getScriptProperties:()=>props},LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock:()=>{}})},MailApp:{getRemainingDailyQuota:()=>quota,sendEmail:o=>{sent.push(o);if(fail)throw Error('uncertain');}},console:{error:()=>{}}};
  vm.createContext(ctx);vm.runInContext(source,ctx);
  ctx.GmailApp={getAliases:()=>{if(aliasFailure)throw Error('authorization');return aliases;},sendEmail:(to,subject,body,options)=>{sent.push({...options,to,subject,body,gmail:true});if(fail)throw Error('uncertain');}};
  const payload={delivery_key:'a'.repeat(64),mode:'PROVA',destinatario:'test@example.invalid',oggetto:'[PROVA] Santiago',html:'<p>Conferma</p>',testo:'Conferma'};
- return {send:p=>ctx.inviaEmailConfermaDaWordPress_({...payload,...p}),sent,properties};
+ return {send:p=>ctx.inviaEmailConfermaDaWordPress_({...payload,...p}),sendTest:p=>ctx.inviaEmailProvaDaWordPress_({destinatario:'test@example.invalid',oggetto:'Prova',testo:'Testo',html:'<p>Testo</p>',...p}),sent,properties};
 }
 test('same accepted delivery is never sent twice',()=>{const s=setup();assert.equal(s.send().ok,true);assert.equal(s.send().replayed,true);assert.equal(s.sent.length,1);});
 test('wrong deployer cannot impersonate info',()=>{const s=setup({sender:'other@example.invalid'});assert.equal(s.send().error,'EMAIL_SENDER_NOT_AUTHORIZED');assert.equal(s.sent.length,0);});
@@ -58,6 +58,12 @@ test('parish and legacy payloads never depend on Gmail aliases',()=>{
  const s=setup({aliasFailure:true});assert.equal(s.send({indirizzo_mittente:'info@parrocchiasanteugenio.it'}).ok,true);assert.equal(s.sent[0].gmail,undefined);
 });
 test('old WordPress payload keeps the default display name',()=>{const s=setup();s.send();assert.equal(s.sent[0].name,'Parrocchia Sant’Eugenio');});
+test('test email checks the configured sender and available quota before sending',()=>{
+ const unauthorized=setup({sender:'other@example.invalid'});assert.equal(unauthorized.sendTest().error,'EMAIL_SENDER_NOT_AUTHORIZED');assert.equal(unauthorized.sent.length,0);
+ const exhausted=setup({quota:0});assert.equal(exhausted.sendTest().error,'EMAIL_QUOTA_EXCEEDED');assert.equal(exhausted.sent.length,0);
+ const ready=setup();assert.equal(ready.sendTest().ok,true);assert.equal(ready.sent.length,1);assert.equal(ready.sent[0].to,'test@example.invalid');
+});
+test('uncertain test send reports an uncertain outcome instead of throwing',()=>{const s=setup({fail:true});assert.equal(s.sendTest().error,'EMAIL_DELIVERY_UNCERTAIN');assert.equal(s.sent.length,1);});
 test('invalid display name is rejected before sending or recording intent',()=>{
  for(const nome_mittente of ['Gruppo\r\nBcc: x@example.invalid','a'.repeat(121),'Gruppo\0']) { const s=setup();assert.equal(s.send({nome_mittente}).error,'INVALID_SENDER_NAME');assert.equal(s.sent.length,0);assert.equal(s.properties['MI_EMAIL_DELIVERY_'+ 'a'.repeat(64)],undefined); }
 });

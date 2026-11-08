@@ -11,13 +11,16 @@ test('report: ammissione e annullamento individuale restano distinti',()=>{
  assert.equal(ctx.valoreCampoElenco_('status',{}, {stato:'WAITLIST_OFFERED'}, {stato_partecipante:'ACTIVE'}, {}, []),'Posto proposto');
  assert.equal(ctx.valoreCampoElenco_('status',{}, {stato:'CONFIRMED'}, {stato_partecipante:'CANCELLED'}, {}, []),'Annullata');
 });
-test('report: importi una volta per ordine anche dopo ordinamento non contiguo',()=>{
- const ctx=context(),row=(code,name,total,paid)=>Object.assign([name,total,paid],{_orderCode:code});
- const rows=[row('A','Ada',100,30),row('B','Bruno',200,50),row('A','Carla',100,30)];
+test('report: importi di prenotazione restano sulla persona 1 anche dopo filtro e ordinamento',()=>{
+ const ctx=context(),row=(code,number,name,total,paid)=>Object.assign([name,total,paid],{_orderCode:code,_participantNumber:number});
+ const rows=[row('A',2,'Carla',100,30),row('B',1,'Bruno',200,50),row('A',1,'Ada',100,30)];
  ctx.limitaImportiAUnaRigaPerOrdine_(rows,['first_name','total','paid']);
- assert.deepEqual(Array.from(rows[2]),['Carla','','']);
+ assert.deepEqual(Array.from(rows[0]),['Carla','','']);
+ assert.deepEqual(Array.from(rows[2]),['Ada',100,30]);
  assert.equal(rows.reduce((n,r)=>n+Number(r[1]),0),300);
  assert.equal(rows.reduce((n,r)=>n+Number(r[2]),0),80);
+ const filtered=[row('A',2,'Carla',100,30)];ctx.limitaImportiAUnaRigaPerOrdine_(filtered,['first_name','total','paid']);
+ assert.deepEqual(Array.from(filtered[0]),['Carla','','']);
 });
 test('report: filtri combinati rispettano persona, stato e assegnazioni',()=>{
  const ctx=context();ctx.normalizzaTesto_=value=>String(value).trim();vm.runInContext(reportSource,ctx);

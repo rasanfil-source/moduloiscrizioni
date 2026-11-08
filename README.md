@@ -26,6 +26,7 @@ Le richieste tra WordPress e Apps Script sono firmate. MySQL conserva il registr
 - [Rilascio 3.26.280: revisione del flusso di creazione evento](docs/rilascio-3.26.280.md)
 - [Rilascio 3.26.279: spostamenti e passaggi privati](docs/rilascio-3.26.279.md)
 - [Gestione degli spostamenti](docs/SPOSTAMENTI.md)
+- [Regole di assegnazione delle camere](docs/REGOLE_ASSEGNAZIONE_CAMERE.md)
 - [Rilascio 3.26.275: audit, correzioni e aggiornamento GAS](docs/rilascio-3.26.275.md)
 - [Plugin WordPress](wordpress-plugin/modulo-iscrizioni/README.md)
 - [Progetto Apps Script MODULI AUTONOMO](workspace-apps-script/README.md)

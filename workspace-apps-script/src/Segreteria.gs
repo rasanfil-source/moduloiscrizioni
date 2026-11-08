@@ -127,7 +127,7 @@ function generaElencoOperativoConLock_(eventId, fields, options) {
   const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.OPERATIONAL_LIST); const event = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS)).find(function (row) { return String(row.id_evento) === String(eventId); }) || {};
   const registrations = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(function (row) { return String(row.id_evento) === String(eventId) && ['ANNULLATO', 'SCADUTO', 'CANCELLED', 'EXPIRED'].indexOf(String(row.stato).toUpperCase()) < 0; }); const byOrder = registrations.reduce(function (result, row) { result[String(row.codice_ordine)] = row; return result; }, {});
   const operational = indiceStatoOperativo_(); const payments = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS)); const labels = campiElencoOperativo_().reduce(function (result, field) { result[field.key] = field.label; return result; }, {});
-	const rows = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).filter(function (row) { return !!byOrder[String(row.codice_ordine)] && ['CANCELLED', 'EXPIRED'].indexOf(String(row.stato_partecipante || 'ACTIVE').toUpperCase()) < 0; }).map(function (participant) { const registration = byOrder[String(participant.codice_ordine)]; const data = decodificaOggetto_(participant.dati_aggiuntivi_json); Object.assign(data, operational[String(participant.codice_ordine)+'|'+Number(participant.numero_partecipante)] || {}); if (!corrispondeFiltriReport_(options.filtri, registration, participant, data)) return null; const row = fields.map(function (field) { return neutralizzaFormula_(valoreCampoElenco_(field, event, registration, participant, data, payments), 1000); }); row._orderCode = String(participant.codice_ordine); return row; }).filter(Boolean);
+	const rows = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).filter(function (row) { return !!byOrder[String(row.codice_ordine)] && ['CANCELLED', 'EXPIRED'].indexOf(String(row.stato_partecipante || 'ACTIVE').toUpperCase()) < 0; }).map(function (participant) { const registration = byOrder[String(participant.codice_ordine)]; const data = decodificaOggetto_(participant.dati_aggiuntivi_json); Object.assign(data, operational[String(participant.codice_ordine)+'|'+Number(participant.numero_partecipante)] || {}); if (!corrispondeFiltriReport_(options.filtri, registration, participant, data)) return null; const row = fields.map(function (field) { return neutralizzaFormula_(valoreCampoElenco_(field, event, registration, participant, data, payments), 1000); }); row._orderCode = String(participant.codice_ordine); row._participantNumber = Number(participant.numero_partecipante) || 0; return row; }).filter(Boolean);
 	const grouping = normalizzaScelteReport_(options.raggruppamenti, fields, 5).map(function (field) { return fields.indexOf(field); }).filter(function (index) { return index >= 0; });
 	const ordering = normalizzaScelteReport_(options.ordinamento, fields, 5).map(function (field) { return fields.indexOf(field); }).filter(function (index) { return index >= 0; });
 	const sortColumns = grouping.concat(ordering).filter(function (column, index, list) { return list.indexOf(column) === index; });
@@ -524,15 +524,13 @@ function creaCacheDecodificaVista_() {
   return {object:object,list:list,option:option};
 }
 
-/** Le colonne economiche appartengono alla prenotazione anche nei report per persona. */
+/** Gli importi di prenotazione restano sulla persona numero 1, se il filtro la include. */
 function limitaImportiAUnaRigaPerOrdine_(rows, fields) {
   const monetary = ['total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance'];
-  const seen = Object.create(null);
   rows.forEach(function (row) {
     const code = row._orderCode;
     if (!code) return;
-    if (seen[code]) fields.forEach(function (field, index) { if (monetary.indexOf(field) >= 0) row[index] = ''; });
-    seen[code] = true;
+    if (Number(row._participantNumber) !== 1) fields.forEach(function (field, index) { if (monetary.indexOf(field) >= 0) row[index] = ''; });
   });
   return rows;
 }
