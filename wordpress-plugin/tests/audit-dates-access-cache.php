@@ -57,7 +57,7 @@ class AuditSuspendedEventQuery {
     public function set( $key, $value ) { $this->values[ $key ] = $value; }
 }
 $GLOBALS['scope'][1]['_mi_access_suspended'] = 1;
-check_audit( array() === MI_Access::activity_ids( 1 ) && array() === MI_Access::event_ids( 1 ) && ! MI_Access::can_access_activity( 9, 1 ), 'Suspended global manager retained activity scope' );
+check_audit( ! MI_Access::is_global_manager( 1 ) && array() === MI_Access::activity_ids( 1 ) && array() === MI_Access::event_ids( 1 ) && ! MI_Access::can_access_activity( 9, 1 ), 'Suspended global manager retained global role or activity scope' );
 $suspended_query = new AuditSuspendedEventQuery(); MI_Access::scope_event_list( $suspended_query );
 check_audit( array( 0 ) === $suspended_query->get( 'post__in' ), 'Suspended global manager still sees event list' );
 unset( $GLOBALS['scope'][1]['_mi_access_suspended'] );

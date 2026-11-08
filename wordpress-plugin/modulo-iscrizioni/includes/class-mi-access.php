@@ -43,6 +43,7 @@ final class MI_Access {
 	}
 
 	public static function is_global_manager( $user_id = 0 ) {
+		if ( self::is_suspended( $user_id ) ) return false;
 		$user = $user_id ? get_user_by( 'id', $user_id ) : wp_get_current_user();
 		return $user && ( user_can( $user, 'manage_options' ) || user_can( $user, 'mi_manage_all_events' ) );
 	}
