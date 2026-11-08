@@ -669,7 +669,8 @@ final class MI_Portal {
 		if ( ! in_array( $template, $allowed_templates, true ) ) return self::redirect_portal_result( 'Tipo di comunicazione non valido.', true, 'communications' );
 		$message = mb_substr( sanitize_textarea_field( $input['message'] ?? '' ), 0, 4000 );
 		global $wpdb;
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,buyer_email,total_cents,economic_mode FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status IN ('CONFIRMED','PENDING_PAYMENT') AND capacity_released_at IS NULL ORDER BY id LIMIT 1001", $event_id ), ARRAY_A );
+		$communication_status = 'BALANCE_REMINDER' === $template ? "status IN ('CONFIRMED','PENDING_PAYMENT')" : "status IN ('CONFIRMED','PENDING_PAYMENT','TRAVEL_PENDING')";
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,buyer_email,total_cents,economic_mode FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND {$communication_status} AND capacity_released_at IS NULL ORDER BY id LIMIT 1001", $event_id ), ARRAY_A );
 		if ( $wpdb->last_error || ! is_array( $rows ) ) return self::redirect_portal_result( 'Destinatari non disponibili. Nessun invio preparato.', true, 'communications' );
 		if ( count( $rows ) > 1000 ) return self::redirect_portal_result( 'Oltre 1000 prenotazioni: invio non disponibile da questa schermata.', true, 'communications' );
 		$recipients = array();

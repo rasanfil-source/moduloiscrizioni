@@ -25,13 +25,14 @@ class MI_Portal {
     static function balance_url(...$args) { return 'https://example.invalid/balance'; }
 }
 class AuditReminderDatabase {
-    public $prefix='wp_', $last_error='', $payloads=[];
+    public $prefix='wp_', $last_error='', $payloads=[], $last_select='';
     function prepare($sql,...$args) {
         if (str_starts_with($sql, 'INSERT')) $this->payloads[$args[0]]=json_decode($args[4], true);
         return $sql;
     }
     function get_var($sql) { return 1; }
     function get_results($sql,...$args) {
+        $this->last_select = $sql;
         expect(str_contains($sql, 'payment_deadline_at'), 'scadenza non caricata dal database');
         $rows=[];
         foreach (['2026-10-07 16:00:00','2026-12-07 17:00:00',null,'','2026-02-30 10:00:00'] as $index=>$deadline) {
@@ -46,6 +47,7 @@ foreach (['BALANCE_REMINDER','DEPOSIT_REMINDER'] as $template) {
     $recipients=array_map(static fn($id)=>['order_code'=>'AUDIT'.$id], range(1,5));
     $result = MI_Spedizione_Email::accoda_comunicazione_operativa(['event_id'=>42,'communication_id'=>'audit-deadline','template_type'=>$template,'recipients'=>$recipients]);
     expect(!is_wp_error($result) && $result['count']===5, 'preparazione promemoria non riuscita');
+    expect(!str_contains($wpdb->last_select, "'TRAVEL_PENDING'"), "$template non deve includere chi è in attesa di passaggio");
     foreach ([1=>'07/10/2026, 18:00',2=>'07/12/2026, 18:00',3=>'Contatta l’organizzazione',4=>'Contatta l’organizzazione',5=>'Contatta l’organizzazione'] as $id=>$expected) {
         foreach (['testo','html'] as $format) {
             $body=$wpdb->payloads[$id]['email_preview'][$format];
@@ -55,4 +57,8 @@ foreach (['BALANCE_REMINDER','DEPOSIT_REMINDER'] as $template) {
         }
     }
 }
+$wpdb = new AuditReminderDatabase();
+$recipients=array_map(static fn($id)=>['order_code'=>'AUDIT'.$id], range(1,5));
+$result = MI_Spedizione_Email::accoda_comunicazione_operativa(['event_id'=>42,'communication_id'=>'audit-predeparture','template_type'=>'PRE_DEPARTURE_REMINDER','message'=>'Informazioni per la partenza','recipients'=>$recipients]);
+expect(!is_wp_error($result) && str_contains($wpdb->last_select, "'TRAVEL_PENDING'"), 'avviso prima della partenza deve includere chi attende un passaggio');
 echo "PASS: operational email uses each booking deadline, UTC conversion in summer/winter and explicit missing/invalid fallback.\n";

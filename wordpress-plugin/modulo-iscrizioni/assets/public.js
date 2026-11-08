@@ -309,17 +309,21 @@
           const detail = document.createElement('p');
           const offeredSeats = Number(travel.seats) || 0;
           const pluralBooking = totalQuantity() > 1;
+          const assignedRides = Array.isArray(travel.assignments) ? travel.assignments.reduce((sum, ride) => sum + (Number(ride.seats) || 0), 0) : (travel.driver_id ? 1 : 0);
+          const assignedPeople = Math.min(totalQuantity(), assignedRides);
+          const allHaveRide = assignedPeople >= totalQuantity();
+          const needSummary = allHaveRide ? 'Passaggio selezionato per ' + assignedPeople + (assignedPeople === 1 ? ' persona' : ' persone') : (assignedPeople > 0 ? 'Passaggio selezionato per ' + assignedPeople + ' su ' + totalQuantity() + ' persone; gli altri posti sono in attesa' : 'Richiesta di passaggio in attesa');
           const offeredSeatsText = offeredSeats > 0 ? ` · ${pluralBooking ? 'Offrite' : 'Offri'} ${offeredSeats} ${offeredSeats === 1 ? 'posto' : 'posti'} auto` : '';
           const contributionCents = amountCents(travel.price);
           const contributionText = offeredSeats > 0 && contributionCents > 0 ? ` (${pluralBooking ? 'riceverete' : 'riceverai'} ${formatCurrency(contributionCents)} da ciascun passeggero che accetterà il passaggio)` : '';
           const names = {
             OWN: 'Viaggio organizzato autonomamente',
             DRIVER: `Viaggio in auto${offeredSeatsText}${contributionText}`,
-            NEED: travel.driver_id ? `Passaggio assegnato: ${formatCurrency(travel.price_cents)} A/R, da versare direttamente al conducente` : 'Richiesta di passaggio in attesa'
+            NEED: needSummary
           };
           detail.textContent = names[travel.mode] || '';
           if (travel.mode === 'NEED' && travel.fallback === 'REQUIRED') detail.textContent += ' · Partecipazione subordinata al passaggio';
-          if (total === 0 && travel.mode === 'NEED' && !travel.driver_id) {
+          if (total === 0 && travel.mode === 'NEED' && !allHaveRide) {
             pendingTravelNote = travel.fallback === 'REQUIRED'
               ? ' (Richiesta di passaggio in attesa · Partecipazione subordinata al passaggio)'
               : ' (Richiesta di passaggio in attesa)';

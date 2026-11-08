@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class MI_Activator {
-	const SCHEMA_REVISION = 3;
+	const SCHEMA_REVISION = 4;
 	public static function activate() {
 		self::create_tables();
 		self::add_roles_and_capabilities();

@@ -411,11 +411,17 @@ final class MI_Modello_Email {
 	}
 
 	/** Conferma al sottoscrittore la cancellazione della singola persona. */
-	public static function crea_istantanea_annullamento_partecipazione_iscritto( $event_id, $participant_name ) {
+	public static function crea_istantanea_annullamento_partecipazione_iscritto( $event_id, $participant_name, $actor = '' ) {
 		$event_title = sanitize_text_field( get_the_title( absint( $event_id ) ) );
 		$participant_name = sanitize_text_field( (string) $participant_name );
 		$body = '<p>Ti confermiamo che la partecipazione di <strong>' . esc_html( $participant_name ) . '</strong> a <strong>' . esc_html( $event_title ) . '</strong> è stata annullata.</p><p>Questa conferma riguarda soltanto la persona indicata. Le eventuali altre partecipazioni della prenotazione restano invariate.</p>';
 		$text = "Ti confermiamo che la partecipazione di {$participant_name} a {$event_title} è stata annullata.\n\nQuesta conferma riguarda soltanto la persona indicata. Le eventuali altre partecipazioni della prenotazione restano invariate.";
+		if ( 'TRAVEL_DEADLINE' === $actor ) {
+			$reason_html = '<p>L’annullamento è avvenuto automaticamente perché entro il termine non è stato assegnato il passaggio richiesto. Le quote già versate non vengono rimborsate automaticamente: per verificare un eventuale rimborso, contatta la segreteria.</p>';
+			$reason_text = "\n\nLa partecipazione è stata annullata automaticamente perché entro il termine non è stato assegnato il passaggio richiesto. Le quote già versate non vengono rimborsate automaticamente: per verificare un eventuale rimborso, contatta la segreteria.";
+			$body .= $reason_html;
+			$text .= $reason_text;
+		}
 		$snapshot = self::crea_istantanea_istituzionale( $event_id, 'Partecipazione annullata — ' . $event_title, 'Conferma della cancellazione della partecipazione.', $body, $text );
 		$style = self::stile_risolto( $event_id );
 		$snapshot['identita_email']['nome_mittente'] = $style['identity_name'];
@@ -424,13 +430,17 @@ final class MI_Modello_Email {
 	}
 
 	/** Avvisa la segreteria quando una persona annulla autonomamente la propria partecipazione. */
-	public static function crea_istantanea_annullamento_partecipazione_segreteria( $event_id, $participant_name, $order_code ) {
+	public static function crea_istantanea_annullamento_partecipazione_segreteria( $event_id, $participant_name, $order_code, $actor = '' ) {
 		$event_title = sanitize_text_field( get_the_title( absint( $event_id ) ) );
 		$participant_name = sanitize_text_field( (string) $participant_name );
 		$order_code = sanitize_text_field( (string) $order_code );
 		$subject = 'Partecipazione annullata — ' . $event_title;
 		$body = '<p>È stata annullata una partecipazione a <strong>' . esc_html( $event_title ) . '</strong>.</p><p><strong>Persona iscritta:</strong> ' . esc_html( $participant_name ) . '</p>';
 		$text = "È stata annullata una partecipazione a {$event_title}.\n\nPersona iscritta: {$participant_name}";
+		if ( 'TRAVEL_DEADLINE' === $actor ) {
+			$body .= '<p>La cancellazione è automatica: entro il termine non è stato assegnato il passaggio richiesto. Verificare eventuali importi già versati e gestire manualmente gli eventuali rimborsi.</p>';
+			$text .= "\n\nCancellazione automatica: entro il termine non è stato assegnato il passaggio richiesto. Verificare eventuali importi già versati e gestire manualmente gli eventuali rimborsi.";
+		}
 		return self::crea_istantanea_istituzionale( $event_id, $subject, 'Una partecipazione è stata annullata.', $body, $text );
 	}
 

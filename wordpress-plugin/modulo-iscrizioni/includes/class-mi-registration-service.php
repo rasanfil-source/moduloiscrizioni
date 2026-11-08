@@ -531,7 +531,7 @@ final class MI_Registration_Service {
 				if ( false === $wpdb->insert( $participants_table, array( 'registration_id' => $registration_id, 'ticket_type_code' => $participant['ticket_type_code'], 'ticket_index' => $participant['ticket_index'], 'first_name' => $participant['first_name'], 'last_name' => $participant['last_name'], 'extra_json' => wp_json_encode( $participant['fields'] ), 'options_json' => wp_json_encode( $participant['options'] ), 'status' => 'ACTIVE', 'cancellation_token_hash' => hash( 'sha256', $cancel_token ) ), array( '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s' ) ) ) {
 					throw new RuntimeException( 'Partecipante non salvato.' );
 				}
-				$participant_management[] = array( 'name' => trim( $participant['first_name'] . ' ' . $participant['last_name'] ), 'url' => MI_Portal::participant_cancel_url( (int) $wpdb->insert_id, $cancel_token ) );
+				$participant_management[] = array( 'participant_id' => (int) $wpdb->insert_id, 'name' => trim( $participant['first_name'] . ' ' . $participant['last_name'] ), 'url' => MI_Portal::participant_cancel_url( (int) $wpdb->insert_id, $cancel_token ) );
 			}
 			if ( class_exists( 'MI_Travel' ) ) MI_Travel::save_locked( $event, $registration_id, $participants );
 			if ( class_exists( 'MI_Management_Service' ) ) {
@@ -1120,17 +1120,17 @@ final class MI_Registration_Service {
 			if ( ! self::append_registration_event( (int) $registration['id'], 'PARTICIPANT_CANCELLED', $registration['status'], $new_registration_status, $actor_label, array( 'participant_id' => $participant_id, 'remaining_participants' => $remaining ) ) ) throw new RuntimeException( 'Audit non aggiornato.' );
 			{
 				$secretariat_recipient = MI_Spedizione_Email::destinatario_evento( $event_id );
-				$secretariat_snapshot = MI_Modello_Email::crea_istantanea_annullamento_partecipazione_segreteria( $event_id, trim( $participant['first_name'] . ' ' . $participant['last_name'] ), $registration['order_code'] );
+				$secretariat_snapshot = MI_Modello_Email::crea_istantanea_annullamento_partecipazione_segreteria( $event_id, trim( $participant['first_name'] . ' ' . $participant['last_name'] ), $registration['order_code'], $actor_label );
 				$secretariat_email_status = MI_Spedizione_Email::stato_nuova_email( $secretariat_snapshot );
-				$secretariat_payload = wp_json_encode( array( 'event_title' => get_the_title( $event_id ), 'order_code' => $registration['order_code'], 'status' => 'CANCELLED', 'participant_id' => $participant_id, 'email_preview' => $secretariat_snapshot ) );
+				$secretariat_payload = wp_json_encode( array( 'event_title' => get_the_title( $event_id ), 'order_code' => $registration['order_code'], 'status' => 'CANCELLED', 'participant_id' => $participant_id, 'cancellation_actor' => $actor_label, 'email_preview' => $secretariat_snapshot ) );
 				if ( false === $secretariat_payload || false === $wpdb->insert( $outbox, array( 'registration_id' => $registration['id'], 'recipient' => $secretariat_recipient, 'template_type' => 'PARTICIPANT_CANCEL_SECRETARIAT', 'payload_json' => $secretariat_payload, 'status' => $secretariat_email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) throw new RuntimeException( 'Notifica di annullamento alla segreteria non salvata.' );
 			}
 			// La conferma personale e la cancellazione devono essere salvate insieme.
 			$participant_recipient = sanitize_email( $registration['buyer_email'] );
 			if ( is_email( $participant_recipient ) ) {
-				$participant_snapshot = MI_Modello_Email::crea_istantanea_annullamento_partecipazione_iscritto( $event_id, trim( $participant['first_name'] . ' ' . $participant['last_name'] ) );
+				$participant_snapshot = MI_Modello_Email::crea_istantanea_annullamento_partecipazione_iscritto( $event_id, trim( $participant['first_name'] . ' ' . $participant['last_name'] ), $actor_label );
 				$participant_email_status = MI_Spedizione_Email::stato_nuova_email( $participant_snapshot );
-				$participant_payload = wp_json_encode( array( 'event_title' => get_the_title( $event_id ), 'order_code' => $registration['order_code'], 'status' => 'CANCELLED', 'participant_id' => $participant_id, 'email_preview' => $participant_snapshot ) );
+				$participant_payload = wp_json_encode( array( 'event_title' => get_the_title( $event_id ), 'order_code' => $registration['order_code'], 'status' => 'CANCELLED', 'participant_id' => $participant_id, 'cancellation_actor' => $actor_label, 'email_preview' => $participant_snapshot ) );
 				if ( false === $participant_payload || false === $wpdb->insert( $outbox, array( 'registration_id' => $registration['id'], 'recipient' => $participant_recipient, 'template_type' => 'PARTICIPANT_CANCEL_CONFIRMATION', 'payload_json' => $participant_payload, 'status' => $participant_email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) throw new RuntimeException( 'Conferma di annullamento all’iscritto non salvata.' );
 			}
 			if ( class_exists( 'MI_Travel' ) ) MI_Travel::maintain_locked( $event_id );
@@ -1818,7 +1818,7 @@ final class MI_Registration_Service {
 			return array_map( $canonical, $value );
 		};
 		$data = array();
-		foreach ( array( 'tickets', 'participants', 'buyer', 'order_options', 'special_requests', 'privacy_accepted', 'marketing_accepted' ) as $key ) {
+		foreach ( array( 'tickets', 'participants', 'travel_booking', 'buyer', 'order_options', 'special_requests', 'privacy_accepted', 'marketing_accepted' ) as $key ) {
 			$data[$key] = $payload[$key] ?? ( in_array( $key, array( 'privacy_accepted', 'marketing_accepted' ), true ) ? false : ( 'special_requests' === $key ? '' : array() ) );
 		}
 		return hash( 'sha256', wp_json_encode( $canonical( $data ) ) );

@@ -14,6 +14,7 @@
     host.dataset.miTravel = '';
     host.className = 'mi-registration__travel';
     const legend = document.createElement('legend'); legend.textContent = party.length > 1 ? 'Come raggiungerete l’evento?' : 'Come raggiungerai l’evento?'; host.append(legend);
+    note('Per lasciare 24 ore complete per ogni risposta, le nuove richieste e offerte di passaggio chiudono 24 ore prima del termine indicato.');
     if (party.length > 1) note('Una sola modalità di viaggio per la prenotazione. Puoi selezionare più auto: assegneremo un posto a ogni persona.');
     function note(text, parent = host) { const p = document.createElement('p'); p.textContent = text; parent.append(p); return p; }
     function field(label, key, type = 'text', parent = host) {
@@ -32,6 +33,8 @@
     mode.value = previous.mode || ''; mode.required = true;
     if (config.event.travel.instructions) note(config.event.travel.instructions);
     const driver = document.createElement('div'); host.append(driver);
+    const cutoffNotice = note('', host); cutoffNotice.dataset.travel = 'closed_notice'; cutoffNotice.hidden = true;
+    const closedDriverNote = note('In questo momento puoi venire in auto, ma non attivare nuovi posti per altre persone.', driver); closedDriverNote.hidden = true;
     const seats = field('Posti disponibili per altri iscritti, esclusi conducente e accompagnatori già previsti', 'seats', 'select', driver);
     for (let n = 0; n <= 8; n++) option(seats, String(n), n === 0 ? '0 — Non offro posti' : String(n));
     seats.value = String(previous.seats || 0);
@@ -51,12 +54,15 @@
     const status = note('', need); status.setAttribute('role', 'status');
     const reload = document.createElement('button'); reload.type = 'button'; reload.textContent = 'Riprova'; reload.hidden = true; need.append(reload);
     const wait = field('Desidero essere avvisato quando si trova un passaggio', 'waitlist', 'checkbox', need); wait.checked = Boolean(previous.waitlist);
-    const fallback = field(party.length > 1 ? 'Se una o più persone non trovano un passaggio' : 'Se non si trova un passaggio', 'fallback', 'select', need);
+    const fallback = field(party.length > 1 ? 'Se una o più persone restano senza passaggio' : 'Se il passaggio non è più disponibile', 'fallback', 'select', need);
     option(fallback, '', party.length > 1 ? 'Scegli cosa fare' : 'Scegli come partecipare');
     option(fallback, 'REQUIRED', party.length > 1 ? 'Annulla la partecipazione delle persone senza passaggio' : 'Parteciperò solo se trovo un passaggio');
     option(fallback, 'ANYWAY', party.length > 1 ? 'Parteciperanno comunque e si organizzeranno diversamente' : 'Parteciperò comunque e mi organizzerò diversamente'); fallback.value = previous.fallback || '';
+    const fallbackHelp = note(party.length > 1
+      ? 'La scelta vale anche se un conducente ritira un posto già assegnato: puoi mantenere solo le persone con un passaggio oppure confermare che tutte parteciperanno organizzandosi diversamente.'
+      : 'La scelta vale anche se il conducente ritira un posto già assegnato: puoi mantenere la partecipazione solo con un passaggio oppure confermare che parteciperai organizzandoti diversamente.', need);
     note('Ogni proposta riserva il posto per 24 ore. Le proposte automatiche ti arrivano via email: partenza e contributo sono indicati nell’email e nella pagina personale del passaggio, prima di accettare. L’attesa auto è distinta dalla lista d’attesa dell’evento.', need);
-    let loading = false; let loadedOnce = false;
+    let loading = false; let loadedOnce = false; let acceptingNewRequests = true;
     async function load() {
       if (loading) return;
       loading = true; reload.disabled = true; reload.hidden = true;
@@ -68,14 +74,25 @@
         const response = await fetch(endpoint, { cache: 'no-store', credentials: 'same-origin' });
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || 'Disponibilità non disponibile.');
+        acceptingNewRequests = data.accepting_new_requests !== false;
+        const needOption = mode.querySelector('option[value="NEED"]');
+        if (needOption) needOption.disabled = !acceptingNewRequests;
+        if (!acceptingNewRequests && mode.value === 'NEED') mode.value = '';
+        cutoffNotice.textContent = acceptingNewRequests ? '' : 'Il termine per i nuovi passaggi è arrivato: non puoi inviare richieste o attivare nuovi posti. Puoi ancora partecipare organizzandoti autonomamente.';
+        cutoffNotice.hidden = acceptingNewRequests;
+        Array.from(seats.options).forEach(item => { if (Number(item.value) > 0) item.disabled = !acceptingNewRequests; });
+        if (!acceptingNewRequests && mode.value === 'DRIVER' && Number(seats.value) > 0) seats.value = '0';
+        closedDriverNote.hidden = acceptingNewRequests;
         rides.replaceChildren();
-        const available = (data.rides || []).filter(ride => Number(ride.seats) > 0);
+        const available = acceptingNewRequests ? (data.rides || []).filter(ride => Number(ride.seats) > 0) : [];
         for (const ride of available) {
           const label = document.createElement('label'); label.className = 'mi-registration__travel-checkbox mi-registration__travel-offer';
           const input = document.createElement('input'); input.type = 'checkbox'; input.dataset.travel = 'ride_offer'; input.dataset.driverId = String(ride.id); input.dataset.seats = String(ride.seats); input.dataset.priceCents = String(ride.price_cents); input.checked = selected.has(String(ride.id));
           label.append(input, document.createTextNode(`${ride.origin} · ${ride.departure} · ${ride.seats} ${Number(ride.seats) === 1 ? 'posto' : 'posti'} · ${money(ride.price_cents)} A/R per persona`)); rides.append(label);
         }
-        status.textContent = available.length ? (party.length > 1 ? 'Seleziona una o più auto: distribuiremo i posti tra le persone della prenotazione.' : 'Seleziona un passaggio oppure chiedi di entrare in lista d’attesa auto.') : 'Al momento non ci sono passaggi disponibili. Puoi chiedere di entrare in lista d’attesa auto.';
+        status.textContent = !acceptingNewRequests
+          ? 'Le nuove richieste e offerte di passaggio sono chiuse. Se avevi già scelto un passaggio, rivedi la scelta e seleziona come vuoi partecipare.'
+          : available.length ? (party.length > 1 ? 'Seleziona una o più auto: distribuiremo i posti tra le persone della prenotazione.' : 'Seleziona un passaggio oppure chiedi di entrare in lista d’attesa auto.') : 'Al momento non ci sono passaggi disponibili. Puoi chiedere di entrare in lista d’attesa auto.';
         loadedOnce = true;
       } catch (error) {
         rides.replaceChildren();
@@ -97,15 +114,16 @@
       if (mode.value === 'NEED' && rides.childElementCount && selectedSeats > 0) status.textContent = party.length > 1
         ? `Hai selezionato posti per ${Math.min(selectedSeats, party.length)} persone su ${party.length}.${unassigned ? ' Seleziona altre auto o chiedi di entrare in lista d’attesa per le persone rimanenti.' : ' Tutte le persone hanno un posto selezionato.'}`
         : 'Passaggio selezionato. La disponibilità sarà verificata al momento dell’iscrizione.';
-      fallback.required = mode.value === 'NEED' && unassigned > 0;
-      fallback.closest('label').hidden = mode.value !== 'NEED' || unassigned === 0;
+      fallback.required = mode.value === 'NEED';
+      fallback.closest('label').hidden = mode.value !== 'NEED';
+      fallbackHelp.hidden = mode.value !== 'NEED';
       wait.required = mode.value === 'NEED' && unassigned > 0;
       wait.closest('label').hidden = mode.value !== 'NEED' || unassigned === 0;
     }
     mode.addEventListener('change', () => { update(); if (mode.value === 'NEED') load(); });
     seats.addEventListener('change', update); rides.addEventListener('change', update); reload.addEventListener('click', load);
     update();
-    if (mode.value === 'NEED') load();
+    load();
     return host;
   }
   globalThis.MITravel = { capture, render };

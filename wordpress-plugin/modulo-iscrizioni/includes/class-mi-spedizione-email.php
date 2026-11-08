@@ -103,7 +103,7 @@ final class MI_Spedizione_Email {
 	/** Chiamata nella transazione di eliminazione, prima di rimuovere i contatti. */
 	public static function accoda_avviso_eliminazione( $event_id ) {
 		global $wpdb;
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT buyer_email FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED','WAITLIST_OFFERED')", $event_id ), ARRAY_A );
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT buyer_email FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND status IN ('CONFIRMED','PENDING_PAYMENT','TRAVEL_PENDING','WAITLISTED','WAITLIST_OFFERED')", $event_id ), ARRAY_A );
 		if ( $wpdb->last_error ) throw new RuntimeException( 'Destinatari dell’avviso non disponibili.' );
 		$title = html_entity_decode( get_the_title( $event_id ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 		$contact = self::destinatario_evento( $event_id );
@@ -252,7 +252,9 @@ final class MI_Spedizione_Email {
 			$order_codes = array_keys( $recipient_state );
 			$placeholders = implode( ',', array_fill( 0, count( $order_codes ), '%s' ) );
 			$query_args = array_merge( array( $event_id ), $order_codes );
-			$status_filter = 'EVENT_CANCELLATION' === $template_type ? "status='CANCELLED'" : "status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED','WAITLIST_OFFERED') AND capacity_released_at IS NULL";
+			if ( 'EVENT_CANCELLATION' === $template_type ) $status_filter = "status='CANCELLED'";
+			elseif ( in_array( $template_type, array( 'BALANCE_REMINDER', 'DEPOSIT_REMINDER' ), true ) ) $status_filter = "status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED','WAITLIST_OFFERED') AND capacity_released_at IS NULL";
+			else $status_filter = "status IN ('CONFIRMED','PENDING_PAYMENT','TRAVEL_PENDING','WAITLISTED','WAITLIST_OFFERED') AND capacity_released_at IS NULL";
 			$registrations = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,status,economic_mode,buyer_first_name,buyer_last_name,buyer_email,total_qty,total_cents,initial_due_cents,balance_cents,payment_methods_json,payment_deadline_at FROM {$registrations_table} WHERE event_id=%d AND order_code IN ({$placeholders}) AND {$status_filter} ORDER BY id LIMIT 1000", $query_args ), ARRAY_A );
 			if ( $wpdb->last_error ) return new WP_Error( 'mi_email_read', 'Prenotazioni non disponibili.' );
 			if ( 'EVENT_CANCELLATION' === $template_type && count( $registrations ) !== count( $order_codes ) ) return new WP_Error( 'mi_email_cancel_incomplete', 'Annullamento dei destinatari non completato.' );
@@ -269,7 +271,7 @@ final class MI_Spedizione_Email {
 					$balance = $position['managed'] ? $position['effective_balance'] : 0;
 					if ( 'BALANCE_REMINDER' === $template_type && $balance < 1 ) continue;
 					$economic = array( 'total_cents' => (int) $position['effective_total'], 'initial_due_cents' => $position['individual_known'] ? (int) $position['individual_deposit_due'] : (int) $registration['initial_due_cents'], 'balance_cents' => $balance, 'payment_methods' => json_decode( (string) $registration['payment_methods_json'], true ) ?: array() );
-					$status_labels = array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'Da pagare', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto' );
+					$status_labels = array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'Da pagare', 'TRAVEL_PENDING' => 'In attesa di passaggio', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto' );
 					$participant_count = (int) $position['individual_people_count'] > 0 ? (int) $position['individual_active_count'] : (int) $registration['total_qty'];
 					// La scadenza della prenotazione è UTC e può differire da quella generale.
 					// Se assente/non valida, il modello invita a contattare l'organizzazione.

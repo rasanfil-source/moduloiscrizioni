@@ -81,8 +81,8 @@
   },
   "public.js": {
     "file": "min/public.js",
-    "source": "7dfbbb6e437dd867003057d38c91be3e470ed97ac35ae1b8a0c4b0c6d0654f0d",
-    "hash": "d512d06c443b25996aa78ac2b8a691c481e2817c09226e077010c709a80cce15"
+    "source": "400a0bee57195f05ad948d260acd7868180b95151722ada7a7ed01a60ba04553",
+    "hash": "4b6eac24be3a56addd7865a8fbe0b4c15c8aeb037e8871388b1780819078ce7c"
   },
   "qrcode-generator-2.0.4.js": {
     "file": "min/qrcode-generator-2.0.4.js",
@@ -91,7 +91,7 @@
   },
   "travel.js": {
     "file": "min/travel.js",
-    "source": "16cb428d2992b287cf141b0c30747294aff82083679d3181a03429f0dce547f6",
-    "hash": "77fc32c3cf36a77cfc1c22b8f6b1b876724ea7f67fb686da08d7bfe9c90d91f8"
+    "source": "1c6f1a2036f96c9697a59d5df716adbe06d46e0f9d3e47117bc7d56d4a6179b7",
+    "hash": "49f8b72c7fb7a2d56db0db2238d9f05aafd9e6f30d401cef13524eaf219821ad"
   }
 }

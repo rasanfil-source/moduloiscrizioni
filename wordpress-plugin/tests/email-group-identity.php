@@ -33,6 +33,10 @@ echo "Group identity and signature: OK\n";
 $snapshot = MI_Modello_Email::crea_istantanea_annullamento_partecipazione_iscritto(42, 'Persona Esempio');
 expect(str_contains($snapshot['html'], 'Persona Esempio') && str_contains($snapshot['testo'], 'Persona Esempio'), 'persona cancellata assente');
 expect(!str_contains($snapshot['testo'], 'annullata dalla segreteria') && str_contains($snapshot['testo'], 'altre partecipazioni'), 'conferma parziale ambigua');
+$travel_cancel = MI_Modello_Email::crea_istantanea_annullamento_partecipazione_iscritto(42, 'Persona Esempio', 'TRAVEL_DEADLINE');
+expect(str_contains($travel_cancel['html'], 'passaggio richiesto') && str_contains($travel_cancel['testo'], 'non vengono rimborsate automaticamente'), 'cancellazione automatica per passaggio senza spiegazione o indicazioni sui rimborsi');
+$travel_secretariat = MI_Modello_Email::crea_istantanea_annullamento_partecipazione_segreteria(42, 'Persona Esempio', 'EXAMPLE', 'TRAVEL_DEADLINE');
+expect(str_contains($travel_secretariat['html'], 'gestire manualmente') && str_contains($travel_secretariat['testo'], 'rimborsi'), 'segreteria non informata della cancellazione automatica o dei rimborsi');
 echo "Participant cancellation template: OK\n";
 
 $GLOBALS['email_meta'][42] = ['_mi_activity_id' => 9];
