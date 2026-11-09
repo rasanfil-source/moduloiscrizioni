@@ -16,13 +16,13 @@ foreach ([51=>9,52=>0,53=>10,54=>11] as $eventId=>$groupId) {
  $new=MI_Modello_Email::crea_istantanea_nuova_iscrizione_segreteria($eventId,[],1);
  expect(strtolower($new['identita_email']['indirizzo_risposte'])===$expected,'registration Reply-To');
  $n=$eventId===51?2:1;
- expect(MI_Spedizione_Email::accoda_notifiche_attivazione_evento($eventId,new WP_User(),'','')['count']===$n,'lifecycle publication recipients');
+ expect(MI_Spedizione_Email::accoda_notifiche_attivazione_evento($eventId,new WP_User(),'','')['count']===$n+1,'lifecycle publication recipients including explicit manager');
  expect(MI_Spedizione_Email::accoda_avviso_annullamento_segreteria($eventId,'Motivo')['count']===$n,'lifecycle cancellation recipients');
  MI_Spedizione_Email::accoda_avviso_eliminazione($eventId);
  MI_Spedizione_Email::accoda_avviso_eliminazione($eventId);
  expect(MI_Spedizione_Email::accoda_avviso_annullamento_segreteria($eventId,'Motivo')['count']===0,'cancellation deduplication');
  $rows=$wpdb->get_results("SELECT recipient,template_type FROM wp_mi_email_outbox WHERE JSON_EXTRACT(payload_json,'$.event_id')=".$eventId,ARRAY_A);
- expect(count($rows)===$n*3,'all lifecycle notices deduplicated');
- foreach($rows as $row) expect(in_array(strtolower($row['recipient']),array_unique([$expected,'secretariat@example.invalid']),true),'no unrelated manager receives notices');
+ expect(count($rows)===$n*3+1,'all lifecycle notices deduplicated');
+ foreach($rows as $row) expect(in_array(strtolower($row['recipient']),array_unique(array_merge([$expected,'secretariat@example.invalid'],$row['template_type']==='EVENT_MANAGER_READY'?['manager@example.invalid']:[])),true),'no unrelated manager receives notices');
 }
 echo "PASS: exclusive group/fallback, contact and Reply-To, publication/cancellation/deletion pairs, same-address deduplication, invalid email fallback. No real email sent.\n";

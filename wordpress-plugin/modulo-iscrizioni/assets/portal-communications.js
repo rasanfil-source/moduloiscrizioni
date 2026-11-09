@@ -8,6 +8,34 @@
       });
     });
   });
+  document.querySelectorAll('[data-mi-email-progress]').forEach((panel) => {
+    let failures = 0;
+    const poll = async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      const data = new FormData();
+      data.set('action', 'mi_email_progress'); data.set('nonce', panel.dataset.nonce); data.set('job', panel.dataset.job);
+      try {
+        const response = await fetch(panel.dataset.url, {method: 'POST', credentials: 'same-origin', body: data, signal: controller.signal});
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error('Stato non disponibile');
+        failures = 0;
+        const s = result.data;
+        panel.textContent = 'Preparate: ' + s.prepared + '/' + s.total + ' prenotazioni. Accettate da Google: ' + s.sent + '. In attesa: ' + s.pending + '. Errori: ' + s.failed + '.' +
+          (s.preview ? ' Solo anteprima: ' + s.preview + '.' : '') +
+          (Number.isInteger(s.quota_remaining) ? ' Ultima quota Google rilevata: ' + s.quota_remaining + '.' : '') +
+          (s.paused ? ' Preparazione sospesa: la modalità di invio è cambiata.' : '') +
+          (s.retry_after ? ' Ripresa automatica tra circa ' + Math.ceil(s.retry_after / 60) + ' minuti.' : '') +
+          (s.error ? ' ' + s.error : '') + (s.done && !s.error ? ' Elaborazione conclusa.' : '');
+        if (!s.done) setTimeout(poll, s.retry_after ? 15000 : 3000);
+      } catch (error) {
+        failures += 1;
+        panel.textContent = 'Aggiornamento dello stato non disponibile. La richiesta resta salvata; aggiorna la pagina per ricontrollare.';
+        if (failures < 5) setTimeout(poll, 10000);
+      } finally { clearTimeout(timeout); }
+    };
+    poll();
+  });
   const form = document.querySelector('[data-mi-communication-messages]');
   if (!form) return;
   const select = form.querySelector('[data-mi-communication-type]');

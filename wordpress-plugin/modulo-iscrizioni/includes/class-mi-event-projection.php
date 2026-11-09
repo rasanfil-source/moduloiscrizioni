@@ -1,5 +1,6 @@
 <?php
 defined( 'ABSPATH' ) || exit;
+require_once __DIR__ . '/class-mi-registration-timestamps.php';
 
 /** Crea dal registro MySQL la proiezione completa del foglio evento, ricostruibile in ogni momento. */
 final class MI_Event_Projection {
@@ -74,6 +75,7 @@ final class MI_Event_Projection {
 		$participant_rows = array();
 		$payment_rows = array();
 		$versions = array();
+		$show_timestamps = MI_Registration_Timestamps::enabled( $event_id );
 		foreach ( $registrations as $registration ) {
 			$id = (int) $registration['id'];
 			$registration_people = $people_by_registration[$id] ?? array();
@@ -103,6 +105,7 @@ final class MI_Event_Projection {
 				if ( isset( $attendance[(int) $person['id']] ) ) $fields['attendance'] = strtoupper( $attendance[(int) $person['id']] );
 				if ( class_exists( 'MI_Travel' ) ) $fields = array_merge( $fields, MI_Travel::projection_fields( $person['id'], $event_id ) );
 				$economic = $individual_by_id[(int) $person['id']] ?? array();
+				if ( $show_timestamps ) $fields = array_merge( $fields, MI_Registration_Timestamps::values( $registration, $person ) );
 				$participant_rows[] = array(
 					'id_partecipante' => (int) $person['id'], 'codice_ordine' => $registration['order_code'], 'numero_partecipante' => $number + 1,
 					'tipo_biglietto' => $person['ticket_type_code'], 'indice_biglietto' => (int) $person['ticket_index'],

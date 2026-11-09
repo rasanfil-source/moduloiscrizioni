@@ -294,12 +294,13 @@ function generaVistaOperativaEvento_(idEvento, campiForzati) {
   const eventi = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS));
   const evento = eventi.find(function (riga) { return String(riga.id_evento) === idEvento; });
   if (!evento) throw new Error('Evento non trovato.');
+  const cronologia=decodificaOggetto_(evento.schema_vista_json).registration_timestamps===true;
   const iscrizioni = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(function (riga) {
-    return String(riga.id_evento) === idEvento && ['ANNULLATO', 'SCADUTO', 'CANCELLED', 'EXPIRED'].indexOf(String(riga.stato).toUpperCase()) < 0;
+    return String(riga.id_evento) === idEvento && (cronologia?['SCADUTO','EXPIRED']:['ANNULLATO', 'SCADUTO', 'CANCELLED', 'EXPIRED']).indexOf(String(riga.stato).toUpperCase()) < 0;
   });
   const iscrizioniPerCodice = iscrizioni.reduce(function (indice, riga) { indice[String(riga.codice_ordine)] = riga; return indice; }, {});
   const partecipanti = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).filter(function (riga) {
-		return !!iscrizioniPerCodice[String(riga.codice_ordine)] && ['CANCELLED', 'EXPIRED'].indexOf(String(riga.stato_partecipante || 'ACTIVE').toUpperCase()) < 0;
+		return !!iscrizioniPerCodice[String(riga.codice_ordine)] && (cronologia?['EXPIRED']:['CANCELLED', 'EXPIRED']).indexOf(String(riga.stato_partecipante || 'ACTIVE').toUpperCase()) < 0;
   });
   const pagamenti = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS));
   const statoOperativo = indiceStatoOperativo_();
@@ -323,6 +324,7 @@ function generaVistaOperativaEvento_(idEvento, campiForzati) {
     const scelte=[...new Set(espliciti)].filter(key=>typeof key==='string'&&/^[a-z][a-z0-9_-]{0,79}$/.test(key));
     colonne.splice(0,colonne.length,...scelte.map(key=>Object.assign({key:key,label:key,gruppo:gruppoCampoVistaOperativa_(key),comprimibile:false},disponibili[key]||{})));
   }else applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, pagamenti);
+  aggiungiColonneCronologiaEvento_(colonne,evento);
   anteponiColonnaProgressiva_(colonne);
   const ordiniEconomici = new Set();
   const righe = partecipanti.map(function (partecipante, indicePartecipante) {
@@ -468,6 +470,16 @@ function anteponiColonnaProgressiva_(colonne) {
   const colonna = indice >= 0 ? colonne.splice(indice, 1)[0] : { key: 'participant_number', label: 'N.', gruppo: 'persona', comprimibile: false };
   colonna.label = 'N.';
   colonne.unshift(colonna);
+}
+
+/** Le date sono automatiche e restano in coda, prima del codice quando presente. */
+function aggiungiColonneCronologiaEvento_(colonne,evento) {
+  if(decodificaOggetto_(evento.schema_vista_json).registration_timestamps!==true)return;
+  const codici=colonne.filter(c=>c.key==='order_code');
+  const dati=colonne.filter(c=>!['order_code','registration_time','cancellation_time'].includes(c.key));
+  if(!dati.some(c=>c.key==='status'))dati.push({key:'status',label:'Stato',gruppo:'persona',comprimibile:false});
+  dati.push({key:'registration_time',label:'Iscrizione (data e ora)',gruppo:'persona',comprimibile:false},{key:'cancellation_time',label:'Cancellazione (data e ora)',gruppo:'persona',comprimibile:false});
+  colonne.splice(0,colonne.length,...dati,...codici);
 }
 
 function valoreCampoElenco_(field, event, registration, participant, data, payments, cache) {

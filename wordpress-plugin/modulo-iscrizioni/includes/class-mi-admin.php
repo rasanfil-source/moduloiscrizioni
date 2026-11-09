@@ -819,6 +819,7 @@ final class MI_Admin {
 		<?php foreach ( $rows as $row ) : ?><?php $preview_url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox', 'email_id' => (int) $row['id'] ), admin_url( 'edit.php' ) ); ?><tr><td><?php echo esc_html( $row['id'] ); ?></td><td><?php echo esc_html( $row['registration_id'] ); ?></td><td><?php echo esc_html( $row['recipient'] ); ?></td><td><?php echo esc_html( $row['template_type'] ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['attempts'] ); ?></td><td><?php echo esc_html( $row['last_error'] ?: 'Nessuno' ); ?></td><td><?php echo esc_html( $row['sent_at'] ?: 'Non inviata' ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $preview_url ); ?>">Apri dettaglio</a><?php if ( in_array( $row['status'], array( 'FAILED', 'TEST_FAILED' ), true ) ) : ?><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;margin-left:8px"><input type="hidden" name="action" value="mi_riaccoda_email"><input type="hidden" name="email_id" value="<?php echo esc_attr( $row['id'] ); ?>"><?php wp_nonce_field( 'mi_riaccoda_email' ); ?><button class="button-link">Riaccoda</button></form><?php endif; ?></td></tr><?php endforeach; ?>
 		</tbody></table></div>
 		<?php if ( $detail ) : ?><?php $payload = json_decode( (string) $detail['payload_json'], true ); $preview = is_array( $payload ) && isset( $payload['email_preview'] ) && is_array( $payload['email_preview'] ) ? $payload['email_preview'] : array(); ?>
+		<?php self::cancellation_diagnostics( $detail, is_array( $payload ) ? $payload : array() ); ?>
 		<hr><h2>Anteprima email conservata</h2>
 		<?php if ( current_user_can( 'manage_options' ) && in_array( $detail['status'], array( 'FAILED', 'TEST_FAILED' ), true ) ) : ?>
 		<details><summary>Rigenera una consegna dopo verifica del mancato invio</summary>
@@ -842,6 +843,26 @@ final class MI_Admin {
 		<?php endif; ?><?php endif; ?>
 		</div>
 		<?php
+	}
+
+	/** Mostra soltanto i dati gia conservati nella notifica; non modifica la partecipazione. */
+	private static function cancellation_diagnostics( array $detail, array $payload ) {
+		if ( ! in_array( $detail['template_type'] ?? '', array( 'PARTICIPANT_CANCEL_SECRETARIAT', 'PARTICIPANT_CANCEL_CONFIRMATION' ), true ) ) return;
+		$actor = is_string( $payload['cancellation_actor'] ?? null ) ? trim( $payload['cancellation_actor'] ) : '';
+		$labels = array(
+			'PARTICIPANT_LINK' => 'Conferma tramite collegamento personale di cancellazione',
+			'TRAVEL_LINK' => 'Rinuncia tramite la pagina degli spostamenti',
+			'TRAVEL_DEADLINE' => 'Annullamento automatico per mancata assegnazione del passaggio entro il termine',
+			'ADMIN' => 'Operazione amministrativa',
+		);
+		$order_code = is_string( $payload['order_code'] ?? null ) ? $payload['order_code'] : '';
+		$participant_id = absint( $payload['participant_id'] ?? 0 );
+		echo '<section class="card" style="max-width:900px"><h2>Origine dell’annullamento</h2><p>Dati registrati al momento dell’annullamento.</p><dl><dt><strong>Origine registrata</strong></dt><dd>';
+		if ( '' === $actor ) echo 'Non presente nei dati conservati.';
+		else echo ( isset( $labels[$actor] ) ? esc_html( $labels[$actor] ) . ' — ' : '' ) . '<code>' . esc_html( $actor ) . '</code>';
+		echo '</dd><dt><strong>Prenotazione</strong></dt><dd>' . ( $order_code ? esc_html( $order_code ) . ' — ' : '' ) . 'ID ' . esc_html( absint( $detail['registration_id'] ?? 0 ) ) . '</dd><dt><strong>ID partecipante</strong></dt><dd>' . ( $participant_id ? esc_html( $participant_id ) : 'Non presente nei dati conservati.' ) . '</dd></dl>';
+		if ( 'PARTICIPANT_LINK' === $actor ) echo '<p>Il valore indica che è stato confermato un collegamento personale valido. Da solo non identifica chi abbia premuto il pulsante di conferma.</p>';
+		echo '</section>';
 	}
 
 	public static function event_row_actions( $actions, $post ) {

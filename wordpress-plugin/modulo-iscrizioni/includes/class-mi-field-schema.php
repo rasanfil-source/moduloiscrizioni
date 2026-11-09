@@ -125,6 +125,7 @@ final class MI_Field_Schema {
 			'pricing' => strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ),
 		);
 		if ( class_exists( 'MI_Travel' ) && MI_Travel::config( $event_id )['enabled'] ) $schema['travel'] = true;
+		if ( '1' === get_post_meta( $event_id, '_mi_registration_timestamps', true ) ) $schema['registration_timestamps'] = true;
 		return $schema;
 	}
 

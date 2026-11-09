@@ -103,7 +103,7 @@ final class MI_Portal {
 	}
 
 	public static function secure_cancellation_headers() {
-		if ( ( empty( $_GET['mi_cancel_participant'] ) || empty( $_GET['mi_cancel_token'] ) ) && empty( $_GET['mi_status'] ) && empty( $_GET['mi_waitlist_offer'] ) ) return;
+		if ( ( empty( $_GET['mi_cancel_participant'] ) || empty( $_GET['mi_cancel_token'] ) ) && empty( $_GET['mi_cancel_demo'] ) && empty( $_GET['mi_status'] ) && empty( $_GET['mi_waitlist_offer'] ) ) return;
 		header( 'Referrer-Policy: no-referrer' );
 		header( 'X-Robots-Tag: noindex, nofollow, noarchive', true );
 	}
@@ -121,7 +121,7 @@ final class MI_Portal {
 	}
 
 	private static function is_public_response_view() {
-		foreach ( array( 'mi_status', 'mi_waitlist_offer', 'mi_cancel_participant', 'mi_cancel_token', 'mi_cancel_result' ) as $flag ) {
+		foreach ( array( 'mi_status', 'mi_waitlist_offer', 'mi_cancel_participant', 'mi_cancel_token', 'mi_cancel_result', 'mi_cancel_demo' ) as $flag ) {
 			if ( ! empty( $_GET[ $flag ] ) ) return true;
 		}
 		return false;
@@ -173,6 +173,7 @@ final class MI_Portal {
 
 	public static function handle_actions() {
 		if ( 'POST' !== strtoupper( $_SERVER['REQUEST_METHOD'] ?? '' ) ) return;
+		if ( ! empty( $_GET['mi_cancel_demo'] ) ) return;
 		$action = sanitize_key( wp_unslash( $_POST['mi_portal_action'] ?? '' ) );
 		if ( 'accedi_portale' === $action ) return self::gestisci_accesso_portale();
 		if ( 'cancel_participant_public' === $action ) {
@@ -714,22 +715,18 @@ final class MI_Portal {
 			if ( ! preg_match( '/^[a-f0-9]{32}$/D', $test_request ) ) return self::redirect_communication_preview( $token, 'Aggiorna la pagina prima di ripetere la prova.', true );
 			$draft['test_recipient'] = $test_recipient;
 			set_transient( 'mi_comm_' . get_current_user_id() . '_' . $token, $draft, 30 * MINUTE_IN_SECONDS );
-			$result = MI_Spedizione_Email::accoda_comunicazione_operativa( array(
+			$result = MI_Email_Jobs::enqueue( array(
 				'communication_id' => 'portal-test-' . get_current_user_id() . '-' . $token . '-' . hash( 'sha256', $test_request . '|' . strtolower( $test_recipient ) ),
 				'event_id' => $event_id, 'template_type' => $template, 'message' => $message,
 				'allow_operational' => false, 'test_only' => true, 'test_recipient' => $test_recipient,
 				'recipients' => array_slice( $recipients, 0, 1 ),
 			) );
 			if ( is_wp_error( $result ) ) return self::redirect_communication_preview( $token, $result->get_error_message(), true );
-			$test_id = absint( $result['outbox_id'] ?? 0 );
-			if ( ! $test_id ) return self::redirect_communication_preview( $token, 'Nessuna prova preparata. Aggiorna l’anteprima e riprova.', true );
-			MI_Spedizione_Email::spedisci_coda( $test_id );
-			$test_status = $wpdb->get_row( $wpdb->prepare( "SELECT status,last_error FROM {$wpdb->prefix}mi_email_outbox WHERE id=%d AND template_type='PORTAL_COMMUNICATION_TEST'", $test_id ), ARRAY_A );
-			if ( 'SENT' === ( $test_status['status'] ?? '' ) ) return self::redirect_communication_preview( $token, 'Email di prova inviata a ' . $test_recipient . '. Puoi ora confermare il messaggio agli iscritti.' );
-			$test_error = sanitize_text_field( $test_status['last_error'] ?? '' );
-			return self::redirect_communication_preview( $token, $test_error ? 'Prova non ancora consegnata: ' . $test_error : 'Prova in coda o già in invio. La conferma del messaggio rimane disponibile.', (bool) $test_error );
+			$draft['test_job'] = $result['job_id'];
+			set_transient( 'mi_comm_' . get_current_user_id() . '_' . $token, $draft, 30 * MINUTE_IN_SECONDS );
+			return self::redirect_communication_preview( $token, 'Prova salvata. Preparazione e invio proseguono in background verso ' . $test_recipient . '.' );
 		}
-		$result = MI_Spedizione_Email::accoda_comunicazione_operativa( array(
+		$result = MI_Email_Jobs::enqueue( array(
 			'communication_id' => 'portal-' . get_current_user_id() . '-' . $token,
 			'event_id' => $event_id, 'template_type' => $template, 'message' => $message,
 			'allow_operational' => true, 'recipients' => $recipients,
@@ -738,7 +735,8 @@ final class MI_Portal {
 		delete_transient( 'mi_comm_' . get_current_user_id() . '_' . $token );
 		$test_queued = 'PROVA' === ( $result['mode'] ?? '' ) && 'TEST_PENDING' === MI_Spedizione_Email::stato_nuova_email( array( 'attivo' => true ) );
 		$delivery_notice = $test_queued ? ' Invio previsto esclusivamente all’indirizzo configurato per i test, non ai destinatari reali.' : ( 'OPERATIVO' === ( $result['mode'] ?? '' ) ? ' Invio ai destinatari reali inserito in coda.' : ' Comunicazioni preparate senza invio.' );
-		return self::redirect_portal_result( 'Comunicazioni preparate: ' . absint( $result['count'] ?? 0 ) . '.' . $delivery_notice, false, 'communications' );
+		wp_safe_redirect( add_query_arg( array( 'mi_portal_view' => 'communications', 'mi_comm_job' => $result['job_id'], 'mi_portal_message' => 'Richiesta salvata per ' . absint( $result['count'] ) . ' prenotazioni. Preparazione e invio proseguono in background.' . $delivery_notice ), self::base_url() ) );
+		exit;
 	}
 
 	private static function handle_communication_type_action( $action ) {
@@ -1240,6 +1238,7 @@ final class MI_Portal {
 
 	public static function render() {
 		if ( ! is_ssl() ) return '<div class="mi-portal-notice mi-portal-error"><strong>Connessione sicura necessaria.</strong><p>Il portale non può essere usato finché HTTPS non è configurato correttamente.</p></div>';
+		if ( ! empty( $_GET['mi_cancel_demo'] ) ) return self::cancellation_demo_view();
 		if ( ! empty( $_GET['mi_status'] ) ) return self::public_status_view();
 		if ( ! empty( $_GET['mi_waitlist_offer'] ) ) return self::waitlist_offer_view();
 		if ( ! empty( $_GET['mi_cancel_participant'] ) && ! empty( $_GET['mi_cancel_token'] ) ) return self::cancellation_view();
@@ -1325,6 +1324,12 @@ final class MI_Portal {
 		ob_start(); ?>
 		<main class="mi-portal mi-public-status"><section class="mi-portal-login"><span class="mi-portal-eyebrow">Posto disponibile</span><h1>Vuoi accettare il posto?</h1><p><strong><?php echo esc_html( $offer['buyer_first_name'] . ' ' . $offer['buyer_last_name'] ); ?></strong>, i posti richiesti per <strong><?php echo esc_html( $offer['event_title'] ); ?></strong> sono riservati fino a <strong><?php echo esc_html( $offer['expires_label'] ); ?></strong>.</p><p>Scegli ora. Se l’evento prevede un pagamento, riceverai istruzioni e scadenza soltanto dopo l’accettazione.</p><form method="post"><input type="hidden" name="mi_portal_action" value="waitlist_offer_decision"><input type="hidden" name="registration_id" value="<?php echo esc_attr( $registration_id ); ?>"><input type="hidden" name="offer_token" value="<?php echo esc_attr( $token ); ?>"><?php wp_nonce_field( 'mi_waitlist_offer_' . $registration_id, 'mi_portal_nonce' ); ?><div class="mi-booking-detail__actions"><button class="mi-primary" type="submit" name="decision" value="ACCEPT">Accetta il posto</button><button class="mi-danger" type="submit" name="decision" value="DECLINE">Rinuncia</button></div></form></section></main>
 		<?php return ob_get_clean();
+	}
+
+	/** Percorso dimostrativo senza identificativi, token o scritture di prenotazioni. */
+	private static function cancellation_demo_view() {
+		$done = 'done' === sanitize_key( wp_unslash( $_GET['mi_cancel_demo'] ?? '' ) );
+		ob_start(); ?><section class="mi-portal mi-cancel-confirm"><span class="mi-portal-eyebrow">Prova dimostrativa</span><h1><?php echo $done ? 'Simulazione completata' : 'Annullare questa partecipazione?'; ?></h1><p><strong>Questa è una prova.</strong> Nessuna iscrizione reale verrà modificata.</p><?php if ( $done ) : ?><p>Hai completato la simulazione della cancellazione. Nell’email operativa ogni partecipante riceverà il proprio collegamento personale.</p><a href="<?php echo esc_url( MI_Modello_Email::cancellation_demo_url() ); ?>">Ripeti la prova</a><?php else : ?><p><strong>Persona di prova</strong><br>Evento dimostrativo</p><p>Nell’invio operativo la pagina chiederà di confermare l’annullamento della partecipazione selezionata.</p><form method="get" action="<?php echo esc_url( home_url( '/' ) ); ?>"><input type="hidden" name="mi_portal" value="1"><input type="hidden" name="mi_cancel_demo" value="done"><button class="mi-danger" type="submit">Simula annullamento</button></form><?php endif; ?></section><?php return ob_get_clean();
 	}
 
 	private static function cancellation_view() {
@@ -1416,24 +1421,22 @@ final class MI_Portal {
 
 	private static function accessible_events( $past = false ) {
 		$scope = MI_Access::event_ids();
-		$query = array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' );
+		if ( 'ALL' !== $scope && ! $scope ) return array();
+		$query = array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC', 'update_post_meta_cache' => true, 'update_post_term_cache' => false, 'no_found_rows' => true );
 		if ( 'ALL' !== $scope ) $query['post__in'] = $scope ?: array( 0 );
-		$empty = static function ( $key ) { return array( 'relation' => 'OR', array( 'key' => $key, 'compare' => 'NOT EXISTS' ), array( 'key' => $key, 'value' => '' ) ); };
-		$filled = static function ( $key ) { return array( 'key' => $key, 'value' => '', 'compare' => '!=' ); };
-		$today = wp_date( 'Y-m-d' ) . 'T00:00';
-		$date_before = static function ( $key ) use ( $filled, $today ) { return array( 'relation' => 'AND', $filled( $key ), array( 'key' => $key, 'value' => $today, 'compare' => '<' ) ); };
-		$date_current = array( 'relation' => 'OR', array( 'key' => '_mi_event_starts_at', 'value' => $today, 'compare' => '>=' ), array( 'relation' => 'AND', $empty( '_mi_event_starts_at' ), array( 'relation' => 'OR', $empty( '_mi_registration_closes_at' ), array( 'key' => '_mi_registration_closes_at', 'value' => $today, 'compare' => '>=' ) ) ) );
-		$date_past = array( 'relation' => 'OR', $date_before( '_mi_event_starts_at' ), array( 'relation' => 'AND', $empty( '_mi_event_starts_at' ), $date_before( '_mi_registration_closes_at' ) ) );
-		$query['meta_query'] = $past
-			? array( 'relation' => 'OR', $filled( '_mi_event_archived_at' ), array( 'relation' => 'AND', $empty( '_mi_event_cancelled_at' ), $date_past ) )
-			: array( 'relation' => 'AND', $empty( '_mi_event_archived_at' ), array( 'relation' => 'OR', $filled( '_mi_event_cancelled_at' ), $date_current ) );
-		return get_posts( $query );
+		// La scheda Messaggi esegue questa lettura prima di apparire. I confronti
+		// OR/NOT EXISTS su postmeta generavano numerosi JOIN sullo stesso evento.
+		// WordPress carica i metadati in blocco; la classificazione usa poi la cache.
+		return array_values( array_filter( get_posts( $query ), static function ( $event ) use ( $past ) {
+			return (bool) $past === self::communication_event_is_past( $event->ID );
+		} ) );
 	}
 
 	private static function communications_view() {
 		$token = sanitize_key( $_GET['mi_comm_preview'] ?? '' );
 		$draft = $token ? get_transient( 'mi_comm_' . get_current_user_id() . '_' . $token ) : false;
 		if ( is_array( $draft ) && MI_Access::can_access_event( $draft['event_id'] ) ) {
+			if ( ! empty( $draft['test_job'] ) ) MI_Email_Jobs::render_progress( $draft['test_job'] );
 			$test_recipient = $draft['test_recipient'] ?? MI_Spedizione_Email::destinatario_evento( $draft['event_id'] );
 			echo '<section><h2>Conferma comunicazione</h2><h3>' . esc_html( get_the_title( $draft['event_id'] ) ) . '</h3><p>' . esc_html( $draft['count'] ) . ' email per le prenotazioni selezionate.</p>';
 			echo '<p><strong>' . ( 'OPERATIVO' === $draft['mode'] ? 'Invio ai destinatari reali' : ( 'PROVA' === $draft['mode'] ? 'Invio esclusivamente alla casella di prova' : 'Solo preparazione, senza invio' ) ) . '</strong></p>';
@@ -1451,6 +1454,7 @@ final class MI_Portal {
 			echo '<button class="mi-primary" type="submit">' . esc_html( $send_label ) . '</button></form><a href="' . esc_url( add_query_arg( array( 'mi_portal_view' => 'communications', 'mi_comm_edit' => $token ), self::base_url() ) ) . '">Torna alla composizione</a></section>';
 			return;
 		}
+		MI_Email_Jobs::render_progress( sanitize_key( $_GET['mi_comm_job'] ?? get_option( 'mi_email_last_job_' . get_current_user_id(), '' ) ) );
 		$edit_token = sanitize_key( $_GET['mi_comm_edit'] ?? '' );
 		$edit = $edit_token ? get_transient( 'mi_comm_' . get_current_user_id() . '_' . $edit_token ) : false;
 		if ( ! is_array( $edit ) || ! MI_Access::can_access_event( $edit['event_id'] ) ) $edit = array();

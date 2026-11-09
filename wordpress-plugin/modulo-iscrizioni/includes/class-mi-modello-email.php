@@ -391,7 +391,7 @@ final class MI_Modello_Email {
 	public static function default_communication_message( $template_type ) {
 		$defaults = array(
 			'PRE_DEPARTURE_REMINDER' => 'Ti ricordiamo che l’evento si avvicina. Leggi con attenzione le indicazioni aggiornate qui sotto e contatta l’organizzazione se hai domande.',
-			'PARTICIPATION_CANCELLATION_REMINDER' => 'Se sai già di non poter partecipare, ti invitiamo ad annullare la partecipazione tramite il collegamento personale qui sotto. Grazie fin d’ora se vorrai avvisarci in questo modo: potremo offrire il posto a chi è in lista d’attesa.',
+			'PARTICIPATION_CANCELLATION_REMINDER' => "i posti disponibili per l’iniziativa stanno per esaurirsi.\n\nSe qualcuno non potrà partecipare, chiediamo cortesemente di **annullare la relativa iscrizione** tramite il **collegamento personale riportato qui sotto**. Potremo così offrire il posto a chi è in lista d’attesa.\n\nGrazie per la collaborazione.",
 			'BALANCE_REMINDER' => 'Ti ricordiamo che per la tua iscrizione a {{evento.titolo}} resta da versare il saldo di {{pagamento.saldo}}. Ti chiediamo di effettuare il pagamento entro {{pagamento.scadenza}}, indicando questa causale: {{pagamento.causale}}. Per consultare il riepilogo e le modalità di pagamento, usa il collegamento personale qui sotto. Grazie per la collaborazione.',
 			'DEPOSIT_REMINDER' => 'Ti ricordiamo che per la tua iscrizione a {{evento.titolo}} resta da versare una caparra di {{pagamento.importo_dovuto}}. Ti chiediamo di effettuare il pagamento entro {{pagamento.scadenza}}, indicando questa causale: {{pagamento.causale}}. Grazie per la collaborazione.',
 		);
@@ -404,7 +404,11 @@ final class MI_Modello_Email {
 		return 'Testo iniziale modificabile. Personalizza il messaggio con orari, luogo e indicazioni utili.';
 	}
 
-	public static function crea_istantanea_operativa( $event_id, $values, $template_type, $message, $status_url, $participant_management = array(), $live_participant_links = false ) {
+	public static function cancellation_demo_url() {
+		return add_query_arg( array( 'mi_portal' => '1', 'mi_cancel_demo' => '1' ), home_url( '/' ) );
+	}
+
+	public static function crea_istantanea_operativa( $event_id, $values, $template_type, $message, $status_url, $participant_management = array(), $live_participant_links = false, $demo_participant_links = false ) {
 		$snapshot = self::crea_istantanea( $event_id, $values );
 		// Le comunicazioni esplicite sono indipendenti dall'abilitazione della conferma automatica.
 		$snapshot['attivo'] = true;
@@ -414,14 +418,27 @@ final class MI_Modello_Email {
 		$event_title = sanitize_text_field( (string) ( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) ) );
 		$buyer_name = sanitize_text_field( (string) ( $values['{{sottoscrittore.nome_completo}}'] ?? '' ) );
 		if ( 'PARTICIPATION_CANCELLATION_REMINDER' === $template_type ) {
+			$snapshot['cancellation_before_event'] = true;
+			$demo = $demo_participant_links && ! $live_participant_links;
+			if ( $demo ) {
+				$participant_management = array( array( 'name' => 'Persona di prova', 'url' => self::cancellation_demo_url() ) );
+				$snapshot['cancellation_demo'] = true;
+			}
 			$snapshot['oggetto'] = 'Un gentile promemoria per l’evento — ' . $event_title;
 			$snapshot['titolo'] = 'Un promemoria per la tua partecipazione';
 			$snapshot['preheader'] = 'Se i tuoi programmi sono cambiati, puoi aggiornare la tua partecipazione.';
 			$clean_message = trim( sanitize_textarea_field( (string) $message ) ) ?: self::default_communication_message( $template_type );
-			if ( ! $live_participant_links ) $clean_message = str_replace( 'tramite il collegamento personale qui sotto', 'tramite il collegamento personale che sarà incluso nell’email operativa', $clean_message );
-			$body = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ti scriviamo per sapere se potrai partecipare a <strong>' . esc_html( $event_title ) . '</strong>.</p><div>' . self::formatta_comunicazione( $clean_message ) . '</div>';
+			if ( ! $live_participant_links && ! $demo ) $clean_message = str_replace( 'tramite il collegamento personale qui sotto', 'tramite il collegamento personale che sarà incluso nell’email operativa', $clean_message );
+			$recipient_name = $buyer_name;
+			if ( $live_participant_links ) {
+				$names = array_values( array_filter( array_map( static function ( $item ) { return sanitize_text_field( (string) ( $item['name'] ?? '' ) ); }, (array) $participant_management ) ) );
+				if ( $names ) $recipient_name = count( $names ) > 1 ? implode( ', ', array_slice( $names, 0, -1 ) ) . ' e ' . end( $names ) : $names[0];
+			}
+			$greeting = 'Buongiorno' . ( $recipient_name ? ' ' . $recipient_name : '' ) . ',';
+			$text_style = 'font-family:Arial,Helvetica,sans-serif;font-size:17px;line-height:1.68;';
+			$body = '<p style="' . $text_style . 'margin:0 0 16px;">' . esc_html( $greeting ) . '</p><div style="' . $text_style . '">' . self::formatta_comunicazione( $clean_message ) . '</div>';
 			$snapshot['html'] = $body;
-			$snapshot['testo'] = "Gentile {$buyer_name},\n\nti scriviamo per sapere se potrai partecipare a {$event_title}.\n\n{$clean_message}";
+			$snapshot['testo'] = $greeting . "\n\n" . $clean_message;
 			$snapshot['gestione_partecipanti'] = array_values( array_filter( array_map( static function ( $item ) {
 				$name = sanitize_text_field( (string) ( $item['name'] ?? '' ) );
 				$url = esc_url_raw( (string) ( $item['url'] ?? '' ) );
@@ -675,11 +692,13 @@ final class MI_Modello_Email {
 				$management_html .= '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:7px 0;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:8px;"><a href="' . esc_url( $item['url'] ?? '' ) . '" style="display:inline-block;padding:9px 14px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.3;color:' . esc_attr( $secondary_text ) . ';font-weight:700;text-decoration:none;border-radius:8px;">' . esc_html( $management_label ) . '</a></td></tr></table>';
 			}
 			$management_html .= '</td></tr></table>';
+			if ( ! empty( $istantanea['cancellation_demo'] ) ) $management_html .= '<p style="font-size:14px;line-height:1.5;">Collegamento dimostrativo: puoi provare la conferma di cancellazione. Nessuna iscrizione reale verrà modificata.</p>';
 		}
 		$status_html = ! empty( $istantanea['status_url'] ) ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . esc_url( $istantanea['status_url'] ) . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">Controlla stato e saldo</a></td></tr></table>' : '';
 		$action_url = ! empty( $istantanea['action_url'] ) ? esc_url( $istantanea['action_url'] ) : '';
 		$action_label = sanitize_text_field( (string) ( $istantanea['action_label'] ?? 'Apri' ) );
 		$action_html = $action_url ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . $action_url . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">' . esc_html( $action_label ) . '</a></td></tr></table>' : '';
+		$buttons_html = ! empty( $istantanea['cancellation_before_event'] ) ? $action_html . $status_html . $management_html . $cta : $action_html . $cta . $status_html . $management_html;
 		$footer = nl2br( self::testo_identita_html( self::chiusura_email( $istantanea ), $identity ) );
 		$code = (string) $codice_html;
 
@@ -693,9 +712,9 @@ final class MI_Modello_Email {
 			. '<div style="font-size:24px;font-weight:700;line-height:1.3;margin-top:5px;">' . esc_html( $communication_title ?: 'Comunicazione iscrizione' ) . '</div>'
 			. ( $activity_name ? '<div style="font-size:13px;line-height:1.4;margin-top:5px;opacity:0.9;">' . esc_html( $activity_name ) . '</div>' : '' )
 			. '</td></tr></table></td></tr><tr><td style="padding:26px 22px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:17px;line-height:1.68;">'
-			. $body . $code . $action_html . $cta . $status_html . $management_html
-			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#eef2ff" style="width:100%;margin-top:20px;background:#eef2ff;border-radius:14px;"><tr><td style="padding:16px 20px;font-family:Arial,Helvetica,sans-serif;color:#333333;"><div style="font-size:15px;font-weight:700;margin-bottom:8px;">Assistenza</div><div style="font-size:15px;line-height:1.7;">' . $assistance . '</div></td></tr></table>'
+			. $body . $code . $buttons_html
 			. '<div style="font-family:Arial,Helvetica,sans-serif;color:' . esc_attr( $secondary ) . ';font-size:14px;font-style:italic;font-weight:700;margin-top:18px;text-align:right;">' . $footer . '</div>'
+			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#eef2ff" style="width:100%;margin-top:20px;background:#eef2ff;border-radius:14px;"><tr><td style="padding:16px 20px;font-family:Arial,Helvetica,sans-serif;color:#333333;"><div style="font-size:15px;font-weight:700;margin-bottom:8px;">Assistenza</div><div style="font-size:15px;line-height:1.7;">' . $assistance . '</div></td></tr></table>'
 			. '</td></tr></table>'
 			. ( $event_url ? '<div style="font-family:Arial,Helvetica,sans-serif;color:#666666;font-size:12px;line-height:1.4;margin-top:12px;text-align:center;">Se il pulsante non funziona, apri: <a href="' . $event_url . '" style="color:' . esc_attr( $secondary ) . ';">' . esc_html( $event_url ) . '</a></div>' : '' )
 			. '<div style="font-family:Arial,Helvetica,sans-serif;color:#6B7280;font-size:12px;line-height:1.6;margin-top:16px;text-align:center;">' . self::testo_identita_html( $identity['nome'] ?? '', $identity ) . ( ! empty( $identity['dettaglio'] ) ? '<br>' . esc_html( $identity['dettaglio'] ) : '' ) . ( ! empty( $identity['contatto'] ) ? '<br><a href="mailto:' . esc_attr( $identity['contatto'] ) . '" style="color:' . esc_attr( $primary ) . ';">' . esc_html( $identity['contatto'] ) . '</a>' : '' ) . '</div>'
@@ -742,12 +761,14 @@ final class MI_Modello_Email {
 			sanitize_text_field( (string) ( $event['titolo'] ?? '' ) ),
 			sanitize_text_field( (string) ( $identity['nome_attivita'] ?? '' ) ),
 			sanitize_textarea_field( (string) ( $istantanea['testo'] ?? '' ) ),
-			! empty( $event['url'] ) ? 'Pagina evento: ' . esc_url_raw( $event['url'] ) : '',
+			empty( $istantanea['cancellation_before_event'] ) && ! empty( $event['url'] ) ? 'Pagina evento: ' . esc_url_raw( $event['url'] ) : '',
 			$management_lines ? implode( "\n", $management_lines ) : '',
+			$management_lines && ! empty( $istantanea['cancellation_demo'] ) ? 'Collegamento dimostrativo: nessuna iscrizione reale verrà modificata.' : '',
+			! empty( $istantanea['cancellation_before_event'] ) && ! empty( $event['url'] ) ? 'Pagina evento: ' . esc_url_raw( $event['url'] ) : '',
 			! empty( $istantanea['status_url'] ) ? 'Controlla stato e saldo: ' . esc_url_raw( $istantanea['status_url'] ) : '',
 			! empty( $istantanea['action_url'] ) ? sanitize_text_field( (string) ( $istantanea['action_label'] ?? 'Apri' ) ) . ': ' . esc_url_raw( $istantanea['action_url'] ) : '',
-			! empty( $email_identity['indirizzo_risposte'] ) ? 'Assistenza: ' . sanitize_email( $email_identity['indirizzo_risposte'] ) : 'Assistenza: rispondi a questa email.',
 			self::chiusura_email( $istantanea ),
+			! empty( $email_identity['indirizzo_risposte'] ) ? 'Assistenza: ' . sanitize_email( $email_identity['indirizzo_risposte'] ) : 'Assistenza: rispondi a questa email.',
 		) );
 		return implode( "\n\n", $parts );
 	}
@@ -778,10 +799,14 @@ final class MI_Modello_Email {
 		$html_originale = (string) ( $istantanea['html'] ?? '' );
 		$html_corrotto = false !== strpos( $html_originale, '**' );
 		$html_ricco = (bool) preg_match( '/<\s*[a-z][^>]*>/i', $html_originale );
-		if ( $html_corrotto || ( ! $html_ricco && ( $markup || $testo !== $originale ) ) ) {
+		if ( ! $html_ricco && ( $html_corrotto || $markup || $testo !== $originale ) ) {
 			$istantanea['html'] = self::testo_email_in_html( $testo );
 		} else {
-			$istantanea['html'] = self::uniforma_grafica_corpo( self::sanitizza_html_email( $html_originale ) );
+			// Un marcatore spaiato non rende invalido il resto dell'HTML. Il testo
+			// semplice puo essere gia stato ripulito: ricostruirlo perderebbe i grassetti.
+			$html = self::sanitizza_html_email( $html_originale );
+			if ( $html_corrotto ) $html = self::ripara_markdown_html( $html );
+			$istantanea['html'] = self::uniforma_grafica_corpo( $html );
 		}
 		$istantanea['testo'] = self::rimuovi_markdown_testo( $testo );
 		// Nasconde solo la riga che contiene esattamente il codice ordine interno.
@@ -811,7 +836,8 @@ final class MI_Modello_Email {
 		$html = (string) ( $settings['html'] ?? '' );
 		$html_ricco = (bool) preg_match( '/<\s*[a-z][^>]*>/i', $html );
 		$html_corrotto = false !== strpos( $html, '**' );
-		if ( $html_corrotto || ( ! $html_ricco && ( $markup || $testo !== $originale ) ) ) $settings['html'] = self::testo_email_in_html( $testo );
+		if ( ! $html_ricco && ( $html_corrotto || $markup || $testo !== $originale ) ) $settings['html'] = self::testo_email_in_html( $testo );
+		elseif ( $html_corrotto ) $settings['html'] = self::ripara_markdown_html( self::sanitizza_html_email( $html ) );
 		$settings['text'] = $testo;
 		return $settings;
 	}
@@ -843,6 +869,19 @@ final class MI_Modello_Email {
 	private static function rimuovi_markdown_testo( $testo ) {
 		$testo = (string) preg_replace( '/\*\*([^*\r\n]+)\*\*/u', '$1', (string) $testo );
 		return (string) preg_replace( '/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/u', '$1: $2', $testo );
+	}
+
+	/** Converte solo i nodi di testo: tag, attributi e formattazione esistenti restano intatti. */
+	private static function ripara_markdown_html( $html ) {
+		$parts = preg_split( '/(<(?:"[^"]*"|\'[^\']*\'|[^\'">])*>)/u', (string) $html, -1, PREG_SPLIT_DELIM_CAPTURE );
+		if ( false === $parts ) return (string) $html;
+		foreach ( $parts as &$part ) {
+			if ( '' === $part || '<' === $part[0] ) continue;
+			$part = (string) preg_replace( '/\*\*([^*\r\n]+)\*\*/u', '<strong>$1</strong>', $part );
+			$part = (string) preg_replace( '/(?<!\*)\*([^*\r\n]+)\*(?!\*)/u', '<em>$1</em>', $part );
+		}
+		unset( $part );
+		return implode( '', $parts );
 	}
 
 	private static function evidenzia_titolo_evento( $html, $title ) {

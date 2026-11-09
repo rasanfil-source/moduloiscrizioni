@@ -63,7 +63,7 @@ final class MI_Workspace_Client {
 		// lo stesso foglio grazie all'idempotenza dell'operazione remota.
 		$timeout = 'PROIETTA_EVENTO' === $action ? 240 : ( 'ELIMINA_DATI_EVENTO' === $action ? 110 : ( 'LEGGI_MODIFICHE_FOGLIO' === $action ? 45 : ( 'INVIA_EMAIL_PROVA' === $action ? 30 : 15 ) ) );
 		if ( 'CONFERMA_MODIFICHE_FOGLIO' === $action ) $timeout = 180;
-		if ( in_array( $action, array( 'INVIA_EMAIL_PROVA', 'INVIA_EMAIL_CONFERMA', 'INVIA_EMAIL_CONFERMA_MITTENTE' ), true ) ) $timeout = 60;
+		if ( in_array( $action, array( 'INVIA_EMAIL_PROVA', 'INVIA_EMAIL_CONFERMA', 'INVIA_EMAIL_CONFERMA_MITTENTE', 'INVIA_EMAIL_LOTTO' ), true ) ) $timeout = 60;
 		if ( in_array( $action, array( 'VERIFICA_FOGLI_EVENTO', 'ORGANIZZA_FOGLI_EVENTO' ), true ) ) $timeout = 60;
 		// Le consegne includono la revisione e Google respinge le scritture successive alla rimozione.
 		// Per email ed eliminazioni il lock resta attivo fino al completamento dell'operazione esterna.

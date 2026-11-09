@@ -162,3 +162,22 @@ function inviaCodaEmailDiTest() {
     (remaining ? ' Restano ' + remaining + ' email PREVIEW: ripeti il comando quando la quota è disponibile.' : ' Nessuna email PREVIEW rimanente.') +
     (uncertain ? ' Sono presenti ' + uncertain + ' righe TEST_IN_CORSO: verifica la consegna prima di modificarne lo stato.' : ''));
 }
+
+
+/** Dieci consegne distinte per busta; il registro durevole protegge la ripetizione dell'intero lotto. */
+function inviaEmailLottoDaWordPress_(payload) {
+  const messages = payload && payload.messages;
+  if (!Array.isArray(messages) || messages.length < 1 || messages.length > 10 ||
+      messages.some(p => !p || !/^[a-f0-9]{64}$/.test(String(p.delivery_key || ''))) ||
+      new Set(messages.map(p => p.delivery_key)).size !== messages.length) return {ok:false,error:'INVALID_EMAIL_PAYLOAD'};
+  const results = {}, started = Date.now();
+  let stop = '';
+  for (const message of messages) {
+    const key = message.delivery_key;
+    if (stop || Date.now() - started >= 20000) { results[key] = {ok:false,error:stop || 'EMAIL_DEFERRED'}; continue; }
+    try { results[key] = inviaEmailConfermaDaWordPress_(message); }
+    catch (error) { console.error('EMAIL_BATCH_ITEM_FAILED', String(error)); results[key] = {ok:false,error:'EMAIL_DELIVERY_UNCERTAIN'}; }
+    if (['EMAIL_QUOTA_EXCEEDED','EMAIL_BUSY','WORKSPACE_BUSY'].includes(results[key].error)) stop = results[key].error;
+  }
+  return {ok:true,channel:'GOOGLE_WORKSPACE',results:results,quota_remaining:MailApp.getRemainingDailyQuota()};
+}

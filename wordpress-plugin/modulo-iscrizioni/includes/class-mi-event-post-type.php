@@ -16,12 +16,18 @@ final class MI_Event_Post_Type {
 	public static function boot() {
 		add_action( 'init', array( __CLASS__, 'register_types' ) );
 		add_action( 'add_meta_boxes', array( __CLASS__, 'add_meta_boxes' ) );
+		add_action( 'save_post_' . self::EVENT_TYPE, array( __CLASS__, 'initialize_registration_timestamps' ), 5, 3 );
 		add_action( 'save_post_' . self::EVENT_TYPE, array( __CLASS__, 'save_event' ), 10, 2 );
 		add_action( 'save_post_' . self::EVENT_TYPE, array( __CLASS__, 'publish_revision' ), 30, 2 );
 		add_action( 'save_post_' . self::ACTIVITY_TYPE, array( __CLASS__, 'save_activity' ), 10, 2 );
 		add_filter( 'manage_' . self::EVENT_TYPE . '_posts_columns', array( __CLASS__, 'event_columns' ) );
 		add_action( 'manage_' . self::EVENT_TYPE . '_posts_custom_column', array( __CLASS__, 'render_event_column' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'admin_assets' ) );
+	}
+
+	/** Solo i nuovi eventi adottano le colonne: il salvataggio di un evento esistente non le attiva. */
+	public static function initialize_registration_timestamps( $post_id, $post, $update ) {
+		if ( ! $update && self::EVENT_TYPE === $post->post_type ) add_post_meta( $post_id, '_mi_registration_timestamps', '1', true );
 	}
 
 	public static function register_types() {

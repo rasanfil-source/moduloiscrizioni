@@ -4,7 +4,7 @@ if(!function_exists('wp_timezone')){function wp_timezone(){return new DateTimeZo
 define('ABSPATH', __DIR__);
 define('ARRAY_A', 'ARRAY_A');
 function wp_json_encode($value) { return json_encode($value); }
-function get_post_meta($id, $key, $single=true) { return ['_mi_options'=>[], '_mi_custom_participant_fields'=>[], '_mi_economic_mode'=>'DEPOSIT_BALANCE'][$key] ?? ''; }
+function get_post_meta($id, $key, $single=true) { if($key==='_mi_registration_timestamps')return $GLOBALS['test_registration_timestamps']??''; return ['_mi_options'=>[], '_mi_custom_participant_fields'=>[], '_mi_economic_mode'=>'DEPOSIT_BALANCE'][$key] ?? ''; }
 function get_the_title($id) { return 'Evento sintetico'; }
 function wp_date($format) { return gmdate($format); }
 function remove_accents($value) { return $value; }

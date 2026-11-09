@@ -27,6 +27,9 @@ function get_option($key, $default = false) {
     ][$key] ?? $default;
 }
 function wp_next_scheduled(...$args) { return false; }
+function sanitize_key($v){return strtolower($v);}
+function add_action(...$args){}
+function wp_unschedule_event(...$args){}
 function wp_schedule_single_event(...$args) { $GLOBALS['scheduled']++; return true; }
 class MI_Event_Deletion {
     static $blocked = true;
@@ -42,7 +45,13 @@ class MI_Modello_Email {
 }
 class MI_Workspace_Client {
     static $recipients = [];
-    static function request($action, $payload) { self::$recipients[] = $payload['destinatario']; return ['ok' => true, 'channel' => 'GOOGLE_WORKSPACE']; }
+    static $calls=0;
+    static function request($action, $payload) {
+        if($action!=='INVIA_EMAIL_LOTTO')throw new Exception('Expected batch transport');
+        self::$calls++;$results=[];
+        foreach($payload['messages'] as $p){self::$recipients[]=$p['destinatario'];$results[$p['delivery_key']]=['ok'=>true,'channel'=>'GOOGLE_WORKSPACE'];}
+        return ['ok'=>true,'channel'=>'GOOGLE_WORKSPACE','results'=>$results];
+    }
 }
 class AuditQueueDatabase {
     public $prefix = 'wp_', $last_error = '', $rows = [];
@@ -68,7 +77,7 @@ class AuditQueueDatabase {
         $normal=str_contains($sql,"status IN ('PENDING')");$test=str_contains($sql,"status IN ('TEST_PENDING')");
         return array_slice(array_values(array_filter($this->rows, fn($r) => $r['id']>$after && (!$target || $target===$r['id']) && $r['attempts']<5 && ($target ? ($r['status']==='TEST_PENDING' && $r['template_type']==='PORTAL_COMMUNICATION_TEST') : (($normal && $r['status']==='PENDING') || ($test && $r['status']==='TEST_PENDING') || ($r['status']==='TEST_PENDING' && $r['template_type']==='PORTAL_COMMUNICATION_TEST'))))),0,10);
     }
-    function get_var($sql) { return count(array_filter($this->rows, fn($r) => in_array($r['status'], ['PENDING', 'TEST_PENDING']) && $r['attempts'] < 5)); }
+    function get_var($sql) { if(str_contains($sql,'GET_LOCK')||str_contains($sql,'RELEASE_LOCK'))return 1; if(str_starts_with($sql,'SELECT id FROM')){foreach($this->rows as $r)if($r['status']==='TEST_PENDING'&&$r['template_type']==='PORTAL_COMMUNICATION_TEST'&&$r['attempts']<5)return $r['id'];return 0;} return count(array_filter($this->rows, fn($r) => in_array($r['status'], ['PENDING', 'TEST_PENDING']) && $r['attempts'] < 5)); }
     function update($table, $data, $where, ...$args) { $this->rows[$where['id']] = array_merge($this->rows[$where['id']], $data); return 1; }
 }
 require __DIR__ . '/../modulo-iscrizioni/includes/class-mi-spedizione-email.php';

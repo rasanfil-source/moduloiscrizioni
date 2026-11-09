@@ -23,6 +23,12 @@
   }
   document.addEventListener('click',e=>document.querySelectorAll('[data-order-menu][open]').forEach(menu=>{if(!menu.contains(e.target))menu.open=false;}));
   // Minimal OOXML workbook, packaged locally as a standard uncompressed ZIP.
+  function reportColumnsWithTimestamps(columns,enabled){
+    if(!enabled)return columns;
+    const tail=columns.filter(([key])=>key==='code'||key==='order_code');
+    const data=columns.filter(([key])=>!['code','order_code','registration_time','cancellation_time'].includes(key));
+    return [...data,['registration_time','Iscrizione (data e ora)'],['cancellation_time','Cancellazione (data e ora)'],...tail];
+  }
   // Il testo viene impostato esplicitamente: i numeri conservano gli zeri iniziali e il foglio non interpreta il valore come formula.
   function reportWorkbook(rows) {
     if(!rows.length||rows.length>1048576||rows.reduce((n,r)=>Math.max(n,r.length),0)>16384)throw new Error('Il rapporto supera i limiti Excel.');
@@ -579,7 +585,7 @@
         };
         content.querySelector('[data-export]').onclick=async()=>{
           try { exportRows=await readAll();
-          const individual=listContext.view==='people',selected=individual?columns.filter(([key])=>content.querySelector('[data-export-column="'+key+'"]').checked):[['code','Prenotazione'],['name','Persone'],['status','Stato'],['paid','Versato netto (EUR)'],['balance','Residuo (EUR)']];
+          const individual=listContext.view==='people',selected=reportColumnsWithTimestamps(individual?columns.filter(([key])=>content.querySelector('[data-export-column="'+key+'"]').checked):[['code','Prenotazione'],['name','Persone'],['status','Stato'],['paid','Versato netto (EUR)'],['balance','Residuo (EUR)']],features.registration_timestamps);
           if(!selected.length){say('Seleziona almeno una colonna.');return;}
           const rows=[selected.map(([key,label])=>reportLabel(key,label)),...exportRows.map(row=>selected.map(([key])=>key==='name'?row.name:key==='future_events'?(row.future_events||'Non rilevato'):key.startsWith('field:')?(row.fields?.[key.slice(6)]??''):key==='attendance'?({PRESENT:'Presente',ABSENT:'Assente',UNRECORDED:'Non rilevata'}[row.attendance?.state||row.attendance]||'Non rilevata'):key==='status'?stateLabel(row):key==='offer_expires_at'?deadlineLabel(row[key]):['paid','balance'].includes(key)?Number(row[key])/100:Array.isArray(row[key])?row[key].join(', '):row[key]))];
           const url=URL.createObjectURL(reportWorkbook(rows));const link=document.createElement('a');link.href=url;link.download='evento-'+event+'-'+(individual?'partecipanti':'prenotazioni')+'.xlsx';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);say('Esportati '+exportRows.length+' risultati filtrati.');

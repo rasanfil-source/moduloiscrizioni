@@ -26,6 +26,7 @@ final class MI_Event_Duplicator {
 			if ( is_wp_error( $target ) ) return $target;
 			$excluded = array( '_mi_projection_version', '_mi_activity_migration_log', '_mi_sheet_ready', '_mi_sheet_organization', '_mi_duplicate_request', '_mi_balance_url', '_mi_registration_url', '_mi_registration_page_id', '_mi_workspace_draft_id', '_mi_operational_sheet_id', '_mi_operational_sheet_url', '_mi_outputs_prepared_at', '_mi_sheet_archived_at', '_mi_sheet_missing', '_mi_event_archived_at', '_mi_event_cancelled_at', '_mi_event_cancellation_reason', '_mi_event_cancellation_job', '_mi_published_revision_id', '_mi_needs_republish', '_mi_privacy_consent_id', '_mi_marketing_consent_id' );
 			foreach ( get_post_meta( $source_id ) as $key => $values ) {
+				if ( '_mi_registration_timestamps' === $key ) continue;
 				if ( ( 0 !== strpos( $key, '_mi_' ) && '_thumbnail_id' !== $key ) || in_array( $key, $excluded, true ) || '_mi_public_slug' === $key || 0 === strpos( $key, '_mi_publication_' ) || 0 === strpos( $key, '_mi_workspace_event_' ) ) continue;
 				foreach ( $values as $value ) {
 					if ( ! add_post_meta( $target, $key, wp_slash( maybe_unserialize( $value ) ) ) ) throw new RuntimeException( 'meta' );

@@ -6,6 +6,8 @@ function current_user_can($cap){return $GLOBALS['caps'][$cap]??false;}
 function is_user_logged_in(){return $GLOBALS['logged'];}
 function is_ssl(){return true;}
 function wp_logout_url($url){return home_url('logout');}
+class MI_Email_Jobs {static function render_progress($id){}}
+function get_current_user_id(){return 7;}
 class MI_Portal_Management {static function url($id=0){return home_url('?mi_portal_view=management');}}
 function absint($v){return abs((int)$v);}
 function wp_unslash($v){return $v;}
@@ -28,7 +30,11 @@ function wp_nonce_url($url,$action){return add_query_arg('_wpnonce','fixture',$u
 function selected($a,$b,$echo=true){$s=(string)$a===(string)$b?'selected="selected"':'';if($echo)echo $s;return $s;}
 function number_format_i18n($v,$n=0){return number_format($v,$n,',','.');}
 function wp_timezone(){return new DateTimeZone('Europe/Rome');}
-function wp_date($f,$t,$tz){return (new DateTimeImmutable('@'.$t))->setTimezone($tz)->format($f);}
+function wp_date($f,$t=null,$tz=null){return (new DateTimeImmutable('@'.($t??time())))->setTimezone($tz??wp_timezone())->format($f);}
+function wp_create_nonce($a){return 'fixture';}
+function wp_nonce_field(...$a){}
+function esc_textarea($v){return esc_html($v);}
+class MI_Modello_Email {static function default_communication_message($v){return 'Messaggio di prova';}static function default_communication_help($v){return 'Testo suggerito';}}
 function paginate_links($args){return '<a class="page-numbers" href="'.esc_url(str_replace('%#%','2',$args['base'])).'">2</a>';}
 class MI_Access {static $scope=[42];static $suspended=false;static function event_ids(){return self::$scope;}static function can_access_event($id){return self::$scope==='ALL'||in_array($id,self::$scope,true);}static function is_suspended(){return self::$suspended;}}
 class MI_Event_Post_Type {const EVENT_TYPE='mi_event';}

@@ -15,6 +15,7 @@ final class MI_Activator {
 		wp_unschedule_hook( 'mi_sync_workspace_pending' );
 		wp_unschedule_hook( 'mi_sync_workspace_registration' );
 		wp_unschedule_hook( 'mi_spedisci_email_in_coda' );
+		wp_unschedule_hook( 'mi_prepara_comunicazioni' );
 		wp_unschedule_hook( 'mi_expire_registrations' );
 		wp_unschedule_hook( 'mi_pulisci_bozze_cestinate' );
 		wp_unschedule_hook( 'mi_organizza_fogli_evento' );

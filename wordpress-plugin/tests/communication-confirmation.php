@@ -32,9 +32,13 @@ class MI_Spedizione_Email{
  static $calls=[]; static $mode='OPERATIVO';
  static function modalita(){return self::$mode;}
  static function accoda_comunicazione_operativa($p){self::$calls[]=$p;return ['count'=>1,'mode'=>self::$mode,'outbox_id'=>99];}
- static function spedisci_coda($id){if($id!==99)throw new Exception('Wrong targeted test');}
+ static function spedisci_coda($id){throw new Exception('HTTP request must never wait for Google');}
  static function stato_nuova_email($s){return 'TEST_PENDING';}
  static function destinatario_evento($id){return 'group@example.invalid';}
+}
+class MI_Email_Jobs {
+ static function enqueue($p){$r=MI_Spedizione_Email::accoda_comunicazione_operativa($p);$r['job_id']=str_repeat('b',64);return $r;}
+ static function render_progress($id){}
 }
 class FakeDB{public $prefix='wp_',$last_error='';public $email='a@example.invalid';function prepare($s,...$args){return $s;}function get_row(){return ['status'=>'SENT','last_error'=>''];}function get_results(){return [['id'=>1,'order_code'=>'A','buyer_email'=>$this->email,'total_cents'=>100,'economic_mode'=>'MANAGED']];}}
 $wpdb=new FakeDB();$nonce=true;$transients=[];
@@ -85,7 +89,7 @@ $transients['mi_comm_7_testtoken']['message']='Testo personalizzato da conservar
 $_GET=['mi_comm_edit'=>'testtoken'];
 $view=new ReflectionMethod('MI_Portal','communications_view');ob_start();$view->invoke(null);$html=ob_get_clean();
 if(!str_contains($html,'Testo personalizzato da conservare</textarea>')||!preg_match('/value="BALANCE_REMINDER"[^>]*selected="selected"/',$html))throw new Exception('Editing lost type/message');
-if(!isset($event_query['meta_query'])||str_contains($html,'data-mi-event-period="past"'))throw new Exception('History eagerly loaded');
+if(isset($event_query['meta_query'])||empty($event_query['update_post_meta_cache'])||str_contains($html,'data-mi-event-period="past"'))throw new Exception('Heavy metadata joins or eagerly rendered history');
 $_GET=['mi_comm_preview'=>'testtoken'];ob_start();$view->invoke(null);$html=ob_get_clean();
 if(!str_contains($html,'mi_comm_edit=testtoken')||!str_contains($html,'communication_test_request'))throw new Exception('Preview lacks editing/request identity');
 echo "PASS: editing preserves event, type and custom text; history deferred; preview links to same draft.\n";
