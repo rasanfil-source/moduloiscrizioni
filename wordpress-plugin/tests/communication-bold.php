@@ -1,7 +1,9 @@
 <?php
+function add_query_arg($args, $url) { return $url . '?' . http_build_query($args); }
+function home_url($path = '') { return 'https://example.invalid/' . ltrim($path, '/'); }
 ob_start(); require __DIR__ . '/email-newlines.php'; ob_end_clean();
 $message = "Siamo lieti dell'interesse per l'iniziativa.\n\nTi invitiamo a verificare la disponibilita: **se sai gia di non poter partecipare**, ti chiediamo di **annullare **la tua partecipazione tramite il **collegamento personale riportato qui sotto**.\n\nGrazie per la collaborazione.**";
-$snapshot = MI_Modello_Email::crea_istantanea_operativa( 42, array( '{{evento.titolo}}' => 'Evento sintetico', '{{sottoscrittore.nome_completo}}' => 'Persona di prova' ), 'PARTICIPATION_CANCELLATION_REMINDER', $message, '' );
+$snapshot = MI_Modello_Email::crea_istantanea_operativa( 42, array( '{{evento.titolo}}' => 'Evento sintetico', '{{sottoscrittore.nome_completo}}' => 'Persona di prova' ), 'PARTICIPATION_CANCELLATION_REMINDER', $message, '', array(), false, true );
 $proof = new ReflectionMethod( 'MI_Spedizione_Email', 'prepara_istantanea_prova' );
 $snapshot = $proof->invoke( null, $snapshot, '', true );
 for ( $i = 0; $i < 5; $i++ ) {
@@ -14,7 +16,7 @@ expect( str_contains( $snapshot['html'], 'Campione anonimizzato' ), 'Avviso prov
 $rich = array( 'testo' => 'Versione semplice senza formattazione.', 'html' => '<p><strong>Gia formattato</strong> e **ancora in grassetto**; *corsivo*.</p><p>Nota finale.**</p><a href="https://example.invalid/a" title="Due > **attributo**">Collegamento</a>' );
 $once = MI_Modello_Email::ripara_istantanea_codifica( $rich );
 $twice = MI_Modello_Email::ripara_istantanea_codifica( $once );
-$canonical_html = static function ( $html ) { return str_replace( 'style=";margin:', 'style="margin:', $html ); };
+$canonical_html = static function ( $html ) { return $html; };
 expect( $canonical_html( $once['html'] ) === $canonical_html( $twice['html'] ), 'Riparazione non idempotente' );
 expect( str_contains( $twice['html'], '<strong>Gia formattato</strong>' ) && str_contains( $twice['html'], '<strong>ancora in grassetto</strong>' ), 'HTML valido ricostruito dal testo semplice' );
 expect( str_contains( $twice['html'], 'title="Due > **attributo**"' ), 'Markdown interpretato dentro attributo HTML' );

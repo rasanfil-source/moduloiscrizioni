@@ -21,8 +21,8 @@
   },
   "portal-communications.js": {
     "file": "min/portal-communications.js",
-    "source": "852f6b4342d30ee36bcfb333ed9ec0e94e2e30a429f545c9a8b6be09eea9c601",
-    "hash": "a14e41c1f2fa90c10b90236d4a557c06a663c2a56d2d32d9b0dd240d7b2cd48a"
+    "source": "d72622929e63c89473797cdc9870f040d35e071f9305550da797b5ae66970149",
+    "hash": "22e69d0ba583937e6b06343ae758317f1e9ee872776119c1552740c6b3a6bb49"
   },
   "portal-management.css": {
     "file": "min/portal-management.css",

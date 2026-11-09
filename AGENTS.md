@@ -11,6 +11,14 @@
 
 Usare sempre PowerShell 7 (`pwsh.exe`), mai `powershell.exe`. Eseguire i comandi PowerShell nella forma `pwsh.exe -NoLogo -NoProfile -Command "<comando>"`.
 
+## Saldo pubblico — scelta esplicita del 9 novembre 2026
+
+- E accettato per scelta che chiunque, digitando un cognome nella pagina pubblica di verifica del saldo, possa consultare quanto deve pagare la persona individuata, senza autenticazione o verifica del recapito.
+- E accettato esplicitamente anche l'invio del riepilogo a un indirizzo email valido scelto dal richiedente nella pagina, anche diverso da quello registrato nella prenotazione, senza verifica OTP del recapito.
+- Per il momento mantenere entrambi i comportamenti. Non introdurre login, OTP, collegamenti personali obbligatori o vincoli al solo recapito registrato come correzione automatica degli audit. Una modifica di questa scelta richiede una successiva indicazione dell'utente.
+- La consultazione per cognome e l'invio al recapito scelto sono requisiti intenzionali accettati, non difetti da correggere d'ufficio. La decisione non impedisce le correzioni delle altre segnalazioni valide degli audit, successivamente autorizzate dall'utente.
+- Decisione e ambito: `docs/decisione-saldo-pubblico-2026-11-09.md`.
+
 ## Versioni e ZIP — richiesta esplicita dell'utente
 
 - Ogni variazione del plugin da distribuire, anche minima o correttiva, richiede SEMPRE un nuovo numero di versione e un nuovo nome ZIP. Non riutilizzare un numero già assegnato a un pacchetto generato o consegnato.

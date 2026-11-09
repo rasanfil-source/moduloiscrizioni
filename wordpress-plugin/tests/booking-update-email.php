@@ -6,7 +6,7 @@ function get_the_title($id) { return 'Evento prova'; }
 function wp_json_encode($value) { return json_encode($value); }
 function esc_html($value) { return htmlspecialchars((string) $value, ENT_QUOTES); }
 function current_time($type, $gmt = false) { return '2026-11-08 12:00:00'; }
-class MI_Modello_Email { static function crea_istantanea($event, $values) { return array('html' => '', 'testo' => ''); } }
+class MI_Modello_Email { static function crea_istantanea($event, $values) { return array('attivo' => false, 'html' => '', 'testo' => ''); } }
 class MI_Portal { static function balance_url($id, $code, $email) { return 'https://example.invalid/balance'; } }
 class BookingUpdateDatabase {
 	public $prefix = 'wp_';
@@ -33,6 +33,7 @@ require __DIR__ . '/../modulo-iscrizioni/includes/class-mi-payment-people.php';
 require __DIR__ . '/../modulo-iscrizioni/includes/class-mi-booking-update-email.php';
 $wpdb = new BookingUpdateDatabase();
 $payload = MI_Booking_Update_Email::snapshot(7);
+if (empty($payload['email_preview']['attivo'])) throw new RuntimeException('La notifica aggiornamento deve essere autonoma dalla conferma iniziale disabilitata.');
 $text = $payload['email_preview']['testo'] ?? '';
 if (!$payload || !str_contains($text, 'Ada Rossi') || !str_contains($text, 'Servizio comune') || !str_contains($text, 'La situazione economica è da verificare con la segreteria.') || str_contains($text, 'Quota complessiva dei partecipanti attivi')) {
 	throw new RuntimeException('L’email deve essere accodata senza importi quando la ripartizione storica non è valida.');

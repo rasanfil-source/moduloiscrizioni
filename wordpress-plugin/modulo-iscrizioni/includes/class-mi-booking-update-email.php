@@ -52,6 +52,8 @@ final class MI_Booking_Update_Email {
 		}
 		$lines[] = ''; $lines[] = 'Per chiarimenti sui servizi o sui versamenti contatta la segreteria.';
 		$snapshot = MI_Modello_Email::crea_istantanea( (int) $r['event_id'], array() );
+		// Una notifica di modifica gestionale e distinta dalla conferma iniziale.
+		$snapshot['attivo'] = true;
 		$snapshot['oggetto'] = 'Prenotazione aggiornata — ' . $title;
 		$snapshot['titolo'] = 'Prenotazione aggiornata';
 		$snapshot['preheader'] = 'Servizi, assegnazioni e situazione aggiornata.';

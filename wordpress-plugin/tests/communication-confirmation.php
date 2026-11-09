@@ -17,7 +17,7 @@ function get_transient($k){return $GLOBALS['transients'][$k]??false;}
 function set_transient($k,$v,$ttl){$GLOBALS['transients'][$k]=$v;return true;}
 function delete_transient($k){unset($GLOBALS['transients'][$k]);}
 function get_option($k,$default=[]){return $default;}
-function get_post_status($id){return 'publish';}
+function get_post_status($id){return $GLOBALS['audit_post_status'] ?? 'publish';}
 function wp_generate_password(){return 'testtoken';}
 function wp_json_encode($v){return json_encode($v);}
 function add_query_arg(...$args){return 'https://example.invalid/?'.http_build_query(is_array($args[0])?$args[0]:[$args[0]=>$args[1]]);}
@@ -26,7 +26,7 @@ function get_posts($query=[]){$GLOBALS['event_query']=$query;return $GLOBALS['fi
 function home_url(){return 'https://example.invalid/';}
 function wp_safe_redirect($u){throw new Redirected($u);}
 function is_wp_error($v){return false;}
-class MI_Access{static function can_access_event($id){return true;}static function event_ids(){return 'ALL';}}
+class MI_Access{static function is_suspended(){return false;}static function can_access_event($id){return true;}static function event_ids(){return 'ALL';}}
 class MI_Payment_Ledger{static function positions($rows){return [1=>['paid'=>0,'balance'=>100,'effective_paid'=>0,'effective_balance'=>100,'managed'=>true]];}}
 class MI_Spedizione_Email{
  static $calls=[]; static $mode='OPERATIVO';
@@ -93,3 +93,7 @@ if(isset($event_query['meta_query'])||empty($event_query['update_post_meta_cache
 $_GET=['mi_comm_preview'=>'testtoken'];ob_start();$view->invoke(null);$html=ob_get_clean();
 if(!str_contains($html,'mi_comm_edit=testtoken')||!str_contains($html,'communication_test_request'))throw new Exception('Preview lacks editing/request identity');
 echo "PASS: editing preserves event, type and custom text; history deferred; preview links to same draft.\n";
+$GLOBALS['audit_post_status']='draft';
+ob_start();$view->invoke(null);$html=ob_get_clean();
+if(str_contains($html,'<strong>Invio ai destinatari reali</strong>')||!str_contains($html,'<strong>Solo preparazione, senza invio</strong>'))throw new Exception('Draft preview announces real delivery');
+echo "PASS: draft preview consistently announces preparation without delivery.\n";

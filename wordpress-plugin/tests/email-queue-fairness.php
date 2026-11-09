@@ -119,7 +119,7 @@ foreach(['OPERATIVO','PROVA','ANTEPRIMA'] as $mode){
  $sample['payload_json']=json_encode(['event_id'=>43,'portal_test_copy'=>true,'test_recipient'=>'chosen@example.invalid','email_preview'=>['attivo'=>true,'oggetto'=>'Prova','html'=>'<p>Prova</p>','testo'=>'Prova']]);
  $wpdb->rows[126]=$sample;$auditOptions['mi_email_scan_cursor_'.strtolower($mode)]=88;
  MI_Spedizione_Email::spedisci_coda(126);
- if(MI_Workspace_Client::$recipients!==['chosen@example.invalid'] || $wpdb->rows[126]['status']!=='SENT')throw new RuntimeException('Target test not delivered immediately');
+ if(MI_Workspace_Client::$recipients!==['chosen@example.invalid'] || $wpdb->rows[126]['status']!=='TEST_SENT')throw new RuntimeException('Target test not delivered immediately');
  if($wpdb->rows[1]['status']!=='PENDING'||$auditOptions['mi_email_scan_cursor_'.strtolower($mode)]!==88)throw new RuntimeException('Target test touched mass queue or its cursor');
  MI_Spedizione_Email::spedisci_coda(126);
  if(count(MI_Workspace_Client::$recipients)!==1)throw new RuntimeException('Target test delivered twice');

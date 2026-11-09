@@ -6,7 +6,7 @@ function wp_slash($value) { return is_array($value) ? array_map('wp_slash', $val
 function wp_unslash($value) { return is_array($value) ? array_map('wp_unslash', $value) : (is_string($value) ? stripslashes($value) : $value); }
 function get_post_meta($id, $key, $single = true) { return $GLOBALS['email_meta'][$id][$key] ?? ''; }
 function update_post_meta($id, $key, $value) { $GLOBALS['email_meta'][$id][$key] = wp_unslash($value); }
-function get_option($key, $default = null) { return $default; }
+function get_option($key, $default = null) { return $GLOBALS['email_test_options'][$key] ?? $default; }
 function get_bloginfo($key) { return 'Segreteria'; }
 function get_the_title($id) { return 'Evento'; }
 function get_post_thumbnail_id($id) { return 0; }
@@ -45,8 +45,8 @@ foreach (['ZERO', 'NONE', 'CALCULATED'] as $mode) {
         foreach (['anno', 'quando', 'nessuno', 'saranno'] as $word) {
             expect(str_contains($preview['testo'], $word) && str_contains($preview['html'], $word), 'parola alterata: ' . $word);
         }
-        expect(('ZERO' !== $mode) === str_contains($preview['testo'], 'Bonifico'), 'filtro pagamento testo');
-        expect(('ZERO' !== $mode) === str_contains($preview['html'], 'Bonifico'), 'filtro pagamento HTML');
+        expect((!in_array($mode,['ZERO','NONE'],true)) === str_contains($preview['testo'], 'Bonifico'), 'filtro pagamento testo');
+        expect((!in_array($mode,['ZERO','NONE'],true)) === str_contains($preview['html'], 'Bonifico'), 'filtro pagamento HTML');
         // Un secondo salvataggio non deve reintrodurre la corruzione.
         MI_Modello_Email::salva_testo_portale(42, wp_slash('Conferma'), wp_slash($stored['text']));
         expect($stored['text'] === get_post_meta(42, '_mi_email_template')['text'], 'salvataggio non idempotente');

@@ -10,14 +10,14 @@ function setup({sender='info@parrocchiasanteugenio.it',quota=10,fail=false,alias
  vm.createContext(ctx);vm.runInContext(source,ctx);
  ctx.GmailApp={getAliases:()=>{if(aliasFailure)throw Error('authorization');return aliases;},sendEmail:(to,subject,body,options)=>{sent.push({...options,to,subject,body,gmail:true});if(fail)throw Error('uncertain');}};
  const payload={delivery_key:'a'.repeat(64),mode:'PROVA',destinatario:'test@example.invalid',oggetto:'[PROVA] Santiago',html:'<p>Conferma</p>',testo:'Conferma'};
- return {send:p=>ctx.inviaEmailConfermaDaWordPress_({...payload,...p}),sendTest:p=>ctx.inviaEmailProvaDaWordPress_({destinatario:'test@example.invalid',oggetto:'Prova',testo:'Testo',html:'<p>Testo</p>',...p}),sent,properties};
+ return {send:p=>ctx.inviaEmailConfermaDaWordPress_({...payload,...p}),sendTest:p=>ctx.inviaEmailProvaDaWordPress_({delivery_key:'b'.repeat(64),destinatario:'test@example.invalid',oggetto:'Prova',testo:'Testo',html:'<p>Testo</p>',...p}),sent,properties};
 }
 test('same accepted delivery is never sent twice',()=>{const s=setup();assert.equal(s.send().ok,true);assert.equal(s.send().replayed,true);assert.equal(s.sent.length,1);});
 test('wrong deployer cannot impersonate info',()=>{const s=setup({sender:'other@example.invalid'});assert.equal(s.send().error,'EMAIL_SENDER_NOT_AUTHORIZED');assert.equal(s.sent.length,0);});
 test('test destination cannot escape configured mailbox',()=>{const s=setup();assert.equal(s.send({destinatario:'other@example.invalid'}).error,'TEST_RECIPIENT_MISMATCH');assert.equal(s.sent.length,0);});
 test('explicit communication test uses chosen address and its own replay protection',()=>{
  const s=setup(),p={mode:'PROVA_PUNTUALE',test_only:true,destinatario:'chosen@example.invalid',reply_to:'group@example.invalid'};
- assert.equal(s.send(p).ok,true);assert.equal(s.send(p).replayed,true);assert.equal(s.sent.length,1);assert.equal(s.sent[0].to,'chosen@example.invalid');assert.equal(s.sent[0].replyTo,'group@example.invalid');
+ assert.equal(s.send(p).ok,true);assert.equal(s.send(p).replayed,true);assert.equal(s.sent.length,1);assert.equal(s.sent[0].to,'chosen@example.invalid');assert.equal(s.sent[0].replyTo,'chosen@example.invalid');
 });
 test('explicit communication test requires signed test-only marker',()=>{
  const s=setup();assert.equal(s.send({mode:'PROVA_PUNTUALE',destinatario:'chosen@example.invalid'}).error,'INVALID_EMAIL_PAYLOAD');assert.equal(s.sent.length,0);

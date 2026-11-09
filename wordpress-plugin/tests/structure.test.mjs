@@ -844,7 +844,7 @@ test('le email non mostrano identificativi testuali o grafici', async () => {
   const model = await read('includes/class-mi-modello-email.php');
   const postType = await read('includes/class-mi-event-post-type.php');
   const sender = await read('includes/class-mi-spedizione-email.php');
-  assert.match(postType, /QR facoltativo/);
+  assert.doesNotMatch(postType, /QR facoltativo/);
   assert.match(model, /payload_qr/);
   assert.match(model, /'modalita' => 'NONE'/);
   assert.match(sender, /identificativo/);

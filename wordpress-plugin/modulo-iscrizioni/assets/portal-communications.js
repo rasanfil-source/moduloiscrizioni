@@ -23,6 +23,8 @@
         const s = result.data;
         panel.textContent = 'Preparate: ' + s.prepared + '/' + s.total + ' prenotazioni. Accettate da Google: ' + s.sent + '. In attesa: ' + s.pending + '. Errori: ' + s.failed + '.' +
           (s.preview ? ' Solo anteprima: ' + s.preview + '.' : '') +
+          (s.excluded ? ' Escluse senza recapito valido: ' + s.excluded + '.' : '') +
+          (s.test_sent ? ' Invii di prova: ' + s.test_sent + '.' : '') +
           (Number.isInteger(s.quota_remaining) ? ' Ultima quota Google rilevata: ' + s.quota_remaining + '.' : '') +
           (s.paused ? ' Preparazione sospesa: la modalità di invio è cambiata.' : '') +
           (s.retry_after ? ' Ripresa automatica tra circa ' + Math.ceil(s.retry_after / 60) + ' minuti.' : '') +

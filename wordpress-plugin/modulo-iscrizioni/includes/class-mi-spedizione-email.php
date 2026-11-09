@@ -245,7 +245,8 @@ final class MI_Spedizione_Email {
 		$custom_allowed = is_array( $custom_types ) && isset( $custom_types[ $template_type ] ) && preg_match( '/^CUSTOM_[A-Z0-9_]{1,24}$/', $template_type );
 		if ( ! $communication_id || ! $event_id || ( ! in_array( $template_type, array( 'PRE_DEPARTURE_REMINDER', 'DEPOSIT_REMINDER', 'BALANCE_REMINDER', 'EVENT_NOTICE', 'EVENT_CANCELLATION', 'REGISTRATION_CANCELLATION', 'MATERIAL_DELIVERY', 'PARTICIPATION_CANCELLATION_REMINDER' ), true ) && ! $custom_allowed ) ) return new WP_Error( 'mi_operational_email_invalid', 'Comunicazione non valida.', array( 'status' => 400 ) );
 		if ( ( 'PRE_DEPARTURE_REMINDER' === $template_type || $custom_allowed ) && ! $message ) return new WP_Error( 'mi_operational_email_message_required', 'La comunicazione richiede un testo.', array( 'status' => 400 ) );
-		$recipient_payload = is_array( $payload['recipients'] ?? null ) ? array_slice( $payload['recipients'], 0, 1000 ) : array();
+		if ( is_array( $payload['recipients'] ?? null ) && count( $payload['recipients'] ) > 1000 ) return new WP_Error( 'mi_email_recipients', 'Oltre 1000 prenotazioni: nessuna comunicazione preparata.' );
+		$recipient_payload = is_array( $payload['recipients'] ?? null ) ? $payload['recipients'] : array();
 		$recipient_state = array();
 		foreach ( $recipient_payload as $recipient ) {
 			if ( ! is_array( $recipient ) ) continue;
@@ -272,7 +273,7 @@ final class MI_Spedizione_Email {
 			$order_codes = array_keys( $recipient_state );
 			$placeholders = implode( ',', array_fill( 0, count( $order_codes ), '%s' ) );
 			$query_args = array_merge( array( $event_id ), $order_codes );
-			if ( 'EVENT_CANCELLATION' === $template_type ) $status_filter = "status='CANCELLED'";
+			if ( in_array( $template_type, array( 'EVENT_CANCELLATION', 'REGISTRATION_CANCELLATION' ), true ) ) $status_filter = "status='CANCELLED'";
 			elseif ( in_array( $template_type, array( 'BALANCE_REMINDER', 'DEPOSIT_REMINDER' ), true ) ) $status_filter = "status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED','WAITLIST_OFFERED') AND capacity_released_at IS NULL";
 			else $status_filter = "status IN ('CONFIRMED','PENDING_PAYMENT','TRAVEL_PENDING','WAITLISTED','WAITLIST_OFFERED') AND capacity_released_at IS NULL";
 			$registrations = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,status,economic_mode,buyer_first_name,buyer_last_name,buyer_email,total_qty,total_cents,initial_due_cents,balance_cents,payment_methods_json,payment_deadline_at FROM {$registrations_table} WHERE event_id=%d AND order_code IN ({$placeholders}) AND {$status_filter} ORDER BY id LIMIT 1000", $query_args ), ARRAY_A );
@@ -281,21 +282,25 @@ final class MI_Spedizione_Email {
 			try { $positions = MI_Payment_Ledger::positions( $registrations ); }
 			catch ( Throwable $error ) { return new WP_Error( 'mi_email_balance', 'Saldi non disponibili. Comunicazione non preparata.' ); }
 			$now = current_time( 'mysql', true );
-			$count = 0;
+			$count = 0; $excluded = 0;
 			$outbox_id = 0;
 			$origin_keys = array();
 			try {
 				if ( false === $wpdb->query( 'START TRANSACTION' ) ) throw new RuntimeException( 'Transazione non disponibile.' );
 				foreach ( $registrations as $registration ) {
+					if ( ! $test_only && ! is_email( trim( (string) $registration['buyer_email'] ) ) ) { $excluded++; continue; }
 					if ( in_array( $registration['status'], array( 'WAITLISTED', 'WAITLIST_OFFERED' ), true ) && ! in_array( $template_type, array( 'EVENT_CANCELLATION', 'PARTICIPATION_CANCELLATION_REMINDER' ), true ) ) continue;
 					$position = $positions[$registration['id']];
 					$paid = $position['effective_paid'];
 					$balance = $position['managed'] ? $position['effective_balance'] : 0;
 					if ( 'BALANCE_REMINDER' === $template_type && $balance < 1 ) continue;
+					$deposit_missing = $position['individual_known'] ? (int) ( $position['individual_deposit_missing'] ?? max( 0, (int) $position['individual_deposit_due'] - (int) $paid ) ) : max( 0, (int) $registration['initial_due_cents'] - (int) $paid );
+					if ( 'DEPOSIT_REMINDER' === $template_type && ( ! $position['managed'] || $deposit_missing < 1 ) ) continue;
 					$economic = $test_only
 						? array( 'total_cents' => 25000, 'initial_due_cents' => 5000, 'balance_cents' => 20000, 'payment_methods' => array( 'BANK_TRANSFER' ) )
 						: array( 'total_cents' => (int) $position['effective_total'], 'initial_due_cents' => $position['individual_known'] ? (int) $position['individual_deposit_due'] : (int) $registration['initial_due_cents'], 'balance_cents' => $balance, 'payment_methods' => json_decode( (string) $registration['payment_methods_json'], true ) ?: array() );
 					$status_labels = array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'Da pagare', 'TRAVEL_PENDING' => 'In attesa di passaggio', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto' );
+					if ( 'DEPOSIT_REMINDER' === $template_type && ! $test_only ) $economic['initial_due_cents'] = $deposit_missing;
 					$participant_count = (int) $position['individual_people_count'] > 0 ? (int) $position['individual_active_count'] : (int) $registration['total_qty'];
 					// La scadenza della prenotazione è UTC e può differire da quella generale.
 					// Se assente/non valida, il modello invita a contattare l'organizzazione.
@@ -323,7 +328,7 @@ final class MI_Spedizione_Email {
 					$origin_keys[] = $origin_key;
 					$outbox_type = $test_only ? 'PORTAL_COMMUNICATION_TEST' : $template_type;
 					$outbox_registration_id = $test_only ? 0 : (int) $registration['id'];
-					$outbox_recipient = $test_only ? $test_recipient : $registration['buyer_email'];
+					$outbox_recipient = $test_only ? $test_recipient : trim( (string) $registration['buyer_email'] );
 					$inserted = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$outbox_table} (registration_id,recipient,template_type,origin_key,payload_json,status,created_at) VALUES (%d,%s,%s,%s,%s,%s,%s)", $outbox_registration_id, $outbox_recipient, $outbox_type, $origin_key, $payload_json, $status, $now ) );
 					if ( false === $inserted ) throw new RuntimeException( 'Coda email non salvata.' );
 					if ( $inserted ) $count++;
@@ -340,7 +345,7 @@ final class MI_Spedizione_Email {
 			// origin_key univoca nella coda confermata protegge i nuovi tentativi anche senza cache o cron.
 			try { set_transient( $idempotency_key, array( 'outbox_id' => $outbox_id, 'origin_keys' => $origin_keys ), DAY_IN_SECONDS ); } catch ( Throwable $error ) {}
 			try { if ( ( $test_only || 'ANTEPRIMA' !== $effective_mode ) && $count ) self::pianifica_spedizione(); } catch ( Throwable $error ) {}
-			return array( 'ok' => true, 'count' => $count, 'mode' => $effective_mode, 'outbox_id' => $outbox_id, 'origin_keys' => $origin_keys, 'message' => 'Comunicazione preparata nella coda WordPress.' );
+			return array( 'ok' => true, 'count' => $count, 'excluded' => $excluded, 'mode' => $effective_mode, 'outbox_id' => $outbox_id, 'origin_keys' => $origin_keys, 'message' => 'Comunicazione preparata nella coda WordPress.' );
 		} finally {
 			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
 		}
@@ -427,7 +432,7 @@ final class MI_Spedizione_Email {
 		add_action( 'phpmailer_init', array( __CLASS__, 'incorpora_codice' ) );
 		// La prova usa esclusivamente il canale firmato verso Apps Script.
 		// La posta generale di WordPress e degli altri plugin resta invariata.
-		$risposta_workspace = MI_Workspace_Client::request( 'INVIA_EMAIL_PROVA', array( 'destinatario' => $destinatario, 'oggetto' => $oggetto, 'html' => $corpo, 'testo' => self::$corpo_testo ) );
+		$risposta_workspace = MI_Workspace_Client::request( 'INVIA_EMAIL_PROVA', array( 'delivery_key' => hash( 'sha256', home_url() . '|settings-test|' . bin2hex( random_bytes( 16 ) ) ), 'indirizzo_mittente' => MI_Modello_Email::EMAIL_SEGRETERIA, 'destinatario' => $destinatario, 'oggetto' => $oggetto, 'html' => $corpo, 'testo' => self::$corpo_testo ) );
 		$inviata = ! is_wp_error( $risposta_workspace ) && ! empty( $risposta_workspace['ok'] );
 		remove_action( 'phpmailer_init', array( __CLASS__, 'incorpora_codice' ) );
 		self::$corpo_testo = '';
@@ -575,11 +580,17 @@ final class MI_Spedizione_Email {
 			$cursor = absint( $riga['id'] );
 			$event_payload = json_decode( (string) $riga['payload_json'], true );
 			$event_id = ! empty( $riga['registration_id'] ) ? MI_Event_Deletion::registration_event( $riga['registration_id'] ) : absint( $event_payload['event_id'] ?? 0 );
+			if ( ! $event_id ) {
+				$wpdb->update( $table, array( 'status' => 'TEST_PENDING' === $riga['status'] ? 'TEST_FAILED' : 'FAILED', 'last_error' => 'Iscrizione o evento non più disponibile. Nessun invio effettuato.' ), array( 'id' => $riga['id'], 'status' => $riga['status'] ) );
+				continue;
+			}
+			if ( (int) get_option( 'mi_email_event_retry_' . $event_id, 0 ) > time() ) { $blocked_events[$event_id] = true; continue; }
 			if ( isset( $blocked_events[$event_id] ) ) continue;
 			if ( in_array( $riga['template_type'], array( 'EVENT_DELETED_NOTICE', 'EVENT_DELETED_SECRETARIAT' ), true ) ) {
-				if ( ! $event_id || 'done' !== ( MI_Event_Deletion::job( $event_id )['stage'] ?? '' ) ) continue;
+				if ( 'done' !== ( MI_Event_Deletion::job( $event_id )['stage'] ?? '' ) ) { $blocked_events[$event_id] = true; continue; }
 			} elseif ( ! $event_id || is_wp_error( MI_Event_Deletion::enter( $event_id ) ) ) {
 				$blocked_events[$event_id] = true;
+				$wpdb->update( $table, array( 'last_error' => 'Evento temporaneamente non disponibile. Ripresa automatica dal cron di recupero.' ), array( 'id' => $riga['id'], 'status' => $riga['status'] ) );
 				MI_Event_Deletion::release( $event_id );
 				continue;
 			}
@@ -621,6 +632,7 @@ final class MI_Spedizione_Email {
 			if ( $invio_prova ) $istantanea = self::prepara_istantanea_prova( $istantanea, $portal_test_copy ? '' : $riga['recipient'], $portal_test_copy );
 
 			$request = self::invia_istantanea( $destinatario, $istantanea, hash( 'sha256', home_url() . '|outbox|' . $id . $delivery_revision ), $invio_prova, $portal_test_copy ? 'PROVA_PUNTUALE' : null, true );
+			$riga['event_id'] = $event_id;
 			if ( is_array( $request ) ) {
 				$deliveries[] = array( 'row' => $riga, 'payload' => $request );
 				$leases[$event_id] = true;
@@ -637,7 +649,7 @@ final class MI_Spedizione_Email {
 		}
 
 		if ( ! $portal_test_id ) update_option( $cursor_key, $cursor, false );
-		if ( (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE {$runnable_filter} AND attempts < 5" ) > 0 ) {
+		if ( (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE {$runnable_filter} AND attempts < 5" ) > 0 && ( $processed > 0 || $cursor > 0 || ! $blocked_events ) ) {
 			self::pianifica_spedizione( $deliveries ? 0 : 30 );
 		}
 		} finally { foreach ( $leases as $event_id => $held ) MI_Event_Deletion::release( $event_id ); }
@@ -674,20 +686,21 @@ final class MI_Spedizione_Email {
 		$id = absint( $row['id'] );
 		$sending = 'TEST_PENDING' === $row['status'] ? 'TEST_SENDING' : 'SENDING';
 		if ( ! is_wp_error( $result ) && $result ) {
-			$wpdb->update( $table, array( 'status' => 'SENT', 'last_error' => null, 'sent_at' => current_time( 'mysql', true ), 'processing_started_at' => null ), array( 'id' => $id, 'status' => $sending ) );
+			$wpdb->update( $table, array( 'status' => 'TEST_PENDING' === $row['status'] ? 'TEST_SENT' : 'SENT', 'last_error' => null, 'sent_at' => current_time( 'mysql', true ), 'processing_started_at' => null ), array( 'id' => $id, 'status' => $sending ) );
 			return;
 		}
 		$data = is_wp_error( $result ) ? $result->get_error_data() : array();
 		$code = is_array( $data ) ? ( $data['remote_code'] ?? '' ) : '';
 		$message = is_wp_error( $result ) ? sanitize_text_field( $result->get_error_message() ) : 'Contenuto email non valido o inattivo.';
-		$deferred = in_array( $code, array( 'EMAIL_BUSY', 'WORKSPACE_BUSY', 'EVENT_BUSY', 'EMAIL_DEFERRED', 'EMAIL_QUOTA_EXCEEDED', 'ACTION_NOT_ALLOWED' ), true ) || ( is_wp_error( $result ) && 'mi_workspace_busy' === $result->get_error_code() );
+		$deferred = in_array( $code, array( 'EMAIL_BUSY', 'WORKSPACE_BUSY', 'EVENT_BUSY', 'EMAIL_DEFERRED', 'EMAIL_QUOTA_EXCEEDED', 'EMAIL_STORAGE_UNAVAILABLE', 'ACTION_NOT_ALLOWED' ), true ) || ( is_wp_error( $result ) && 'mi_workspace_busy' === $result->get_error_code() );
 		if ( $deferred ) {
 			$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status=%s, attempts=GREATEST(0,attempts-1), processing_started_at=NULL, last_error=%s WHERE id=%d AND status=%s", $row['status'], $message, $id, $sending ) );
-			if ( 'EMAIL_DEFERRED' !== $code ) update_option( 'mi_email_retry_after', time() + ( in_array( $code, array( 'EMAIL_QUOTA_EXCEEDED', 'ACTION_NOT_ALLOWED' ), true ) ? 900 : 30 ), false );
+			if ( 'EVENT_BUSY' === $code && ! empty( $row['event_id'] ) ) update_option( 'mi_email_event_retry_' . absint( $row['event_id'] ), time() + 30, false );
+			elseif ( 'EMAIL_DEFERRED' !== $code ) update_option( 'mi_email_retry_after', time() + ( in_array( $code, array( 'EMAIL_QUOTA_EXCEEDED', 'EMAIL_STORAGE_UNAVAILABLE', 'ACTION_NOT_ALLOWED' ), true ) ? 900 : 30 ), false );
 			return;
 		}
-		$terminal = ! $result || in_array( $code, array( 'EMAIL_DELIVERY_UNCERTAIN', 'EMAIL_ALIAS_NOT_AUTHORIZED', 'EMAIL_ALIAS_CHECK_FAILED', 'EMAIL_SENDER_NOT_AUTHORIZED', 'INVALID_EMAIL_PAYLOAD', 'INVALID_SENDER_EMAIL', 'INVALID_REPLY_TO', 'INVALID_SENDER_NAME', 'TEST_RECIPIENT_MISMATCH', 'ACTION_NOT_ALLOWED' ), true );
-		if ( ! $terminal ) update_option( 'mi_email_retry_after', time() + 60, false );
+		$terminal = ! $result || in_array( $code, array( 'EMAIL_DELIVERY_UNCERTAIN', 'EMAIL_ALIAS_NOT_AUTHORIZED', 'EMAIL_ALIAS_CHECK_FAILED', 'EMAIL_SENDER_NOT_AUTHORIZED', 'INVALID_EMAIL_PAYLOAD', 'INVALID_SENDER_EMAIL', 'INVALID_REPLY_TO', 'INVALID_SENDER_NAME', 'TEST_RECIPIENT_MISMATCH' ), true );
+		if ( ! $terminal ) update_option( 'mi_email_retry_after', time() + min( 900, 60 * ( 2 ** min( 4, (int) $row['attempts'] ) ) ), false );
 		$failed = 'TEST_PENDING' === $row['status'] ? 'TEST_FAILED' : 'FAILED';
 		$wpdb->update( $table, array( 'status' => $terminal || (int) $row['attempts'] >= 4 ? $failed : $row['status'], 'last_error' => $message, 'processing_started_at' => null ), array( 'id' => $id, 'status' => $sending ) );
 	}
@@ -703,7 +716,8 @@ final class MI_Spedizione_Email {
 	}
 
 	private static function invia_istantanea( $destinatario, $istantanea, $delivery_key, $invio_prova, $mode_override = null, $prepare_only = false ) {
-		if ( ! is_email( $destinatario ) || empty( $istantanea['attivo'] ) || empty( $istantanea['oggetto'] ) ) {
+		if ( ! is_email( $destinatario ) ) return new WP_Error( 'mi_email_recipient_invalid', 'Destinatario email assente o non valido. Correggi il recapito prima di preparare una nuova consegna.', array( 'remote_code' => 'INVALID_EMAIL_PAYLOAD' ) );
+		if ( empty( $istantanea['attivo'] ) || empty( $istantanea['oggetto'] ) ) {
 			return false;
 		}
 		$istantanea = MI_Modello_Email::ripara_istantanea_codifica( $istantanea );

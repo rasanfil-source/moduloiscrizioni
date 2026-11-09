@@ -26,9 +26,13 @@ final class MI_Portal {
 		add_action( 'mi_sync_workspace_event', array( __CLASS__, 'sincronizza_evento_in_coda' ) );
 	}
 
+	private static function can_manage_communications() {
+		return is_user_logged_in() && ! MI_Access::is_suspended() && ( current_user_can( 'mi_manage_communications' ) || current_user_can( 'manage_options' ) );
+	}
+
 	/** Restituisce solo il testo richiesto dal tipo selezionato nella schermata Comunicazioni. */
 	public static function ajax_communication_default_text() {
-		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_manage_communications' ) && ! current_user_can( 'manage_options' ) ) ) wp_send_json_error( array( 'message' => 'Accesso non consentito.' ), 403 );
+		if ( ! self::can_manage_communications() ) wp_send_json_error( array( 'message' => 'Accesso non consentito.' ), 403 );
 		check_ajax_referer( 'mi_communication_default_text', 'nonce' );
 		$type = strtoupper( sanitize_key( wp_unslash( $_POST['template_type'] ?? '' ) ) );
 		$allowed = array( 'PRE_DEPARTURE_REMINDER', 'PARTICIPATION_CANCELLATION_REMINDER', 'BALANCE_REMINDER' );
@@ -676,7 +680,7 @@ final class MI_Portal {
 	}
 
 	private static function handle_communication_action() {
-		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_manage_communications' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Accesso non consentito.', 403 );
+		if ( ! self::can_manage_communications() ) wp_die( 'Accesso non consentito.', 403 );
 		check_admin_referer( 'mi_portal_prepare_communication', 'mi_portal_nonce' );
 		$token = sanitize_key( $_POST['communication_token'] ?? '' );
 		$draft = $token ? get_transient( 'mi_comm_' . get_current_user_id() . '_' . $token ) : false;
@@ -688,22 +692,30 @@ final class MI_Portal {
 		$allowed_templates = array_merge( array( 'PRE_DEPARTURE_REMINDER', 'BALANCE_REMINDER', 'PARTICIPATION_CANCELLATION_REMINDER' ), array_keys( self::custom_communication_types() ) );
 		if ( ! in_array( $template, $allowed_templates, true ) ) return self::redirect_portal_result( 'Tipo di comunicazione non valido.', true, 'communications' );
 		$message = mb_substr( sanitize_textarea_field( $input['message'] ?? '' ), 0, 4000 );
+		if ( '' === trim( $message ) && ! in_array( $template, array( 'BALANCE_REMINDER', 'PARTICIPATION_CANCELLATION_REMINDER' ), true ) ) return self::redirect_portal_result( 'Inserisci il messaggio.', true, 'communications' );
 		if ( '' === trim( $message ) ) $message = MI_Modello_Email::default_communication_message( $template );
 		global $wpdb;
 		$communication_status = 'BALANCE_REMINDER' === $template ? "status IN ('CONFIRMED','PENDING_PAYMENT')" : ( 'PARTICIPATION_CANCELLATION_REMINDER' === $template ? "status IN ('CONFIRMED','PENDING_PAYMENT','TRAVEL_PENDING','WAITLISTED','WAITLIST_OFFERED')" : "status IN ('CONFIRMED','PENDING_PAYMENT','TRAVEL_PENDING')" );
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,buyer_email,total_cents,economic_mode FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND {$communication_status} AND capacity_released_at IS NULL ORDER BY id LIMIT 1001", $event_id ), ARRAY_A );
 		if ( $wpdb->last_error || ! is_array( $rows ) ) return self::redirect_portal_result( 'Destinatari non disponibili. Nessun invio preparato.', true, 'communications' );
 		if ( count( $rows ) > 1000 ) return self::redirect_portal_result( 'Oltre 1000 prenotazioni: invio non disponibile da questa schermata.', true, 'communications' );
-		$recipients = array();
+		$recipients = array(); $sample_recipients = array(); $excluded = 0;
 		try { $positions = MI_Payment_Ledger::positions( $rows ); }
 		catch ( Throwable $error ) { return self::redirect_portal_result( 'Saldo non disponibile. Nessuna comunicazione preparata.', true, 'communications' ); }
-		foreach ( $rows as $row ) { $position = $positions[$row['id']]; if ( 'BALANCE_REMINDER' === $template && ( ! $position['managed'] || $position['effective_balance'] < 1 ) ) continue; $recipients[] = array( 'order_code' => $row['order_code'], 'paid_cents' => $position['effective_paid'], 'balance_cents' => $position['managed'] ? $position['effective_balance'] : 0 ); }
+		foreach ( $rows as $row ) {
+			$position = $positions[$row['id']]; if ( 'BALANCE_REMINDER' === $template && ( ! $position['managed'] || $position['effective_balance'] < 1 ) ) continue;
+			$recipient = array( 'order_code' => $row['order_code'], 'paid_cents' => $position['effective_paid'], 'balance_cents' => $position['managed'] ? $position['effective_balance'] : 0 );
+			$sample_recipients[] = $recipient;
+			if ( ! is_email( trim( (string) $row['buyer_email'] ) ) ) { $excluded++; continue; }
+			$recipients[] = $recipient;
+		}
+		$recipient_codes = array_fill_keys( array_column( $recipients, 'order_code' ), true );
 		$fingerprint = hash( 'sha256', wp_json_encode( array( get_post_status( $event_id ), $rows, $recipients ) ) );
 		if ( ! $token ) {
-			if ( ! $recipients ) return self::redirect_portal_result( 'Nessun destinatario corrisponde ai criteri.', true, 'communications' );
+			if ( ! $sample_recipients ) return self::redirect_portal_result( 'Nessun destinatario corrisponde ai criteri.', true, 'communications' );
 			if ( ! in_array( $template, array( 'BALANCE_REMINDER', 'PARTICIPATION_CANCELLATION_REMINDER' ), true ) && ! trim( $message ) ) return self::redirect_portal_result( 'Inserisci il messaggio.', true, 'communications' );
 			$token = strtolower( wp_generate_password( 32, false, false ) );
-			set_transient( 'mi_comm_' . get_current_user_id() . '_' . $token, array( 'event_id' => $event_id, 'template_type' => $template, 'message' => $message, 'mode' => MI_Spedizione_Email::modalita(), 'fingerprint' => $fingerprint, 'count' => count( $recipients ), 'emails' => array_values( array_unique( array_column( array_filter( $rows, function( $row ) use ( $recipients ) { return in_array( $row['order_code'], array_column( $recipients, 'order_code' ), true ); } ), 'buyer_email' ) ) ) ), 30 * MINUTE_IN_SECONDS );
+			set_transient( 'mi_comm_' . get_current_user_id() . '_' . $token, array( 'event_id' => $event_id, 'template_type' => $template, 'message' => $message, 'mode' => MI_Spedizione_Email::modalita(), 'fingerprint' => $fingerprint, 'count' => count( $recipients ), 'excluded' => $excluded, 'emails' => array_values( array_unique( array_column( array_filter( $rows, function( $row ) use ( $recipient_codes ) { return isset( $recipient_codes[$row['order_code']] ); } ), 'buyer_email' ) ) ) ), 30 * MINUTE_IN_SECONDS );
 			wp_safe_redirect( add_query_arg( array( 'mi_portal_view' => 'communications', 'mi_comm_preview' => $token ), self::base_url() ) );
 			exit;
 		}
@@ -719,13 +731,14 @@ final class MI_Portal {
 				'communication_id' => 'portal-test-' . get_current_user_id() . '-' . $token . '-' . hash( 'sha256', $test_request . '|' . strtolower( $test_recipient ) ),
 				'event_id' => $event_id, 'template_type' => $template, 'message' => $message,
 				'allow_operational' => false, 'test_only' => true, 'test_recipient' => $test_recipient,
-				'recipients' => array_slice( $recipients, 0, 1 ),
+				'recipients' => array_slice( $sample_recipients, 0, 1 ),
 			) );
 			if ( is_wp_error( $result ) ) return self::redirect_communication_preview( $token, $result->get_error_message(), true );
 			$draft['test_job'] = $result['job_id'];
 			set_transient( 'mi_comm_' . get_current_user_id() . '_' . $token, $draft, 30 * MINUTE_IN_SECONDS );
 			return self::redirect_communication_preview( $token, 'Prova salvata. Preparazione e invio proseguono in background verso ' . $test_recipient . '.' );
 		}
+		if ( ! $recipients ) return self::redirect_portal_result( 'Nessun recapito email valido. Puoi inviare una prova oppure completare i recapiti delle prenotazioni.', true, 'communications' );
 		$result = MI_Email_Jobs::enqueue( array(
 			'communication_id' => 'portal-' . get_current_user_id() . '-' . $token,
 			'event_id' => $event_id, 'template_type' => $template, 'message' => $message,
@@ -740,7 +753,7 @@ final class MI_Portal {
 	}
 
 	private static function handle_communication_type_action( $action ) {
-		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_manage_all_events' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Solo un Gestore iscrizioni può modificare i tipi di comunicazione.', 403 );
+		if ( ! is_user_logged_in() || MI_Access::is_suspended() || ( ! current_user_can( 'mi_manage_all_events' ) && ! current_user_can( 'manage_options' ) ) ) wp_die( 'Solo un Gestore iscrizioni può modificare i tipi di comunicazione.', 403 );
 		check_admin_referer( 'mi_portal_manage_communication_types', 'mi_portal_nonce' );
 		$types = self::custom_communication_types();
 		if ( 'add_communication_type' === $action ) {
@@ -749,7 +762,8 @@ final class MI_Portal {
 			$base = strtoupper( str_replace( '-', '_', sanitize_title( $label ) ) );
 			$base = preg_replace( '/[^A-Z0-9_]/', '', $base );
 			$code = 'CUSTOM_' . substr( $base ?: 'MESSAGGIO', 0, 24 );
-			if ( isset( $types[ $code ] ) ) return self::redirect_portal_result( 'Esiste già un tipo di comunicazione con questo nome.', true, 'communications' );
+			foreach ( $types as $existing_label ) if ( mb_strtolower( $existing_label ) === mb_strtolower( $label ) ) return self::redirect_portal_result( 'Esiste già un tipo di comunicazione con questo nome.', true, 'communications' );
+			for ( $suffix = 0; isset( $types[$code] ); $suffix++ ) $code = 'CUSTOM_' . substr( $base ?: 'MESSAGGIO', 0, 17 ) . '_' . substr( hash( 'sha256', $label . '|' . $suffix ), 0, 6 );
 			$types[ $code ] = $label;
 			update_option( self::CUSTOM_COMMUNICATION_TYPES_OPTION, $types, false );
 			return self::redirect_portal_result( 'Nuovo tipo di comunicazione salvato.', false, 'communications' );
@@ -1247,13 +1261,14 @@ final class MI_Portal {
 		if ( MI_Access::is_suspended() ) return '<div class="mi-portal-empty"><h2>Accesso sospeso</h2><p>Questo account non può accedere alla Segreteria eventi. Contatta un amministratore.</p></div>';
 		if ( ! current_user_can( 'mi_portal_access' ) && ! current_user_can( 'manage_options' ) ) return '<div class="mi-portal-empty"><h2>C’è qualcuno qui…?</h2><p>Il tuo account non è abilitato al servizio iscrizioni.</p></div>';
 		$view = self::current_view();
+		if ( 'communications' === $view && ! self::can_manage_communications() ) return '<div class="mi-portal-notice mi-portal-error">Accesso ai messaggi non consentito.</div>';
 		$can_view_groups = self::can_manage_groups() || ( class_exists( 'MI_Portal_PWA' ) && MI_Portal_PWA::enabled() && MI_Portal_PWA::allowed_groups() );
 		$can_create = current_user_can( 'mi_create_events' ) || current_user_can( 'manage_options' );
 		$requested_edit_id = absint( $_GET['mi_portal_edit'] ?? $_GET['mi_portal_draft'] ?? 0 );
 		$can_edit_requested = $requested_edit_id && ( current_user_can( 'mi_manage_events' ) || current_user_can( 'manage_options' ) ) && MI_Access::can_access_event( $requested_edit_id );
 		ob_start();
 		?><main class="mi-portal" data-mi-portal-scope="reserved"><header class="mi-portal-header"><div><span class="mi-portal-eyebrow">Area riservata</span><h1>Segreteria eventi</h1></div><div class="mi-portal-header__actions"><?php if ( class_exists( 'MI_Web_Push' ) ) MI_Web_Push::render_control(); ?><a class="mi-portal-logout" href="<?php echo esc_url( wp_logout_url( self::base_url() ) ); ?>"><span aria-hidden="true">↗</span> Esci</a></div></header>
-		<nav class="mi-portal-switcher" aria-label="Segreteria eventi"><a class="<?php echo in_array( $view, array( 'management', 'registrations' ), true ) ? 'is-active' : ''; ?>" <?php if ( in_array( $view, array( 'management', 'registrations' ), true ) ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( ( isset( $_GET['mi_portal_event'] ) ? MI_Portal_Management::url( absint( $_GET['mi_portal_event'] ) ) : add_query_arg( 'mi_portal_view', 'management', self::base_url() ) ) ); ?>">Iscrizioni</a><a class="<?php echo 'manage' === $view ? 'is-active' : ''; ?>" <?php if ( 'manage' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'manage', self::base_url() ) ); ?>">Eventi</a><?php if ( $can_create ) : ?><a class="<?php echo 'create' === $view ? 'is-active' : ''; ?>" <?php if ( 'create' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'create', self::base_url() ) ); ?>">+ Crea evento</a><?php endif; ?><?php if ( MI_Portal_Payments::allowed() ) : ?><a class="<?php echo in_array( $view, array( 'payments', 'payment-report' ), true ) ? 'is-active' : ''; ?>" <?php if ( in_array( $view, array( 'payments', 'payment-report' ), true ) ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( array( 'mi_portal_view' => 'payments', 'mi_portal_event' => absint( $_GET['mi_portal_event'] ?? 0 ) ), self::base_url() ) ); ?>">Pagamenti</a><?php endif; ?><a class="<?php echo 'communications' === $view ? 'is-active' : ''; ?>" <?php if ( 'communications' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'communications', self::base_url() ) ); ?>">Messaggi</a><?php if ( $can_view_groups ) : ?><a class="<?php echo 'groups' === $view ? 'is-active' : ''; ?>" <?php if ( 'groups' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'groups', self::base_url() ) ); ?>">Gruppi</a><?php endif; ?><?php if ( self::can_manage_module_users() ) : ?><a class="<?php echo 'operators' === $view ? 'is-active' : ''; ?>" <?php if ( 'operators' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'operators', self::base_url() ) ); ?>">Operatori</a><?php endif; ?></nav>
+		<nav class="mi-portal-switcher" aria-label="Segreteria eventi"><a class="<?php echo in_array( $view, array( 'management', 'registrations' ), true ) ? 'is-active' : ''; ?>" <?php if ( in_array( $view, array( 'management', 'registrations' ), true ) ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( ( isset( $_GET['mi_portal_event'] ) ? MI_Portal_Management::url( absint( $_GET['mi_portal_event'] ) ) : add_query_arg( 'mi_portal_view', 'management', self::base_url() ) ) ); ?>">Iscrizioni</a><a class="<?php echo 'manage' === $view ? 'is-active' : ''; ?>" <?php if ( 'manage' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'manage', self::base_url() ) ); ?>">Eventi</a><?php if ( $can_create ) : ?><a class="<?php echo 'create' === $view ? 'is-active' : ''; ?>" <?php if ( 'create' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'create', self::base_url() ) ); ?>">+ Crea evento</a><?php endif; ?><?php if ( MI_Portal_Payments::allowed() ) : ?><a class="<?php echo in_array( $view, array( 'payments', 'payment-report' ), true ) ? 'is-active' : ''; ?>" <?php if ( in_array( $view, array( 'payments', 'payment-report' ), true ) ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( array( 'mi_portal_view' => 'payments', 'mi_portal_event' => absint( $_GET['mi_portal_event'] ?? 0 ) ), self::base_url() ) ); ?>">Pagamenti</a><?php endif; ?><?php if ( self::can_manage_communications() ) : ?><a class="<?php echo 'communications' === $view ? 'is-active' : ''; ?>" <?php if ( 'communications' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'communications', self::base_url() ) ); ?>">Messaggi</a><?php endif; ?><?php if ( $can_view_groups ) : ?><a class="<?php echo 'groups' === $view ? 'is-active' : ''; ?>" <?php if ( 'groups' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'groups', self::base_url() ) ); ?>">Gruppi</a><?php endif; ?><?php if ( self::can_manage_module_users() ) : ?><a class="<?php echo 'operators' === $view ? 'is-active' : ''; ?>" <?php if ( 'operators' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'operators', self::base_url() ) ); ?>">Operatori</a><?php endif; ?></nav>
 
 		<?php $notice_near_outputs = 'manage' === $view && ! empty( $_GET['mi_portal_event'] ) && ! empty( $_GET['mi_portal_outputs'] ); if ( ! $notice_near_outputs ) self::notice(); ?>
 		<?php if ( 'delete' === $view ) MI_Event_Deletion::render(); elseif ( 'create' === $view && ( $can_create || $can_edit_requested ) ) self::create_view( $requested_edit_id ); elseif ( 'management' === $view ) MI_Portal_Management::render(); elseif ( 'registrations' === $view ) MI_Portal_Management::render( absint( $_GET['mi_portal_booking'] ?? 0 ) ); elseif ( 'payments' === $view ) MI_Portal_Payments::render(); elseif ( 'payment-report' === $view ) MI_Portal_Payments::render_report(); elseif ( 'communications' === $view ) self::communications_view(); elseif ( 'groups' === $view && $can_view_groups ) self::groups_tab(); elseif ( 'operators' === $view && self::can_manage_module_users() ) self::operators_view(); else self::manage_view(); ?>
@@ -1438,8 +1453,10 @@ final class MI_Portal {
 		if ( is_array( $draft ) && MI_Access::can_access_event( $draft['event_id'] ) ) {
 			if ( ! empty( $draft['test_job'] ) ) MI_Email_Jobs::render_progress( $draft['test_job'] );
 			$test_recipient = $draft['test_recipient'] ?? MI_Spedizione_Email::destinatario_evento( $draft['event_id'] );
+			$display_mode = 'publish' === get_post_status( $draft['event_id'] ) ? $draft['mode'] : 'ANTEPRIMA';
 			echo '<section><h2>Conferma comunicazione</h2><h3>' . esc_html( get_the_title( $draft['event_id'] ) ) . '</h3><p>' . esc_html( $draft['count'] ) . ' email per le prenotazioni selezionate.</p>';
-			echo '<p><strong>' . ( 'OPERATIVO' === $draft['mode'] ? 'Invio ai destinatari reali' : ( 'PROVA' === $draft['mode'] ? 'Invio esclusivamente alla casella di prova' : 'Solo preparazione, senza invio' ) ) . '</strong></p>';
+			echo '<p><strong>' . ( 'OPERATIVO' === $display_mode ? 'Invio ai destinatari reali' : ( 'PROVA' === $display_mode ? 'Invio esclusivamente alla casella di prova' : 'Solo preparazione, senza invio' ) ) . '</strong></p>';
+			if ( ! empty( $draft['excluded'] ) ) echo '<p>' . esc_html( $draft['excluded'] ) . ' prenotazioni escluse perché prive di un recapito email valido.</p>';
 			if ( 'publish' !== get_post_status( $draft['event_id'] ) ) echo '<p>Evento non pubblicato: verranno salvate soltanto anteprime, senza invio.</p>';
 			echo '<details><summary>Destinatari delle prenotazioni</summary><p>' . esc_html( implode( ', ', $draft['emails'] ) ) . '</p></details><h3>Testo del messaggio</h3>';
 			if ( 'BALANCE_REMINDER' === $draft['template_type'] ) echo '<p>Il testo sarà personalizzato per ogni prenotazione sostituendo i segnaposto con saldo, scadenza e causale. Il collegamento al riepilogo viene aggiunto automaticamente.</p>' . MI_Modello_Email::formatta_comunicazione( $draft['message'] );

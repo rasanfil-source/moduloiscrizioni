@@ -211,7 +211,7 @@ final class MI_Modello_Email {
 					$declarations = preg_match( '/(?:^|;)\s*margin\s*:/i', $style[2] )
 						? preg_replace( '/(?:^|;)\s*margin\s*:[^;]*/i', ';margin:' . $margin, $style[2], 1 )
 						: rtrim( $style[2], '; ' ) . ';margin:' . $margin . ';';
-					return 'style=' . $style[1] . $declarations . $style[1];
+					return 'style=' . $style[1] . ltrim( $declarations, '; ' ) . $style[1];
 				}, $attributes, 1 );
 			} else {
 				$attributes .= ' style="margin:' . $margin . ';"';
@@ -229,7 +229,7 @@ final class MI_Modello_Email {
 
 	public static function mostra_riquadro( $post ) {
 		$settings = self::impostazioni( $post->ID );
-		$email_style = (array) get_post_meta( $post->ID, '_mi_email_style', true );
+		$email_style = self::sanitizza_stile( get_post_meta( $post->ID, '_mi_email_style', true ) );
 		$resolved_style = self::stile_risolto( $post->ID );
 		$identity_override = ! empty( array_intersect_key( $email_style, array_flip( array( 'identity_name', 'identity_detail', 'contact_email', 'signature' ) ) ) );
 		$color_override = ! empty( array_intersect_key( $email_style, array_flip( array( 'primary_color', 'secondary_color' ) ) ) );
@@ -286,13 +286,13 @@ final class MI_Modello_Email {
 
 	public static function crea_istantanea( $event_id, $values ) {
 		$settings = self::impostazioni( $event_id );
-		if ( 'ZERO' === strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ) ) {
+		if ( in_array( strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ), array( 'NONE', 'ZERO' ), true ) && empty( $values['_payment_required'] ) ) {
 			$settings['html'] = self::rimuovi_riferimenti_pagamento_gratuito( $settings['html'], true );
 			$settings['text'] = self::rimuovi_riferimenti_pagamento_gratuito( $settings['text'] );
 		}
 		$participant_management = isset( $values['_participant_management'] ) && is_array( $values['_participant_management'] ) ? $values['_participant_management'] : array();
 		unset( $values['_participant_management'] );
-		$snapshot = array( 'attivo' => '1' === $settings['enabled'] );
+		$snapshot = array( 'attivo' => '1' === $settings['enabled'], 'preserve_free_code' => true );
 		foreach ( array( 'subject' => 'oggetto', 'preheader' => 'preheader', 'html' => 'html', 'text' => 'testo', 'footer' => 'footer' ) as $source => $destination ) {
 			$snapshot[ $destination ] = 'html' === $source ? self::renderizza_html( $settings[ $source ], $values ) : self::renderizza( $settings[ $source ], $values );
 		}
@@ -381,11 +381,26 @@ final class MI_Modello_Email {
 			if ( $is_item && ! $list ) { $html .= '<ul>'; $list = true; }
 			if ( ! $is_item && $list ) { $html .= '</ul>'; $list = false; }
 			$safe = esc_html( $is_item ? substr( $line, 2 ) : $line );
-			$safe = preg_replace( '/\*\*([^*]+)\*\*/u', '<strong>$1</strong>', $safe );
-			$safe = preg_replace( '/(?<!\*)\*([^*]+)\*(?!\*)/u', '<em>$1</em>', $safe );
+			$safe = self::formatta_inline( $safe );
 			$html .= $is_item ? '<li>' . $safe . '</li>' : $safe . '<br>';
 		}
 		return $html . ( $list ? '</ul>' : '' );
+	}
+
+	/** Il testo e gia escapato: URL e frammenti generati restano fuori dalla conversione dell'enfasi. */
+	private static function formatta_inline( $text, $links = true ) {
+		$tokens = array();
+		if ( $links ) $text = preg_replace_callback( '/\[([^\]\r\n]+)\]\((https?:\/\/[^\s)]+)\)/u', static function ( $m ) use ( &$tokens ) {
+			$url = esc_url( html_entity_decode( $m[2], ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
+			if ( ! $url ) return $m[1];
+			$key = "\x1A" . count( $tokens ) . "\x1A";
+			$tokens[$key] = '<a href="' . $url . '">' . self::formatta_inline( $m[1], false ) . '</a>';
+			return $key;
+		}, $text );
+		$text = preg_replace( '/(?<!\*)\*\*\*(?=\S)([^\r\n]+?)\*\*\*(?!\*)/u', '<strong><em>$1</em></strong>', $text );
+		$text = preg_replace( '/(?<!\*)\*\*(?!\*)(?=\S)([^\r\n]+?)\*\*(?!\*)/u', '<strong>$1</strong>', $text );
+		$text = preg_replace( '/(?<![\w*])\*(?=\S)([^*\r\n]*?\S|\S)\*(?![\w*])/u', '<em>$1</em>', $text );
+		return $tokens ? strtr( $text, $tokens ) : $text;
 	}
 
 	public static function default_communication_message( $template_type ) {
@@ -428,7 +443,8 @@ final class MI_Modello_Email {
 			$snapshot['titolo'] = 'Un promemoria per la tua partecipazione';
 			$snapshot['preheader'] = 'Se i tuoi programmi sono cambiati, puoi aggiornare la tua partecipazione.';
 			$clean_message = trim( sanitize_textarea_field( (string) $message ) ) ?: self::default_communication_message( $template_type );
-			if ( ! $live_participant_links && ! $demo ) $clean_message = str_replace( 'tramite il collegamento personale qui sotto', 'tramite il collegamento personale che sarà incluso nell’email operativa', $clean_message );
+			if ( ! $live_participant_links && ! $demo ) $clean_message = preg_replace( '/tramite il (?:\*\*)?collegamento personale(?: riportato)? qui sotto(?:\*\*)?/u', 'contattando l’organizzazione', $clean_message );
+			$clean_message = self::renderizza( $clean_message, $values );
 			$recipient_name = $buyer_name;
 			if ( $live_participant_links ) {
 				$names = array_values( array_filter( array_map( static function ( $item ) { return sanitize_text_field( (string) ( $item['name'] ?? '' ) ); }, (array) $participant_management ) ) );
@@ -446,7 +462,7 @@ final class MI_Modello_Email {
 			}, (array) $participant_management ) ) );
 			$snapshot['status_url'] = '';
 		} elseif ( 'EVENT_CANCELLATION' === $template_type ) {
-			$clean_message = sanitize_textarea_field( (string) $message );
+			$clean_message = self::renderizza( sanitize_textarea_field( (string) $message ), $values );
 			$snapshot['oggetto'] = 'Evento annullato — ' . $event_title;
 			$snapshot['preheader'] = 'Comunicazione importante relativa alla tua iscrizione.';
 			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ti informiamo che <strong>' . esc_html( $event_title ) . '</strong> è stato annullato.</p>' . ( $clean_message ? '<p><strong>Motivo comunicato:</strong><br>' . nl2br( esc_html( $clean_message ) ) . '</p>' : '' ) . '<p>La segreteria ti contatterà separatamente se sono necessari rimborsi o altri adempimenti.</p>';
@@ -475,9 +491,15 @@ final class MI_Modello_Email {
 			$snapshot['testo'] = "Gentile {$buyer_name},\n\nla cancellazione dell’iscrizione a {$event_title} è stata registrata.";
 			$snapshot['status_url'] = '';
 		} else {
-			$clean_message = sanitize_textarea_field( (string) $message );
+			$clean_message = self::renderizza( sanitize_textarea_field( (string) $message ), $values );
 			$snapshot['oggetto'] = ( 'MATERIAL_DELIVERY' === $template_type ? 'Materiale' : 'Informazioni utili' ) . ' — ' . $event_title;
 			$snapshot['titolo'] = 'MATERIAL_DELIVERY' === $template_type ? 'Materiale per l’evento' : 'Comunicazione';
+			$custom_types = get_option( 'mi_custom_communication_types', array() );
+			if ( 0 === strpos( $template_type, 'CUSTOM_' ) && is_array( $custom_types ) && ! empty( $custom_types[$template_type] ) ) {
+				$label = sanitize_text_field( $custom_types[$template_type] );
+				$snapshot['oggetto'] = $label . ' — ' . $event_title;
+				$snapshot['titolo'] = $label;
+			}
 			$snapshot['preheader'] = 'Indicazioni operative prima dell’evento.';
 			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ecco le informazioni aggiornate per <strong>' . esc_html( $event_title ) . '</strong>.</p>' . self::formatta_comunicazione( $clean_message );
 			$snapshot['testo'] = "Gentile {$buyer_name},\n\necco le informazioni aggiornate per {$event_title}.\n\n{$clean_message}";
@@ -613,13 +635,14 @@ final class MI_Modello_Email {
 		);
 		$methods = array_map( static function ( $code ) use ( $method_labels ) { return $method_labels[ $code ]; }, $method_codes );
 		$instructions = array_map( static function ( $code ) use ( $instruction_labels ) { return $instruction_labels[ $code ]; }, $method_codes );
-		if ( 0 === $due ) {
+		$payment_required = $due > 0 || $balance > 0;
+		if ( ! $payment_required ) {
 			$methods = array( 'Nessun pagamento previsto' );
 			$instructions = array( 'Nessun pagamento richiesto.' );
 		}
 		$event_date = self::formatta_data_locale( $event['event_starts_at'] ?? '' );
-		$deadline = $due ? self::formatta_data_locale( $event['payment_deadline_at'] ?? '' ) : 'Non applicabile';
-		if ( $due && ! $deadline ) {
+		$deadline = $payment_required ? self::formatta_data_locale( $event['payment_deadline_at'] ?? '' ) : 'Non applicabile';
+		if ( $payment_required && ! $deadline ) {
 			$deadline = 'Contatta l’organizzazione';
 		}
 		$total_label = self::formatta_importo( $total );
@@ -627,6 +650,7 @@ final class MI_Modello_Email {
 		$balance_label = self::formatta_importo( $balance );
 
 		return array(
+			'_payment_required'            => $payment_required,
 			'{{evento.titolo}}'              => sanitize_text_field( (string) ( $event['title'] ?? '' ) ),
 			'{{evento.data}}'                => $event_date ?: 'Da definire',
 			'{{evento.luogo}}'               => sanitize_text_field( (string) ( $event['event_location'] ?? '' ) ) ?: 'Da definire',
@@ -644,7 +668,7 @@ final class MI_Modello_Email {
 			'{{pagamento.metodi}}'           => implode( ', ', $methods ),
 			'{{pagamento.istruzioni}}'       => implode( ' ', $instructions ),
 			'{{pagamento.scadenza}}'         => $deadline,
-			'{{pagamento.causale}}'          => $due ? sanitize_text_field( (string) $order_code ) : 'Non applicabile',
+			'{{pagamento.causale}}'          => $payment_required ? sanitize_text_field( (string) $order_code ) : 'Non applicabile',
 			'{{legale.privacy_url}}'         => esc_url_raw( $event['privacy_url'] ?? '' ),
 		);
 	}
@@ -840,7 +864,7 @@ final class MI_Modello_Email {
 			// Un marcatore spaiato non rende invalido il resto dell'HTML. Il testo
 			// semplice puo essere gia stato ripulito: ricostruirlo perderebbe i grassetti.
 			$html = self::sanitizza_html_email( $html_originale );
-			if ( $html_corrotto ) $html = self::ripara_markdown_html( $html );
+			if ( $html_corrotto || false !== strpos( $html, '[' ) || false !== strpos( $html, '*' ) ) $html = self::ripara_markdown_html( $html );
 			$istantanea['html'] = self::uniforma_grafica_corpo( $html );
 		}
 		$istantanea['testo'] = self::rimuovi_markdown_testo( $testo );
@@ -848,7 +872,7 @@ final class MI_Modello_Email {
 		// Il testo libero dell’organizzatore può legittimamente iniziare con “Codice:”;
 		// Il confronto esatto limita la rimozione al codice, senza interpretare lettere n o altre parole.
 		$order_code = trim( (string) ( $istantanea['identificativo']['codice'] ?? '' ) );
-		if ( '' !== $order_code ) {
+		if ( empty( $istantanea['preserve_free_code'] ) && '' !== $order_code ) {
 			$plain_code = preg_quote( $order_code, '/' );
 			$istantanea['testo'] = (string) preg_replace( '/^Codice(?: iscrizione)?:[\t ]*' . $plain_code . '[\t ]*(?:\r?\n)?/imu', '', $istantanea['testo'] );
 			$html_code = preg_quote( esc_html( $order_code ), '#' );
@@ -856,8 +880,10 @@ final class MI_Modello_Email {
 		}
 		// Le vecchie istantanee possono non avere metadati identificativi. Rimuovi
 		// comunque l'etichetta non ambigua "Codice iscrizione", mai il generico "Codice".
-		$istantanea['testo'] = (string) preg_replace( '/^Codice iscrizione:[\t ]*[^\r\n]*(?:\r?\n)?/imu', '', $istantanea['testo'] );
-		$istantanea['html'] = (string) preg_replace( '#(?:<br\s*/?>)?\s*(?:<strong>)?Codice iscrizione:(?:</strong>)?[^<]*(?=<br\s*/?>|</p>)#iu', '', $istantanea['html'] );
+		if ( empty( $istantanea['preserve_free_code'] ) ) {
+			$istantanea['testo'] = (string) preg_replace( '/^Codice iscrizione:[\t ]*[^\r\n]*(?:\r?\n)?/imu', '', $istantanea['testo'] );
+			$istantanea['html'] = (string) preg_replace( '#(?:<br\s*/?>)?\s*(?:<strong>)?Codice iscrizione:(?:</strong>)?[^<]*(?=<br\s*/?>|</p>)#iu', '', $istantanea['html'] );
+		}
 		return $istantanea;
 	}
 
@@ -892,17 +918,14 @@ final class MI_Modello_Email {
 	}
 
 	private static function testo_email_in_html( $testo ) {
-		$html = esc_html( (string) $testo );
-		$html = (string) preg_replace_callback( '/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/u', static function ( $match ) {
-			$url = esc_url( html_entity_decode( $match[2], ENT_QUOTES, 'UTF-8' ) );
-			return $url ? '<a href="' . $url . '">' . $match[1] . '</a>' : $match[1];
-		}, $html );
-		$html = (string) preg_replace( '/\*\*([^*\r\n]+)\*\*/u', '<strong>$1</strong>', $html );
+		$html = self::formatta_inline( esc_html( (string) $testo ) );
 		return self::sanitizza_html_email( wpautop( $html ) );
 	}
 
 	private static function rimuovi_markdown_testo( $testo ) {
-		$testo = (string) preg_replace( '/\*\*([^*\r\n]+)\*\*/u', '$1', (string) $testo );
+		$testo = (string) preg_replace( '/(?<!\*)\*\*\*(?=\S)([^\r\n]+?)\*\*\*(?!\*)/u', '$1', (string) $testo );
+		$testo = (string) preg_replace( '/(?<!\*)\*\*(?!\*)(?=\S)([^\r\n]+?)\*\*(?!\*)/u', '$1', $testo );
+		$testo = (string) preg_replace( '/(?<![\w*])\*(?=\S)([^*\r\n]*?\S|\S)\*(?![\w*])/u', '$1', $testo );
 		return (string) preg_replace( '/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/u', '$1: $2', $testo );
 	}
 
@@ -910,10 +933,11 @@ final class MI_Modello_Email {
 	private static function ripara_markdown_html( $html ) {
 		$parts = preg_split( '/(<(?:"[^"]*"|\'[^\']*\'|[^\'">])*>)/u', (string) $html, -1, PREG_SPLIT_DELIM_CAPTURE );
 		if ( false === $parts ) return (string) $html;
+		$anchor = false;
 		foreach ( $parts as &$part ) {
-			if ( '' === $part || '<' === $part[0] ) continue;
-			$part = (string) preg_replace( '/\*\*([^*\r\n]+)\*\*/u', '<strong>$1</strong>', $part );
-			$part = (string) preg_replace( '/(?<!\*)\*([^*\r\n]+)\*(?!\*)/u', '<em>$1</em>', $part );
+			if ( '' === $part ) continue;
+			if ( '<' === $part[0] ) { if ( preg_match( '#^</?a\b#i', $part ) ) $anchor = 0 !== strpos( $part, '</' ); continue; }
+			$part = self::formatta_inline( $part, ! $anchor );
 		}
 		unset( $part );
 		return implode( '', $parts );
@@ -960,8 +984,9 @@ final class MI_Modello_Email {
 		if ( wp_is_post_autosave( $post_id ) || wp_is_post_revision( $post_id ) || ! current_user_can( 'mi_manage_events' ) || ! MI_Access::can_access_event( $post_id ) ) {
 			return;
 		}
-		$raw_reply_to = sanitize_text_field( wp_unslash( $_POST['mi_email_reply_to'] ?? '' ) );
-		$raw_recipients = sanitize_textarea_field( wp_unslash( $_POST['mi_email_internal_recipients'] ?? '' ) );
+		$input = wp_unslash( $_POST );
+		$raw_reply_to = sanitize_text_field( $input['mi_email_reply_to'] ?? '' );
+		$raw_recipients = sanitize_textarea_field( $input['mi_email_internal_recipients'] ?? '' );
 		$recipient_candidates = array_values( array_filter( array_map( 'trim', preg_split( '/[\r\n,;]+/', $raw_recipients ) ) ) );
 		$recipients = array_values( array_filter( array_map( 'sanitize_email', $recipient_candidates ), 'is_email' ) );
 		if ( ( $raw_reply_to && ! is_email( $raw_reply_to ) ) || count( $recipient_candidates ) !== count( $recipients ) || count( $recipients ) > 10 ) {
@@ -969,29 +994,29 @@ final class MI_Modello_Email {
 			return;
 		}
 		$settings = array(
-			'enabled'   => isset( $_POST['mi_email_enabled'] ) ? '1' : '0',
-			'sender_name' => self::pulisci_riga( $_POST['mi_email_sender_name'] ?? '', 120 ),
+			'enabled'   => isset( $input['mi_email_enabled'] ) ? '1' : '0',
+			'sender_name' => self::pulisci_riga( $input['mi_email_sender_name'] ?? '', 120 ),
 			'reply_to'    => $raw_reply_to ? sanitize_email( $raw_reply_to ) : '',
 			'internal_recipients' => $recipients,
-			'subject'   => self::pulisci_riga( $_POST['mi_email_subject'] ?? '', 180 ),
-			'preheader' => self::pulisci_riga( $_POST['mi_email_preheader'] ?? '', 240 ),
-			'html'      => self::uniforma_grafica_corpo( self::sanitizza_html_email( wp_unslash( $_POST['mi_email_html'] ?? '' ) ) ),
-			'text'      => sanitize_textarea_field( wp_unslash( $_POST['mi_email_text'] ?? '' ) ),
-			'footer'    => sanitize_textarea_field( wp_unslash( $_POST['mi_email_footer'] ?? '' ) ),
+			'subject'   => self::pulisci_riga( $input['mi_email_subject'] ?? '', 180 ),
+			'preheader' => self::pulisci_riga( $input['mi_email_preheader'] ?? '', 240 ),
+			'html'      => self::uniforma_grafica_corpo( self::sanitizza_html_email( $input['mi_email_html'] ?? '' ) ),
+			'text'      => sanitize_textarea_field( $input['mi_email_text'] ?? '' ),
+			'footer'    => sanitize_textarea_field( $input['mi_email_footer'] ?? '' ),
 		);
 		$email_style = array();
-		if ( ! empty( $_POST['mi_email_event_identity_enabled'] ) ) $email_style = array( 'identity_name' => $_POST['mi_email_event_identity_name'] ?? '', 'identity_detail' => $_POST['mi_email_event_identity_detail'] ?? '', 'contact_email' => $_POST['mi_email_event_contact'] ?? '', 'signature' => $_POST['mi_email_event_signature'] ?? '' );
-		if ( ! empty( $_POST['mi_email_event_colors_enabled'] ) ) $email_style = array_merge( $email_style, array( 'primary_color' => $_POST['mi_email_event_primary'] ?? '', 'secondary_color' => $_POST['mi_email_event_secondary'] ?? '' ) );
-		if ( ! empty( $_POST['mi_email_event_banner_enabled'] ) ) $email_style['banner_url'] = $_POST['mi_email_event_banner'] ?? '';
-		$email_style = self::logo_override( $email_style, $_POST['mi_email_event_logo_mode'] ?? null, get_post_meta( $post_id, '_mi_email_style', true ) );
-		$email_style = self::sanitizza_stile( wp_unslash( $email_style ) );
-		if ( $email_style ) update_post_meta( $post_id, '_mi_email_style', $email_style ); else delete_post_meta( $post_id, '_mi_email_style' );
+		if ( ! empty( $input['mi_email_event_identity_enabled'] ) ) $email_style = array( 'identity_name' => $input['mi_email_event_identity_name'] ?? '', 'identity_detail' => $input['mi_email_event_identity_detail'] ?? '', 'contact_email' => $input['mi_email_event_contact'] ?? '', 'signature' => $input['mi_email_event_signature'] ?? '' );
+		if ( ! empty( $input['mi_email_event_colors_enabled'] ) ) $email_style = array_merge( $email_style, array( 'primary_color' => $input['mi_email_event_primary'] ?? '', 'secondary_color' => $input['mi_email_event_secondary'] ?? '' ) );
+		if ( ! empty( $input['mi_email_event_banner_enabled'] ) ) $email_style['banner_url'] = $input['mi_email_event_banner'] ?? '';
+		$email_style = self::logo_override( $email_style, $input['mi_email_event_logo_mode'] ?? null, get_post_meta( $post_id, '_mi_email_style', true ) );
+		$email_style = self::sanitizza_stile( $email_style );
 		$settings = self::aggiorna_segnaposto( $settings );
 		$unknown = self::trova_segnaposto_non_ammessi( $settings );
 		if ( $unknown ) {
 			set_transient( 'mi_email_placeholder_error_' . get_current_user_id(), implode( ', ', $unknown ), MINUTE_IN_SECONDS );
 			return;
 		}
+		if ( $email_style ) update_post_meta( $post_id, '_mi_email_style', wp_slash( $email_style ) ); else delete_post_meta( $post_id, '_mi_email_style' );
 		foreach ( array( 'html', 'text', 'footer' ) as $field ) $settings[ $field ] = self::normalizza_interruzioni( $settings[ $field ] );
 		// update_post_meta applica wp_unslash: proteggere i dati già decodificati.
 		update_post_meta( $post_id, '_mi_email_template', wp_slash( $settings ) );
@@ -1007,7 +1032,7 @@ final class MI_Modello_Email {
 		$generated_saved_html = self::uniforma_grafica_corpo( self::testo_email_in_html( $saved_text ) );
 		$html_is_custom = '' !== trim( $saved_html ) && $saved_html !== $generated_saved_html;
 		$settings['enabled'] = '1';
-		$settings['subject'] = self::pulisci_riga( $subject, 180 );
+		$settings['subject'] = self::pulisci_riga( wp_unslash( $subject ), 180 );
 		$settings['text'] = mb_substr( sanitize_textarea_field( wp_unslash( $text ) ), 0, 5000 );
 		$settings['text'] = self::ripara_interruzioni_testo( $settings['text'] );
 		if ( 'ZERO' === strtoupper( (string) get_post_meta( $event_id, '_mi_pricing_mode', true ) ) ) $settings['text'] = self::rimuovi_riferimenti_pagamento_gratuito( $settings['text'] );
@@ -1057,7 +1082,7 @@ final class MI_Modello_Email {
 	}
 
 	private static function pulisci_riga( $value, $maximum ) {
-		$value = sanitize_text_field( wp_unslash( $value ) );
+		$value = sanitize_text_field( $value );
 		return function_exists( 'mb_substr' ) ? mb_substr( $value, 0, $maximum ) : substr( $value, 0, $maximum );
 	}
 
