@@ -22,8 +22,20 @@ La rimozione dall'albero corrente non cancella i vecchi contenuti dai commit pre
 
 ## Release pubblicate su GitHub
 
-La sezione Releases aveva dieci vecchie pubblicazioni e non conteneva ancora le 3.27.37–3.27.41. Eliminate le cinque piu vecchie (3.26.179, 3.26.180, 3.26.194, 3.26.195, 3.26.198), inclusi relativi tag e allegati, per **9,70 MiB**. Conservate le cinque pubblicazioni piu recenti gia presenti: **3.26.210, 3.26.217, 3.26.219, 3.26.220 e 3.26.232**. Verificati invariati gli identificativi, i nomi e le dimensioni dei loro allegati.
+L'utente ha confermato che le cinque release da conservare anche su GitHub sono **3.27.37–3.27.41**, come in locale. La sezione Releases conteneva invece dieci pubblicazioni della serie 3.26: sono state eliminate tutte, con relativi tag e allegati. La cronologia dei commit non viene riscritta.
 
-La sostituzione di queste cinque pubblicazioni con le cinque versioni correnti del progetto e una scelta distinta, sottoposta all'utente. La pulizia dell'albero corrente riguarda il ramo di lavoro `codex/segreteria-3-26-15`; gli altri rami e la cronologia dei commit restano conservati. Non viene eseguito alcun force push.
+| Release GitHub | Allegati |
+| --- | --- |
+| [3.27.41](https://github.com/rasanfil-source/moduloiscrizioni/releases/tag/v3.27.41) | ZIP pubblico originale e SHA-256; sorgente MODULI AUTONOMO e SHA-256 |
+| [3.27.40](https://github.com/rasanfil-source/moduloiscrizioni/releases/tag/v3.27.40) | ZIP pubblico originale e SHA-256 |
+| [3.27.39](https://github.com/rasanfil-source/moduloiscrizioni/releases/tag/v3.27.39) | ZIP pubblico originale e SHA-256 |
+| [3.27.38](https://github.com/rasanfil-source/moduloiscrizioni/releases/tag/v3.27.38) | ZIP pubblico originale e SHA-256 |
+| [3.27.37](https://github.com/rasanfil-source/moduloiscrizioni/releases/tag/v3.27.37) | ZIP pubblico originale e SHA-256 |
+
+La 3.27.41 e contrassegnata come ultima release. Ogni allegato e verificato confrontando il digest SHA-256 restituito da GitHub con quello del file locale. Le varianti ZIP locali con configurazione privata non sono pubblicate. Le nuove pubblicazioni sono state prima caricate in bozza e verificate; le cinque vecchie release ancora presenti sono state rimosse soltanto dopo la pubblicazione di tutte le nuove.
+
+I 100 file del plugin di ciascun tag corrispondono a quelli dello ZIP pubblico originale, con la sola normale normalizzazione Git delle interruzioni di riga CRLF/LF per i file di testo. Gli snapshot pubblici escludono i vecchi archivi, checksum, note e helper di distribuzione. La 3.27.37, originariamente inclusa nel commit cumulativo della 3.27.38, ha uno snapshot recuperato dal suo ZIP originale: differiscono soltanto bootstrap e modello email. Gli ZIP conservati non sono stati ricostruiti o modificati.
+
+La pulizia dell'albero corrente riguarda il ramo di lavoro `codex/segreteria-3-26-15`; gli altri rami e la cronologia dei commit restano conservati. Non viene eseguito alcun force push. La pubblicazione su GitHub non installa aggiornamenti sul sito o nel progetto Google.
 
 Gli oggetti Git locali sono stati inoltre compattati con `git gc --no-prune`, passando da circa 73,74 a 23,36 MiB, senza eliminare gli oggetti recuperabili o riscrivere i commit.

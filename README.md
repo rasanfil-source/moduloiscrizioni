@@ -22,6 +22,7 @@ Le richieste tra WordPress e Apps Script sono firmate. MySQL conserva il registr
 ## Documentazione
 
 - [Distribuzioni conservate: ultimi cinque rilasci](docs/distribuzioni-conservate.md)
+- [Download delle cinque release pubblicate](https://github.com/rasanfil-source/moduloiscrizioni/releases)
 - [Rilascio 3.27.41: correzioni degli audit email e permessi](docs/rilascio-3.27.41.md)
 - [Rilascio 3.27.40: pulsante Google e date nella scheda evento](docs/rilascio-3.27.40.md)
 - [Rilascio 3.27.39: tipografia uniforme delle email](docs/rilascio-3.27.39.md)
