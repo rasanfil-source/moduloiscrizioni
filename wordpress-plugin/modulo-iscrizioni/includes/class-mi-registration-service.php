@@ -201,6 +201,7 @@ final class MI_Registration_Service {
 			'event_starts_at'  => (string) get_post_meta( $event_id, '_mi_event_starts_at', true ),
 			'event_location'   => (string) get_post_meta( $event_id, '_mi_event_location', true ),
 			'capacity'         => max( 1, absint( get_post_meta( $event_id, '_mi_capacity', true ) ) ),
+			'availability_count_visible' => '0' !== (string) get_post_meta( $event_id, '_mi_availability_count_visible', true ),
 			'waitlist_enabled' => '1' === get_post_meta( $event_id, '_mi_waitlist_enabled', true ),
 			'reopened_payment_hours' => min( 168, max( 1, absint( get_post_meta( $event_id, '_mi_reopened_payment_hours', true ) ?: 48 ) ) ),
 			'waitlist_offer_hours' => min( 168, max( 1, absint( get_post_meta( $event_id, '_mi_waitlist_offer_hours', true ) ?: 48 ) ) ),
