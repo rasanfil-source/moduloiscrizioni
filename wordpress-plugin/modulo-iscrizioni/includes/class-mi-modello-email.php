@@ -659,8 +659,43 @@ final class MI_Modello_Email {
 		return wp_kses( (string) $html, $allowed );
 	}
 
+	/** Stile inline del corpo, al maggiore formato presente (minimo 17 px), esclusi i titoli. */
+	private static function uniforma_tipografia_corpo( $html ) {
+		$parts = preg_split( '/(<(?:"[^"]*"|\'[^\']*\'|[^\'">])*>)/u', (string) $html, -1, PREG_SPLIT_DELIM_CAPTURE );
+		if ( false === $parts ) return (string) $html;
+		$size = 17; $nodes = array(); $in_heading = false;
+		$units = array( 'px' => 1, 'pt' => 96 / 72, 'pc' => 16, 'in' => 96, 'cm' => 96 / 2.54, 'mm' => 96 / 25.4, 'rem' => 16, 'em' => 17, '%' => 0.17 );
+		foreach ( $parts as $index => $part ) {
+			if ( preg_match( '#^</?h[1-6]\b#i', $part ) ) { $in_heading = 0 !== strpos( $part, '</' ); continue; }
+			if ( $in_heading || ! preg_match( '#^<(p|div|td|th|li|span|small|a|code|blockquote|ul|ol|strong|em|b|i)\b(.*)>$#is', $part, $tag ) ) continue;
+			$style = preg_match( '/\sstyle\s*=\s*([\'\"])(.*?)\1/is', $tag[2], $match ) ? html_entity_decode( $match[2], ENT_QUOTES | ENT_HTML5, 'UTF-8' ) : '';
+			if ( preg_match_all( '/(?:^|;)\s*font(?:-size)?\s*:\s*([^;]+)/i', $style, $declarations ) ) {
+				foreach ( $declarations[1] as $declaration ) {
+					if ( preg_match( '/(\d+(?:\.\d+)?)\s*(px|pt|pc|in|cm|mm|rem|em|%)/i', $declaration, $value ) ) $size = max( $size, (float) $value[1] * $units[ strtolower( $value[2] ) ] );
+				}
+			}
+			$nodes[$index] = array( $tag[1], $tag[2], $style );
+		}
+		// Arrotonda verso l'alto: la normalizzazione non riduce il formato rilevato.
+		$size = ceil( round( $size * 100, 6 ) ) / 100;
+		$text_style = 'font-family:Arial,Helvetica,sans-serif;font-size:' . $size . 'px;line-height:1.68;';
+		foreach ( $nodes as $index => $node ) {
+			list( $tag, $attributes, $style ) = $node;
+			$remaining = trim( (string) preg_replace( '/(?:^|;)\s*(?:font-family|font-size|line-height)\s*:[^;]*/i', '', $style ), '; ' );
+			// Un eventuale shorthand importante conserva peso/corsivo, ma non prevale sulle dimensioni uniformi.
+			$inline = preg_match( '/(?:^|;)\s*font\s*:[^;]*!important/i', $remaining ) ? str_replace( ';', ' !important;', $text_style ) : $text_style;
+			$inline = ( $remaining ? $remaining . ';' : '' ) . $inline;
+			if ( preg_match( '/\sstyle\s*=\s*([\'\"])(.*?)\1/is', $attributes ) ) {
+				$attributes = preg_replace_callback( '/\sstyle\s*=\s*([\'\"])(.*?)\1/is', static function () use ( $inline ) { return ' style="' . esc_attr( $inline ) . '"'; }, $attributes, 1 );
+			} else $attributes .= ' style="' . esc_attr( $inline ) . '"';
+			$parts[$index] = '<' . $tag . $attributes . '>';
+		}
+		$body = implode( '', $parts );
+		return preg_match( '/<(?:html|body)\b/i', (string) $html ) ? $body : '<div style="' . esc_attr( $text_style ) . '">' . $body . '</div>';
+	}
+
 	public static function componi_html( $istantanea, $codice_html = '' ) {
-		if ( 'PUBLIC_BALANCE' === ( $istantanea['layout'] ?? '' ) ) return (string) ( $istantanea['html'] ?? '' );
+		if ( 'PUBLIC_BALANCE' === ( $istantanea['layout'] ?? '' ) ) return self::uniforma_tipografia_corpo( (string) ( $istantanea['html'] ?? '' ) );
 		if ( 'INSTITUTIONAL' === ( $istantanea['layout'] ?? '' ) ) return self::componi_html_istituzionale( $istantanea );
 		$identity = isset( $istantanea['identita'] ) && is_array( $istantanea['identita'] ) ? $istantanea['identita'] : array();
 		$email_identity = isset( $istantanea['identita_email'] ) && is_array( $istantanea['identita_email'] ) ? $istantanea['identita_email'] : array();
@@ -682,7 +717,7 @@ final class MI_Modello_Email {
 		$reply_to = ! empty( $email_identity['indirizzo_risposte'] ) && is_email( $email_identity['indirizzo_risposte'] ) ? sanitize_email( $email_identity['indirizzo_risposte'] ) : '';
 		$assistance = $reply_to ? 'Per domande o variazioni scrivi a <a href="mailto:' . esc_attr( $reply_to ) . '" style="color:' . esc_attr( $primary ) . ';text-decoration:none;font-weight:700;">' . esc_html( $reply_to ) . '</a>.' : 'Per domande o variazioni, rispondi direttamente a questa email.';
 		$activity_name = sanitize_text_field( (string) ( $identity['nome_attivita'] ?? '' ) );
-		$body = self::evidenzia_titolo_evento( self::sanitizza_html_email( $istantanea['html'] ?? '' ), $title );
+		$body = self::uniforma_tipografia_corpo( self::evidenzia_titolo_evento( self::sanitizza_html_email( $istantanea['html'] ?? '' ), $title ) );
 		$management_html = '';
 		if ( ! empty( $istantanea['gestione_partecipanti'] ) && is_array( $istantanea['gestione_partecipanti'] ) ) {
 			$single_management = 1 === count( $istantanea['gestione_partecipanti'] );
@@ -724,7 +759,7 @@ final class MI_Modello_Email {
 	private static function componi_html_istituzionale( $snapshot ) {
 		$title = sanitize_text_field( (string) ( $snapshot['titolo'] ?? $snapshot['oggetto'] ?? 'Comunicazione di segreteria' ) );
 		$event = sanitize_text_field( (string) ( $snapshot['evento']['titolo'] ?? '' ) );
-		$body = self::sanitizza_html_email( $snapshot['html'] ?? '' );
+		$body = self::uniforma_tipografia_corpo( self::sanitizza_html_email( $snapshot['html'] ?? '' ) );
 		$actions = '';
 		foreach ( (array) ( $snapshot['azioni'] ?? array() ) as $action ) {
 			$url = esc_url( $action['url'] ?? '' ); $label = sanitize_text_field( $action['label'] ?? '' );

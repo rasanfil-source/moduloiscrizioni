@@ -23,7 +23,7 @@ $template = new ReflectionMethod( 'MI_Modello_Email', 'ripara_modello_testuale' 
 $settings = $template->invoke( null, array( 'html' => $rich['html'], 'text' => $rich['testo'], 'footer' => '' ) );
 expect( str_contains( $settings['html'], '<strong>Gia formattato</strong>' ) && str_contains( $settings['html'], '<strong>ancora in grassetto</strong>' ), 'Modello salvato perde i grassetti esistenti' );
 $complete = MI_Modello_Email::componi_html( $snapshot );
-expect( str_contains( $complete, '<strong>collegamento personale riportato qui sotto</strong>' ), 'Grassetto perso nell HTML finale' );
+expect( preg_match( '#<strong\b[^>]*>collegamento personale riportato qui sotto</strong>#u', $complete ), 'Grassetto perso nell HTML finale' );
 $unsafe = MI_Modello_Email::ripara_istantanea_codifica( array( 'html' => MI_Modello_Email::formatta_comunicazione( '**<img src=x onerror=alert(1)>** e nota.**' ), 'testo' => 'Testo semplice' ) );
 expect( ! str_contains( $unsafe['html'], '<img' ) && str_contains( $unsafe['html'], '&lt;img' ), 'HTML inserito dall utente non escapato' );
 if ( in_array( '--render', $argv, true ) ) file_put_contents( dirname( __DIR__, 2 ) . '/output/grassetto-3.27.32/prova.html', $complete );
