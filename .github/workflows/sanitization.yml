@@ -38,6 +38,7 @@ jobs:
           php wordpress-plugin/tests/public-balance.php
           php wordpress-plugin/tests/public-balance-model.php
           php wordpress-plugin/tests/email-body-typography.php
+          php wordpress-plugin/tests/event-card-layout.php
           php wordpress-plugin/tests/operational-profile.php
           php wordpress-plugin/tests/option-rules.php
           php wordpress-plugin/tests/sheet-open.php
