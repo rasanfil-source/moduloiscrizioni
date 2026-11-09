@@ -203,6 +203,7 @@ final class MI_Registration_Service {
 			'capacity'         => max( 1, absint( get_post_meta( $event_id, '_mi_capacity', true ) ) ),
 			'availability_count_visible' => '0' !== (string) get_post_meta( $event_id, '_mi_availability_count_visible', true ),
 			'waitlist_enabled' => '1' === get_post_meta( $event_id, '_mi_waitlist_enabled', true ),
+			'waitlist_capacity' => min( 10000, max( 1, absint( get_post_meta( $event_id, '_mi_waitlist_capacity', true ) ?: 20 ) ) ),
 			'reopened_payment_hours' => min( 168, max( 1, absint( get_post_meta( $event_id, '_mi_reopened_payment_hours', true ) ?: 48 ) ) ),
 			'waitlist_offer_hours' => min( 168, max( 1, absint( get_post_meta( $event_id, '_mi_waitlist_offer_hours', true ) ?: 48 ) ) ),
 			'opens_at'         => (string) get_post_meta( $event_id, '_mi_registration_opens_at', true ),
@@ -249,7 +250,7 @@ final class MI_Registration_Service {
 			return $time_state;
 		}
 		$availability = isset( $event['availability'] ) && is_array( $event['availability'] ) ? $event['availability'] : self::availability( $event );
-		return $availability['full'] && empty( $event['waitlist_enabled'] ) ? 'SOLD_OUT' : 'OPEN';
+		return $availability['full'] && ( empty( $event['waitlist_enabled'] ) || $availability['waitlist_remaining'] < 1 ) ? 'SOLD_OUT' : 'OPEN';
 	}
 
 	public static function registration_time_state( $event ) {
@@ -314,7 +315,9 @@ final class MI_Registration_Service {
 				$ticket_availability[ $code ] = array( 'capacity' => $type_capacity, 'confirmed' => $type_confirmed, 'waitlisted' => (int) ( $indexed[ $code ]['waitlisted_count'] ?? 0 ), 'remaining' => $type_remaining );
 			}
 		}
-		return array( 'capacity' => $capacity, 'confirmed' => $confirmed, 'waitlisted' => $waitlisted, 'remaining' => $remaining, 'full' => 0 === $remaining || ( ! empty( $event['ticket_types'] ) && ! $any_ticket_available ), 'ticket_types' => $ticket_availability );
+		$waitlist_capacity = min( 10000, max( 1, absint( $event['waitlist_capacity'] ?? 20 ) ) );
+		$waitlist_remaining = max( 0, $waitlist_capacity - $waitlisted );
+		return array( 'capacity' => $capacity, 'confirmed' => $confirmed, 'waitlisted' => $waitlisted, 'waitlist_capacity' => $waitlist_capacity, 'waitlist_remaining' => $waitlist_remaining, 'remaining' => $remaining, 'full' => 0 === $remaining || ( ! empty( $event['ticket_types'] ) && ! $any_ticket_available ), 'ticket_types' => $ticket_availability );
 	}
 
 	public static function create( $event_id, $payload, $idempotency_key, $allow_unpublished = false, $audit_actor = 'PUBLIC_FORM', $trusted_operator = false ) {
@@ -447,6 +450,11 @@ final class MI_Registration_Service {
 				$status = in_array( $event['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) && ( $selection['total_cents'] + $options_total ) > 0 ? 'PENDING_PAYMENT' : 'CONFIRMED';
 				$counter_field = 'confirmed_count';
 			} elseif ( $event['waitlist_enabled'] ) {
+				$waitlist_remaining = max( 0, (int) ( $event['waitlist_capacity'] ?? 20 ) - (int) $counter['waitlisted_count'] );
+				if ( $selection['quantity'] > $waitlist_remaining ) {
+					$wpdb->query( 'ROLLBACK' );
+					return new WP_Error( 'mi_waitlist_full', 0 === $waitlist_remaining ? 'La lista d’attesa è al completo e al momento non può accettare altre richieste.' : 'Nella lista d’attesa restano ' . $waitlist_remaining . ' posti: la richiesta non può essere inserita perché comprende più persone.' , array( 'status' => 409 ) );
+				}
 				$status = 'WAITLISTED';
 				$counter_field = 'waitlisted_count';
 				if ( empty( $buyer['email'] ) ) {
@@ -1046,9 +1054,31 @@ final class MI_Registration_Service {
 		$token = (string) $token;
 		if ( ! $participant_id || ! preg_match( '/^[a-f0-9]{64}$/', $token ) ) return new WP_Error( 'mi_cancel_token_invalid', 'Collegamento non valido.' );
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT p.id,p.registration_id,p.first_name,p.last_name,p.status,p.cancellation_token_hash,r.event_id,r.order_code,r.status registration_status FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE p.id=%d", $participant_id ), ARRAY_A );
-		if ( ! $row || empty( $row['cancellation_token_hash'] ) || ! hash_equals( (string) $row['cancellation_token_hash'], hash( 'sha256', $token ) ) ) return new WP_Error( 'mi_cancel_token_invalid', 'Collegamento non valido o non più utilizzabile.' );
+		$token_hash = hash( 'sha256', $token );
+		$valid = $row && ! empty( $row['cancellation_token_hash'] ) && hash_equals( (string) $row['cancellation_token_hash'], $token_hash );
+		if ( $row && ! $valid ) {
+			$token_table = $wpdb->prefix . 'mi_cancellation_tokens';
+			$valid = (bool) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$token_table} WHERE participant_id=%d AND token_hash=%s LIMIT 1", $participant_id, $token_hash ) );
+		}
+		if ( ! $valid ) return new WP_Error( 'mi_cancel_token_invalid', 'Collegamento non valido o non più utilizzabile.' );
 		unset( $row['cancellation_token_hash'] );
 		return $row;
+	}
+
+	/** Crea credenziali aggiuntive senza invalidare i collegamenti già inviati. */
+	public static function create_participant_cancellation_links( $registration_id ) {
+		global $wpdb;
+		$participants = $wpdb->prefix . 'mi_participants';
+		$token_table = $wpdb->prefix . 'mi_cancellation_tokens';
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id,first_name,last_name FROM {$participants} WHERE registration_id=%d AND status='ACTIVE' ORDER BY id", absint( $registration_id ) ), ARRAY_A );
+		if ( $wpdb->last_error ) throw new RuntimeException( 'Collegamenti per i partecipanti non disponibili.' );
+		$links = array();
+		foreach ( $rows as $row ) {
+			$token = bin2hex( random_bytes( 32 ) );
+			if ( false === $wpdb->insert( $token_table, array( 'participant_id' => (int) $row['id'], 'token_hash' => hash( 'sha256', $token ), 'created_at' => current_time( 'mysql', true ) ), array( '%d', '%s', '%s' ) ) ) throw new RuntimeException( 'Collegamento individuale non salvato.' );
+			$links[] = array( 'name' => trim( $row['first_name'] . ' ' . $row['last_name'] ), 'url' => MI_Portal::participant_cancel_url( (int) $row['id'], $token ) );
+		}
+		return $links;
 	}
 
 	public static function cancel_participant_with_token( $participant_id, $token ) {
@@ -1085,6 +1115,8 @@ final class MI_Registration_Service {
 			$actor_label = substr( sanitize_text_field( $actor_label ), 0, 120 );
 			$participant_updated = $wpdb->query( $wpdb->prepare( "UPDATE {$participants} SET status='CANCELLED',cancelled_at=%s,cancellation_actor=%s,cancellation_token_hash=NULL WHERE id=%d AND status='ACTIVE'", $now, $actor_label, $participant_id ) );
 			if ( 1 !== $participant_updated ) throw new RuntimeException( 'Partecipante non aggiornato.' );
+			$token_table = $wpdb->prefix . 'mi_cancellation_tokens';
+			if ( false === $wpdb->delete( $token_table, array( 'participant_id' => $participant_id ), array( '%d' ) ) ) throw new RuntimeException( 'Collegamenti di annullamento non aggiornati.' );
 			$remaining = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$participants} WHERE registration_id=%d AND status='ACTIVE'", $registration['id'] ) );
 			if ( $wpdb->last_error ) throw new RuntimeException( 'Conteggio partecipanti non disponibile.' );
 			// total_qty rappresenta le persone ancora attive; le righe annullate restano

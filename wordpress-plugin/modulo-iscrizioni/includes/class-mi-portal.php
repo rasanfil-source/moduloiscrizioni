@@ -16,12 +16,25 @@ final class MI_Portal {
 		add_action( 'template_redirect', array( __CLASS__, 'render_virtual_page' ), -90 );
 		add_filter( 'posts_pre_query', array( __CLASS__, 'skip_unused_main_query' ), 10, 2 );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'assets' ) );
+		add_action( 'wp_ajax_mi_communication_default_text', array( __CLASS__, 'ajax_communication_default_text' ) );
+		add_action( 'wp_ajax_mi_communication_events', array( __CLASS__, 'ajax_communication_events' ) );
 		add_action( 'wp_head', array( __CLASS__, 'portal_icon_links' ), 99 );
 		add_action( 'send_headers', array( __CLASS__, 'secure_cancellation_headers' ) );
 		add_action( 'mi_pulisci_bozze_cestinate', array( __CLASS__, 'purge_trashed_drafts' ) );
 		add_action( 'mi_pulisci_bozze_cestinate', array( __CLASS__, 'archive_completed_event_sheets' ), 20 );
 		add_action( 'mi_organizza_fogli_evento', array( __CLASS__, 'archive_completed_event_sheets' ) );
 		add_action( 'mi_sync_workspace_event', array( __CLASS__, 'sincronizza_evento_in_coda' ) );
+	}
+
+	/** Restituisce solo il testo richiesto dal tipo selezionato nella schermata Comunicazioni. */
+	public static function ajax_communication_default_text() {
+		if ( ! is_user_logged_in() || ( ! current_user_can( 'mi_manage_communications' ) && ! current_user_can( 'manage_options' ) ) ) wp_send_json_error( array( 'message' => 'Accesso non consentito.' ), 403 );
+		check_ajax_referer( 'mi_communication_default_text', 'nonce' );
+		$type = strtoupper( sanitize_key( wp_unslash( $_POST['template_type'] ?? '' ) ) );
+		$allowed = array( 'PRE_DEPARTURE_REMINDER', 'PARTICIPATION_CANCELLATION_REMINDER', 'BALANCE_REMINDER' );
+		$custom = self::custom_communication_types();
+		if ( ! in_array( $type, $allowed, true ) && ! isset( $custom[ $type ] ) ) wp_send_json_error( array( 'message' => 'Tipo di comunicazione non valido.' ), 400 );
+		wp_send_json_success( array( 'message' => MI_Modello_Email::default_communication_message( $type ), 'help' => MI_Modello_Email::default_communication_help( $type ) ) );
 	}
 
 	/** Il portale autonomo non usa gli articoli della home; le query delle schede restano normali. */
@@ -129,6 +142,7 @@ final class MI_Portal {
 		if ( empty( $_GET['mi_portal'] ) && empty( $_GET['mi_status'] ) && empty( $_GET['mi_waitlist_offer'] ) && ( ! $post || ! has_shortcode( $post->post_content, self::SHORTCODE ) ) ) return;
 		wp_enqueue_style( 'mi-portal', MI_PLUGIN_URL . 'assets/portal.css', array(), MI_VERSION );
 		if ( self::needs_portal_script() ) wp_enqueue_script( 'mi-portal', MI_PLUGIN_URL . 'assets/portal.js', array(), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
+		if ( self::needs_portal_script() && 'communications' === self::current_view() ) wp_enqueue_script( 'mi-portal-communications', MI_PLUGIN_URL . 'assets/portal-communications.js', array( 'mi-portal' ), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
 		if ( self::needs_management_script() ) wp_enqueue_script( 'mi-portal-management', MI_PLUGIN_URL . 'assets/portal-management.js', array(), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
 		if ( self::needs_management_styles() ) wp_enqueue_style( 'mi-portal-management', MI_PLUGIN_URL . 'assets/portal-management.css', array( 'mi-portal' ), MI_VERSION );
 		if ( self::needs_payment_assets() ) {
@@ -320,6 +334,9 @@ final class MI_Portal {
 		$availability_count_visible = isset( $_POST['availability_count_visible'] ) ? '1' === (string) wp_unslash( $_POST['availability_count_visible'] ) : ( '0' !== (string) get_post_meta( $event_id, '_mi_availability_count_visible', true ) );
 		update_post_meta( $event_id, '_mi_availability_count_visible', $availability_count_visible ? '1' : '0' );
 		update_post_meta( $event_id, '_mi_waitlist_enabled', ! empty( $_POST['waitlist_enabled'] ) ? '1' : '0' );
+		$saved_waitlist_capacity = absint( get_post_meta( $event_id, '_mi_waitlist_capacity', true ) );
+		$waitlist_capacity = isset( $_POST['waitlist_capacity'] ) ? absint( $_POST['waitlist_capacity'] ) : ( $saved_waitlist_capacity ?: 20 );
+		update_post_meta( $event_id, '_mi_waitlist_capacity', min( 10000, max( 1, $waitlist_capacity ) ) );
 		$saved_waitlist_offer_hours = absint( get_post_meta( $event_id, '_mi_waitlist_offer_hours', true ) );
 		$waitlist_offer_hours = isset( $_POST['waitlist_offer_hours'] ) ? absint( $_POST['waitlist_offer_hours'] ) : ( $saved_waitlist_offer_hours ?: 48 );
 		update_post_meta( $event_id, '_mi_waitlist_offer_hours', min( 168, max( 1, $waitlist_offer_hours ) ) );
@@ -667,11 +684,12 @@ final class MI_Portal {
 		$event_id = absint( $input['event_id'] ?? 0 );
 		if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Evento non accessibile.', 403 );
 		$template = strtoupper( sanitize_key( $input['template_type'] ?? '' ) );
-		$allowed_templates = array_merge( array( 'PRE_DEPARTURE_REMINDER', 'BALANCE_REMINDER' ), array_keys( self::custom_communication_types() ) );
+		$allowed_templates = array_merge( array( 'PRE_DEPARTURE_REMINDER', 'BALANCE_REMINDER', 'PARTICIPATION_CANCELLATION_REMINDER' ), array_keys( self::custom_communication_types() ) );
 		if ( ! in_array( $template, $allowed_templates, true ) ) return self::redirect_portal_result( 'Tipo di comunicazione non valido.', true, 'communications' );
 		$message = mb_substr( sanitize_textarea_field( $input['message'] ?? '' ), 0, 4000 );
+		if ( '' === trim( $message ) ) $message = MI_Modello_Email::default_communication_message( $template );
 		global $wpdb;
-		$communication_status = 'BALANCE_REMINDER' === $template ? "status IN ('CONFIRMED','PENDING_PAYMENT')" : "status IN ('CONFIRMED','PENDING_PAYMENT','TRAVEL_PENDING')";
+		$communication_status = 'BALANCE_REMINDER' === $template ? "status IN ('CONFIRMED','PENDING_PAYMENT')" : ( 'PARTICIPATION_CANCELLATION_REMINDER' === $template ? "status IN ('CONFIRMED','PENDING_PAYMENT','TRAVEL_PENDING','WAITLISTED','WAITLIST_OFFERED')" : "status IN ('CONFIRMED','PENDING_PAYMENT','TRAVEL_PENDING')" );
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,buyer_email,total_cents,economic_mode FROM {$wpdb->prefix}mi_registrations WHERE event_id=%d AND {$communication_status} AND capacity_released_at IS NULL ORDER BY id LIMIT 1001", $event_id ), ARRAY_A );
 		if ( $wpdb->last_error || ! is_array( $rows ) ) return self::redirect_portal_result( 'Destinatari non disponibili. Nessun invio preparato.', true, 'communications' );
 		if ( count( $rows ) > 1000 ) return self::redirect_portal_result( 'Oltre 1000 prenotazioni: invio non disponibile da questa schermata.', true, 'communications' );
@@ -682,13 +700,35 @@ final class MI_Portal {
 		$fingerprint = hash( 'sha256', wp_json_encode( array( get_post_status( $event_id ), $rows, $recipients ) ) );
 		if ( ! $token ) {
 			if ( ! $recipients ) return self::redirect_portal_result( 'Nessun destinatario corrisponde ai criteri.', true, 'communications' );
-			if ( 'BALANCE_REMINDER' !== $template && ! trim( $message ) ) return self::redirect_portal_result( 'Inserisci il messaggio.', true, 'communications' );
+			if ( ! in_array( $template, array( 'BALANCE_REMINDER', 'PARTICIPATION_CANCELLATION_REMINDER' ), true ) && ! trim( $message ) ) return self::redirect_portal_result( 'Inserisci il messaggio.', true, 'communications' );
 			$token = strtolower( wp_generate_password( 32, false, false ) );
 			set_transient( 'mi_comm_' . get_current_user_id() . '_' . $token, array( 'event_id' => $event_id, 'template_type' => $template, 'message' => $message, 'mode' => MI_Spedizione_Email::modalita(), 'fingerprint' => $fingerprint, 'count' => count( $recipients ), 'emails' => array_values( array_unique( array_column( array_filter( $rows, function( $row ) use ( $recipients ) { return in_array( $row['order_code'], array_column( $recipients, 'order_code' ), true ); } ), 'buyer_email' ) ) ) ), 30 * MINUTE_IN_SECONDS );
 			wp_safe_redirect( add_query_arg( array( 'mi_portal_view' => 'communications', 'mi_comm_preview' => $token ), self::base_url() ) );
 			exit;
 		}
 		if ( ! hash_equals( $draft['fingerprint'], $fingerprint ) ) return self::redirect_portal_result( 'Destinatari o saldi cambiati. Prepara una nuova anteprima prima di inviare.', true, 'communications' );
+		if ( ! empty( $_POST['communication_test'] ) ) {
+			$test_recipient = sanitize_email( wp_unslash( $_POST['communication_test_recipient'] ?? '' ) );
+			if ( ! is_email( $test_recipient ) ) return self::redirect_communication_preview( $token, 'Inserisci un indirizzo valido per l’email di prova.', true );
+			$test_request = sanitize_key( wp_unslash( $_POST['communication_test_request'] ?? '' ) );
+			if ( ! preg_match( '/^[a-f0-9]{32}$/D', $test_request ) ) return self::redirect_communication_preview( $token, 'Aggiorna la pagina prima di ripetere la prova.', true );
+			$draft['test_recipient'] = $test_recipient;
+			set_transient( 'mi_comm_' . get_current_user_id() . '_' . $token, $draft, 30 * MINUTE_IN_SECONDS );
+			$result = MI_Spedizione_Email::accoda_comunicazione_operativa( array(
+				'communication_id' => 'portal-test-' . get_current_user_id() . '-' . $token . '-' . hash( 'sha256', $test_request . '|' . strtolower( $test_recipient ) ),
+				'event_id' => $event_id, 'template_type' => $template, 'message' => $message,
+				'allow_operational' => false, 'test_only' => true, 'test_recipient' => $test_recipient,
+				'recipients' => array_slice( $recipients, 0, 1 ),
+			) );
+			if ( is_wp_error( $result ) ) return self::redirect_communication_preview( $token, $result->get_error_message(), true );
+			$test_id = absint( $result['outbox_id'] ?? 0 );
+			if ( ! $test_id ) return self::redirect_communication_preview( $token, 'Nessuna prova preparata. Aggiorna l’anteprima e riprova.', true );
+			MI_Spedizione_Email::spedisci_coda( $test_id );
+			$test_status = $wpdb->get_row( $wpdb->prepare( "SELECT status,last_error FROM {$wpdb->prefix}mi_email_outbox WHERE id=%d AND template_type='PORTAL_COMMUNICATION_TEST'", $test_id ), ARRAY_A );
+			if ( 'SENT' === ( $test_status['status'] ?? '' ) ) return self::redirect_communication_preview( $token, 'Email di prova inviata a ' . $test_recipient . '. Puoi ora confermare il messaggio agli iscritti.' );
+			$test_error = sanitize_text_field( $test_status['last_error'] ?? '' );
+			return self::redirect_communication_preview( $token, $test_error ? 'Prova non ancora consegnata: ' . $test_error : 'Prova in coda o già in invio. La conferma del messaggio rimane disponibile.', (bool) $test_error );
+		}
 		$result = MI_Spedizione_Email::accoda_comunicazione_operativa( array(
 			'communication_id' => 'portal-' . get_current_user_id() . '-' . $token,
 			'event_id' => $event_id, 'template_type' => $template, 'message' => $message,
@@ -811,6 +851,11 @@ final class MI_Portal {
 		self::save_operator_scope( $user_id, $role, $groups, $events );
 		if ( ! empty( $_POST['operator_suspended'] ) ) update_user_meta( $user_id, '_mi_access_suspended', '1' ); else delete_user_meta( $user_id, '_mi_access_suspended' );
 		return self::redirect_portal_result( 'Operatore aggiornato.', false, 'operators' );
+	}
+
+	private static function redirect_communication_preview( $token, $message, $error = false ) {
+		wp_safe_redirect( add_query_arg( array( 'mi_portal_view' => 'communications', 'mi_comm_preview' => $token, 'mi_portal_message' => $message, 'mi_portal_error' => $error ? '1' : '0' ), self::base_url() ) );
+		exit;
 	}
 
 	private static function redirect_portal_result( $message, $error, $view ) {
@@ -984,6 +1029,7 @@ final class MI_Portal {
 		<body class="mi-portal-standalone">
 			<?php echo self::render(); ?>
 			<?php if ( self::needs_portal_script() ) : ?><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal.js?ver=' . $asset_version ) ); ?>"></script><?php endif; ?>
+				<?php if ( self::needs_portal_script() && 'communications' === self::current_view() ) : ?><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-communications.js?ver=' . $asset_version ) ); ?>"></script><?php endif; ?>
 			<?php if ( self::needs_payment_assets() ) : ?><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-payments.js?ver=' . $asset_version ) ); ?>"></script><?php endif; ?>
 			<?php if ( self::needs_management_script() ) : ?><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-management.js?ver=' . $asset_version ) ); ?>"></script><?php endif; ?>
 		</body>
@@ -1171,7 +1217,7 @@ final class MI_Portal {
 	}
 
 	private static function copy_configuration( $source, $target ) {
-		$keys = array( '_mi_activity_id', '_mi_capacity', '_mi_availability_count_visible', '_mi_waitlist_enabled', '_mi_waitlist_offer_hours', '_mi_reopened_payment_hours', '_mi_pricing_mode', '_mi_fixed_price_cents', '_mi_economic_mode', '_mi_deposit_mode', '_mi_deposit_percentage', '_mi_deposit_fixed_cents', '_mi_payment_methods', '_mi_operational_profile', '_mi_data_profile', '_mi_participant_fields', '_mi_participant_required_fields', '_mi_custom_participant_fields', '_mi_participant_extra_scope', '_mi_ticket_types', '_mi_options', '_mi_marketing_enabled', '_mi_special_requests_enabled', '_mi_completion_url', '_mi_overnight_enabled', '_mi_accommodation_management', '_mi_bus_assignment_enabled', '_mi_accommodations', '_mi_email_template', '_mi_email_style', '_mi_identifier_display', '_mi_event_qr_enabled' );
+		$keys = array( '_mi_activity_id', '_mi_capacity', '_mi_availability_count_visible', '_mi_waitlist_enabled', '_mi_waitlist_capacity', '_mi_waitlist_offer_hours', '_mi_reopened_payment_hours', '_mi_pricing_mode', '_mi_fixed_price_cents', '_mi_economic_mode', '_mi_deposit_mode', '_mi_deposit_percentage', '_mi_deposit_fixed_cents', '_mi_payment_methods', '_mi_operational_profile', '_mi_data_profile', '_mi_participant_fields', '_mi_participant_required_fields', '_mi_custom_participant_fields', '_mi_participant_extra_scope', '_mi_ticket_types', '_mi_options', '_mi_marketing_enabled', '_mi_special_requests_enabled', '_mi_completion_url', '_mi_overnight_enabled', '_mi_accommodation_management', '_mi_bus_assignment_enabled', '_mi_accommodations', '_mi_email_template', '_mi_email_style', '_mi_identifier_display', '_mi_event_qr_enabled' );
 		foreach ( $keys as $key ) {
 			$value = get_post_meta( $source, $key, true );
 			if ( '' !== $value ) update_post_meta( $target, $key, $value );
@@ -1355,10 +1401,32 @@ final class MI_Portal {
 		exit;
 	}
 
-	private static function accessible_events() {
+	public static function ajax_communication_events() {
+		if ( ! is_user_logged_in() || MI_Access::is_suspended() || ( ! current_user_can( 'mi_manage_communications' ) && ! current_user_can( 'manage_options' ) ) ) wp_send_json_error( array( 'message' => 'Accesso non consentito.' ), 403 );
+		check_ajax_referer( 'mi_communication_events', 'nonce' );
+		$events = self::accessible_events( '1' === (string) ( $_POST['past'] ?? '' ) );
+		wp_send_json_success( array( 'events' => array_map( static function ( $event ) { return array( 'id' => (int) $event->ID, 'title' => $event->post_title ); }, $events ) ) );
+	}
+
+	private static function communication_event_is_past( $event_id ) {
+		if ( get_post_meta( $event_id, '_mi_event_archived_at', true ) ) return true;
+		if ( get_post_meta( $event_id, '_mi_event_cancelled_at', true ) ) return false;
+		return self::is_past_event( get_post_meta( $event_id, '_mi_event_starts_at', true ) ?: get_post_meta( $event_id, '_mi_registration_closes_at', true ) );
+	}
+
+	private static function accessible_events( $past = false ) {
 		$scope = MI_Access::event_ids();
 		$query = array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' );
 		if ( 'ALL' !== $scope ) $query['post__in'] = $scope ?: array( 0 );
+		$empty = static function ( $key ) { return array( 'relation' => 'OR', array( 'key' => $key, 'compare' => 'NOT EXISTS' ), array( 'key' => $key, 'value' => '' ) ); };
+		$filled = static function ( $key ) { return array( 'key' => $key, 'value' => '', 'compare' => '!=' ); };
+		$today = wp_date( 'Y-m-d' ) . 'T00:00';
+		$date_before = static function ( $key ) use ( $filled, $today ) { return array( 'relation' => 'AND', $filled( $key ), array( 'key' => $key, 'value' => $today, 'compare' => '<' ) ); };
+		$date_current = array( 'relation' => 'OR', array( 'key' => '_mi_event_starts_at', 'value' => $today, 'compare' => '>=' ), array( 'relation' => 'AND', $empty( '_mi_event_starts_at' ), array( 'relation' => 'OR', $empty( '_mi_registration_closes_at' ), array( 'key' => '_mi_registration_closes_at', 'value' => $today, 'compare' => '>=' ) ) ) );
+		$date_past = array( 'relation' => 'OR', $date_before( '_mi_event_starts_at' ), array( 'relation' => 'AND', $empty( '_mi_event_starts_at' ), $date_before( '_mi_registration_closes_at' ) ) );
+		$query['meta_query'] = $past
+			? array( 'relation' => 'OR', $filled( '_mi_event_archived_at' ), array( 'relation' => 'AND', $empty( '_mi_event_cancelled_at' ), $date_past ) )
+			: array( 'relation' => 'AND', $empty( '_mi_event_archived_at' ), array( 'relation' => 'OR', $filled( '_mi_event_cancelled_at' ), $date_current ) );
 		return get_posts( $query );
 	}
 
@@ -1366,32 +1434,47 @@ final class MI_Portal {
 		$token = sanitize_key( $_GET['mi_comm_preview'] ?? '' );
 		$draft = $token ? get_transient( 'mi_comm_' . get_current_user_id() . '_' . $token ) : false;
 		if ( is_array( $draft ) && MI_Access::can_access_event( $draft['event_id'] ) ) {
+			$test_recipient = $draft['test_recipient'] ?? MI_Spedizione_Email::destinatario_evento( $draft['event_id'] );
 			echo '<section><h2>Conferma comunicazione</h2><h3>' . esc_html( get_the_title( $draft['event_id'] ) ) . '</h3><p>' . esc_html( $draft['count'] ) . ' email per le prenotazioni selezionate.</p>';
 			echo '<p><strong>' . ( 'OPERATIVO' === $draft['mode'] ? 'Invio ai destinatari reali' : ( 'PROVA' === $draft['mode'] ? 'Invio esclusivamente alla casella di prova' : 'Solo preparazione, senza invio' ) ) . '</strong></p>';
 			if ( 'publish' !== get_post_status( $draft['event_id'] ) ) echo '<p>Evento non pubblicato: verranno salvate soltanto anteprime, senza invio.</p>';
 			echo '<details><summary>Destinatari delle prenotazioni</summary><p>' . esc_html( implode( ', ', $draft['emails'] ) ) . '</p></details><h3>Testo del messaggio</h3>';
-			echo 'BALANCE_REMINDER' === $draft['template_type'] ? '<p>Promemoria personalizzato con saldo, scadenza, causale e collegamento al pagamento di ciascuna prenotazione. Il testo libero non viene utilizzato.</p>' : MI_Modello_Email::formatta_comunicazione( $draft['message'] );
-			echo '<form method="post"><input type="hidden" name="mi_portal_action" value="prepare_communication"><input type="hidden" name="communication_token" value="' . esc_attr( $token ) . '">';
+			if ( 'BALANCE_REMINDER' === $draft['template_type'] ) echo '<p>Il testo sarà personalizzato per ogni prenotazione sostituendo i segnaposto con saldo, scadenza e causale. Il collegamento al riepilogo viene aggiunto automaticamente.</p>' . MI_Modello_Email::formatta_comunicazione( $draft['message'] );
+			elseif ( 'PARTICIPATION_CANCELLATION_REMINDER' === $draft['template_type'] ) echo '<p>' . ( 'OPERATIVO' === $draft['mode'] ? 'Saranno generati link personali di annullamento per i partecipanti attivi.' : 'Anteprima senza token utilizzabili: i link personali saranno creati solo per un invio operativo.' ) . '</p>' . MI_Modello_Email::formatta_comunicazione( $draft['message'] );
+			else echo MI_Modello_Email::formatta_comunicazione( $draft['message'] );
+			echo '<form class="mi-communication-test" method="post"><input type="hidden" name="mi_portal_action" value="prepare_communication"><input type="hidden" name="communication_token" value="' . esc_attr( $token ) . '"><input type="hidden" name="communication_test" value="1"><input type="hidden" name="communication_test_request" value="' . esc_attr( bin2hex( random_bytes( 16 ) ) ) . '">';
+			wp_nonce_field( 'mi_portal_prepare_communication', 'mi_portal_nonce' );
+			echo '<label>Email a cui inviare la prova<input type="email" name="communication_test_recipient" maxlength="254" value="' . esc_attr( $test_recipient ) . '" required></label><small>Per la prova viene usato un campione anonimizzato. L’email non viene inviata agli iscritti.</small><button class="mi-secondary" type="submit">Invia email di prova</button></form>';
+			echo '<form class="mi-communication-send" method="post"><input type="hidden" name="mi_portal_action" value="prepare_communication"><input type="hidden" name="communication_token" value="' . esc_attr( $token ) . '">';
 			wp_nonce_field( 'mi_portal_prepare_communication', 'mi_portal_nonce' );
 			$send_label = 'publish' !== get_post_status( $draft['event_id'] ) || 'ANTEPRIMA' === $draft['mode'] ? 'Conferma preparazione senza invio' : ( 'OPERATIVO' === $draft['mode'] ? 'Conferma invio ai destinatari reali' : 'Conferma invio di prova' );
-			echo '<button type="submit">' . esc_html( $send_label ) . '</button></form><a href="' . esc_url( add_query_arg( 'mi_portal_view', 'communications', self::base_url() ) ) . '">Torna alla composizione</a></section>';
+			echo '<button class="mi-primary" type="submit">' . esc_html( $send_label ) . '</button></form><a href="' . esc_url( add_query_arg( array( 'mi_portal_view' => 'communications', 'mi_comm_edit' => $token ), self::base_url() ) ) . '">Torna alla composizione</a></section>';
 			return;
 		}
-		$events = self::accessible_events();
+		$edit_token = sanitize_key( $_GET['mi_comm_edit'] ?? '' );
+		$edit = $edit_token ? get_transient( 'mi_comm_' . get_current_user_id() . '_' . $edit_token ) : false;
+		if ( ! is_array( $edit ) || ! MI_Access::can_access_event( $edit['event_id'] ) ) $edit = array();
+		$selected_event = absint( $edit['event_id'] ?? ( $_GET['mi_portal_event'] ?? 0 ) );
+		$show_past = $selected_event && MI_Access::can_access_event( $selected_event ) && self::communication_event_is_past( $selected_event );
+		$events = self::accessible_events( $show_past );
 		$custom_types = self::custom_communication_types();
 		$test_mode = 'PROVA' === MI_Spedizione_Email::modalita();
 		$test_ready = $test_mode && 'TEST_PENDING' === MI_Spedizione_Email::stato_nuova_email( array( 'attivo' => true ) );
 		$notice = $test_ready ? '<strong>Modalità test.</strong> Le comunicazioni degli eventi pubblicati vengono inviate esclusivamente all’indirizzo configurato per i test, non ai destinatari reali.' : ( $test_mode ? '<strong>Modalità test.</strong> Configura un indirizzo di test per abilitare l’invio. Per ora le comunicazioni vengono preparate senza invio.' : ( 'OPERATIVO' === MI_Spedizione_Email::modalita() ? '' : '<strong>Preparazione senza invio.</strong> Da questa schermata le comunicazioni vengono preparate, ma non inviate.' ) );
 		echo '<section class="mi-portal-communications"><h2>Comunicazioni</h2>';
 		if ( $notice ) echo '<p class="mi-portal-notice">' . $notice . '</p>';
-		if ( ! $events ) { echo '<p class="mi-portal-muted">Non ci sono eventi accessibili.</p></section>'; return; }
-		echo '<form method="post"><input type="hidden" name="mi_portal_action" value="prepare_communication">';
+		if ( ! $events ) echo '<p class="mi-portal-muted">Non ci sono eventi in questo elenco. Puoi consultare lo storico dalla tendina.</p>';
+		echo '<form method="post" data-mi-communication-messages data-events-ajax="' . esc_url( admin_url( 'admin-ajax.php' ) ) . '" data-events-nonce="' . esc_attr( wp_create_nonce( 'mi_communication_events' ) ) . '" data-events-past="' . ( $show_past ? '1' : '0' ) . '"><input type="hidden" name="mi_portal_action" value="prepare_communication">';
 		wp_nonce_field( 'mi_portal_prepare_communication', 'mi_portal_nonce' );
 		echo '<label>Evento<select name="event_id" required><option value="">Scegli un evento</option>';
-		foreach ( $events as $event ) echo '<option value="' . esc_attr( $event->ID ) . '" ' . selected( absint( $_GET['mi_portal_event'] ?? 0 ), $event->ID, false ) . '>' . esc_html( $event->post_title ) . '</option>';
-		echo '</select></label><label>Tipo<select name="template_type" required><option value="PRE_DEPARTURE_REMINDER">Informazioni prima dell’evento</option><option value="BALANCE_REMINDER">Promemoria del saldo</option>';
-		foreach ( $custom_types as $code => $label ) echo '<option value="' . esc_attr( $code ) . '">' . esc_html( $label ) . '</option>';
-		echo '</select></label><label>Messaggio<small>Grassetto: **testo** · Corsivo: *testo* · Elenco: una riga per voce preceduta da - . Il promemoria saldo usa il testo automatico.</small><textarea name="message" rows="8" maxlength="4000" placeholder="Punto di ritrovo, orario, cosa portare e altre indicazioni…"></textarea></label><button class="mi-primary" type="submit">' . 'Controlla anteprima e destinatari' . '</button></form>';
+		foreach ( $events as $event ) echo '<option value="' . esc_attr( $event->ID ) . '" ' . selected( $selected_event, $event->ID, false ) . '>' . esc_html( $event->post_title ) . '</option>';
+		echo '<option value="__mi_toggle_events__">' . ( $show_past ? 'Torna agli eventi attivi' : 'Visualizza eventi passati' ) . '</option></select><small data-mi-events-help role="status" aria-live="polite"></small></label><label>Tipo<select name="template_type" data-mi-communication-type required>';
+		$types = array_merge( array( 'PRE_DEPARTURE_REMINDER' => 'Informazioni prima dell’evento', 'PARTICIPATION_CANCELLATION_REMINDER' => 'Verifica della partecipazione', 'BALANCE_REMINDER' => 'Promemoria del saldo' ), $custom_types );
+		$initial_type = isset( $types[ $edit['template_type'] ?? '' ] ) ? $edit['template_type'] : 'PRE_DEPARTURE_REMINDER';
+		foreach ( $types as $code => $label ) echo '<option value="' . esc_attr( $code ) . '" data-mi-message="' . esc_attr( MI_Modello_Email::default_communication_message( $code ) ) . '" data-mi-help="' . esc_attr( MI_Modello_Email::default_communication_help( $code ) ) . '" ' . selected( $initial_type, $code, false ) . '>' . esc_html( $label ) . '</option>';
+		$initial_message = $edit['message'] ?? MI_Modello_Email::default_communication_message( $initial_type );
+		$initial_help = MI_Modello_Email::default_communication_help( $initial_type );
+		echo '</select></label><label>Messaggio<small data-mi-communication-help role="status" aria-live="polite">' . esc_html( $initial_help ) . '</small><textarea name="message" data-mi-communication-message rows="8" maxlength="4000">' . esc_textarea( $initial_message ) . '</textarea></label><button type="button" class="mi-secondary" data-mi-communication-reset hidden>Ripristina testo suggerito</button><p class="mi-portal-muted">Grassetto: **testo** · Corsivo: *testo* · Elenco: una riga per voce preceduta da - . I segnaposto disponibili cambiano in base al tipo di messaggio.</p><button class="mi-primary" type="submit">Controlla anteprima e destinatari</button></form>';
 		if ( current_user_can( 'mi_manage_all_events' ) || current_user_can( 'manage_options' ) ) {
 			echo '<details class="mi-communication-types"><summary>Gestisci i tipi di messaggio</summary><div><form method="post"><input type="hidden" name="mi_portal_action" value="add_communication_type">';
 			wp_nonce_field( 'mi_portal_manage_communication_types', 'mi_portal_nonce' );
@@ -1883,7 +1966,7 @@ final class MI_Portal {
 			<div class="mi-bus-routes" data-mi-bus-routes><div class="mi-bus-routes__heading"><h3 class="mi-bus-title">Pullman</h3><button type="button" class="mi-secondary" data-mi-add-bus-route>Aggiungi tratta</button></div><p class="mi-portal-muted">Indica le tratte tra cui potranno scegliere i partecipanti, per esempio RM-FCO o RM-Assisi. Le quote dipendono dalla modalità scelta nel passaggio «Servizi e quote».</p><p class="mi-portal-muted">I supplementi delle tratte si applicano solo con «Quote in base ai servizi scelti». Con una quota uguale per tutti il pullman è compreso; senza quote nel modulo gli importi non vengono calcolati.</p><div data-mi-bus-routes-list><?php foreach ( $bus_routes as $route ) : ?><div class="mi-bus-route"><input type="hidden" name="bus_route_id[]" value="<?php echo esc_attr( $route['id'] ); ?>"><label>Descrizione (facoltativa)<input name="bus_route_code[]" maxlength="60" value="<?php echo esc_attr( $route['label'] ); ?>" placeholder="Es. RM-FCO"></label><label>Supplemento (€)<input name="bus_route_price[]" value="<?php echo esc_attr( $route['price'] ); ?>" inputmode="decimal" placeholder="Es. 25,00"></label><button type="button" class="mi-icon-button" data-mi-remove-bus-route aria-label="Rimuovi questa tratta">×</button></div><?php endforeach; ?></div><template data-mi-bus-route-template><div class="mi-bus-route"><input type="hidden" name="bus_route_id[]" value=""><label>Descrizione (facoltativa)<input name="bus_route_code[]" maxlength="60" placeholder="Es. RM-FCO"></label><label>Supplemento (€)<input name="bus_route_price[]" inputmode="decimal" placeholder="Es. 25,00"></label><button type="button" class="mi-icon-button" data-mi-remove-bus-route aria-label="Rimuovi questa tratta">×</button></div></template></div>
 
 		</section>
-		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">5 di 9</span><h2>Date e posti</h2><div class="mi-wizard-grid"><label>Apertura iscrizioni<input type="text" inputmode="numeric" maxlength="16" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}" name="opens_at" value="<?php echo esc_attr( self::portal_date_input_value( $value( '_mi_registration_opens_at' ) ) ); ?>" placeholder="gg/mm/aaaa hh:mm" data-mi-opens><small>Facoltativa: se vuota, le iscrizioni aprono subito alla pubblicazione.</small></label><label>Chiusura iscrizioni<input type="text" inputmode="numeric" maxlength="16" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}" name="closes_at" value="<?php echo esc_attr( self::portal_date_input_value( '1' === $value( '_mi_registration_closes_auto' ) ? '' : $value( '_mi_registration_closes_at' ) ) ); ?>" placeholder="gg/mm/aaaa hh:mm" data-mi-closes><small>Facoltativa: se vuota, le iscrizioni chiudono 30 minuti prima dell’inizio dell’evento.</small></label><label>Data e ora di inizio<input type="text" inputmode="numeric" maxlength="16" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}" name="starts_at" value="<?php echo esc_attr( self::portal_date_input_value( $value( '_mi_event_starts_at' ) ) ); ?>" placeholder="gg/mm/aaaa hh:mm" data-mi-starts required></label><label>Posti disponibili<input type="number" min="1" max="10000" name="capacity" value="<?php echo esc_attr( max( 1, absint( $value( '_mi_capacity', 30 ) ) ) ); ?>" required></label></div><input type="hidden" name="availability_count_visible" value="0"><label class="mi-check"><input type="checkbox" name="availability_count_visible" value="1" <?php checked( '0' !== (string) $value( '_mi_availability_count_visible', '1' ) ); ?>> Mostra nel modulo di iscrizione il numero dei posti disponibili</label><p class="mi-portal-muted">Formato richiesto: gg/mm/aaaa hh:mm. Ordine: apertura iscrizioni, chiusura iscrizioni, inizio evento. La chiusura e l’inizio non possono essere nel passato.</p><fieldset class="mi-booking-limit" data-mi-booking-limit><legend>Quante persone può comprendere una prenotazione?</legend><label class="mi-check"><input type="radio" name="booking_limit_mode" value="ONE" <?php checked( ! $multiple_per_order ); ?>> Ogni persona si iscrive separatamente</label><label class="mi-check"><input type="radio" name="booking_limit_mode" value="MULTIPLE" <?php checked( $multiple_per_order ); ?>> Più persone nella stessa prenotazione</label><label data-mi-booking-limit-value>Fino a quante persone?<input type="number" name="max_per_order" min="2" max="20" value="<?php echo esc_attr( max( 2, $max_per_order ) ); ?>" required></label><small>Questo limite riguarda la singola prenotazione, non i posti complessivi dell’evento.</small></fieldset><label class="mi-check"><input type="checkbox" name="waitlist_enabled" value="1" data-mi-waitlist <?php checked( '1', $value( '_mi_waitlist_enabled' ) ); ?>> Attiva la lista d’attesa per partecipare all’evento quando i posti sono esauriti</label><p class="mi-portal-muted" data-mi-travel-waitlist-notice hidden>Questa lista riguarda i posti all’evento. L’attesa di un passaggio in auto è gestita separatamente.</p><label data-mi-waitlist-offer>Tempo per accettare un posto liberato all’evento<input type="number" name="waitlist_offer_hours" min="1" max="168" value="<?php echo esc_attr( min( 168, max( 1, absint( $value( '_mi_waitlist_offer_hours', 48 ) ) ) ) ); ?>" required> <small>ore. La proposta scade dopo queste ore o alla scadenza comune, se precedente; se la scadenza comune è già passata non vengono inviate nuove proposte. Il valore consigliato è 48.</small></label></section>
+		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">5 di 9</span><h2>Date e posti</h2><div class="mi-wizard-grid"><label>Apertura iscrizioni<input type="text" inputmode="numeric" maxlength="16" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}" name="opens_at" value="<?php echo esc_attr( self::portal_date_input_value( $value( '_mi_registration_opens_at' ) ) ); ?>" placeholder="gg/mm/aaaa hh:mm" data-mi-opens><small>Facoltativa: se vuota, le iscrizioni aprono subito alla pubblicazione.</small></label><label>Chiusura iscrizioni<input type="text" inputmode="numeric" maxlength="16" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}" name="closes_at" value="<?php echo esc_attr( self::portal_date_input_value( '1' === $value( '_mi_registration_closes_auto' ) ? '' : $value( '_mi_registration_closes_at' ) ) ); ?>" placeholder="gg/mm/aaaa hh:mm" data-mi-closes><small>Facoltativa: se vuota, le iscrizioni chiudono 30 minuti prima dell’inizio dell’evento.</small></label><label>Data e ora di inizio<input type="text" inputmode="numeric" maxlength="16" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}" name="starts_at" value="<?php echo esc_attr( self::portal_date_input_value( $value( '_mi_event_starts_at' ) ) ); ?>" placeholder="gg/mm/aaaa hh:mm" data-mi-starts required></label><label>Posti disponibili<input type="number" min="1" max="10000" name="capacity" value="<?php echo esc_attr( max( 1, absint( $value( '_mi_capacity', 30 ) ) ) ); ?>" required></label></div><input type="hidden" name="availability_count_visible" value="0"><label class="mi-check"><input type="checkbox" name="availability_count_visible" value="1" <?php checked( '0' !== (string) $value( '_mi_availability_count_visible', '1' ) ); ?>> Mostra nel modulo di iscrizione il numero dei posti disponibili</label><p class="mi-portal-muted">Formato richiesto: gg/mm/aaaa hh:mm. Ordine: apertura iscrizioni, chiusura iscrizioni, inizio evento. La chiusura e l’inizio non possono essere nel passato.</p><fieldset class="mi-booking-limit" data-mi-booking-limit><legend>Quante persone può comprendere una prenotazione?</legend><label class="mi-check"><input type="radio" name="booking_limit_mode" value="ONE" <?php checked( ! $multiple_per_order ); ?>> Ogni persona si iscrive separatamente</label><label class="mi-check"><input type="radio" name="booking_limit_mode" value="MULTIPLE" <?php checked( $multiple_per_order ); ?>> Più persone nella stessa prenotazione</label><label data-mi-booking-limit-value>Fino a quante persone?<input type="number" name="max_per_order" min="2" max="20" value="<?php echo esc_attr( max( 2, $max_per_order ) ); ?>" required></label><small>Questo limite riguarda la singola prenotazione, non i posti complessivi dell’evento.</small></fieldset><label class="mi-check"><input type="checkbox" name="waitlist_enabled" value="1" data-mi-waitlist <?php checked( '1', $value( '_mi_waitlist_enabled' ) ); ?>> Attiva la lista d’attesa per partecipare all’evento quando i posti sono esauriti</label><label data-mi-waitlist-capacity>Capienza massima della lista d’attesa<input type="number" name="waitlist_capacity" min="1" max="10000" value="<?php echo esc_attr( min( 10000, max( 1, absint( $value( '_mi_waitlist_capacity', 20 ) ) ) ) ); ?>" required> <small>persone. Valore predefinito: 20. Quando è piena, non è possibile aggiungere altre richieste.</small></label><p class="mi-portal-muted" data-mi-travel-waitlist-notice hidden>Questa lista riguarda i posti all’evento. L’attesa di un passaggio in auto è gestita separatamente.</p><label data-mi-waitlist-offer>Tempo per accettare un posto liberato all’evento<input type="number" name="waitlist_offer_hours" min="1" max="168" value="<?php echo esc_attr( min( 168, max( 1, absint( $value( '_mi_waitlist_offer_hours', 48 ) ) ) ) ); ?>" required> <small>ore. La proposta scade dopo queste ore o alla scadenza comune, se precedente; se la scadenza comune è già passata non vengono inviate nuove proposte. Il valore consigliato è 48.</small></label></section>
 		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">6 di 9</span><h2>Quali dati chiediamo?</h2><p>Nome e cognome sono sempre obbligatori per ogni partecipante.</p><fieldset data-mi-participant-scope <?php echo $multiple_per_order ? '' : 'hidden disabled'; ?>><legend>Dati aggiuntivi da compilare</legend><label class="mi-check"><input type="radio" name="participant_extra_scope" value="ONE" <?php checked( 'ONE', $value( '_mi_participant_extra_scope', 'ONE' ) ); ?>> Solo per uno degli iscritti (il primo, modificabile)</label><label class="mi-check"><input type="radio" name="participant_extra_scope" value="ALL" <?php checked( 'ALL', $value( '_mi_participant_extra_scope', 'ONE' ) ); ?>> Per tutti gli iscritti</label></fieldset><div class="mi-field-choice-list"><?php self::render_field_choices( $common_fields, $participant_fields, $participant_required ); ?></div><details class="mi-additional-fields"><summary>Ulteriori dati per alcuni eventi</summary><div class="mi-field-choice-list"><?php self::render_field_choices( $additional_fields, $participant_fields, $participant_required ); ?></div></details></section>
 		<section class="mi-wizard-step">
 			<span class="mi-portal-eyebrow">7 di 9</span><h2>Domande particolari</h2>

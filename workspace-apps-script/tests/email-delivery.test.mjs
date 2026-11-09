@@ -15,6 +15,13 @@ function setup({sender='info@parrocchiasanteugenio.it',quota=10,fail=false,alias
 test('same accepted delivery is never sent twice',()=>{const s=setup();assert.equal(s.send().ok,true);assert.equal(s.send().replayed,true);assert.equal(s.sent.length,1);});
 test('wrong deployer cannot impersonate info',()=>{const s=setup({sender:'other@example.invalid'});assert.equal(s.send().error,'EMAIL_SENDER_NOT_AUTHORIZED');assert.equal(s.sent.length,0);});
 test('test destination cannot escape configured mailbox',()=>{const s=setup();assert.equal(s.send({destinatario:'other@example.invalid'}).error,'TEST_RECIPIENT_MISMATCH');assert.equal(s.sent.length,0);});
+test('explicit communication test uses chosen address and its own replay protection',()=>{
+ const s=setup(),p={mode:'PROVA_PUNTUALE',test_only:true,destinatario:'chosen@example.invalid',reply_to:'group@example.invalid'};
+ assert.equal(s.send(p).ok,true);assert.equal(s.send(p).replayed,true);assert.equal(s.sent.length,1);assert.equal(s.sent[0].to,'chosen@example.invalid');assert.equal(s.sent[0].replyTo,'group@example.invalid');
+});
+test('explicit communication test requires signed test-only marker',()=>{
+ const s=setup();assert.equal(s.send({mode:'PROVA_PUNTUALE',destinatario:'chosen@example.invalid'}).error,'INVALID_EMAIL_PAYLOAD');assert.equal(s.sent.length,0);
+});
 test('uncertain send is not repeated',()=>{const s=setup({fail:true});assert.equal(s.send().error,'EMAIL_DELIVERY_UNCERTAIN');assert.equal(s.send().error,'EMAIL_DELIVERY_UNCERTAIN');assert.equal(s.sent.length,1);});
 test('quota failure creates no delivery intent',()=>{const s=setup({quota:0});assert.equal(s.send().error,'EMAIL_QUOTA_EXCEEDED');assert.equal(s.properties['MI_EMAIL_DELIVERY_'+ 'a'.repeat(64)],undefined);});
 test('operational mail uses real recipient and institutional reply',()=>{const s=setup();assert.equal(s.send({mode:'OPERATIVO',destinatario:'person@example.invalid'}).ok,true);assert.equal(s.sent[0].to,'person@example.invalid');assert.equal(s.sent[0].replyTo,'info@parrocchiasanteugenio.it');});

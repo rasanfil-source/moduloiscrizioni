@@ -51,20 +51,22 @@ class AuditQueueDatabase {
         return $sql;
     }
     function query($sql) {
-        if (preg_match("/SET status = 'SENDING', attempts = attempts \\+ 1, processing_started_at = '([^']+)' WHERE id = (\\d+) AND status = 'PENDING'/", $sql, $m)) {
-            if ($this->rows[$m[2]]['status'] !== 'PENDING') return 0;
-            $this->rows[$m[2]]['status'] = 'SENDING';
-            $this->rows[$m[2]]['attempts']++;
-            $this->rows[$m[2]]['processing_started_at'] = $m[1];
+        if (preg_match("/SET status = '(SENDING|TEST_SENDING)', attempts = attempts \\+ 1, processing_started_at = '([^']+)' WHERE id = (\\d+) AND status = '(PENDING|TEST_PENDING)'/", $sql, $m)) {
+            if ($this->rows[$m[3]]['status'] !== $m[4]) return 0;
+            $this->rows[$m[3]]['status'] = $m[1];
+            $this->rows[$m[3]]['attempts']++;
+            $this->rows[$m[3]]['processing_started_at'] = $m[2];
             return 1;
         }
         if (str_starts_with($sql, 'UPDATE') && (str_contains($sql, 'processing_started_at <') || str_contains($sql, 'attempts >= 5'))) return 0;
         throw new RuntimeException('Unexpected SQL: ' . $sql);
     }
     function get_results($sql, $format) {
-        if (!str_contains($sql, "status IN ('PENDING') AND attempts < 5") || !str_contains($sql,'ORDER BY id ASC LIMIT 10')) throw new RuntimeException('Unexpected select');
+        if (!str_contains($sql, 'FROM wp_mi_email_outbox WHERE') || !str_contains($sql,'ORDER BY id ASC LIMIT 10')) throw new RuntimeException('Unexpected select');
         $after=preg_match('/AND id > (\d+)/',$sql,$matches)?(int)$matches[1]:0;
-        return array_slice(array_values(array_filter($this->rows, fn($r) => $r['id']>$after && $r['status'] === 'PENDING' && $r['attempts'] < 5)), 0, 10);
+        $target=preg_match('/\(id=(\d+) AND/',$sql,$matches)?(int)$matches[1]:0;
+        $normal=str_contains($sql,"status IN ('PENDING')");$test=str_contains($sql,"status IN ('TEST_PENDING')");
+        return array_slice(array_values(array_filter($this->rows, fn($r) => $r['id']>$after && (!$target || $target===$r['id']) && $r['attempts']<5 && ($target ? ($r['status']==='TEST_PENDING' && $r['template_type']==='PORTAL_COMMUNICATION_TEST') : (($normal && $r['status']==='PENDING') || ($test && $r['status']==='TEST_PENDING') || ($r['status']==='TEST_PENDING' && $r['template_type']==='PORTAL_COMMUNICATION_TEST'))))),0,10);
     }
     function get_var($sql) { return count(array_filter($this->rows, fn($r) => in_array($r['status'], ['PENDING', 'TEST_PENDING']) && $r['attempts'] < 5)); }
     function update($table, $data, $where, ...$args) { $this->rows[$where['id']] = array_merge($this->rows[$where['id']], $data); return 1; }
@@ -101,3 +103,21 @@ MI_Event_Deletion::$blocked=false;
 for($run=0;$run<3;$run++)MI_Spedizione_Email::spedisci_coda();
 if(count(MI_Workspace_Client::$recipients)!==11)throw new RuntimeException('Unblocked messages lost');
 echo "PASS: previously blocked messages resume.\n";
+
+foreach(['OPERATIVO','PROVA','ANTEPRIMA'] as $mode){
+ seed_queue(0,126);$auditOptions['mi_modalita_spedizione_email']=$mode;
+ $sample=$wpdb->rows[126];$sample['status']='TEST_PENDING';$sample['template_type']='PORTAL_COMMUNICATION_TEST';
+ $sample['payload_json']=json_encode(['event_id'=>43,'portal_test_copy'=>true,'test_recipient'=>'chosen@example.invalid','email_preview'=>['attivo'=>true,'oggetto'=>'Prova','html'=>'<p>Prova</p>','testo'=>'Prova']]);
+ $wpdb->rows[126]=$sample;$auditOptions['mi_email_scan_cursor_'.strtolower($mode)]=88;
+ MI_Spedizione_Email::spedisci_coda(126);
+ if(MI_Workspace_Client::$recipients!==['chosen@example.invalid'] || $wpdb->rows[126]['status']!=='SENT')throw new RuntimeException('Target test not delivered immediately');
+ if($wpdb->rows[1]['status']!=='PENDING'||$auditOptions['mi_email_scan_cursor_'.strtolower($mode)]!==88)throw new RuntimeException('Target test touched mass queue or its cursor');
+ MI_Spedizione_Email::spedisci_coda(126);
+ if(count(MI_Workspace_Client::$recipients)!==1)throw new RuntimeException('Target test delivered twice');
+ echo "PASS: targeted test in $mode bypasses 125 queued emails, preserves cursor, sends once.\n";
+}
+
+seed_queue(0,2);$wpdb->rows[1]['status']='TEST_PENDING';$wpdb->rows[1]['template_type']='ORDINARY_TEST';
+MI_Spedizione_Email::spedisci_coda();
+if(MI_Workspace_Client::$recipients!==['recipient2@example.invalid'])throw new RuntimeException('Operational mode sent ordinary test queue');
+echo "PASS: operational mode does not deliver ordinary test queue.\n";

@@ -5,6 +5,7 @@ import {readFile} from 'node:fs/promises';
 const source=await readFile(new URL('../modulo-iscrizioni/includes/class-mi-spedizione-email.php',import.meta.url),'utf8');
 test('la coda seleziona un solo canale coerente con la modalità attuale',()=>{
   assert.match(source,/\$modalita = self::modalita\(\);[\s\S]*?\$operativo = 'OPERATIVO' === \$modalita/s);
-  assert.match(source,/\$stati = 'OPERATIVO' === \$modalita \? array\( "'PENDING'" \) : array\( "'TEST_PENDING'" \);/);
+  assert.match(source,/\$stati = 'OPERATIVO' === \$modalita && \$operativo \? array\( "'PENDING'" \)/);
+  assert.match(source,/status='TEST_PENDING' AND template_type='PORTAL_COMMUNICATION_TEST'/);
   assert.doesNotMatch(source,/if \( \$operativo \) \$stati\[\] = "'PENDING'";\s*if \( \$destinatario_prova \) \$stati\[\] = "'TEST_PENDING'";/);
 });

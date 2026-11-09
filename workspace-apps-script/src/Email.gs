@@ -27,11 +27,12 @@ function inviaEmailConfermaDaWordPress_(payload) {
   const sender = statoCanaleEmail_();
   if (!sender.ok) return sender;
   const recipient = String(p.destinatario || '').trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient) || !/^[a-f0-9]{64}$/.test(String(p.delivery_key || '')) || !['PROVA', 'OPERATIVO'].includes(p.mode)) return { ok: false, error: 'INVALID_EMAIL_PAYLOAD' };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient) || !/^[a-f0-9]{64}$/.test(String(p.delivery_key || '')) || !['PROVA', 'PROVA_PUNTUALE', 'OPERATIVO'].includes(p.mode)) return { ok: false, error: 'INVALID_EMAIL_PAYLOAD' };
+  if (p.mode === 'PROVA_PUNTUALE' && p.test_only !== true) return { ok: false, error: 'INVALID_EMAIL_PAYLOAD' };
   const props = PropertiesService.getScriptProperties();
   if (p.mode === 'PROVA' && recipient !== String(props.getProperty(MI_TEST_EMAIL_PROPERTY) || '').trim().toLowerCase()) return { ok: false, error: 'TEST_RECIPIENT_MISMATCH' };
   const replyTo = String(p.reply_to || sender.sender).trim().toLowerCase();
-  if (p.mode === 'OPERATIVO' && (replyTo.length > 254 || !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(replyTo))) return { ok: false, error: 'INVALID_REPLY_TO' };
+  if (p.mode !== 'PROVA' && (replyTo.length > 254 || !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(replyTo))) return { ok: false, error: 'INVALID_REPLY_TO' };
   if (!p.oggetto || !p.testo || !p.html || String(p.oggetto).length > 250 || String(p.testo).length > 100000 || String(p.html).length > 300000 || /[\r\n]/.test(String(p.oggetto))) return { ok: false, error: 'INVALID_EMAIL_PAYLOAD' };
   const lock = LockService.getScriptLock();
   const senderName = String(p.nome_mittente || '').trim() || 'Parrocchia Sant’Eugenio';
@@ -51,8 +52,7 @@ function inviaEmailConfermaDaWordPress_(payload) {
       if (!alias) return { ok: false, error: 'EMAIL_ALIAS_NOT_AUTHORIZED' };
     }
     if (MailApp.getRemainingDailyQuota() < 1) return { ok: false, error: 'EMAIL_QUOTA_EXCEEDED' };
-    const options = { to: recipient, subject: String(p.oggetto), body: String(p.testo), htmlBody: String(p.html), name: senderName, replyTo: recipient };
-    if (p.mode === 'OPERATIVO') options.replyTo = replyTo;
+    const options = { to: recipient, subject: String(p.oggetto), body: String(p.testo), htmlBody: String(p.html), name: senderName, replyTo: 'PROVA' === p.mode ? recipient : replyTo };
     if (p.codice_svg) options.inlineImages = { 'mi-registration-code': Utilities.newBlob(String(p.codice_svg), 'image/svg+xml', 'codice-iscrizione.svg') };
     // La quota viene controllata prima di registrare SENDING. Dopo sendEmail,
     // un'eccezione non prova che Google non abbia accettato il messaggio:

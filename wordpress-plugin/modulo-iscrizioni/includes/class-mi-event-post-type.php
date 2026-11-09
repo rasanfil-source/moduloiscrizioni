@@ -115,6 +115,7 @@ final class MI_Event_Post_Type {
 		$event_location = (string) get_post_meta( $post->ID, '_mi_event_location', true );
 		$capacity = max( 1, absint( get_post_meta( $post->ID, '_mi_capacity', true ) ?: 30 ) );
 		$waitlist = '1' === get_post_meta( $post->ID, '_mi_waitlist_enabled', true );
+		$waitlist_capacity = min( 10000, max( 1, absint( get_post_meta( $post->ID, '_mi_waitlist_capacity', true ) ?: 20 ) ) );
 		$waitlist_offer_hours = min( 168, max( 1, absint( get_post_meta( $post->ID, '_mi_waitlist_offer_hours', true ) ?: 48 ) ) );
 		$pricing_mode = get_post_meta( $post->ID, '_mi_pricing_mode', true ) ?: 'NONE';
 		$fixed_price_cents = max( 0, (int) get_post_meta( $post->ID, '_mi_fixed_price_cents', true ) );
@@ -166,6 +167,7 @@ final class MI_Event_Post_Type {
 			<p><label for="mi_event_starts_at"><strong>Data e ora dell’evento</strong></label><br><input id="mi_event_starts_at" name="mi_event_starts_at" type="datetime-local" value="<?php echo esc_attr( $event_starts_at ); ?>"></p>
 			<p><label for="mi_event_location"><strong>Luogo dell’evento</strong></label><br><input id="mi_event_location" name="mi_event_location" type="text" maxlength="180" value="<?php echo esc_attr( $event_location ); ?>" placeholder="Es. Piazza San Pietro, Roma"></p>
 			<p><label><input name="mi_waitlist_enabled" type="checkbox" value="1" <?php checked( $waitlist ); ?>> Attiva automaticamente la lista d’attesa a esaurimento posti</label></p>
+			<p><label for="mi_waitlist_capacity"><strong>Capienza massima lista d’attesa</strong></label><br><input id="mi_waitlist_capacity" name="mi_waitlist_capacity" type="number" min="1" max="10000" value="<?php echo esc_attr( $waitlist_capacity ); ?>"> persone<br><small>Quando la lista è piena, il modulo non accetta altre richieste. Valore predefinito: 20 persone.</small></p>
 			<p><label for="mi_waitlist_offer_hours"><strong>Tempo per accettare un posto liberato</strong></label><br><input id="mi_waitlist_offer_hours" name="mi_waitlist_offer_hours" type="number" min="1" max="168" value="<?php echo esc_attr( $waitlist_offer_hours ); ?>"> ore<br><small>La proposta scade dopo queste ore o alla scadenza comune dell’evento, se precedente. Se la scadenza comune è già passata, non vengono inviate nuove proposte.</small></p>
 			<h3 class="mi-admin-section-title">Quote e pagamenti</h3>
 			<p data-mi-reopened-payment-setting data-mi-service-pricing-saved="<?php echo esc_attr( $service_pricing_saved ? '1' : '0' ); ?>" <?php echo $reopened_payment_visible ? '' : 'hidden'; ?>><label for="mi_reopened_payment_hours"><strong>Tempo per pagare dopo una rettifica</strong></label><br><input id="mi_reopened_payment_hours" name="mi_reopened_payment_hours" type="number" min="1" max="168" value="<?php echo esc_attr( $reopened_payment_hours ); ?>"> ore<br><small>Se la rettifica riapre un pagamento e la scadenza comune è trascorsa o troppo vicina, concede almeno queste ore; una scadenza futura più lontana resta valida. Senza scadenza comune non viene creato un nuovo termine. L’offerta della lista d’attesa ha un termine dedicato, limitato dalla scadenza comune se presente.</small></p>
@@ -323,6 +325,7 @@ final class MI_Event_Post_Type {
 		$capacity = isset( $_POST['mi_capacity'] ) ? min( 10000, max( 1, absint( $_POST['mi_capacity'] ) ) ) : 30;
 		update_post_meta( $post_id, '_mi_capacity', $capacity );
 		update_post_meta( $post_id, '_mi_waitlist_enabled', isset( $_POST['mi_waitlist_enabled'] ) ? '1' : '0' );
+		update_post_meta( $post_id, '_mi_waitlist_capacity', min( 10000, max( 1, absint( $_POST['mi_waitlist_capacity'] ?? 20 ) ) ) );
 		update_post_meta( $post_id, '_mi_waitlist_offer_hours', min( 168, max( 1, absint( $_POST['mi_waitlist_offer_hours'] ?? 48 ) ) ) );
 		if ( isset( $_POST['mi_reopened_payment_hours'] ) ) update_post_meta( $post_id, '_mi_reopened_payment_hours', min( 168, max( 1, absint( $_POST['mi_reopened_payment_hours'] ) ) ) );
 		$payment_deadline_at = isset( $_POST['mi_payment_deadline_at'] ) ? sanitize_text_field( wp_unslash( $_POST['mi_payment_deadline_at'] ) ) : '';

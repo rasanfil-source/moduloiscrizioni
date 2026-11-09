@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class MI_Activator {
-	const SCHEMA_REVISION = 4;
+	const SCHEMA_REVISION = 5;
 	public static function activate() {
 		self::create_tables();
 		self::add_roles_and_capabilities();
@@ -183,6 +183,17 @@ final class MI_Activator {
 			KEY registration_id (registration_id),
 			KEY participant_status (registration_id,status),
 			KEY room_occupancy (room_code,status,registration_id)
+		) ENGINE=InnoDB {$charset};" );
+
+		$cancellation_tokens = $wpdb->prefix . 'mi_cancellation_tokens';
+		dbDelta( "CREATE TABLE {$cancellation_tokens} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			participant_id bigint(20) unsigned NOT NULL,
+			token_hash char(64) NOT NULL,
+			created_at datetime NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY token_hash (token_hash),
+			KEY participant_id (participant_id)
 		) ENGINE=InnoDB {$charset};" );
 
 		dbDelta( "CREATE TABLE {$counters} (
