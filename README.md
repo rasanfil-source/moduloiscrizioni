@@ -21,13 +21,14 @@ Le richieste tra WordPress e Apps Script sono firmate. MySQL conserva il registr
 
 ## Documentazione
 
-- [Rilascio 3.26.282: affinamento creazione evento](docs/rilascio-3.26.282.md)
-
-- [Rilascio 3.26.280: revisione del flusso di creazione evento](docs/rilascio-3.26.280.md)
-- [Rilascio 3.26.279: spostamenti e passaggi privati](docs/rilascio-3.26.279.md)
+- [Distribuzioni conservate: ultimi cinque rilasci](docs/distribuzioni-conservate.md)
+- [Rilascio 3.27.41: correzioni degli audit email e permessi](docs/rilascio-3.27.41.md)
+- [Rilascio 3.27.40: pulsante Google e date nella scheda evento](docs/rilascio-3.27.40.md)
+- [Rilascio 3.27.39: tipografia uniforme delle email](docs/rilascio-3.27.39.md)
+- [Rilascio 3.27.38: carattere del promemoria partecipazione](docs/rilascio-3.27.38.md)
+- [Rilascio 3.27.37: origine degli annullamenti](docs/rilascio-3.27.37.md)
 - [Gestione degli spostamenti](docs/SPOSTAMENTI.md)
 - [Regole di assegnazione delle camere](docs/REGOLE_ASSEGNAZIONE_CAMERE.md)
-- [Rilascio 3.26.275: audit, correzioni e aggiornamento GAS](docs/rilascio-3.26.275.md)
 - [Plugin WordPress](wordpress-plugin/modulo-iscrizioni/README.md)
 - [Progetto Apps Script MODULI AUTONOMO](workspace-apps-script/README.md)
 - [Architettura e flussi operativi](PROGETTO.md)

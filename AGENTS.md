@@ -26,4 +26,12 @@ Usare sempre PowerShell 7 (`pwsh.exe`), mai `powershell.exe`. Eseguire i comandi
 - Prima del confezionamento verificare versione del plugin, archivi già presenti e note di rilascio; usare un numero successivo al massimo già assegnato. Allineare intestazione Version, MI_VERSION, nome ZIP e note del nuovo rilascio.
 - Le varianti locale e pubblica dello stesso rilascio possono condividere la versione, distinguendosi con il suffisso `-pubblico`. Per entrambe, non alterare archivi già generati.
 - Questa regola è permanente: applicarla senza chiedere all'utente di ripeterla o riconfermarla.
-- Il pacchetto 3.26.226 già consegnato deve rimanere invariato, come espressamente richiesto dall'utente. L'aggiunta di queste istruzioni non richiede di modificarlo.
+- Il pacchetto 3.26.226 gia consegnato non va modificato o rigenerato. La successiva richiesta del 9 novembre 2026 autorizza l'eliminazione delle vecchie distribuzioni, compresa questa, mantenendo gli ultimi cinque rilasci.
+
+## Conservazione delle distribuzioni — 9 novembre 2026
+
+- Conservare soltanto gli ultimi cinque rilasci nelle distribuzioni locali e nel materiale di rilascio del repository. Alla data della pulizia: 3.27.37, 3.27.38, 3.27.39, 3.27.40 e 3.27.41, con entrambe le varianti ZIP e relativi checksum.
+- Eliminare i vecchi pacchetti, le esportazioni versionate, i checksum e gli helper/note relativi ai rilasci precedenti. Non rigenerare o alterare gli archivi conservati; i numeri eliminati restano gia assegnati e non possono essere riutilizzati.
+- La pulizia non cambia i sorgenti operativi e non richiede una nuova versione del plugin. Conservare documentazione operativa, test e decisioni funzionali.
+- La cancellazione dei file dall'albero corrente e delle release GitHub non riscrive automaticamente la cronologia dei commit. Un'eventuale riscrittura va definita separatamente.
+- Riferimento: `docs/distribuzioni-conservate.md`.
