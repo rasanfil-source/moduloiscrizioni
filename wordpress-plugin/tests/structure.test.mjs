@@ -640,7 +640,7 @@ test('la coda email resta sicura fino all’attivazione operativa', async () => 
   assert.doesNotMatch(sender, /wp_mail\s*\(/);
   assert.doesNotMatch(sender, /MI-PROVA-0001/);
   assert.match(sender, /'PROVA' === self::modalita\(\).*'TEST_PENDING'/s);
-  assert.match(sender, /\$destinatario = \$invio_prova \? \$destinatario_prova : \$riga\['recipient'\]/);
+  assert.match(sender, /\$destinatario = \$invio_prova \? \( \$portal_test_copy \?[\s\S]*?: \$destinatario_prova \) : \$riga\['recipient'\]/);
   assert.match(sender, /Destinatario originale:/);
   assert.match(sender, /\['oggetto'\] = '\[PROVA\] '/);
   assert.match(sender, /TEST_SENDING/);
@@ -677,7 +677,7 @@ test('prova e operativo generano sia la conferma iscritto sia la notifica alla s
 	assert.match(model, /function crea_istantanea_nuova_iscrizione_segreteria/);
 	assert.match(model, /Nuova prenotazione —/);
 	assert.match(model, /crea_istantanea_istituzionale/);
-	assert.match(sender, /\$destinatario = \$invio_prova \? \$destinatario_prova : \$riga\['recipient'\]/);
+	assert.match(sender, /\$destinatario = \$invio_prova \? \( \$portal_test_copy \?[\s\S]*?: \$destinatario_prova \) : \$riga\['recipient'\]/);
 	assert.match(sender, /Destinatario originale:/);
 });
 
