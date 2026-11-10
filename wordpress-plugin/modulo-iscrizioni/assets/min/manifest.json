@@ -81,8 +81,8 @@
   },
   "public.css": {
     "file": "min/public.css",
-    "source": "9fa594492caceb70d87efef0b46505a7494041f0ebfc80de1c520aa55280489c",
-    "hash": "5aaad73b30c05afe8e3c40e0fee1f251950775b5b8de843bbaba877c73b3560e"
+    "source": "05f9f9c3e3dc3e60f0c8efa349300c4294e8c409f6b1795a47158c244bdc4eb8",
+    "hash": "b934e2937069ce29494bcbec72258156c2d2af9ec63331dc0790c777a492c609"
   },
   "public.js": {
     "file": "min/public.js",
