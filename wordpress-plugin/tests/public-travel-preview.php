@@ -2,6 +2,7 @@
 // Rendering del modulo pubblico reale su un evento dimostrativo, senza WordPress o servizi esterni.
 define('ABSPATH',__DIR__);define('MI_VERSION','preview');define('MI_PLUGIN_URL','https://example.invalid/plugin/');
 function nocache_headers(){}function shortcode_atts($defaults,$args,...$rest){return array_merge($defaults,$args);}
+function wp_kses($value,$allowed){return strip_tags($value);}
 function sanitize_hex_color($v){return preg_match('/^#[0-9a-f]{6}$/i',$v)?$v:'';}
 function absint($v){return abs((int)$v);}function current_user_can(...$args){return true;}function is_wp_error($v){return false;}
 function wp_enqueue_style(...$args){}function wp_enqueue_script(...$args){}

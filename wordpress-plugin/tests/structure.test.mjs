@@ -2038,7 +2038,7 @@ test('le date dei partecipanti vengono validate prima di lasciare la scheda', as
   assert.match(publicScript, /if \(field\.type === 'date'\)/);
   assert.match(publicScript, /input\.min = localDateWithYearOffset\(futureDate \? 0 : -120\)/);
   assert.match(publicScript, /input\.max = localDateWithYearOffset\(futureDate \? 20 : 0\)/);
-  assert.match(publicScript, /fields\.find\(\(field\) => !field\.checkValidity\(\)\)/);
+  assert.match(publicScript, /fields\.find\(\(field\) => field\.willValidate && !field\.validity\.valid\)/);
   assert.match(publicScript, /if \(invalid\) \{ revealInvalidField\(invalid\); return false; \}/);
 });
 
