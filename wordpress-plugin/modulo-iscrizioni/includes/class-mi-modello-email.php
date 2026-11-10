@@ -341,6 +341,7 @@ final class MI_Modello_Email {
 	/** Comunicazione dedicata: la richiesta è in coda e non richiede azioni o pagamenti. */
 	public static function crea_istantanea_lista_attesa( $event_id, $values ) {
 		$snapshot = self::crea_istantanea( $event_id, $values );
+		$snapshot['attivo'] = true;
 		$name = sanitize_text_field( (string) ( $values['{{sottoscrittore.nome_completo}}'] ?? '' ) );
 		$title = sanitize_text_field( (string) ( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) ) );
 		$summary = sanitize_text_field( (string) ( $values['{{ordine.riepilogo}}'] ?? '' ) );
@@ -357,6 +358,7 @@ final class MI_Modello_Email {
 	/** Comunicazione dedicata: il posto è riservato fino alla scadenza indicata. */
 	public static function crea_istantanea_offerta_lista_attesa( $event_id, $values, $offer_url, $expires_label ) {
 		$snapshot = self::crea_istantanea( $event_id, $values );
+		$snapshot['attivo'] = true;
 		$name = sanitize_text_field( (string) ( $values['{{sottoscrittore.nome_completo}}'] ?? '' ) );
 		$title = sanitize_text_field( (string) ( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) ) );
 		$expires_label = sanitize_text_field( (string) $expires_label );
@@ -475,12 +477,14 @@ final class MI_Modello_Email {
 			$snapshot['status_url'] = '';
 		} elseif ( in_array( $template_type, array( 'DEPOSIT_REMINDER', 'BALANCE_REMINDER' ), true ) ) {
 			$is_deposit = 'DEPOSIT_REMINDER' === $template_type;
+			$full_payment = 'FULL_PAYMENT' === ( $values['_economic_mode'] ?? '' );
 			$amount = (string) ( $values[ $is_deposit ? '{{pagamento.importo_dovuto}}' : '{{pagamento.saldo}}' ] ?? '' );
-			$label = $is_deposit ? 'caparra' : 'saldo';
+			$label = $is_deposit ? ( $full_payment ? 'pagamento' : 'caparra' ) : 'saldo';
 			$snapshot['oggetto'] = 'Promemoria ' . $label . ' — ' . $event_title;
 			$snapshot['titolo'] = 'Promemoria ' . $label;
 			$snapshot['preheader'] = 'Controlla l’importo e la scadenza.';
 			$clean_message = trim( sanitize_textarea_field( (string) $message ) ) ?: self::default_communication_message( $template_type );
+			if ( $is_deposit && $full_payment && '' === trim( (string) $message ) ) $clean_message = str_replace( 'una caparra di', 'un pagamento di', $clean_message );
 			$rendered_message = self::renderizza( $clean_message, $values );
 			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><div>' . self::formatta_comunicazione( $rendered_message ) . '</div>';
 			$snapshot['testo'] = "Gentile {$buyer_name},\n\n{$rendered_message}";
@@ -625,6 +629,8 @@ final class MI_Modello_Email {
 		}
 		$total = max( 0, (int) ( $economic_summary['total_cents'] ?? 0 ) );
 		$due = max( 0, (int) ( $economic_summary['initial_due_cents'] ?? 0 ) );
+		$economic_mode = (string) ( $economic_summary['mode'] ?? $event['economic_mode'] ?? '' );
+		if ( 'FULL_PAYMENT' === $economic_mode && 0 === $due ) $due = $total;
 		$balance = max( 0, (int) ( $economic_summary['balance_cents'] ?? 0 ) );
 		$method_codes = array_values( array_intersect( array( 'BANK_TRANSFER', 'CARD', 'CASH' ), (array) ( $economic_summary['payment_methods'] ?? array() ) ) );
 		$method_labels = array( 'BANK_TRANSFER' => 'Bonifico', 'CARD' => 'Carta', 'CASH' => 'Contanti' );
@@ -650,6 +656,7 @@ final class MI_Modello_Email {
 		$balance_label = self::formatta_importo( $balance );
 
 		return array(
+			'_economic_mode'               => $economic_mode,
 			'_payment_required'            => $payment_required,
 			'{{evento.titolo}}'              => sanitize_text_field( (string) ( $event['title'] ?? '' ) ),
 			'{{evento.data}}'                => $event_date ?: 'Da definire',
@@ -807,7 +814,7 @@ final class MI_Modello_Email {
 		if ( 'INSTITUTIONAL' === ( $istantanea['layout'] ?? '' ) ) {
 			$parts = array( sanitize_text_field( $istantanea['oggetto'] ?? '' ), ! empty( $istantanea['evento']['titolo'] ) ? 'Evento: ' . sanitize_text_field( $istantanea['evento']['titolo'] ) : '', sanitize_textarea_field( $istantanea['testo'] ?? '' ) );
 			foreach ( (array) ( $istantanea['azioni'] ?? array() ) as $action ) if ( ! empty( $action['label'] ) && ! empty( $action['url'] ) ) $parts[] = sanitize_text_field( $action['label'] ) . ': ' . esc_url_raw( $action['url'] );
-			return implode( "\n\n", array_filter( $parts ) );
+			return html_entity_decode( implode( "\n\n", array_filter( $parts ) ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 		}
 		$identity = isset( $istantanea['identita'] ) && is_array( $istantanea['identita'] ) ? $istantanea['identita'] : array();
 		$email_identity = isset( $istantanea['identita_email'] ) && is_array( $istantanea['identita_email'] ) ? $istantanea['identita_email'] : array();
@@ -829,7 +836,7 @@ final class MI_Modello_Email {
 			self::chiusura_email( $istantanea ),
 			! empty( $email_identity['indirizzo_risposte'] ) ? 'Assistenza: ' . sanitize_email( $email_identity['indirizzo_risposte'] ) : 'Assistenza: rispondi a questa email.',
 		) );
-		return implode( "\n\n", $parts );
+		return html_entity_decode( implode( "\n\n", $parts ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 	}
 
 	/** Un collegamento esplicito evita che il client interpreti il nome come un indirizzo geografico. */

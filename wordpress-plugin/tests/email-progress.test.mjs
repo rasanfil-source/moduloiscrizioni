@@ -30,3 +30,20 @@ test('failed status polling preserves saved-request guidance',async()=>{
  const s=await run({}, {networkFailure:true});assert.match(s.panel.textContent,/richiesta resta salvata/);
  assert.equal(s.timers.filter(t=>t.ms===10000).length,2);
 });
+
+test('completed result with errors disappears on the open page after the remaining interval',async()=>{
+ const s=await run({prepared:127,total:127,sent:120,pending:0,failed:7,done:true,error:'Contenuto email non valido o inattivo.',dismiss_after:1200});
+ assert.match(s.panel.textContent,/Errori: 7/);
+ assert.match(s.panel.textContent,/Contenuto email non valido/);
+ const expiry=s.timers.find(t=>t.ms===1200000);
+ assert.ok(expiry);assert.notEqual(s.panel.hidden,true);
+ expiry.f();assert.equal(s.panel.hidden,true);
+ assert.equal(s.requests.length,1);
+});
+test('expired completed result is hidden immediately and active campaigns never expire',async()=>{
+ const expired=await run({prepared:127,total:127,sent:127,pending:0,failed:0,done:true,dismiss_after:0});
+ assert.equal(expired.panel.hidden,true);
+ const active=await run({prepared:127,total:127,sent:120,pending:7,failed:0,done:false,dismiss_after:null});
+ assert.notEqual(active.panel.hidden,true);
+ assert.equal(active.timers.filter(t=>t.ms===3000).length,1);
+});

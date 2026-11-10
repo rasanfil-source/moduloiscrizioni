@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class MI_Activator {
-	const SCHEMA_REVISION = 5;
+	const SCHEMA_REVISION = 6;
 	public static function activate() {
 		self::create_tables();
 		self::add_roles_and_capabilities();
@@ -16,6 +16,8 @@ final class MI_Activator {
 		wp_unschedule_hook( 'mi_sync_workspace_registration' );
 		wp_unschedule_hook( 'mi_spedisci_email_in_coda' );
 		wp_unschedule_hook( 'mi_prepara_comunicazioni' );
+		wp_unschedule_hook( 'mi_web_push_registration' );
+		wp_unschedule_hook( 'mi_riprova_notifica_pubblicazione' );
 		wp_unschedule_hook( 'mi_expire_registrations' );
 		wp_unschedule_hook( 'mi_pulisci_bozze_cestinate' );
 		wp_unschedule_hook( 'mi_organizza_fogli_evento' );
@@ -331,8 +333,26 @@ final class MI_Activator {
 		self::backfill_ticket_counters( $ticket_counters, $registrations, $items );
 		update_option( 'mi_db_version', MI_VERSION, false );
 		// Completa la migrazione degli indici prima di registrare lo schema come aggiornato.
-		$audit_index = $wpdb->get_results( "SHOW INDEX FROM {$registration_events} WHERE Key_name='type_actor'", ARRAY_A );
-		if ( ! $wpdb->last_error && array_column( (array) $audit_index, 'Column_name' ) === array( 'event_type', 'actor_label' ) ) update_option( 'mi_db_schema_revision', self::SCHEMA_REVISION, false );
+		if ( self::repair_audit_index( $registration_events ) ) update_option( 'mi_db_schema_revision', self::SCHEMA_REVISION, false );
+	}
+
+	/** dbDelta non sostituisce un indice omonimo con colonne differenti. */
+	private static function repair_audit_index( $table ) {
+		global $wpdb;
+		$read_columns = static function () use ( $wpdb, $table ) {
+			$rows = $wpdb->get_results( "SHOW INDEX FROM {$table} WHERE Key_name='type_actor'", ARRAY_A );
+			if ( $wpdb->last_error ) return null;
+			usort( $rows, static function ( $a, $b ) { return (int) $a['Seq_in_index'] <=> (int) $b['Seq_in_index']; } );
+			return array_column( $rows, 'Column_name' );
+		};
+		$expected = array( 'event_type', 'actor_label' );
+		$columns = $read_columns();
+		if ( null === $columns ) return false;
+		if ( $expected === $columns ) return true;
+		// Un solo ALTER: un errore non lascia intenzionalmente una tabella senza indice.
+		$drop = $columns ? 'DROP INDEX type_actor, ' : '';
+		if ( false === $wpdb->query( "ALTER TABLE {$table} {$drop}ADD INDEX type_actor (event_type,actor_label)" ) ) return false;
+		return $expected === $read_columns();
 	}
 
 	private static function backfill_ticket_counters( $ticket_counters, $registrations, $items ) {

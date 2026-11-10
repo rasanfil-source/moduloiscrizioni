@@ -43,6 +43,10 @@ jobs:
           php wordpress-plugin/tests/email-jobs-audit.php
           php wordpress-plugin/tests/email-recipients-audit.php
           php wordpress-plugin/tests/email-outcomes-audit.php
+          php wordpress-plugin/tests/email-progress-retention.php
+          php wordpress-plugin/tests/audit-comproved-email.php
+          php wordpress-plugin/tests/audit-schema-index.php
+          php wordpress-plugin/tests/payment-ledger.php
           php wordpress-plugin/tests/event-card-layout.php
           php wordpress-plugin/tests/operational-profile.php
           php wordpress-plugin/tests/option-rules.php
@@ -108,6 +112,8 @@ jobs:
           php wordpress-plugin/tests/sheet-receipts-innodb.php
           php wordpress-plugin/tests/room-postcommit-innodb.php
           php wordpress-plugin/tests/audit-275-innodb.php
+          php wordpress-plugin/tests/audit-schema-index-innodb.php
+          php wordpress-plugin/tests/event-deletion-innodb.php
 
   sanitization:
     runs-on: ubuntu-latest

@@ -125,6 +125,7 @@ final class MI_Workspace_Client {
 				'EMAIL_QUOTA_EXCEEDED' => 'quota giornaliera Google esaurita',
 				'EMAIL_BUSY' => 'un altro invio è in corso',
 				'EVENT_BUSY' => 'è in corso un aggiornamento Google; riprova tra poco',
+				'WORKSPACE_BUSY' => 'Google sta elaborando un’altra operazione; attendi qualche secondo e riprova',
 				'DELETION_CONFLICT' => 'esiste una cancellazione con identificativo o scelta differenti',
 				'INVALID_DELETION' => 'i parametri della cancellazione non sono validi',
 				'SHARED_EVENT_SHEET' => 'il foglio risulta collegato anche a un altro evento',

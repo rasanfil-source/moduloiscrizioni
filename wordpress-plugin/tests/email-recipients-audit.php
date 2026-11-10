@@ -10,6 +10,7 @@ class RecipientAuditDatabase extends AuditReminderDatabase {
         $row = parent::get_results($sql, ...$args)[0];
         $row['buyer_email'] = $this->recipient;
         $row['initial_due_cents'] = $this->deposit;
+        $row['economic_mode'] = 'DEPOSIT_BALANCE';
         return array($row);
     }
 }

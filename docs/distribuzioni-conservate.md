@@ -1,41 +1,27 @@
 # Distribuzioni conservate
 
-Pulizia richiesta dall'utente il 9 novembre 2026: mantenere gli ultimi cinque rilasci ed eliminare il precedente materiale di distribuzione.
+Aggiornamento del 10 novembre 2026. La regola permanente è conservare gli ultimi cinque rilasci, senza modificare gli archivi già assegnati e senza riutilizzare i numeri eliminati.
 
-| Versione | Distribuzioni locali conservate |
-| --- | --- |
-| 3.27.41 | ZIP locale e pubblico, checksum, sorgente MODULI AUTONOMO e checksum |
-| 3.27.40 | ZIP locale e pubblico, checksum |
-| 3.27.39 | ZIP locale e pubblico, checksum |
-| 3.27.38 | ZIP locale e pubblico, checksum |
-| 3.27.37 | ZIP locale e pubblico, checksum |
+| Versione | Distribuzione locale | GitHub |
+| --- | --- | --- |
+| 3.27.43 | ZIP locale e pubblico, checksum; sorgente MODULI AUTONOMO e checksum | [Release 3.27.43](https://github.com/rasanfil-source/moduloiscrizioni/releases/tag/v3.27.43) |
+| 3.27.42 | ZIP locale e pubblico, checksum | [Release 3.27.42](https://github.com/rasanfil-source/moduloiscrizioni/releases/tag/v3.27.42) |
+| 3.27.41 | ZIP locale e pubblico, checksum; sorgente MODULI AUTONOMO e checksum | [Release 3.27.41](https://github.com/rasanfil-source/moduloiscrizioni/releases/tag/v3.27.41) |
+| 3.27.40 | ZIP locale e pubblico, checksum | [Release 3.27.40](https://github.com/rasanfil-source/moduloiscrizioni/releases/tag/v3.27.40) |
+| 3.27.39 | ZIP locale e pubblico, checksum | [Release 3.27.39](https://github.com/rasanfil-source/moduloiscrizioni/releases/tag/v3.27.39) |
 
-Conservate inoltre le cinque note e i cinque script di confezionamento corrispondenti. Le versioni 3.27.37–3.27.40 sono correzioni WordPress; non avevano un nuovo sorgente Google distribuito con il rispettivo numero. Il sorgente Google completo corrente e quello della 3.27.41.
+Per ciascuna versione restano note e helper di confezionamento. Su GitHub si pubblicano esclusivamente ZIP pubblici e checksum; quando previsto, si aggiunge il sorgente MODULI AUTONOMO. La configurazione privata del saldo resta soltanto nella variante locale.
 
-Eliminati localmente **684 file**, per **518,60 MiB**: vecchi archivi, esportazioni versionate, checksum, note e script di confezionamento. Rimossi dall'albero Git corrente i 336 file tra questi precedentemente tracciati, inclusi sei vecchi ZIP erroneamente tracciati. I 22 file di distribuzione conservati sono stati verificati mediante SHA-256 prima e dopo la pulizia: nessuna modifica ai loro contenuti.
+La 3.27.42 è pubblicata usando lo ZIP originale già consegnato, senza ricostruirlo. Il relativo snapshot sorgente è ricavato da quel pacchetto pubblico. La 3.27.43 include la correzione della 3.27.42 e i rilievi comprovati dell'audit.
 
-Restano i sorgenti correnti, i test, la documentazione operativa e le decisioni dell'utente. I file di lavoro e gli strumenti temporanei non fanno parte di questa pulizia. La 3.26.226 non viene modificata o rigenerata: e eliminata insieme alle altre vecchie distribuzioni per la successiva richiesta esplicita di conservare soltanto cinque rilasci.
+## Conservazione e verifiche
 
-Nessun nuovo numero di versione o ZIP: il plugin rimane 3.27.41. I numeri delle versioni eliminate restano gia utilizzati e non devono essere riciclati. Il prossimo rilascio dovra comunque superare 3.27.41.
+La pulizia iniziale del 9 novembre aveva rimosso 684 file locali di distribuzioni precedenti, lasciando la serie 3.27.37–3.27.41. Con la 3.27.42 è stata rimossa localmente la 3.27.37; con la 3.27.43 è stata rimossa la 3.27.38. Sono eliminati ZIP, checksum, note e helper obsoleti. I dieci ZIP conservati sono stati confrontati mediante SHA-256 e non sono stati modificati.
 
-La rimozione dall'albero corrente non cancella i vecchi contenuti dai commit precedenti. La pulizia delle release GitHub e la riscrittura della cronologia Git sono operazioni distinte; la seconda non e eseguita implicitamente da questa pulizia.
+La pubblicazione delle nuove release precede la rimozione delle release GitHub 3.27.37 e 3.27.38 e dei loro tag. Gli allegati conservati sono confrontati con quelli precedenti e con i digest dei file locali. La 3.27.43 è l'ultima release.
 
-## Release pubblicate su GitHub
+Il ramo operativo viene integrato nel ramo principale tramite pull request verificata. Non si riscrive la cronologia dei commit e non si esegue force push. La rimozione dall'albero corrente e dalle release non cancella automaticamente i vecchi oggetti Git.
 
-L'utente ha confermato che le cinque release da conservare anche su GitHub sono **3.27.37–3.27.41**, come in locale. La sezione Releases conteneva invece dieci pubblicazioni della serie 3.26: sono state eliminate tutte, con relativi tag e allegati. La cronologia dei commit non viene riscritta.
+Restano i sorgenti operativi, i test, gli audit e le decisioni funzionali. I file temporanei e i dati locali estranei alla distribuzione non fanno parte della pulizia. La 3.26.226 non viene ricostruita o riutilizzata.
 
-| Release GitHub | Allegati |
-| --- | --- |
-| [3.27.41](https://github.com/rasanfil-source/moduloiscrizioni/releases/tag/v3.27.41) | ZIP pubblico originale e SHA-256; sorgente MODULI AUTONOMO e SHA-256 |
-| [3.27.40](https://github.com/rasanfil-source/moduloiscrizioni/releases/tag/v3.27.40) | ZIP pubblico originale e SHA-256 |
-| [3.27.39](https://github.com/rasanfil-source/moduloiscrizioni/releases/tag/v3.27.39) | ZIP pubblico originale e SHA-256 |
-| [3.27.38](https://github.com/rasanfil-source/moduloiscrizioni/releases/tag/v3.27.38) | ZIP pubblico originale e SHA-256 |
-| [3.27.37](https://github.com/rasanfil-source/moduloiscrizioni/releases/tag/v3.27.37) | ZIP pubblico originale e SHA-256 |
-
-La 3.27.41 e contrassegnata come ultima release. Ogni allegato e verificato confrontando il digest SHA-256 restituito da GitHub con quello del file locale. Le varianti ZIP locali con configurazione privata non sono pubblicate. Le nuove pubblicazioni sono state prima caricate in bozza e verificate; le cinque vecchie release ancora presenti sono state rimosse soltanto dopo la pubblicazione di tutte le nuove.
-
-I 100 file del plugin di ciascun tag corrispondono a quelli dello ZIP pubblico originale, con la sola normale normalizzazione Git delle interruzioni di riga CRLF/LF per i file di testo. Gli snapshot pubblici escludono i vecchi archivi, checksum, note e helper di distribuzione. La 3.27.37, originariamente inclusa nel commit cumulativo della 3.27.38, ha uno snapshot recuperato dal suo ZIP originale: differiscono soltanto bootstrap e modello email. Gli ZIP conservati non sono stati ricostruiti o modificati.
-
-La pulizia dell'albero corrente riguarda il ramo di lavoro `codex/segreteria-3-26-15`; gli altri rami e la cronologia dei commit restano conservati. Non viene eseguito alcun force push. La pubblicazione su GitHub non installa aggiornamenti sul sito o nel progetto Google.
-
-Gli oggetti Git locali sono stati inoltre compattati con `git gc --no-prune`, passando da circa 73,74 a 23,36 MiB, senza eliminare gli oggetti recuperabili o riscrivere i commit.
+La pubblicazione GitHub non installa aggiornamenti in WordPress o in Google. Per la 3.27.43 servono il nuovo ZIP WordPress e l'aggiornamento della distribuzione del solo progetto MODULI AUTONOMO con il sorgente completo 3.27.43.

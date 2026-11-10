@@ -294,11 +294,13 @@ final class MI_Spedizione_Email {
 					$paid = $position['effective_paid'];
 					$balance = $position['managed'] ? $position['effective_balance'] : 0;
 					if ( 'BALANCE_REMINDER' === $template_type && $balance < 1 ) continue;
-					$deposit_missing = $position['individual_known'] ? (int) ( $position['individual_deposit_missing'] ?? max( 0, (int) $position['individual_deposit_due'] - (int) $paid ) ) : max( 0, (int) $registration['initial_due_cents'] - (int) $paid );
+					$full_payment = 'FULL_PAYMENT' === ( $registration['economic_mode'] ?? '' );
+					$initial_due = $full_payment ? (int) $position['effective_total'] : ( $position['individual_known'] ? (int) $position['individual_deposit_due'] : (int) $registration['initial_due_cents'] );
+					$deposit_missing = $full_payment ? (int) $balance : ( $position['individual_known'] ? (int) ( $position['individual_deposit_missing'] ?? max( 0, $initial_due - (int) $paid ) ) : max( 0, $initial_due - (int) $paid ) );
 					if ( 'DEPOSIT_REMINDER' === $template_type && ( ! $position['managed'] || $deposit_missing < 1 ) ) continue;
 					$economic = $test_only
-						? array( 'total_cents' => 25000, 'initial_due_cents' => 5000, 'balance_cents' => 20000, 'payment_methods' => array( 'BANK_TRANSFER' ) )
-						: array( 'total_cents' => (int) $position['effective_total'], 'initial_due_cents' => $position['individual_known'] ? (int) $position['individual_deposit_due'] : (int) $registration['initial_due_cents'], 'balance_cents' => $balance, 'payment_methods' => json_decode( (string) $registration['payment_methods_json'], true ) ?: array() );
+						? array( 'mode' => 'DEPOSIT_BALANCE', 'total_cents' => 25000, 'initial_due_cents' => 5000, 'balance_cents' => 20000, 'payment_methods' => array( 'BANK_TRANSFER' ) )
+						: array( 'mode' => (string) $registration['economic_mode'], 'total_cents' => (int) $position['effective_total'], 'initial_due_cents' => $initial_due, 'balance_cents' => $balance, 'payment_methods' => json_decode( (string) $registration['payment_methods_json'], true ) ?: array() );
 					$status_labels = array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'Da pagare', 'TRAVEL_PENDING' => 'In attesa di passaggio', 'WAITLISTED' => 'Lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto' );
 					if ( 'DEPOSIT_REMINDER' === $template_type && ! $test_only ) $economic['initial_due_cents'] = $deposit_missing;
 					$participant_count = (int) $position['individual_people_count'] > 0 ? (int) $position['individual_active_count'] : (int) $registration['total_qty'];

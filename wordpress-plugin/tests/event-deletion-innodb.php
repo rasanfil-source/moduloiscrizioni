@@ -57,9 +57,10 @@ $wpdb->query("UPDATE wp_mi_registrations SET buyer_email='person@example.invalid
 $allowed=false;check(is_wp_error(MI_Event_Deletion::begin(42,$preview['fingerprint'],$request,'trash','Evento 42',true)),'Permissions bypassed');$allowed=true;
 $wpdb->query('UPDATE wp_mi_payments SET amount_cents=200 WHERE id=42');
 check(is_wp_error(MI_Event_Deletion::begin(42,$preview['fingerprint'],$request,'trash','Evento 42',true)),'Stale preview accepted');
+$posts[42]->post_title='Evento A &amp; B all&#8217;Abbazia';
 $preview=MI_Event_Deletion::preview(42);
 check(is_wp_error(MI_Event_Deletion::begin(42,$preview['fingerprint'],$request,'trash','Wrong title',true)),'Wrong title accepted');
-check(!is_wp_error(MI_Event_Deletion::begin(42,$preview['fingerprint'],$request,'trash','Evento 42',true)),'Cannot start');
+check(!is_wp_error(MI_Event_Deletion::begin(42,$preview['fingerprint'],$request,'trash','Evento A & B all’Abbazia',true)),'Cannot confirm decoded title');
 check(is_wp_error(MI_Event_Deletion::enter(42)),'Writes allowed after deletion began');
 $worker_command=[PHP_BINARY];
 if(PHP_OS_FAMILY==='Windows')$worker_command=array_merge($worker_command,['-n','-d','extension_dir='.dirname(PHP_BINARY).'/ext','-d','extension=mysqli']);
