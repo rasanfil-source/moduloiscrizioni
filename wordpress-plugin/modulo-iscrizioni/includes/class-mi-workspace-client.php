@@ -6,7 +6,11 @@ final class MI_Workspace_Client {
 	public static function is_configured() {
 		$url = self::webapp_url();
 		$secret = self::shared_secret();
-		return 0 === strpos( $url, 'https://script.google.com/macros/s/' ) && strlen( $secret ) >= 32;
+		return self::valid_webapp_url( $url ) && strlen( $secret ) >= 32;
+	}
+
+	public static function valid_webapp_url( $url ) {
+		return (bool) preg_match( '#^https://script\.google\.com/(?:a/macros/[A-Za-z0-9.-]+/s|macros/s)/[A-Za-z0-9_-]+/exec$#D', (string) $url );
 	}
 
 	public static function ping() {

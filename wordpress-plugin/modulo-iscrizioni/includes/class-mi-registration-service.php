@@ -124,7 +124,7 @@ final class MI_Registration_Service {
 		return $wpdb->get_row( $wpdb->prepare( "SELECT id, revision_number, config_hash, config_json FROM {$table} WHERE event_id = %d ORDER BY revision_number DESC LIMIT 1", $event_id ), ARRAY_A );
 	}
 
-	public static function public_event( $event_id, $allow_unpublished = false ) {
+	public static function public_event( $event_id, $allow_unpublished = false, $include_availability = true ) {
 		if ( class_exists( 'MI_Event_Deletion' ) && MI_Event_Deletion::job( $event_id ) ) return new WP_Error( 'mi_event_deleting', 'Evento non disponibile: eliminazione in corso.', array( 'status' => 410 ) );
 		$event = get_post( $event_id );
 		$allowed_status = $allow_unpublished ? array( 'publish', 'draft', 'private' ) : array( 'publish' );
@@ -150,8 +150,7 @@ final class MI_Registration_Service {
 				return new WP_Error( 'mi_event_revision_unavailable', 'La revisione pubblicata non è disponibile. Riprova più tardi.', array( 'status' => 503 ) );
 			}
 			$revision_config['revision'] = array( 'id' => (int) $revision['id'], 'number' => (int) $revision['revision_number'], 'hash' => (string) $revision['config_hash'] );
-			$revision_config['availability'] = self::availability( $revision_config );
-			return $revision_config;
+			return $include_availability ? self::with_availability( $revision_config ) : $revision_config;
 		}
 
 		$ticket_types = get_post_meta( $event_id, '_mi_ticket_types', true );
@@ -199,6 +198,7 @@ final class MI_Registration_Service {
 			'cover_image'      => $resolved_cover_id ? (string) wp_get_attachment_image_url( $resolved_cover_id, 'large' ) : ( $external_group_cover ?: $external_group_logo ),
 			'cover_image_alt'  => $resolved_cover_id ? (string) get_post_meta( $resolved_cover_id, '_wp_attachment_image_alt', true ) : '',
 			'event_starts_at'  => (string) get_post_meta( $event_id, '_mi_event_starts_at', true ),
+			'event_ends_at'    => (string) get_post_meta( $event_id, '_mi_event_ends_at', true ),
 			'event_location'   => (string) get_post_meta( $event_id, '_mi_event_location', true ),
 			'capacity'         => max( 1, absint( get_post_meta( $event_id, '_mi_capacity', true ) ) ),
 			'availability_count_visible' => '0' !== (string) get_post_meta( $event_id, '_mi_availability_count_visible', true ),
@@ -233,8 +233,14 @@ final class MI_Registration_Service {
 			'marketing_enabled' => '1' === get_post_meta( $event_id, '_mi_marketing_enabled', true ),
 			'marketing_consent_id' => (string) get_post_meta( $event_id, '_mi_marketing_consent_id', true ),
 		);
-		$public_event['availability'] = self::availability( $public_event );
-		return $public_event;
+		return self::with_availability( $public_event );
+	}
+
+	private static function with_availability( $event ) {
+		$availability = self::availability( $event );
+		if ( is_wp_error( $availability ) ) return $availability;
+		$event['availability'] = $availability;
+		return $event;
 	}
 
 	public static function privacy_policy_url() {
@@ -250,6 +256,7 @@ final class MI_Registration_Service {
 			return $time_state;
 		}
 		$availability = isset( $event['availability'] ) && is_array( $event['availability'] ) ? $event['availability'] : self::availability( $event );
+		if ( is_wp_error( $availability ) ) return 'UNAVAILABLE';
 		return $availability['full'] && ( empty( $event['waitlist_enabled'] ) || $availability['waitlist_remaining'] < 1 ) ? 'SOLD_OUT' : 'OPEN';
 	}
 
@@ -278,7 +285,17 @@ final class MI_Registration_Service {
 		$starts = self::local_datetime( $event['event_starts_at'] ?? '' );
 		$closes = self::local_datetime( $event['closes_at'] ?? '' );
 		if ( ! $starts ) return new WP_Error( 'mi_event_dates', 'Inserisci una data di inizio valida.' );
+		$end_valid = self::validate_event_end( $event['event_starts_at'] ?? '', $event['event_ends_at'] ?? '' );
+		if ( true !== $end_valid ) return $end_valid;
 		if ( 'CLOSED' === $state ) return new WP_Error( 'mi_event_dates', 'La chiusura delle iscrizioni è già trascorsa. Aggiorna le date prima di proseguire.' );
+		return true;
+	}
+
+	public static function validate_event_end( $start, $end ) {
+		if ( '' === (string) $end ) return true;
+		$starts = self::local_datetime( $start );
+		$ends = self::local_datetime( $end );
+		if ( ! $starts || ! $ends || $ends < $starts ) return new WP_Error( 'mi_event_dates', 'La conclusione dell’evento deve essere una data valida, uguale o successiva all’inizio.' );
 		return true;
 	}
 
@@ -291,6 +308,7 @@ final class MI_Registration_Service {
 		if ( $event_id ) {
 			$table = $wpdb->prefix . 'mi_event_counters';
 			$counter = $wpdb->get_row( $wpdb->prepare( "SELECT confirmed_count, waitlisted_count FROM {$table} WHERE event_id = %d", $event_id ), ARRAY_A );
+			if ( $wpdb->last_error ) return self::availability_error();
 			$confirmed = max( 0, (int) ( $counter['confirmed_count'] ?? 0 ) );
 			$waitlisted = max( 0, (int) ( $counter['waitlisted_count'] ?? 0 ) );
 		}
@@ -300,6 +318,7 @@ final class MI_Registration_Service {
 		if ( $event_id ) {
 			$ticket_table = $wpdb->prefix . 'mi_ticket_counters';
 			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT ticket_type_code, confirmed_count, waitlisted_count FROM {$ticket_table} WHERE event_id = %d", $event_id ), ARRAY_A );
+			if ( $wpdb->last_error || ! is_array( $rows ) ) return self::availability_error();
 			$indexed = array();
 			foreach ( $rows as $row ) {
 				$indexed[ $row['ticket_type_code'] ] = $row;
@@ -318,6 +337,10 @@ final class MI_Registration_Service {
 		$waitlist_capacity = min( 10000, max( 1, absint( $event['waitlist_capacity'] ?? 20 ) ) );
 		$waitlist_remaining = max( 0, $waitlist_capacity - $waitlisted );
 		return array( 'capacity' => $capacity, 'confirmed' => $confirmed, 'waitlisted' => $waitlisted, 'waitlist_capacity' => $waitlist_capacity, 'waitlist_remaining' => $waitlist_remaining, 'remaining' => $remaining, 'full' => 0 === $remaining || ( ! empty( $event['ticket_types'] ) && ! $any_ticket_available ), 'ticket_types' => $ticket_availability );
+	}
+
+	private static function availability_error() {
+		return new WP_Error( 'mi_availability_unavailable', 'Disponibilità dei posti temporaneamente non verificabile. Riprova tra poco.', array( 'status' => 503 ) );
 	}
 
 	public static function create( $event_id, $payload, $idempotency_key, $allow_unpublished = false, $audit_actor = 'PUBLIC_FORM', $trusted_operator = false ) {

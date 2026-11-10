@@ -13,7 +13,7 @@ function wp_create_nonce($v){return 'test';}
 function selected($a,$b){if((string)$a===(string)$b)echo 'selected';}
 class MI_Event_Post_Type {const EVENT_TYPE='event';}
 class MI_Access {static $scope='ALL';static function is_suspended(){return false;}static function event_ids(){return self::$scope;}static function can_access_event($id){return self::$scope==='ALL'||in_array($id,self::$scope,true);}}
-class MI_Portal {static function is_past_event($end){return $end==='past';}}
+class MI_Portal {static function event_dates_past($id){return get_post_meta($id,'_mi_event_starts_at',true)==='past';}}
 function get_post_meta($id,$key,$single){return $key==='_mi_event_starts_at'&&$id===30?'past':'';}
 function get_posts($query){if($query['orderby']!==array('date'=>'DESC','ID'=>'DESC'))throw new RuntimeException('Missing creation order');return array_values(array_filter(array_map(fn($id)=>(object)array('ID'=>$id,'post_title'=>'Evento '.$id),array(30,20,10)),fn($e)=>!isset($query['post__in'])||in_array($e->ID,$query['post__in'],true)));}
 require __DIR__.'/../modulo-iscrizioni/includes/class-mi-portal-management.php';

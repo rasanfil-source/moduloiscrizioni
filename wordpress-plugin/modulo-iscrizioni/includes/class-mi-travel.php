@@ -439,7 +439,12 @@ final class MI_Travel {
 			MI_Management_Service::lock_room_event( $event_id );
 			self::maintain_locked( $event_id );
 			self::check( $wpdb->query( 'COMMIT' ) );
-		} catch ( Throwable $error ) { $wpdb->query( 'ROLLBACK' ); }
+			set_transient( 'mi_travel_maintained_' . absint( $event_id ), 1, 60 );
+		} catch ( Throwable $error ) {
+			$wpdb->query( 'ROLLBACK' );
+			error_log( 'MI_TRAVEL_MAINTENANCE_FAILED event=' . absint( $event_id ) . ' type=' . get_class( $error ) );
+			return new WP_Error( 'mi_travel_maintenance', 'Aggiornamento dei passaggi temporaneamente non disponibile. Riprova tra poco.' );
+		}
 		try { MI_Spedizione_Email::pianifica_spedizione(); } catch ( Throwable $ignored ) { /* Il cron recupera la coda persistente. */ }
 	}
 	public static function decide( $id, $token, $action, $expected_driver = 0, $expected_expiry = '', $requested_seats = 0, array $requested_details = array() ) {
@@ -537,7 +542,8 @@ final class MI_Travel {
 				$message = is_wp_error( $result ) ? $result->get_error_message() : 'Spostamento aggiornato.';
 			}
 		}
-		self::maintain( $event_id );
+		$maintenance = get_transient( 'mi_travel_maintained_' . $event_id ) ? null : self::maintain( $event_id );
+		if ( is_wp_error( $maintenance ) ) $message = $maintenance->get_error_message();
 		$rows = self::rows( $event_id ); $row = array_column( $rows, null, 'participant_id' )[$id] ?? null;
 		if ( ! $row ) wp_die( 'Viaggio non disponibile.' );
 		$config = self::config( $event_id );

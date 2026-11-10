@@ -26,8 +26,8 @@
   },
   "portal-management.css": {
     "file": "min/portal-management.css",
-    "source": "f2d0344b4812ce853a7ccafc89fabe48fff9acb3385ed34b7f601e4ab0b462c3",
-    "hash": "7f2161135861eaac21241b013a288443d7a079d9cd9e90374c7ae50c5b49f056"
+    "source": "734d5f7c6c70236f34052b266885b03a497f737fcad1d795ced2bb3882be203c",
+    "hash": "370da086419cb5176ab9b16bda5e233208d96ae8d834c32ef8e5ebd8f41a68aa"
   },
   "portal-management.js": {
     "file": "min/portal-management.js",
@@ -66,8 +66,8 @@
   },
   "portal.js": {
     "file": "min/portal.js",
-    "source": "647f391def8944b365b185d6ee19d0784d42363a28806118a361069c393b6498",
-    "hash": "19127fb04444bb4f262cae9f97fa25d39ceb1bdb4711223a66be5b00a5b776b6"
+    "source": "74832e41770119a9913a9a74947b78bc6c092ac1687853f2c8c548682273593c",
+    "hash": "f031d3a20a8414736dbca18809bb9e52fe781323a90aab05b19154d2b5c35d86"
   },
   "public-balance.css": {
     "file": "min/public-balance.css",
@@ -76,8 +76,8 @@
   },
   "public-balance.js": {
     "file": "min/public-balance.js",
-    "source": "55634e9c1410cc14c4e1665cea5b79bea51e455aa0a2548fc2301157d942c92a",
-    "hash": "3c43dcc5ddee3eb2ca8c23b515ab6f0b774c8f561412935d00013b12ad31c142"
+    "source": "24eb6a9586e4ac2c31f9bfa57b4677259c5f44cbf19b715baa1ce4c2f6c2a8ab",
+    "hash": "c25cd7d60ee85dc2f03c495c9366685971533c574036b8a33a01dd053ad244af"
   },
   "public.css": {
     "file": "min/public.css",

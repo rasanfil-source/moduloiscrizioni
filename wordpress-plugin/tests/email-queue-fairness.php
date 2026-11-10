@@ -12,6 +12,7 @@ class WP_Error {
 function is_wp_error($v) { return $v instanceof WP_Error; }
 function absint($v) { return abs((int)$v); }
 function sanitize_email($v) { return $v; }
+function esc_html($v) { return htmlspecialchars($v); }
 function sanitize_text_field($v) { return $v; }
 function is_email($v) { return filter_var($v, FILTER_VALIDATE_EMAIL); }
 function current_time(...$args) { return gmdate('Y-m-d H:i:s'); }
@@ -32,6 +33,12 @@ function add_action(...$args){}
 function wp_unschedule_event(...$args){}
 function wp_schedule_single_event(...$args) { $GLOBALS['scheduled']++; return true; }
 class MI_Event_Deletion {
+    static $read_failure = false;
+    static function registration_event($registration) {
+        global $wpdb;
+        $wpdb->last_error = self::$read_failure ? 'SQL failure' : '';
+        return self::$read_failure || $registration === 99 ? 0 : 43;
+    }
     static $blocked = true;
     static function enter($event) { return self::$blocked && $event === 42 ? new WP_Error('mi_event_deleting', 'Synthetic paused deletion') : true; }
     static function release($event) {}
@@ -55,6 +62,10 @@ class MI_Workspace_Client {
 }
 class AuditQueueDatabase {
     public $prefix = 'wp_', $last_error = '', $rows = [];
+    function get_row($sql,$format) {
+        if (!str_contains($sql,'SELECT economic_mode,total_cents')) throw new RuntimeException('Unexpected registration read');
+        return ['economic_mode'=>'REGISTRATION_ONLY','total_cents'=>0];
+    }
     function prepare($sql, ...$args) {
         foreach ($args as $arg) $sql = preg_replace_callback('/%[ds]/', fn($m) => $m[0] === '%d' ? (string)(int)$arg : "'" . str_replace("'", "''", (string)$arg) . "'", $sql, 1);
         return $sql;
@@ -71,6 +82,7 @@ class AuditQueueDatabase {
         throw new RuntimeException('Unexpected SQL: ' . $sql);
     }
     function get_results($sql, $format) {
+        $this->last_error='';
         if (!str_contains($sql, 'FROM wp_mi_email_outbox WHERE') || !str_contains($sql,'ORDER BY id ASC LIMIT 10')) throw new RuntimeException('Unexpected select');
         $after=preg_match('/AND id > (\d+)/',$sql,$matches)?(int)$matches[1]:0;
         $target=preg_match('/\(id=(\d+) AND/',$sql,$matches)?(int)$matches[1]:0;
@@ -130,3 +142,19 @@ seed_queue(0,2);$wpdb->rows[1]['status']='TEST_PENDING';$wpdb->rows[1]['template
 MI_Spedizione_Email::spedisci_coda();
 if(MI_Workspace_Client::$recipients!==['recipient2@example.invalid'])throw new RuntimeException('Operational mode sent ordinary test queue');
 echo "PASS: operational mode does not deliver ordinary test queue.\n";
+
+foreach (['PENDING'=>'OPERATIVO','TEST_PENDING'=>'PROVA'] as $pending=>$mode) {
+    seed_queue(0,2);
+    $auditOptions['mi_modalita_spedizione_email']=$mode;
+    foreach ($wpdb->rows as $id=>$row) {
+        $wpdb->rows[$id]['registration_id']=$id===1 ? 7 : 99;
+        $wpdb->rows[$id]['status']=$pending;
+    }
+    MI_Event_Deletion::$read_failure=true;
+    MI_Spedizione_Email::spedisci_coda();
+    if ($wpdb->rows[1]['status']!==$pending || $wpdb->rows[1]['attempts']!==0 || MI_Workspace_Client::$recipients) throw new RuntimeException('SQL failure consumed a delivery');
+    MI_Event_Deletion::$read_failure=false;
+    MI_Spedizione_Email::spedisci_coda();
+    $prefix=$mode==='PROVA' ? 'TEST_' : '';
+    if ($wpdb->rows[1]['status']!==$prefix.'SENT' || $wpdb->rows[2]['status']!==$prefix.'FAILED' || count(MI_Workspace_Client::$recipients)!==1) throw new RuntimeException('Recovery or missing registration handled incorrectly');
+}

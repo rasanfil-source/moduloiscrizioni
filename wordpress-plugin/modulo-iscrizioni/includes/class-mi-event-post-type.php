@@ -118,6 +118,7 @@ final class MI_Event_Post_Type {
 		$opens_at = (string) get_post_meta( $post->ID, '_mi_registration_opens_at', true );
 		$closes_at = (string) get_post_meta( $post->ID, '_mi_registration_closes_at', true );
 		$event_starts_at = (string) get_post_meta( $post->ID, '_mi_event_starts_at', true );
+		$event_ends_at = (string) get_post_meta( $post->ID, '_mi_event_ends_at', true );
 		$event_location = (string) get_post_meta( $post->ID, '_mi_event_location', true );
 		$capacity = max( 1, absint( get_post_meta( $post->ID, '_mi_capacity', true ) ?: 30 ) );
 		$waitlist = '1' === get_post_meta( $post->ID, '_mi_waitlist_enabled', true );
@@ -171,6 +172,7 @@ final class MI_Event_Post_Type {
 			<p><label for="mi_registration_opens_at"><strong>Apertura iscrizioni</strong></label><br><input id="mi_registration_opens_at" name="mi_registration_opens_at" type="datetime-local" value="<?php echo esc_attr( $opens_at ); ?>"><br><small>Facoltativa: se vuota, le iscrizioni aprono subito alla pubblicazione.</small></p>
 			<p><label for="mi_registration_closes_at"><strong>Chiusura iscrizioni</strong></label><br><input id="mi_registration_closes_at" name="mi_registration_closes_at" type="datetime-local" value="<?php echo esc_attr( $closes_at ); ?>" required></p>
 			<p><label for="mi_event_starts_at"><strong>Data e ora dell’evento</strong></label><br><input id="mi_event_starts_at" name="mi_event_starts_at" type="datetime-local" value="<?php echo esc_attr( $event_starts_at ); ?>"></p>
+			<p><label for="mi_event_ends_at"><strong>Data e ora di conclusione (facoltativa)</strong></label><br><input id="mi_event_ends_at" name="mi_event_ends_at" type="datetime-local" value="<?php echo esc_attr( $event_ends_at ); ?>"><br><small>Se manca, per la conservazione del registro email vale la data di inizio.</small></p>
 			<p><label for="mi_event_location"><strong>Luogo dell’evento</strong></label><br><input id="mi_event_location" name="mi_event_location" type="text" maxlength="180" value="<?php echo esc_attr( $event_location ); ?>" placeholder="Es. Piazza San Pietro, Roma"></p>
 			<p><label><input name="mi_waitlist_enabled" type="checkbox" value="1" <?php checked( $waitlist ); ?>> Attiva automaticamente la lista d’attesa a esaurimento posti</label></p>
 			<p><label for="mi_waitlist_capacity"><strong>Capienza massima lista d’attesa</strong></label><br><input id="mi_waitlist_capacity" name="mi_waitlist_capacity" type="number" min="1" max="10000" value="<?php echo esc_attr( $waitlist_capacity ); ?>"> persone<br><small>Quando la lista è piena, il modulo non accetta altre richieste. Valore predefinito: 20 persone.</small></p>
@@ -309,6 +311,12 @@ final class MI_Event_Post_Type {
 		}
 
 		$activity_id = isset( $_POST['mi_activity_id'] ) ? absint( $_POST['mi_activity_id'] ) : 0;
+		$event_ends_at = sanitize_text_field( wp_unslash( $_POST['mi_event_ends_at'] ?? get_post_meta( $post_id, '_mi_event_ends_at', true ) ) );
+		$end_valid = '' === $event_ends_at ? true : MI_Registration_Service::validate_event_end( sanitize_text_field( wp_unslash( $_POST['mi_event_starts_at'] ?? '' ) ), $event_ends_at );
+		if ( is_wp_error( $end_valid ) ) {
+			set_transient( 'mi_publication_error_' . get_current_user_id(), $end_valid->get_error_message(), MINUTE_IN_SECONDS );
+			return;
+		}
 		$current_activity_id = absint( get_post_meta( $post_id, '_mi_activity_id', true ) );
 		if ( $current_activity_id && $activity_id !== $current_activity_id ) {
 			global $wpdb;
@@ -355,6 +363,7 @@ final class MI_Event_Post_Type {
 			update_post_meta( $post_id, '_mi_event_starts_at', $event_starts_at );
 		}
 		$event_location = isset( $_POST['mi_event_location'] ) ? sanitize_text_field( wp_unslash( $_POST['mi_event_location'] ) ) : '';
+		update_post_meta( $post_id, '_mi_event_ends_at', $event_ends_at );
 		update_post_meta( $post_id, '_mi_event_location', mb_substr( $event_location, 0, 180 ) );
 
 		$pricing_mode = isset( $_POST['mi_pricing_mode'] ) ? sanitize_key( wp_unslash( $_POST['mi_pricing_mode'] ) ) : 'none';
@@ -497,9 +506,11 @@ final class MI_Event_Post_Type {
 			echo esc_html( get_post_meta( $post_id, '_mi_registration_opens_at', true ) . ' → ' . get_post_meta( $post_id, '_mi_registration_closes_at', true ) );
 		} elseif ( 'mi_capacity' === $column ) {
 			$published_event = MI_Registration_Service::public_event( $post_id );
+			if ( is_wp_error( $published_event ) && 'mi_availability_unavailable' === $published_event->get_error_code() ) { echo esc_html( $published_event->get_error_message() ); return; }
 			$draft_capacity = absint( get_post_meta( $post_id, '_mi_capacity', true ) );
 			$capacity_event = is_wp_error( $published_event ) ? array( 'id' => $post_id, 'capacity' => $draft_capacity ) : $published_event;
-			$availability = MI_Registration_Service::availability( $capacity_event );
+			$availability = $capacity_event['availability'] ?? MI_Registration_Service::availability( $capacity_event );
+			if ( is_wp_error( $availability ) ) { echo esc_html( $availability->get_error_message() ); return; }
 			echo esc_html( $availability['confirmed'] . '/' . $availability['capacity'] . ' posti occupati' );
 			if ( ! is_wp_error( $published_event ) && $draft_capacity !== (int) $availability['capacity'] ) echo '<br><small style="color:#b32d2e">Bozza: ' . esc_html( $draft_capacity ) . ' · ripubblicare</small>';
 			if ( $availability['waitlisted'] ) {

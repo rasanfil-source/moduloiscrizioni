@@ -9,6 +9,9 @@ function avviaCronWordPress() {
   const response = UrlFetchApp.fetch(base + 'wp-cron.php', {method:'get',followRedirects:true,muteHttpExceptions:true});
   const code = response.getResponseCode();
   if (code < 200 || code >= 300) throw new Error('Avvio cron WordPress: HTTP ' + code);
+  if(typeof manutenzioneRicevuteEmail==='function'){
+    try{manutenzioneRicevuteEmail();}catch(error){console.error('EMAIL_MAINTENANCE_DEFERRED',String(error));}
+  }
   return {ok:true,http_status:code};
 }
 

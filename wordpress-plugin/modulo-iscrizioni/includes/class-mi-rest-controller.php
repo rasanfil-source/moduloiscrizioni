@@ -54,6 +54,7 @@ final class MI_REST_Controller {
 		if ( 'GET_MANUAL_REGISTRATION_SCHEMA' === $action ) return self::manual_registration_schema( $payload );
 		if ( 'CREATE_MANUAL_REGISTRATION' === $action ) return self::create_manual_registration( $payload );
 		if ( 'GET_EMAIL_MODE' === $action ) return array( 'ok' => true, 'mode' => MI_Spedizione_Email::modalita() );
+		if ( 'GET_EMAIL_RETENTION' === $action ) return MI_Spedizione_Email::retention_event_deadlines( $payload );
 		if ( 'QUEUE_OPERATIONAL_EMAILS' === $action ) return MI_Spedizione_Email::accoda_comunicazione_operativa( $payload );
 		return new WP_Error( 'mi_workspace_action_not_allowed', 'Azione Workspace non consentita.', array( 'status' => 403 ) );
 	}
@@ -162,20 +163,22 @@ final class MI_REST_Controller {
 			$content = $hash;
 		}
 		$secret = defined( 'MI_WORKSPACE_SHARED_SECRET' ) ? (string) MI_WORKSPACE_SHARED_SECRET : (string) get_option( 'mi_workspace_shared_secret', '' );
-		if ( strlen( $secret ) < 32 || strlen( $nonce ) < 32 || abs( (int) floor( microtime( true ) * 1000 ) - $timestamp ) > 120000 ) return new WP_Error( 'mi_workspace_signature_invalid', 'Firma Workspace non valida.', array( 'status' => 401 ) );
+		$window_ms = 120000;
+		if ( strlen( $secret ) < 32 || strlen( $nonce ) < 32 || abs( (int) floor( microtime( true ) * 1000 ) - $timestamp ) > $window_ms ) return new WP_Error( 'mi_workspace_signature_invalid', 'Firma Workspace non valida.', array( 'status' => 401 ) );
 		$message = $timestamp . "\n" . $nonce . "\n" . $action . "\n" . $content;
 		$expected = rtrim( strtr( base64_encode( hash_hmac( 'sha256', $message, $secret, true ) ), '+/', '-_' ), '=' );
 		if ( ! hash_equals( $expected, $signature ) ) return new WP_Error( 'mi_workspace_signature_invalid', 'Firma Workspace non valida.', array( 'status' => 401 ) );
-		$nonce_key = 'mi_workspace_command_nonce_' . hash( 'sha256', $nonce );
-		$lock_name = 'mi_ws_nonce_' . substr( hash( 'sha256', $nonce ), 0, 48 );
-		$locked = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 2)', $lock_name ) );
-		if ( 1 !== $locked ) return new WP_Error( 'mi_workspace_busy', 'Verifica Workspace momentaneamente occupata.', array( 'status' => 503 ) );
-		try {
-			if ( get_transient( $nonce_key ) ) return new WP_Error( 'mi_workspace_replay', 'Richiesta Workspace già utilizzata.', array( 'status' => 409 ) );
-			set_transient( $nonce_key, 1, 3 * MINUTE_IN_SECONDS );
-		} finally {
-			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock_name ) );
-		}
+		$hash = hash( 'sha256', $nonce );
+		// Durante l'aggiornamento rispetta anche le ricevute della versione precedente.
+		if ( get_transient( 'mi_workspace_command_nonce_' . $hash ) ) return new WP_Error( 'mi_workspace_replay', 'Richiesta Workspace già utilizzata.', array( 'status' => 409 ) );
+		$table = $wpdb->prefix . 'mi_workspace_nonces';
+		$now = (int) floor( microtime( true ) * 1000 );
+		$expires = $timestamp + $window_ms;
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE expires_at < %d ORDER BY expires_at LIMIT 100", $now ) );
+		$claimed = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$table} (nonce_hash,expires_at) VALUES (%s,%d)", $hash, $expires ) );
+		if ( false === $claimed ) return new WP_Error( 'mi_workspace_busy', 'Registrazione del comando Workspace temporaneamente non disponibile.', array( 'status' => 503 ) );
+		if ( 1 !== $claimed ) return new WP_Error( 'mi_workspace_replay', 'Richiesta Workspace già utilizzata.', array( 'status' => 409 ) );
+		if ( (int) floor( microtime( true ) * 1000 ) > $expires ) return new WP_Error( 'mi_workspace_signature_invalid', 'Firma Workspace scaduta.', array( 'status' => 401 ) );
 		return $payload;
 	}
 

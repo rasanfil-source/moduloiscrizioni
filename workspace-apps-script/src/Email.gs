@@ -33,6 +33,8 @@ function assicuraSpazioRicevuteEmail_(props, context) {
   const keys=Object.keys(all).filter(k=>/^MI_EMAIL_DELIVERY_[a-f0-9]{64}$/.test(k)&&/^(ACCEPTED|SENDING)\|/.test(String(all[k]))).sort();
   if (!keys.length) throw new Error('EMAIL_LEDGER_CAPACITY');
   const sheet=archivioRicevuteEmail_(props,context,true), rows=keys.map(k=>[k,String(all[k])]);
+  const required=sheet.getLastRow()+rows.length;
+  if(sheet.getMaxRows()<required)sheet.insertRowsAfter(sheet.getMaxRows(),required-sheet.getMaxRows());
   sheet.getRange(sheet.getLastRow()+1,1,rows.length,2).setValues(rows);
   SpreadsheetApp.flush();
   // Prima rendi durevole la copia; un'interruzione puo duplicare righe tecniche, mai una consegna.
@@ -46,18 +48,52 @@ function statoCanaleEmail_() {
   return { ok: !!authorized, error: authorized ? '' : 'EMAIL_SENDER_NOT_AUTHORIZED', channel: 'GOOGLE_WORKSPACE', sender: sender };
 }
 
-/** Limita il controllo delle ripetizioni; MySQL resta la coda autorevole. */
-function pulisciRicevuteEmail_ (props) {
+/** Cancella solo ACCEPTED: almeno 90 giorni dopo l'evento e dopo la consegna. */
+function pulisciRicevuteEmail_ (props, context) {
+  context=context||{};
   const now=Date.now(), last=Number(props.getProperty('MI_EMAIL_LEDGER_CLEANED_AT')||0);
   if (now-last<86400000) return;
   const all=props.getProperties();
-  Object.keys(all).forEach(key=>{
-    if (!/^MI_EMAIL_DELIVERY_[a-f0-9]{64}$/.test(key)) return;
-    const value=String(all[key]||''), parts=value.split('|');
-    // Lo stato SENDING non viene eliminato in automatico: l'esito della consegna è incerto.
-    if (parts[0]==='ACCEPTED'&&Number(parts[1])>0&&now-Number(parts[1])>90*86400000) props.deleteProperty(key);
-  });
+  const sheet=archivioRicevuteEmail_(props,context,false);
+  const rows=sheet&&sheet.getLastRow()>1?sheet.getRange(2,1,sheet.getLastRow()-1,2).getValues():[];
+  const keys=Object.keys(all).filter(key=>/^MI_EMAIL_DELIVERY_[a-f0-9]{64}$/.test(key));
+  // Le ricevute storiche senza evento restano conservate; un replay firmato può associarle.
+  const events=new Map();
+  const bind=(key,value)=>{const parts=String(value||'').split('|');if(/^MI_EMAIL_DELIVERY_[a-f0-9]{64}$/.test(key)&&/^[1-9][0-9]*$/.test(parts[2]||''))events.set(key,parts[2]);};
+  rows.forEach(row=>bind(String(row[0]),row[1]));keys.forEach(key=>bind(key,all[key]));
+  const ids=[...new Set(events.values())], deadlines={};
+  try {
+    for(let i=0;i<ids.length;i+=100){
+      const result=inviaComandoWordPress_('GET_EMAIL_RETENTION',{event_ids:ids.slice(i,i+100)});
+      if(!result||result.ok!==true||!result.deadlines||typeof result.deadlines!=='object')throw new Error('EMAIL_RETENTION_UNAVAILABLE');
+      Object.assign(deadlines,result.deadlines);
+    }
+  } catch(error) {
+    // Il servizio date non disponibile rinvia la sola pulizia, non una consegna valida.
+    console.error('EMAIL_RETENTION_DEFERRED',String(error));
+    props.setProperty('MI_EMAIL_LEDGER_CLEANED_AT',String(now));return;
+  }
+  const expired=(key,value)=>{
+    const parts=String(value||'').split('|'), sent=Number(parts[1]), deadline=Number(deadlines[events.get(key)]||0);
+    return parts[0]==='ACCEPTED'&&sent>0&&Number.isFinite(sent)&&deadline>0&&now>deadline&&now-sent>90*86400000;
+  };
+  // Elimina blocchi dal basso: un'interruzione non sovrascrive ricevute recenti o SENDING.
+  let end=-1;
+  for(let i=rows.length-1;i>=-1;i--){
+    if(i>=0&&expired(String(rows[i][0]),rows[i][1])){if(end<0)end=i;}
+    else if(end>=0){sheet.deleteRows(i+3,end-i);end=-1;}
+  }
+  if(sheet)SpreadsheetApp.flush();
+  keys.forEach(key=>{if(expired(key,all[key]))props.deleteProperty(key);});
   props.setProperty('MI_EMAIL_LEDGER_CLEANED_AT',String(now));
+}
+
+/** Riutilizza il cron già installato; nessun invio email, nessun nuovo trigger. */
+function manutenzioneRicevuteEmail() {
+  const props=PropertiesService.getScriptProperties();
+  if(Date.now()-Number(props.getProperty('MI_EMAIL_LEDGER_CLEANED_AT')||0)<86400000)return {ok:true,invariato:true};
+  const lock=LockService.getScriptLock();if(!lock.tryLock(100))return {ok:false,busy:true};
+  try{pulisciRicevuteEmail_(props,{});return {ok:true};}finally{lock.releaseLock();}
 }
 
 /** Coda WordPress firmata. Registra l'intento prima dell'invio per consentire la verifica degli esiti incerti. */
@@ -90,11 +126,14 @@ function eseguiConsegnaEmail_(payload, context) {
     const key='MI_EMAIL_DELIVERY_'+p.delivery_key;
     let previous;
     try {
-      pulisciRicevuteEmail_(props);
+      pulisciRicevuteEmail_(props,context);
       assicuraSpazioRicevuteEmail_(props,context);
       previous=cercaRicevutaEmail_(props,context,key);
     } catch (error) { return {ok:false,error:'EMAIL_STORAGE_UNAVAILABLE'}; }
-    if (previous) return previous.startsWith('ACCEPTED|') ? { ok: true, channel: 'GOOGLE_WORKSPACE', replayed: true } : { ok: false, error: 'EMAIL_DELIVERY_UNCERTAIN' };
+    if (previous) {
+      if(previous.startsWith('ACCEPTED|')&&previous.split('|').length===2&&/^[1-9][0-9]*$/.test(String(p.event_id||'')))props.setProperty(key,previous+'|'+p.event_id);
+      return previous.startsWith('ACCEPTED|') ? { ok: true, channel: 'GOOGLE_WORKSPACE', replayed: true } : { ok: false, error: 'EMAIL_DELIVERY_UNCERTAIN' };
+    }
     let alias = '';
     if (requestedSender !== sender.sender) {
       try { const aliases=context.aliases||(context.aliases=GmailApp.getAliases());alias = aliases.find(address => String(address).toLowerCase() === requestedSender) || ''; }
@@ -108,7 +147,8 @@ function eseguiConsegnaEmail_(payload, context) {
     // un'eccezione non prova che Google non abbia accettato il messaggio:
     // conserviamo l'intento per evitare duplicati, senza dedurlo dal testo
     // dell'errore (localizzato e non un codice di consegna affidabile).
-    try { props.setProperty(key,'SENDING|'+Date.now()); }
+    const eventSuffix=/^[1-9][0-9]*$/.test(String(p.event_id||''))?'|'+p.event_id:'';
+    try { props.setProperty(key,'SENDING|'+Date.now()+eventSuffix); }
     catch (error) { return {ok:false,error:'EMAIL_STORAGE_UNAVAILABLE'}; }
     context.transportStarted=true;
     try {
@@ -118,7 +158,7 @@ function eseguiConsegnaEmail_(payload, context) {
       } else { MailApp.sendEmail(options); }
     }
     catch (error) { console.error('EMAIL_SEND_FAILED', String(error)); return { ok: false, error: 'EMAIL_DELIVERY_UNCERTAIN' }; }
-    try { props.setProperty(key,'ACCEPTED|'+Date.now()); }
+    try { props.setProperty(key,'ACCEPTED|'+Date.now()+eventSuffix); }
     catch (error) { return {ok:false,error:'EMAIL_DELIVERY_UNCERTAIN'}; }
     return { ok: true, channel: 'GOOGLE_WORKSPACE', sender: requestedSender };
   } finally { lock.releaseLock(); }

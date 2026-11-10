@@ -38,7 +38,7 @@ final class MI_Workspace_Settings {
 			<p>Blocco cron: <strong><?php $cron_lock = get_transient( 'doing_cron' ); echo esc_html( $cron_lock ? max( 0, time() - (int) $cron_lock ) . ' secondi fa' : 'Libero' ); ?></strong></p>
 			</details>
 			<?php if ( 'salvato' === $notice ) : ?><div class="notice notice-success"><p>Configurazione salvata.</p></div><?php endif; ?>
-			<?php if ( 'ping_ok' === $notice ) : ?><div class="notice notice-success"><p>Collegamento firmato verificato. Workspace è in modalità ANTEPRIMA.</p></div><?php endif; ?>
+			<?php if ( 'ping_ok' === $notice ) : ?><div class="notice notice-success"><p>Collegamento firmato verificato.</p></div><?php endif; ?>
 			<?php if ( 'ping_errore' === $notice ) : ?><div class="notice notice-error"><p>Collegamento non riuscito. Codice diagnostico: <code><?php echo esc_html( $error_code ?: 'non_disponibile' ); ?></code>.</p></div><?php endif; ?>
 			<?php if ( 'schema_ok' === $notice ) : ?><div class="notice notice-success"><p>Progetto Apps Script autonomo verificato: proiezione diretta disponibile.</p></div><?php endif; ?>
 			<?php if ( 'schema_errore' === $notice ) : ?><div class="notice notice-error"><p>La distribuzione non conferma il progetto Apps Script autonomo e il prelievo firmato delle proiezioni. Verifica l’URL e lo stato della configurazione.</p></div><?php endif; ?>
@@ -75,7 +75,7 @@ final class MI_Workspace_Settings {
 		$email_segreteria = sanitize_email( wp_unslash( $_POST['mi_email_segreteria_eventi'] ?? '' ) );
 		if ( ! empty( $_POST['mi_email_segreteria_eventi'] ) && ! is_email( $email_segreteria ) ) wp_die( 'Email della segreteria non valida.' );
 		$url = esc_url_raw( wp_unslash( $_POST['mi_workspace_webapp_url'] ?? '' ) );
-		if ( ! preg_match( '#^https://script\.google\.com/macros/s/[A-Za-z0-9_-]+/exec$#', $url ) ) {
+		if ( ! MI_Workspace_Client::valid_webapp_url( $url ) ) {
 			wp_die( esc_html__( 'URL Web App non valido.', 'modulo-iscrizioni' ) );
 		}
 		update_option( 'mi_workspace_webapp_url', $url, false );

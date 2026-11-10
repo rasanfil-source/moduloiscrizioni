@@ -103,7 +103,10 @@ final class MI_Modello_Email {
 			if ( ! $source || ! is_file( $source ) ) {
 				if ( ! function_exists( 'wp_safe_remote_get' ) || ! function_exists( 'wp_tempnam' ) ) return $resolved[ $url ] = $url;
 				$response = wp_safe_remote_get( $url, array( 'timeout' => 8, 'redirection' => 3, 'limit_response_size' => 8 * 1024 * 1024 + 1 ) );
-				if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) return $resolved[ $url ] = $url;
+				if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+					set_transient( $key, array( 'url' => $url ), 5 * MINUTE_IN_SECONDS );
+					return $resolved[ $url ] = $url;
+				}
 				$body = wp_remote_retrieve_body( $response );
 				if ( ! $body || strlen( $body ) > 8 * 1024 * 1024 ) return $resolved[ $url ] = $url;
 				$temporary = wp_tempnam( 'mi-email-banner' );

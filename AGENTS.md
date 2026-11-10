@@ -19,6 +19,13 @@ Usare sempre PowerShell 7 (`pwsh.exe`), mai `powershell.exe`. Eseguire i comandi
 - La consultazione per cognome e l'invio al recapito scelto sono requisiti intenzionali accettati, non difetti da correggere d'ufficio. La decisione non impedisce le correzioni delle altre segnalazioni valide degli audit, successivamente autorizzate dall'utente.
 - Decisione e ambito: `docs/decisione-saldo-pubblico-2026-11-09.md`.
 
+## Registro tecnico email — scelta del 10 novembre 2026
+
+- Le ricevute degli invii accettati possono essere eliminate 90 giorni dopo la conclusione dell'evento; se la conclusione non è indicata, vale la data di inizio.
+- Usare le date correnti dell'evento, così un rinvio sposta anche la scadenza. Per prudenza un invio successivo all'evento conserva comunque almeno 90 giorni dall'accettazione.
+- Conservare gli esiti incerti SENDING e le ricevute per cui evento o data non sono determinabili. Non cancellare la casella email, la coda autorevole o i riepiloghi WordPress applicando questa regola al registro tecnico Google.
+- Riferimento: `docs/decisione-conservazione-email-2026-11-10.md`.
+
 ## Versioni e ZIP — richiesta esplicita dell'utente
 
 - Ogni variazione del plugin da distribuire, anche minima o correttiva, richiede SEMPRE un nuovo numero di versione e un nuovo nome ZIP. Non riutilizzare un numero già assegnato a un pacchetto generato o consegnato.

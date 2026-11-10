@@ -565,7 +565,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const opensAt = form.querySelector('[data-mi-opens]');
     const closesAt = form.querySelector('[data-mi-closes]');
     const startsAt = form.querySelector('[data-mi-starts]');
-    const dateFields = [opensAt, closesAt, startsAt, form.querySelector('[name="travel_deadline"]')].filter(Boolean);
+    const endsAt = form.querySelector('[data-mi-ends]');
+    const dateFields = [opensAt, closesAt, startsAt, endsAt, form.querySelector('[name="travel_deadline"]')].filter(Boolean);
     const lateRegistrationNotice = form.querySelector('[data-mi-late-registration-notice]');
     if (lateRegistrationNotice) lateRegistrationNotice.hidden = true;
     const formatItalianDateInput = (field) => {
@@ -627,6 +628,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const opening = parseItalianDate(opensAt?.value || '');
       const closing = effectiveClosingDate();
       const start = parseItalianDate(startsAt?.value || '');
+      const end = parseItalianDate(endsAt?.value || '');
+      if (start && end && end < start) endsAt.setCustomValidity('La conclusione deve essere uguale o successiva all’inizio dell’evento.');
       if (opening && closing && closing <= opening) closesAt.setCustomValidity('La chiusura deve essere successiva all’apertura delle iscrizioni.');
       if (lateRegistrationNotice) lateRegistrationNotice.hidden = !(closing && start && start < closing);
     };
@@ -809,7 +812,9 @@ document.addEventListener('DOMContentLoaded', () => {
 		const lateRegistrationNotice = quickForm.querySelector('[data-mi-late-registration-notice]');
 		const startsAt = quickForm.querySelector('[name="starts_at"]');
 		const closesAt = quickForm.querySelector('[name="closes_at"]');
+		const endsAt = quickForm.querySelector('[name="ends_at"]');
 		const updateLateRegistrationNotice = () => {
+			if (endsAt) endsAt.setCustomValidity(endsAt.value && startsAt?.value && new Date(endsAt.value) < new Date(startsAt.value) ? 'La conclusione deve essere uguale o successiva all’inizio dell’evento.' : '');
 			if (!lateRegistrationNotice || !startsAt?.value || !closesAt?.value) return;
 			lateRegistrationNotice.hidden = new Date(closesAt.value) <= new Date(startsAt.value);
 		};

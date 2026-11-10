@@ -54,15 +54,15 @@ function generaVistaDaProiezioneDiretta_(projection) {
   applicaSchemaColonneEvento_(colonne,evento,iscrizioni,attive,pagamenti,cache);
   aggiungiColonneCronologiaEvento_(colonne,evento);
   anteponiColonnaProgressiva_(colonne);
-  const ordiniEconomici=new Set();
+  const referentiImporti=referentiImportiOrdine_(attive);
   const righe=attive.map((persona,indice)=>{
     const iscrizione=iscrizioniPerCodice[String(persona.codice_ordine)], dati=cache.object(persona.dati_aggiuntivi_json), valori={};
     colonne.forEach(colonna=>valori[colonna.key]=valoreCampoElenco_(colonna.key,evento,iscrizione,persona,dati,pagamenti,cache));
     if(Object.prototype.hasOwnProperty.call(valori,'participant_number'))valori.participant_number=indice+1;
     const personale={total:'totale_centesimi',paid:'versato_centesimi',balance:'saldo_centesimi'};
-    Object.keys(personale).forEach(key=>{const amount=persona[personale[key]];if(amount!==''&&amount!=null&&Number.isFinite(Number(amount)))valori[key]=Number(amount)/100;else if(ordiniEconomici.has(String(persona.codice_ordine)))valori[key]='';});
-    if(ordiniEconomici.has(String(persona.codice_ordine)))['paid_cash','paid_transfer','paid_card'].forEach(key=>valori[key]='');
-    ordiniEconomici.add(String(persona.codice_ordine));
+    const referente=referentiImporti.get(String(persona.codice_ordine))===persona;
+    Object.keys(personale).forEach(key=>{const amount=persona[personale[key]];if(amount!==''&&amount!=null&&Number.isFinite(Number(amount)))valori[key]=Number(amount)/100;else if(!referente)valori[key]='';});
+    if(!referente)['paid_cash','paid_transfer','paid_card'].forEach(key=>valori[key]='');
     return {codice_ordine:String(persona.codice_ordine),numero_partecipante:Number(persona.numero_partecipante),valori:valori,workspace_revision:String(iscrizione.workspace_revision||'')};
   });
   return {evento:{id:idEvento,titolo:String(evento.titolo||idEvento)},sola_lettura:vistaEventoSolaLettura_(evento,colonne),profilo:profilo.id,nome_profilo:profilo.nome,personalizzata:false,conservata:false,colonne:colonne,righe:righe};
@@ -83,11 +83,27 @@ function apriFoglioEventoFirmato_(payload, create, title) {
     }else book=SpreadsheetApp.openById(requested);
   }
   if(!book){if(!create)throw new Error('EVENT_SHEET_MISSING');book=SpreadsheetApp.create('Evento '+eventId+' - '+String(title||eventId).replace(/[\\/:*?"<>|#%{}]/g,' ').replace(/\s+/g,' ').trim().slice(0,140));properties.setProperty(registryKey,book.getId());spostaFoglioAccantoAlDatabase_(book.getId());created=true;}
-  let sheet=book.getSheetByName('Dati operativi');
-  if(!sheet){sheet=book.getSheets()[0];sheet.setName('Dati operativi');}
-  const metadata=sheet.getDeveloperMetadata().find(item=>item.getKey()==='MI_ID_EVENTO');
-  if(metadata && metadata.getValue()!==eventId)throw new Error('EVENT_SHEET_MISMATCH');
-  if(!metadata)sheet.addDeveloperMetadata('MI_ID_EVENTO',eventId);
+  const markers=book.createDeveloperMetadataFinder().withKey('MI_ID_EVENTO')
+    .withLocationType(SpreadsheetApp.DeveloperMetadataLocationType.SHEET).find();
+  const named=book.getSheetByName('Dati operativi');
+  let sheet;
+  if(markers.length){
+    sheet=markers[0].getLocation().getSheet();
+    if(markers.some(marker=>marker.getValue()!==eventId || marker.getLocation().getSheet().getSheetId()!==sheet.getSheetId()))throw new Error('EVENT_SHEET_MISMATCH');
+    if(named && named.getSheetId()!==sheet.getSheetId())throw new Error('EVENT_SHEET_MISMATCH');
+  }else{
+    sheet=named;
+    if(!sheet){
+      const tabs=book.getSheets();
+      // Una creazione interrotta può avere già registrato il documento ancora vuoto.
+      const registeredBlank=create && requested===properties.getProperty(registryKey) &&
+        tabs.length===1 && /^(Sheet1|Foglio1)$/.test(tabs[0].getName()) && tabs[0].getLastRow()===0;
+      if(!created && !registeredBlank)throw new Error('EVENT_SHEET_MISMATCH');
+      sheet=tabs[0];
+    }
+    sheet.addDeveloperMetadata('MI_ID_EVENTO',eventId);
+  }
+  if(!named)sheet.setName('Dati operativi');
   if(properties.getProperty(registryKey)!==book.getId())properties.setProperty(registryKey,book.getId());
   return {book:book,sheet:sheet,created:created,eventId:eventId};
 }
@@ -96,24 +112,24 @@ function aggiornaPagamentiDaProiezione_(book, projection, readOnly) {
   const schema=decodificaOggetto_(projection.event.schema_vista_json), payments=projection.payments;
   const props=PropertiesService.getScriptProperties(),management=book.getSheetByName('Gestione evento');
   const managementKey='MI_DIRECT_MANAGEMENT_'+book.getId(),managementVersion=String(props.getProperty('MI_WORDPRESS_COMMAND_URL')||'');
-  if(readOnly){if(management&&!management.isSheetHidden())management.hideSheet();}
+  if(readOnly){const data=book.getSheetByName('Dati operativi');if(data)data.showSheet();if(data&&management&&!management.isSheetHidden())management.hideSheet();}
   else {
     if(management&&management.isSheetHidden())management.showSheet();
     if(!management||props.getProperty(managementKey)!==managementVersion){preparaAccessoGestioneEvento_(book,String(projection.event.id_evento));props.setProperty(managementKey,managementVersion);}
   }
   let sheet=book.getSheetByName('Pagamenti');
   if(['NONE','ZERO'].includes(schema.pricing)&&!payments.length){if(sheet&&book.getSheets().some(s=>s.getName()!=='Pagamenti'&&!s.isSheetHidden()))sheet.hideSheet();return;}
-  const created=!sheet;
   sheet=sheet||book.insertSheet('Pagamenti');if(sheet.isSheetHidden())sheet.showSheet();
+  // Ripara anche una scheda creata da un tentativo interrotto prima della scrittura.
+  proteggiProiezione_(sheet);sheet.setFrozenRows(1);
   const headers=['Movimento','Prenotazione','Data','Tipo','Importo (€)','Metodo','Riferimento','Operatore','Nota'];
-  const rows=payments.map(row=>[row.id_pagamento,row.codice_ordine,row.data_effettiva,row.tipo_movimento,(['RIMBORSO','STORNO','REFUND'].includes(String(row.tipo_movimento).toUpperCase())?-1:1)*Math.abs(Number(row.importo_centesimi)||0)/100,row.fonte_pagamento,row.riferimento_esterno,row.etichetta_operatore,row.nota_amministrativa].map(value=>typeof value==='string'?neutralizzaFormula_(value,5000):value));
+  const rows=payments.slice().sort((a,b)=>(Date.parse(a.data_effettiva)||0)-(Date.parse(b.data_effettiva)||0)).map(row=>[row.id_pagamento,row.codice_ordine,row.data_effettiva,row.tipo_movimento,(['RIMBORSO','STORNO','REFUND'].includes(String(row.tipo_movimento).toUpperCase())?-1:1)*Math.abs(Number(row.importo_centesimi)||0)/100,row.fonte_pagamento,row.riferimento_esterno,row.etichetta_operatore,row.nota_amministrativa].map(value=>typeof value==='string'?neutralizzaFormula_(value,5000):value));
   estendiGrigliaProiezione_(sheet,rows.length+1,headers.length);
   const oldCount=Math.max(0,sheet.getLastRow()-1),old=oldCount?sheet.getRange(2,1,oldCount,headers.length).getValues():[];
   if(!righeProiezioneUguali_(sheet.getRange(1,1,1,headers.length).getValues()[0],headers))sheet.getRange(1,1,1,headers.length).setValues([headers]).setFontWeight('bold');
   const blocks=blocchiRigheProiezione_(old,rows,2);
   blocks.forEach(block=>{sheet.getRange(block.row,1,block.values.length,headers.length).setNumberFormat('@').setValues(block.values);sheet.getRange(block.row,5,block.values.length,1).setNumberFormat('#,##0.00');});
   if(oldCount>rows.length)sheet.getRange(rows.length+2,1,oldCount-rows.length,headers.length).clearContent();
-  if(created){sheet.setFrozenRows(1);proteggiProiezione_(sheet);}
 }
 
 function proiettaEventoDaWordPress_(payload) {

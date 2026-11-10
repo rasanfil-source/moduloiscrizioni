@@ -96,7 +96,13 @@ final class MI_Group_Links {
 		$today = ( new DateTimeImmutable( '@' . current_time( 'timestamp', true ) ) )->setTimezone( wp_timezone() )->setTime( 0, 0 );
 		foreach ( $ids as $id ) {
 			if ( get_post_meta( $id, '_mi_event_cancelled_at', true ) || get_post_meta( $id, '_mi_event_archived_at', true ) ) continue;
-			$event = MI_Registration_Service::public_event( $id );
+			$revision = absint( get_post_meta( $id, '_mi_published_revision_id', true ) );
+			$key = 'mi_group_event_' . $id . '_' . $revision;
+			$event = $revision ? get_transient( $key ) : false;
+			if ( ! is_array( $event ) ) {
+				$event = MI_Registration_Service::public_event( $id, false, false );
+				if ( ! is_wp_error( $event ) && $revision ) set_transient( $key, array_intersect_key( $event, array_flip( array( 'event_starts_at', 'event_ends_at' ) ) ), HOUR_IN_SECONDS );
+			}
 			if ( is_wp_error( $event ) ) continue;
 			$raw = (string) ( $event['event_starts_at'] ?? '' );
 			$date = DateTimeImmutable::createFromFormat( '!Y-m-d\TH:i', $raw, wp_timezone() );

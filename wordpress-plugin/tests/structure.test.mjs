@@ -204,7 +204,7 @@ test('i fogli evento vengono verificati, ricreati, organizzati e ripuliti nella 
 	assert.match(fogli, /function organizzaFogliEventoDaWordPress_/);
 	assert.match(webApp, /ORGANIZZA_FOGLI_EVENTO/);
 	assert.match(portal, /ORGANIZZA_FOGLI_EVENTO/);
-	assert.match(portal, /\$archiviato \|\| \( ! \$annullato && self::is_past_event\( \$inizio \?: \$chiusura \) \)/);
+	assert.match(portal, /\$passato = self::event_in_history\( \$event_id \)/);
 	assert.match(eliminazione, /setTrashed\(true\)/);
 	assert.doesNotMatch(eliminazione, /ottieniSchedaObbligatoria_|MI_SHEETS/);
 	assert.match(fogli, /registro\.getRange\(esistente\._row/);
@@ -266,7 +266,8 @@ test('anti replay e limiti pubblici sono atomici anche fra richieste concorrenti
   assert.match(service, /SELECT GET_LOCK/);
   assert.match(service, /SELECT RELEASE_LOCK/);
   assert.match(service, /'email\|'/);
-  assert.match(rest, /mi_ws_nonce_/);
+  assert.match(rest, /mi_workspace_nonces/);
+  assert.match(await read('includes/class-mi-activator.php'), /PRIMARY KEY  \(nonce_hash\)/);
   assert.match(rest, /mi_ws_draft_/);
   assert.match(rest, /SELECT GET_LOCK/);
   assert.match(rest, /finally/);
@@ -918,7 +919,7 @@ test('la gratuità è visibile e compatibile soltanto con la sola iscrizione', a
 test('il modulo indica quando apriranno le iscrizioni future', async () => {
   const shortcode = await read('includes/class-mi-shortcode.php');
   assert.match(shortcode, /\$formatted_opens = self::formatted_event_date/);
-  assert.match(shortcode, /state_message\( \$config\['state'\], \$formatted_opens \)/);
+  assert.match(shortcode, /state_message\( \$config\['state'\], \$formatted_opens, \$event \)/);
   assert.match(shortcode, /Le iscrizioni apriranno/);
 });
 
@@ -1419,7 +1420,7 @@ test('gli eventi passati sono separati dalla vista operativa ordinaria', async (
   assert.match(portal, /Torna agli eventi attuali/);
   assert.match(portal, /is_past_event/);
   assert.match(portal, /Eventi passati/);
-	assert.match(portal, /is_past_event\( \$starts_at \?: \$closes_at \)/);
+	assert.match(portal, /event_dates_past\( \$event->ID, \$published \)/);
 	assert.match(css, /\.mi-event-history-link/);
 	assert.match(css, /\.mi-event-card\.is-expired \.mi-event-card__status strong/);
 });
@@ -1813,7 +1814,7 @@ test('la ricerca cross-evento limita i risultati agli eventi accessibili del per
   const management = await read('includes/class-mi-portal-management.php');
   assert.match(management, /MI_Access::can_access_event/);
   assert.match(management, /_mi_event_archived_at/);
-  assert.match(management, /MI_Portal::is_past_event/);
+  assert.match(management, /MI_Portal::event_dates_past/);
   assert.match(management, /\$past === \( 'past' === \$period \)/);
 });
 
@@ -2416,8 +2417,8 @@ test('il percorso guidato limita le persone comprese in una prenotazione', async
 test('il wizard limita l anno delle date a quattro cifre', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const script = await read('assets/portal.js');
-  assert.equal((portal.match(/maxlength="16"/g) || []).length, 3);
-  assert.equal((portal.match(/placeholder="gg\/mm\/aaaa hh:mm"/g) || []).length, 3);
+  assert.equal((portal.match(/maxlength="16"/g) || []).length, 4);
+  assert.equal((portal.match(/placeholder="gg\/mm\/aaaa hh:mm"/g) || []).length, 4);
   assert.match(portal, /function valid_portal_date/);
   assert.match(portal, /function normalize_portal_date/);
   assert.match(portal, /anno di quattro cifre/);

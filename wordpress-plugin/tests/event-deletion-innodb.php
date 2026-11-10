@@ -37,7 +37,7 @@ $wpdb->query('CREATE DATABASE IF NOT EXISTS mi_deletion_test');$wpdb->db->select
 $allowed=true;$options=['mi_modalita_spedizione_email'=>'PROVA','mi_destinatario_prova_email'=>'test@example.invalid'];$meta=[];$scopes=[7=>[42,43]];$posts=[];
 foreach([42,43]as$id)$posts[$id]=(object)['ID'=>$id,'post_type'=>'mi_event','post_status'=>'draft','post_title'=>'Evento '.$id,'post_modified_gmt'=>'2026-09-09 00:00:00'];
 $schema=file_get_contents(__DIR__.'/../modulo-iscrizioni/includes/class-mi-activator.php');
-foreach(['registrations'=>'registrations','items'=>'registration_items','participants'=>'participants','counters'=>'event_counters','ticket_counters'=>'ticket_counters','event_revisions'=>'event_revisions','registration_events'=>'registration_events','outbox'=>'email_outbox','payments'=>'payments','rooms'=>'rooms','management_state'=>'management_state','management_requests'=>'management_requests']as$var=>$name){
+foreach(['registrations'=>'registrations','cancellation_tokens'=>'cancellation_tokens','items'=>'registration_items','participants'=>'participants','counters'=>'event_counters','ticket_counters'=>'ticket_counters','event_revisions'=>'event_revisions','registration_events'=>'registration_events','outbox'=>'email_outbox','payments'=>'payments','rooms'=>'rooms','management_state'=>'management_state','management_requests'=>'management_requests']as$var=>$name){
  preg_match('/CREATE TABLE \{\$'.$var.'\} \((.*?)\) ENGINE=InnoDB/s',$schema,$m);check(!empty($m),'Schema missing '.$name);
  $wpdb->query('DROP TABLE IF EXISTS wp_mi_'.$name);check(false!==$wpdb->query('CREATE TABLE wp_mi_'.$name.' ('.$m[1].') ENGINE=InnoDB'),$wpdb->last_error);
 }
@@ -52,6 +52,7 @@ foreach([42,43]as$id){
  $wpdb->query("INSERT INTO wp_mi_rooms VALUES ($id,'A','Camera',2)");
  $wpdb->query("INSERT INTO wp_mi_email_outbox (registration_id,recipient,template_type,payload_json,status,created_at) VALUES (0,'test@example.invalid','EVENT_MANAGER_READY','{\"event_id\":$id}','PREVIEW',NOW())");
 }
+$wpdb->query("INSERT INTO wp_mi_cancellation_tokens (participant_id,token_hash,created_at) VALUES (42,REPEAT(CHAR(97),64),NOW()),(43,REPEAT(CHAR(98),64),NOW())");
 $request='12345678-1234-4234-8234-123456789abc';$preview=MI_Event_Deletion::preview(42);
 $wpdb->query("UPDATE wp_mi_registrations SET buyer_email='person@example.invalid' WHERE event_id=42");$preview=MI_Event_Deletion::preview(42);
 $allowed=false;check(is_wp_error(MI_Event_Deletion::begin(42,$preview['fingerprint'],$request,'trash','Evento 42',true)),'Permissions bypassed');$allowed=true;
@@ -74,7 +75,7 @@ check((int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_participants')===2,'SQL ro
 $calls=MI_Workspace_Client::$calls;
 $result=MI_Event_Deletion::advance(42);check(!is_wp_error($result)&&$result['stage']==='done','Retry did not finish');
 check(MI_Workspace_Client::$calls===$calls,'Repeated successful Google phase');
-foreach(['registrations','participants','payments','rooms','travel']as$table)check((int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_'.$table)===1,'Wrong cleanup '.$table);
+foreach(['registrations','participants','payments','rooms','travel','cancellation_tokens']as$table)check((int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_'.$table)===1,'Wrong cleanup '.$table);
 $notice=$wpdb->get_row("SELECT * FROM wp_mi_email_outbox WHERE template_type='EVENT_DELETED_NOTICE'",ARRAY_A);
 check($notice&&$notice['status']==='TEST_PENDING'&&(int)$notice['registration_id']===0,'Avviso eliminato o modalità errata');
 check(str_contains($notice['payload_json'],'office@example.invalid'),'Contatto assente');

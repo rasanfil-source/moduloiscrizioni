@@ -25,13 +25,17 @@ $metadata = array(
 	8 => array( '_mi_event_starts_at' => '2026-11-01T08:00', '_mi_event_archived_at' => '2026-11-08 10:00:00', '_mi_event_cancelled_at' => '2026-11-02 10:00:00' ),
 	9 => array( '_mi_event_starts_at' => '2026-11-10T08:00', '_mi_registration_closes_at' => '2026-11-01T08:00' ),
 	10 => array( '_mi_registration_closes_at' => '2026-11-09T00:00' ),
+	11 => array( '_mi_event_starts_at' => '2026-11-08T08:00', '_mi_event_ends_at' => '2026-11-11T18:00' ),
+	12 => array( '_mi_event_starts_at' => '2026-11-08T08:00', '_mi_event_ends_at' => '2026-11-09T08:00' ),
 );
 $events = array_map( static function ( $id ) { return (object) array( 'ID' => $id, 'post_title' => 'Evento ' . $id ); }, array_keys( $metadata ) );
 $queries = array();
 $reader = new ReflectionMethod( 'MI_Portal', 'accessible_events' );
 $read = static function ( $past ) use ( $reader ) { return array_column( $reader->invoke( null, $past ), 'ID' ); };
-check_events( $read( false ), array( 1, 3, 5, 6, 9, 10 ), 'Elenco corrente cambiato' );
+check_events( $read( false ), array( 1, 3, 5, 6, 9, 10, 11, 12 ), 'Elenco corrente cambiato' );
 check_events( $read( true ), array( 2, 4, 7, 8 ), 'Elenco storico cambiato' );
+check_events( MI_Portal::event_dates_past( 2, array( 'event_ends_at' => '2026-11-11T18:00' ) ), false, 'Scheda pubblicata classificata prima della conclusione' );
+check_events( MI_Portal::event_dates_past( 11, array( 'event_ends_at' => '', 'event_starts_at' => '2026-11-08T08:00' ) ), true, 'Conclusione in bozza applicata alla revisione pubblicata' );
 MI_Access::$scope = array( 1, 2, 6 );
 check_events( $read( false ), array( 1, 6 ), 'Ambito corrente perso' );
 check_events( $read( true ), array( 2 ), 'Ambito storico perso' );
