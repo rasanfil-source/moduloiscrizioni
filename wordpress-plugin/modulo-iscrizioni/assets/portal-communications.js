@@ -29,6 +29,10 @@
           (s.paused ? ' Preparazione sospesa: la modalità di invio è cambiata.' : '') +
           (s.retry_after ? ' Ripresa automatica tra circa ' + Math.ceil(s.retry_after / 60) + ' minuti.' : '') +
           (s.error ? ' ' + s.error : '') + (s.done && !s.error ? ' Elaborazione conclusa.' : '');
+        if (s.done && Number.isFinite(s.dismiss_after)) {
+          if (s.dismiss_after <= 0) panel.hidden = true;
+          else setTimeout(() => { panel.hidden = true; }, s.dismiss_after * 1000);
+        }
         if (!s.done) setTimeout(poll, s.retry_after ? 15000 : 3000);
       } catch (error) {
         failures += 1;

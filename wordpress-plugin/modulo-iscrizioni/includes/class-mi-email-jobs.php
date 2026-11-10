@@ -3,6 +3,7 @@ defined( 'ABSPATH' ) || exit;
 
 /** Richieste durevoli, preparazione limitata e risveglio indipendente dalle visite. */
 final class MI_Email_Jobs {
+	private const PROGRESS_RETENTION_SECONDS = 1800;
 	public static function boot() {
 		add_action( 'wp_ajax_mi_email_worker', array( __CLASS__, 'worker' ) );
 		add_action( 'wp_ajax_nopriv_mi_email_worker', array( __CLASS__, 'worker' ) );
@@ -117,7 +118,19 @@ final class MI_Email_Jobs {
 		$sent = ( $counts['SENT'] ?? 0 ) + ( $counts['TEST_SENT'] ?? 0 ); $failed = ( $counts['FAILED'] ?? 0 ) + ( $counts['TEST_FAILED'] ?? 0 );
 		$pending = ( $counts['PENDING'] ?? 0 ) + ( $counts['TEST_PENDING'] ?? 0 ) + ( $counts['SENDING'] ?? 0 ) + ( $counts['TEST_SENDING'] ?? 0 );
 		$paused = empty( $job['test_only'] ) && 'ANTEPRIMA' !== $job['mode'] && ( $job['mode'] !== MI_Spedizione_Email::modalita() || ! self::mode_ready( $job['mode'] ) );
-		return array( 'total' => $job['total'], 'prepared' => $job['offset'], 'queued' => count( $job['origin_keys'] ), 'excluded' => (int) ( $job['excluded'] ?? 0 ), 'test_sent' => (int) ( $counts['TEST_SENT'] ?? 0 ), 'sent' => $sent, 'failed' => $failed, 'pending' => $pending, 'preview' => $counts['PREVIEW'] ?? 0, 'done' => 'pending' !== $job['state'] && ! $pending, 'paused' => $paused, 'quota_remaining' => null === get_option( 'mi_email_quota_remaining', null ) ? null : (int) get_option( 'mi_email_quota_remaining' ), 'retry_after' => max( 0, (int) get_option( 'mi_email_retry_after', 0 ) - time() ), 'error' => $job['error'] ?: implode( ' ', array_unique( $errors ) ) );
+		$done = 'pending' !== $job['state'] && ! $pending;
+		// Separato dal job: il polling non sovrascrive la preparazione di un worker.
+		$completion_key = 'mi_email_job_completed_' . $id;
+		$completed_at = (int) get_option( $completion_key, 0 );
+		if ( $done && ! $completed_at ) {
+			add_option( $completion_key, time(), '', false );
+			$completed_at = (int) get_option( $completion_key, time() );
+		} elseif ( ! $done && $completed_at ) {
+			// Una coda riaperta deve tornare visibile e ricevere una nuova scadenza.
+			delete_option( $completion_key );
+			$completed_at = 0;
+		}
+		return array( 'dismiss_after' => $done ? max( 0, $completed_at + self::PROGRESS_RETENTION_SECONDS - time() ) : null, 'total' => $job['total'], 'prepared' => $job['offset'], 'queued' => count( $job['origin_keys'] ), 'excluded' => (int) ( $job['excluded'] ?? 0 ), 'test_sent' => (int) ( $counts['TEST_SENT'] ?? 0 ), 'sent' => $sent, 'failed' => $failed, 'pending' => $pending, 'preview' => $counts['PREVIEW'] ?? 0, 'done' => $done, 'paused' => $paused, 'quota_remaining' => null === get_option( 'mi_email_quota_remaining', null ) ? null : (int) get_option( 'mi_email_quota_remaining' ), 'retry_after' => max( 0, (int) get_option( 'mi_email_retry_after', 0 ) - time() ), 'error' => $job['error'] ?: implode( ' ', array_unique( $errors ) ) );
 	}
 	public static function progress() {
 		if ( ! is_user_logged_in() || MI_Access::is_suspended() || ( ! current_user_can( 'mi_manage_communications' ) && ! current_user_can( 'manage_options' ) ) ) wp_send_json_error( array( 'message' => 'Accesso non consentito.' ), 403 );
@@ -127,7 +140,9 @@ final class MI_Email_Jobs {
 		wp_send_json_success( $state );
 	}
 	public static function render_progress( $id ) {
-		if ( ! is_string( $id ) || ! self::status( $id ) ) return;
+		if ( ! is_string( $id ) ) return;
+		$state = self::status( $id );
+		if ( ! $state || ( $state['done'] && 0 === $state['dismiss_after'] ) ) return;
 		echo '<p role="status" aria-live="polite" data-mi-email-progress data-job="' . esc_attr( $id ) . '" data-url="' . esc_url( admin_url( 'admin-ajax.php' ) ) . '" data-nonce="' . esc_attr( wp_create_nonce( 'mi_email_progress' ) ) . '">Preparazione e invio in background. Verifica dell’avanzamento…</p>';
 	}
 }
