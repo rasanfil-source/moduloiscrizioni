@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$releaseVersion = '3.27.44'
+$releaseVersion = '3.27.49'
 $releaseRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $releaseSource = Join-Path $releaseRoot 'wordpress-plugin/modulo-iscrizioni'
 $releaseDist = Join-Path $releaseRoot 'dist'
@@ -66,7 +66,3 @@ foreach ($previous in $previousArchives) {
  if ((Get-FileHash -LiteralPath $previous.Path -Algorithm SHA256).Hash -ne $previous.Hash) { throw "Archivio precedente alterato: $($previous.Path)" }
 }
 Write-Output "Verificati $($previousArchives.Count) archivi precedenti: tutti invariati."
-
-
-
-
