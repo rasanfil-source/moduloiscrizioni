@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class MI_Activator {
-	const SCHEMA_REVISION = 6;
+	const SCHEMA_REVISION = 7;
 	public static function activate() {
 		self::create_tables();
 		self::add_roles_and_capabilities();
@@ -308,6 +308,13 @@ final class MI_Activator {
 			KEY event_requests (event_id,created_at)
 		) ENGINE=InnoDB {$charset};" );
 
+		$nonce_table = $wpdb->prefix . 'mi_workspace_nonces';
+		dbDelta( "CREATE TABLE {$nonce_table} (
+			nonce_hash char(64) NOT NULL,
+			expires_at bigint(20) unsigned NOT NULL,
+			PRIMARY KEY  (nonce_hash),
+			KEY expires_at (expires_at)
+		) ENGINE=InnoDB {$charset};" );
 		dbDelta( "CREATE TABLE {$push_subscriptions} (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			user_id bigint(20) unsigned NOT NULL,
@@ -333,7 +340,8 @@ final class MI_Activator {
 		self::backfill_ticket_counters( $ticket_counters, $registrations, $items );
 		update_option( 'mi_db_version', MI_VERSION, false );
 		// Completa la migrazione degli indici prima di registrare lo schema come aggiornato.
-		if ( self::repair_audit_index( $registration_events ) ) update_option( 'mi_db_schema_revision', self::SCHEMA_REVISION, false );
+		$nonce_primary = $wpdb->get_row( "SHOW INDEX FROM {$nonce_table} WHERE Key_name='PRIMARY'", ARRAY_A );
+		if ( self::repair_audit_index( $registration_events ) && 'nonce_hash' === ( $nonce_primary['Column_name'] ?? '' ) ) update_option( 'mi_db_schema_revision', self::SCHEMA_REVISION, false );
 	}
 
 	/** dbDelta non sostituisce un indice omonimo con colonne differenti. */

@@ -118,8 +118,10 @@ async function fetchWithTimeout(url, options = {}, ms = FETCH_TIMEOUT_MS) {
     const res = await fetch(url, { ...options, signal: ac.signal });
     return res;
   } catch (err) {
-    if (isTimeout || err.name === 'AbortError') {
-      throw new Error('La richiesta ha impiegato troppo tempo (Timeout). Riprova, i dati potrebbero essere stati comunque salvati.');
+    if (isTimeout) {
+      const error = new Error('La richiesta ha impiegato troppo tempo. Riprova, i dati potrebbero essere stati comunque salvati.');
+      error.name = 'TimeoutError';
+      throw error;
     }
     throw err;
   } finally {
@@ -517,7 +519,8 @@ async function lookupPersona(card, index) {
     applyResult(card,p,data,nomeRaw,cognomeRaw);
   } catch (error) {
     if (latestLookupToken[index] !== token) return;
-    setCardStatus(card,'error', error.name === 'AbortError' ? 'Il server sta impiegando troppo tempo. Premi Trova per riprovare.' : 'Errore di connessione. Premi Trova per riprovare.');
+    if (error.name === 'AbortError') return;
+    setCardStatus(card,'error', error.name === 'TimeoutError' ? 'Il server sta impiegando troppo tempo. Premi Trova per riprovare.' : 'Errore di connessione. Premi Trova per riprovare.');
   } finally { if (lookupControllers[index] === ctrl) delete lookupControllers[index]; }
 }
 
@@ -890,6 +893,7 @@ function openTinaba() {
 
 function onGlobalEnterShortcut(e) {
   if (e.key !== 'Enter' || e.defaultPrevented) return;
+  if (e.target.closest('button, a, input, select, textarea, [contenteditable], [role="button"]')) return;
   if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
   if (_activeModal) return;
   if (!persone.some(p => p.loaded)) return;

@@ -191,7 +191,7 @@ function verificaFoglioEventoDaWordPress_(payload) {
 function verificaFogliEventoDaWordPress_(payload) {
 	if ((payload||{}).direct_projection !== true || !Array.isArray((payload||{}).fogli)) return {ok:false,error:'USE_DIRECT_PROJECTION'};
 	const stati=[];
-	payload.fogli.slice(0,100).forEach(item=>{const id=normalizzaTesto_((item||{}).id_evento,40);if(!/^\d+$/.test(id))return;const stato=verificaFoglioEventoDaWordPress_({id_evento:id,id_foglio:String((item||{}).id_foglio||''),direct_projection:true});if(stato.ok)stati.push({id_evento:id,esiste:!!stato.esiste,id_foglio:String(stato.id_foglio||''),url_foglio:String(stato.url_foglio||'')});});
+	payload.fogli.slice(0,100).forEach(item=>{const id=normalizzaTesto_((item||{}).id_evento,40);if(!/^\d+$/.test(id))return;const stato=verificaFoglioEventoDaWordPress_({id_evento:id,id_foglio:String((item||{}).id_foglio||''),direct_projection:true});stati.push(stato.ok?{ok:true,id_evento:id,esiste:!!stato.esiste,id_foglio:String(stato.id_foglio||''),url_foglio:String(stato.url_foglio||'')}:{ok:false,id_evento:id,error:String(stato.error||'SHEET_UNAVAILABLE')});});
 	return {ok:true,stati:stati};
 }
 

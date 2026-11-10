@@ -61,6 +61,7 @@ class FaultDatabase {
  function get_row($sql,$mode){
   $this->last_error='';
   if(str_contains($sql,'mi_event_revisions'))return ['id'=>1,'revision_number'=>1,'config_hash'=>'test','config_json'=>json_encode($GLOBALS['event'])];
+  if($this->failure==='public_event_count' && str_contains($sql,'mi_event_counters')){$this->last_error='injected';return null;}
   if(str_contains($sql,'mi_booking_codes'))return ['prefix'=>'TEST','sequence'=>0];
   if($this->failure==='concurrent'&&str_contains($sql,'mi_event_counters')&&str_contains($sql,'FOR UPDATE')){
    $this->registration=['id'=>7,'order_code'=>'TEST7','status'=>'CONFIRMED','workspace_status'=>'SYNCED','economic_mode'=>'REGISTRATION_ONLY','total_cents'=>0,'initial_due_cents'=>0,'balance_cents'=>0,'payment_methods_json'=>'[]'];
@@ -78,6 +79,7 @@ class FaultDatabase {
  }
  function get_results($sql,$mode){
   $this->last_error='';
+  if($this->failure==='public_ticket_count' && str_contains($sql,'mi_ticket_counters')){$this->last_error='injected';return [];}
   if(str_contains($sql,'mi_ticket_counters')){if($this->failure==='type_read'&&str_contains($sql,'FOR UPDATE'))$this->last_error='injected';return [];}
   if(str_contains($sql,'mi_registrations')){if($this->failure==='candidate_read')$this->last_error='injected';return [];}
   if(str_contains($sql,'mi_participants')){
@@ -102,6 +104,11 @@ $payload=['tickets'=>['a'=>1],'participants'=>[['ticket_type_code'=>'a','ticket_
 $stored=['id'=>1,'event_id'=>42,'status'=>'WAITLISTED','capacity_released_at'=>null,'total_qty'=>2,'economic_mode'=>'REGISTRATION_ONLY','order_code'=>'TEST1','buyer_first_name'=>'Persona','buyer_last_name'=>'Test','buyer_email'=>'test@example.invalid'];
 $failures=[];
 function check_case($condition,$label){global $failures;if(!$condition)$failures[]=$label;echo ($condition?'PASS: ':'FAIL: ').$label."\n";}
+foreach(['public_event_count','public_ticket_count'] as $failure){
+ $wpdb=new FaultDatabase();$wpdb->failure=$failure;
+ $result=MI_Registration_Service::public_event(42);
+ check_case(is_wp_error($result)&&$result->code==='mi_availability_unavailable'&&$result->data['status']===503,$failure);
+}
 foreach(['START TRANSACTION','COMMIT','ticket_lock','scheduler','none'] as $failure){
  $wpdb=new FaultDatabase();$wpdb->failure=$failure;$GLOBALS['fail_schedule']=$failure==='scheduler';
  $result=MI_Registration_Service::create(42,$payload,'synthetic-request-0001',false,'TEST',true);

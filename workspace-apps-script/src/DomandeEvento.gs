@@ -39,7 +39,7 @@ function applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, 
   };
   ['last_name','first_name','phone'].forEach(key=>add(key));
   schema.fields.forEach(field=>{if (field) add(field.key, field.label);});
-  aggiungiColonneDomande_(result, {domande_json:'[]'}, iscrizioni, partecipanti, cache);
+  aggiungiColonneDomande_(result, Object.assign({},evento,{domande_json:JSON.stringify(schema.fields)}), iscrizioni, partecipanti, cache);
   if (schema.room) add('room');
   if (schema.transport) add('transport');
   if (iscrizioni.some(r=>['TRAVEL_PENDING','WAITLISTED','WAITLIST_OFFERED','LISTA_ATTESA','POSTO_PROPOSTO'].includes(String(r.stato).toUpperCase()))) add('status');

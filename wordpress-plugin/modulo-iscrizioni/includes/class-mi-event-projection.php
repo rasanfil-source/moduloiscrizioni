@@ -135,6 +135,7 @@ final class MI_Event_Projection {
 
 		$schema = MI_Field_Schema::workspace_event_schema( $event_id );
 		$projection = array(
+			'view_revision' => 2,
 			'event' => array( 'id_evento' => (string) $event_id, 'titolo' => $event->post_title, 'modalita_prezzo' => $schema['pricing'], 'profilo_operativo' => MI_Field_Schema::resolved_operational_profile( $event_id ), 'servizi_json' => wp_json_encode( $schema['options'] ), 'domande_json' => wp_json_encode( $schema['fields'] ), 'schema_vista_json' => wp_json_encode( $schema ) ),
 			'registrations' => $registration_rows, 'participants' => $participant_rows, 'payments' => $payment_rows, 'rooms' => $rooms,
 		);

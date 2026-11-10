@@ -206,6 +206,7 @@ final class MI_Event_Deletion {
 				self::query( 'START TRANSACTION' );
 				try {
 					MI_Spedizione_Email::accoda_avviso_eliminazione( $id );
+					self::query( $wpdb->prepare( "DELETE t FROM {$wpdb->prefix}mi_cancellation_tokens t JOIN {$wpdb->prefix}mi_participants p ON p.id=t.participant_id JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d", $id ) );
 					foreach ( self::CHILDREN as $table ) self::query( $wpdb->prepare( "DELETE c FROM {$wpdb->prefix}{$table} c JOIN {$wpdb->prefix}mi_registrations r ON r.id=c.registration_id WHERE r.event_id=%d", $id ) );
 					foreach ( self::event_emails( $id ) as $row ) self::query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}mi_email_outbox WHERE id=%d AND registration_id=0 AND template_type NOT IN ('EVENT_DELETED_NOTICE','EVENT_DELETED_SECRETARIAT')", $row['id'] ) );
 					foreach ( self::DIRECT as $table ) self::query( $wpdb->prepare( "DELETE FROM {$wpdb->prefix}{$table} WHERE event_id=%d", $id ) );

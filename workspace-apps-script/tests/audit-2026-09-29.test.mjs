@@ -79,13 +79,23 @@ test('old COMMITTED journal preserves later manual edits and upgrades baseline o
 function driveFixture(){
   const properties=new Map(),books=new Map(),state={creates:0,driveFailure:false,openFailure:false,trashed:false};
   const makeBook=()=>{
-    const id=`synthetic-sheet-id-${String(++state.creates).padStart(6,'0')}`,metadata=[];
-    const sheet={getDeveloperMetadata:()=>metadata,setName(){},addDeveloperMetadata(key,value){metadata.push({getKey:()=>key,getValue:()=>value});}};
-    const book={getId:()=>id,getSheetByName:()=>sheet,getSheets:()=>[sheet]};books.set(id,book);return book;
+    const id=`synthetic-sheet-id-${String(++state.creates).padStart(6,'0')}`,tabs=[];
+    const book={
+      getId:()=>id,getSheetByName:name=>tabs.find(s=>s.getName()===name),getSheets:()=>tabs,
+      insertSheet(name){
+        const sheetId=tabs.length,metadata=[];
+        const sheet={getSheetId:()=>sheetId,getName:()=>name,setName(value){name=value;},getLastRow:()=>0,metadata,
+          addDeveloperMetadata(key,value){metadata.push({getKey:()=>key,getValue:()=>value,getLocation:()=>({getSheet:()=>sheet})});}};
+        tabs.push(sheet);return sheet;
+      },
+      createDeveloperMetadataFinder(){return {withKey(key){this.key=key;return this;},withLocationType(type){assert.equal(type,'SHEET');return this;},
+        find(){return tabs.flatMap(s=>s.metadata).filter(m=>m.getKey()===this.key);}};}
+    };
+    book.insertSheet('Foglio1');books.set(id,book);return book;
   };
   const c=vm.createContext({
     PropertiesService:{getScriptProperties:()=>({getProperty:key=>properties.get(key),setProperty:(key,value)=>properties.set(key,value),deleteProperty:key=>properties.delete(key)})},
-    SpreadsheetApp:{create:makeBook,openById:id=>{if(state.openFailure)throw Error('Sheets temporarily unavailable');return books.get(id);}},
+    SpreadsheetApp:{DeveloperMetadataLocationType:{SHEET:'SHEET'},create:makeBook,openById:id=>{if(state.openFailure)throw Error('Sheets temporarily unavailable');return books.get(id);}},
     DriveApp:{getFileById(){if(state.driveFailure)throw Error('Drive temporarily unavailable');return {isTrashed:()=>state.trashed};}},
     spostaFoglioAccantoAlDatabase_(){}
   });
@@ -98,6 +108,30 @@ for(const failure of ['driveFailure','openFailure'])test('registered sheet survi
   assert.throws(()=>c.apriFoglioEventoFirmato_(payload,true,'Synthetic'),/temporarily unavailable/);
   assert.equal(state.creates,1);assert.equal(properties.get('MI_DIRECT_SHEET_42'),first.book.getId());
   state[failure]=false;assert.equal(c.apriFoglioEventoFirmato_(payload,true,'Synthetic').book.getId(),first.book.getId());
+});
+test('verification restores the marked participant tab and refuses conflicting identities',()=>{
+  const {c}=driveFixture(),payload={event_id:'42'};
+  const {book,sheet}=c.apriFoglioEventoFirmato_(payload,true,'Synthetic');
+  sheet.setName('Elenco pellegrini');
+  const management=book.insertSheet('Gestione evento');
+  book.getSheets().reverse();
+  assert.equal(c.apriFoglioEventoFirmato_(payload,false).sheet,sheet);
+  assert.equal(management.getName(),'Gestione evento');
+  assert.equal(sheet.getName(),'Dati operativi');
+  sheet.setName('Elenco pellegrini');
+  management.setName('Dati operativi');
+  assert.throws(()=>c.apriFoglioEventoFirmato_(payload,false),/MISMATCH/);
+  assert.equal(sheet.getName(),'Elenco pellegrini');
+  management.setName('Gestione evento');
+  management.addDeveloperMetadata('MI_ID_EVENTO','42');
+  assert.throws(()=>c.apriFoglioEventoFirmato_(payload,false),/MISMATCH/);
+  management.metadata.length=0;
+  sheet.metadata.length=0;
+  assert.throws(()=>c.apriFoglioEventoFirmato_(payload,false),/MISMATCH/);
+  sheet.setName('Dati operativi');
+  assert.equal(c.apriFoglioEventoFirmato_(payload,false).sheet,sheet);
+  assert.equal(sheet.metadata[0].getValue(),'42');
+  assert.throws(()=>c.apriFoglioEventoFirmato_({event_id:'43',sheet_id:book.getId()},false),/MISMATCH/);
 });
 test('only a verified trashed registry file may be recreated without an explicit WordPress ID',()=>{
   const {c,state}=driveFixture(),payload={event_id:'42',sheet_id:''};

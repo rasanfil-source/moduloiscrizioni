@@ -69,16 +69,18 @@ final class MI_Portal {
 		if ( ! is_wp_error( $verifica ) ) foreach ( (array) ( $verifica['stati'] ?? array() ) as $stato ) {
 			$id = absint( $stato['id_evento'] ?? 0 );
 			if ( ! in_array( $id, $batch, true ) ) continue;
+			if ( isset( $stato['ok'] ) && true !== $stato['ok'] ) {
+				update_post_meta( $id, '_mi_sheet_unavailable', '1' );
+				continue;
+			}
+			if ( ! array_key_exists( 'esiste', $stato ) ) continue;
+			delete_post_meta( $id, '_mi_sheet_unavailable' );
 			if ( empty( $stato['esiste'] ) ) update_post_meta( $id, '_mi_sheet_missing', '1' );
 			else delete_post_meta( $id, '_mi_sheet_missing' );
 		}
 		$correnti = $passati = $versions = array();
 		foreach ( $batch as $event_id ) {
-			$annullato = (bool) get_post_meta( $event_id, '_mi_event_cancelled_at', true );
-			$archiviato = (bool) get_post_meta( $event_id, '_mi_event_archived_at', true );
-			$chiusura = (string) get_post_meta( $event_id, '_mi_registration_closes_at', true );
-			$inizio = (string) get_post_meta( $event_id, '_mi_event_starts_at', true );
-			$passato = $archiviato || ( ! $annullato && self::is_past_event( $inizio ?: $chiusura ) );
+			$passato = self::event_in_history( $event_id );
 			// Anche la sostituzione del file deve invalidare lo stato già confermato.
 			$version = get_post_meta( $event_id, '_mi_operational_sheet_id', true ) . '|' . ( $passato ? 'past' : 'current' );
 			if ( $version === get_post_meta( $event_id, '_mi_sheet_organization', true ) ) continue;
@@ -231,6 +233,11 @@ final class MI_Portal {
 		if ( ! $start_date || ( ! $unchanged_start && $start_date->format( 'Y-m-d' ) < current_time( 'Y-m-d' ) ) ) return self::redirect_result( 'La data di inizio non può essere precedente a oggi.', true );
 		$latest_event_date = ( new DateTimeImmutable( 'today', wp_timezone() ) )->modify( '+10 years' )->setTime( 23, 59 );
 		if ( $start_date > $latest_event_date ) return self::redirect_result( 'La data dell’evento non può essere oltre dieci anni nel futuro.', true );
+		$ends_input = sanitize_text_field( wp_unslash( $_POST['ends_at'] ?? ( $existing_event ? get_post_meta( $existing_event_id, '_mi_event_ends_at', true ) : '' ) ) );
+		$ends_at = '' === $ends_input ? '' : self::normalize_portal_date( $ends_input );
+		if ( $ends_input && ! $ends_at ) return self::redirect_result( 'La data di conclusione deve usare il formato gg/mm/aaaa hh:mm.', true );
+		$end_valid = '' === $ends_at ? true : MI_Registration_Service::validate_event_end( $starts_at, $ends_at );
+		if ( is_wp_error( $end_valid ) ) return self::redirect_result( $end_valid->get_error_message(), true );
 		$opens_input = sanitize_text_field( wp_unslash( $_POST['opens_at'] ?? '' ) );
 		$closes_input = sanitize_text_field( wp_unslash( $_POST['closes_at'] ?? '' ) );
 		$opens_at = $opens_input ? self::normalize_portal_date( $opens_input ) : '';
@@ -331,6 +338,7 @@ final class MI_Portal {
 		$gestore = self::risolvi_gestore_evento( $event_id, false );
 		if ( $gestore instanceof WP_User ) update_post_meta( $event_id, '_mi_manager_user_id', $gestore->ID );
 		self::save_date( $event_id, '_mi_event_starts_at', $starts_at );
+		self::save_date( $event_id, '_mi_event_ends_at', $ends_at );
 		self::save_date( $event_id, '_mi_registration_opens_at', $opens_at );
 		self::save_date( $event_id, '_mi_registration_closes_at', $closes_at );
 		update_post_meta( $event_id, '_mi_registration_closes_auto', $closes_auto ? '1' : '0' );
@@ -539,7 +547,10 @@ final class MI_Portal {
 		if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_die( 'Evento non accessibile.', 403 );
 		$verifica = MI_Workspace_Client::request( 'VERIFICA_FOGLIO_EVENTO', array( 'id_evento' => (string) $event_id, 'id_foglio' => (string) get_post_meta( $event_id, '_mi_operational_sheet_id', true ), 'direct_projection' => true ) );
 		if ( is_wp_error( $verifica ) ) return self::redirect_result( 'Non è stato possibile verificare il foglio: ' . $verifica->get_error_message(), true, $event_id, true );
-		if ( ! empty( $verifica['esiste'] ) ) return self::redirect_result( 'Il foglio Google è disponibile e correttamente collegato.', false, $event_id, true );
+		if ( ! empty( $verifica['esiste'] ) ) {
+			delete_post_meta( $event_id, '_mi_sheet_unavailable' );delete_post_meta( $event_id, '_mi_sheet_missing' );
+			return self::redirect_result( 'Il foglio Google è disponibile e correttamente collegato.', false, $event_id, true );
+		}
 		update_post_meta( $event_id, '_mi_sheet_missing', '1' );
 		delete_post_meta( $event_id, '_mi_operational_sheet_id' );
 		delete_post_meta( $event_id, '_mi_operational_sheet_url' );
@@ -610,6 +621,7 @@ final class MI_Portal {
 		else delete_post_meta( $event_id, '_mi_balance_url' );
 		update_post_meta( $event_id, '_mi_outputs_prepared_at', current_time( 'mysql', true ) );
 		delete_post_meta( $event_id, '_mi_sheet_missing' );
+		delete_post_meta( $event_id, '_mi_sheet_unavailable' );
 		if ( $gestore ) update_post_meta( $event_id, '_mi_manager_user_id', $gestore->ID );
 		else delete_post_meta( $event_id, '_mi_manager_user_id' );
 		// Certifica la proiezione anche a zero iscrizioni, prima del primo Apri.
@@ -911,12 +923,16 @@ final class MI_Portal {
 				$automatic_start = DateTimeImmutable::createFromFormat( '!Y-m-d\TH:i', $starts_at, wp_timezone() );
 				if ( $automatic_start ) $closes_at = $automatic_start->modify( '-30 minutes' )->format( 'Y-m-d\TH:i' );
 			}
-			$dates = MI_Registration_Service::validate_event_dates( array( 'opens_at' => $opens_at, 'closes_at' => $closes_at, 'event_starts_at' => $starts_at ) );
+			$ends_input = sanitize_text_field( wp_unslash( $_POST['ends_at'] ?? get_post_meta( $event_id, '_mi_event_ends_at', true ) ) );
+			$ends_at = '' === $ends_input ? '' : self::normalize_portal_date( $ends_input );
+			if ( $ends_input && ! $ends_at ) return self::redirect_result( 'La data di conclusione non è valida.', true, $event_id );
+			$dates = MI_Registration_Service::validate_event_dates( array( 'opens_at' => $opens_at, 'closes_at' => $closes_at, 'event_starts_at' => $starts_at, 'event_ends_at' => $ends_at ) );
 			if ( is_wp_error( $dates ) ) return self::redirect_result( $dates->get_error_message(), true, $event_id );
 			wp_update_post( array( 'ID' => $event_id, 'post_title' => $title ) );
 			update_post_meta( $event_id, '_mi_event_location', mb_substr( sanitize_text_field( wp_unslash( $_POST['location'] ?? '' ) ), 0, 180 ) );
 			update_post_meta( $event_id, '_mi_capacity', min( 10000, max( 1, absint( $_POST['capacity'] ?? 1 ) ) ) );
 			self::save_date( $event_id, '_mi_event_starts_at', $starts_at );
+			self::save_date( $event_id, '_mi_event_ends_at', $ends_at );
 			self::save_date( $event_id, '_mi_registration_opens_at', $opens_at );
 			self::save_date( $event_id, '_mi_registration_closes_at', $closes_at );
 			update_post_meta( $event_id, '_mi_registration_closes_auto', $closes_auto ? '1' : '0' );
@@ -1428,10 +1444,17 @@ final class MI_Portal {
 		wp_send_json_success( array( 'events' => array_map( static function ( $event ) { return array( 'id' => (int) $event->ID, 'title' => $event->post_title ); }, $events ) ) );
 	}
 
-	private static function communication_event_is_past( $event_id ) {
+	private static function event_in_history( $event_id ) {
 		if ( get_post_meta( $event_id, '_mi_event_archived_at', true ) ) return true;
 		if ( get_post_meta( $event_id, '_mi_event_cancelled_at', true ) ) return false;
-		return self::is_past_event( get_post_meta( $event_id, '_mi_event_starts_at', true ) ?: get_post_meta( $event_id, '_mi_registration_closes_at', true ) );
+		return self::event_dates_past( $event_id );
+	}
+
+	public static function event_dates_past( $event_id, array $published = array() ) {
+		$end = $published['event_ends_at'] ?? get_post_meta( $event_id, '_mi_event_ends_at', true );
+		$start = $published['event_starts_at'] ?? get_post_meta( $event_id, '_mi_event_starts_at', true );
+		$close = $published['closes_at'] ?? get_post_meta( $event_id, '_mi_registration_closes_at', true );
+		return self::is_past_event( $end ?: ( $start ?: $close ) );
 	}
 
 	private static function accessible_events( $past = false ) {
@@ -1443,7 +1466,7 @@ final class MI_Portal {
 		// OR/NOT EXISTS su postmeta generavano numerosi JOIN sullo stesso evento.
 		// WordPress carica i metadati in blocco; la classificazione usa poi la cache.
 		return array_values( array_filter( get_posts( $query ), static function ( $event ) use ( $past ) {
-			return (bool) $past === self::communication_event_is_past( $event->ID );
+			return (bool) $past === self::event_in_history( $event->ID );
 		} ) );
 	}
 
@@ -1476,7 +1499,7 @@ final class MI_Portal {
 		$edit = $edit_token ? get_transient( 'mi_comm_' . get_current_user_id() . '_' . $edit_token ) : false;
 		if ( ! is_array( $edit ) || ! MI_Access::can_access_event( $edit['event_id'] ) ) $edit = array();
 		$selected_event = absint( $edit['event_id'] ?? ( $_GET['mi_portal_event'] ?? 0 ) );
-		$show_past = $selected_event && MI_Access::can_access_event( $selected_event ) && self::communication_event_is_past( $selected_event );
+		$show_past = $selected_event && MI_Access::can_access_event( $selected_event ) && self::event_in_history( $selected_event );
 		$events = self::accessible_events( $show_past );
 		$custom_types = self::custom_communication_types();
 		$test_mode = 'PROVA' === MI_Spedizione_Email::modalita();
@@ -1553,9 +1576,7 @@ final class MI_Portal {
 		$all_events = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'draft', 'private' ), 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) );
 		$events = array_values( array_filter( $all_events, static function ( $event ) {
 			if ( get_post_meta( $event->ID, '_mi_event_cancelled_at', true ) || get_post_meta( $event->ID, '_mi_event_archived_at', true ) ) return false;
-			$closes_at = (string) get_post_meta( $event->ID, '_mi_registration_closes_at', true );
-			$starts_at = (string) get_post_meta( $event->ID, '_mi_event_starts_at', true );
-			return ! self::is_past_event( $starts_at ?: $closes_at );
+			return ! self::event_dates_past( $event->ID );
 		} ) );
 		$group_names = wp_list_pluck( $groups, 'post_title', 'ID' );
 		$event_names = wp_list_pluck( $all_events, 'post_title', 'ID' );
@@ -1614,12 +1635,12 @@ final class MI_Portal {
 		if ( ! $revision_ids ) return array();
 		sort( $revision_ids, SORT_NUMERIC );
 		$revision_list = implode( ',', $revision_ids );
-		$key = 'mi_event_cards_v1_' . hash( 'sha256', $revision_list );
+		$key = 'mi_event_cards_v2_' . hash( 'sha256', $revision_list );
 		$cached = get_transient( $key );
 		if ( is_array( $cached ) ) return $cached;
 		$rows = $wpdb->get_results( "SELECT event_id,config_json FROM {$wpdb->prefix}mi_event_revisions WHERE id IN ({$revision_list})", ARRAY_A );
 		if ( $wpdb->last_error || ! is_array( $rows ) ) return array();
-		$keys = array_flip( array( 'title', 'activity', 'event_starts_at', 'opens_at', 'closes_at', 'capacity', 'waitlist_enabled', 'cover_image', 'pricing_mode' ) );
+		$keys = array_flip( array( 'title', 'activity', 'event_starts_at', 'event_ends_at', 'opens_at', 'closes_at', 'capacity', 'waitlist_enabled', 'cover_image', 'pricing_mode' ) );
 		$summaries = array();
 		foreach ( $rows as $revision ) {
 			$config = json_decode( (string) $revision['config_json'], true );
@@ -1651,13 +1672,12 @@ final class MI_Portal {
 		foreach ( $all_events as $event ) {
 			$published = (array) ( $published_summaries[ $event->ID ] ?? array() );
 			$starts_at = (string) ( $published['event_starts_at'] ?? get_post_meta( $event->ID, '_mi_event_starts_at', true ) );
-			$closes_at = (string) ( $published['closes_at'] ?? get_post_meta( $event->ID, '_mi_registration_closes_at', true ) );
 			$start_timestamps[ $event->ID ] = self::date_timestamp( $starts_at );
 			$cancelled_events[ $event->ID ] = (bool) get_post_meta( $event->ID, '_mi_event_cancelled_at', true );
 			$archived_events[ $event->ID ] = (bool) get_post_meta( $event->ID, '_mi_event_archived_at', true );
 			if ( $archived_events[ $event->ID ] ) $past_events[] = $event;
 			elseif ( $cancelled_events[ $event->ID ] ) $current_events[] = $event;
-			elseif ( self::is_past_event( $starts_at ?: $closes_at ) ) $past_events[] = $event;
+			elseif ( self::event_dates_past( $event->ID, $published ) ) $past_events[] = $event;
 			else $current_events[] = $event;
 		}
 		$events = $show_past ? $past_events : $current_events;
@@ -1749,7 +1769,7 @@ final class MI_Portal {
 			$price_config = $published ?: array( 'pricing_mode' => get_post_meta( $event->ID, '_mi_pricing_mode', true ) );
 			if ( self::is_free_configuration( $price_config ) ) echo '<span class="mi-event-free">Gratuito</span>';
 			echo '</span>';
-			$status_label = $is_cancelled ? 'Annullato' : ( 'publish' === $event->post_status ? ( self::is_past_event( $starts_at ) ? 'Concluso' : 'Attivo' ) : 'Bozza' );
+			$status_label = $is_cancelled ? 'Annullato' : ( 'publish' === $event->post_status ? ( self::event_dates_past( $event->ID, $published ) ? 'Concluso' : 'Attivo' ) : 'Bozza' );
 			echo '</span><span class="mi-event-card__footer"><span class="mi-event-card__capacity"><small>Posti occupati</small><strong>' . esc_html( $count . ' / ' . $capacity ) . '</strong><i aria-hidden="true"><b style="width:' . esc_attr( $occupancy_percentage ) . '%"></b></i></span><span class="mi-event-card__status"><strong>' . esc_html( $status_label ) . '</strong>' . ( $registration_label ? '<small>' . ( $registration_opens_later ? '<b>' . esc_html( $registration_label ) . '</b>' : esc_html( $registration_label ) ) . '</small>' : '' ) . '<small>Scadenza: ' . esc_html( self::format_date( $closes_at ) ) . '</small></span></span></span></a>';
 			$registration_count = (int) ( $registration_counts[ $event->ID ] ?? 0 );
 			$active_count = (int) ( $active_registration_counts[ $event->ID ] ?? 0 );
@@ -1850,7 +1870,7 @@ final class MI_Portal {
 		}
 		echo '<details open><summary>Dettagli principali</summary><form class="mi-event-management__form" method="post" data-mi-event-quick-form><input type="hidden" name="mi_portal_action" value="update_event"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
 		wp_nonce_field( 'mi_portal_manage_event_' . $event_id, 'mi_portal_nonce' );
-		echo '<label>Titolo<input name="title" maxlength="180" required value="' . esc_attr( $event->post_title ) . '"></label><label>Luogo<input name="location" maxlength="180" value="' . esc_attr( $location ) . '"></label><div class="mi-event-management__dates"><label>Inizio evento<input type="datetime-local" name="starts_at" value="' . esc_attr( $starts_at ) . '"></label><label>Apertura iscrizioni<input type="datetime-local" name="opens_at" value="' . esc_attr( $opens_at ) . '"><small>Facoltativa: se vuota, le iscrizioni aprono subito alla pubblicazione.</small></label><label>Chiusura iscrizioni<input type="datetime-local" name="closes_at" value="' . esc_attr( '1' === get_post_meta( $event_id, '_mi_registration_closes_auto', true ) ? '' : $closes_at ) . '"><small>Facoltativa: se vuota, le iscrizioni chiudono 30 minuti prima dell’inizio dell’evento.</small></label><label>Posti disponibili<input type="number" min="1" max="10000" name="capacity" value="' . esc_attr( $capacity ) . '"></label></div><p class="mi-portal-warning" role="status" data-mi-late-registration-notice hidden>Attenzione: stai lasciando la possibilità di iscriversi anche dopo l’inizio dell’evento.</p><button class="mi-primary" type="submit" data-mi-event-quick-submit>Salva modifiche</button></form>';
+		echo '<label>Titolo<input name="title" maxlength="180" required value="' . esc_attr( $event->post_title ) . '"></label><label>Luogo<input name="location" maxlength="180" value="' . esc_attr( $location ) . '"></label><div class="mi-event-management__dates"><label>Inizio evento<input type="datetime-local" name="starts_at" value="' . esc_attr( $starts_at ) . '"></label><label>Conclusione evento (facoltativa)<input type="datetime-local" name="ends_at" value="' . esc_attr( get_post_meta( $event_id, '_mi_event_ends_at', true ) ) . '"><small>Se manca, per il registro email vale l’inizio.</small></label><label>Apertura iscrizioni<input type="datetime-local" name="opens_at" value="' . esc_attr( $opens_at ) . '"><small>Facoltativa: se vuota, le iscrizioni aprono subito alla pubblicazione.</small></label><label>Chiusura iscrizioni<input type="datetime-local" name="closes_at" value="' . esc_attr( '1' === get_post_meta( $event_id, '_mi_registration_closes_auto', true ) ? '' : $closes_at ) . '"><small>Facoltativa: se vuota, le iscrizioni chiudono 30 minuti prima dell’inizio dell’evento.</small></label><label>Posti disponibili<input type="number" min="1" max="10000" name="capacity" value="' . esc_attr( $capacity ) . '"></label></div><p class="mi-portal-warning" role="status" data-mi-late-registration-notice hidden>Attenzione: stai lasciando la possibilità di iscriversi anche dopo l’inizio dell’evento.</p><button class="mi-primary" type="submit" data-mi-event-quick-submit>Salva modifiche</button></form>';
 		if ( $registration_url ) {
 			echo '<div class="mi-event-management__registration"><strong>Link per le iscrizioni</strong><div class="mi-output-copy mi-event-registration-link"><input type="url" readonly aria-label="Link per le iscrizioni" value="' . esc_attr( $registration_url ) . '"><button type="button" class="mi-secondary" data-mi-copy="' . esc_attr( $registration_url ) . '">Copia</button><button type="button" class="mi-event-link-share" data-mi-share="' . esc_attr( $registration_url ) . '" data-mi-share-title="' . esc_attr( $event->post_title ) . '" aria-label="Condividi il link per le iscrizioni" title="Condividi il link per le iscrizioni"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="18" cy="5" r="2.5"></circle><circle cx="6" cy="12" r="2.5"></circle><circle cx="18" cy="19" r="2.5"></circle><path d="M8.2 10.8l7.6-4.5M8.2 13.2l7.6 4.5"></path></svg></button><a class="mi-secondary mi-output-link" href="' . esc_url( $registration_url ) . '" target="_blank" rel="noopener noreferrer">Apri <span aria-hidden="true">↗</span></a></div></div>';
 		}
@@ -1887,7 +1907,7 @@ final class MI_Portal {
 		if ( $copy_from && ( ! $model || MI_Event_Post_Type::EVENT_TYPE !== $model->post_type || ! in_array( $model->post_status, array( 'draft', 'publish', 'private' ), true ) || ! MI_Access::can_access_event( $copy_from ) ) ) $copy_from = 0;
 		$configuration_id = $is_editing ? $existing_event_id : $copy_from;
 		$value = static function ( $key, $default = '' ) use ( $configuration_id, $is_editing ) {
-			if ( ! $configuration_id || ( ! $is_editing && in_array( $key, array( '_mi_registration_opens_at', '_mi_registration_closes_at', '_mi_event_starts_at' ), true ) ) ) return $default;
+			if ( ! $configuration_id || ( ! $is_editing && in_array( $key, array( '_mi_registration_opens_at', '_mi_registration_closes_at', '_mi_event_starts_at', '_mi_event_ends_at' ), true ) ) ) return $default;
 			return metadata_exists( 'post', $configuration_id, $key ) ? get_post_meta( $configuration_id, $key, true ) : $default;
 		};
 		$activity_id = absint( $value( '_mi_activity_id' ) );
@@ -1934,7 +1954,7 @@ final class MI_Portal {
 			$starts_at = (string) get_post_meta( $model->ID, '_mi_event_starts_at', true );
 			$closes_at = (string) get_post_meta( $model->ID, '_mi_registration_closes_at', true );
 			$model_dates[ $model->ID ] = strtotime( $starts_at ?: $closes_at ) ?: 0;
-			if ( get_post_meta( $model->ID, '_mi_event_archived_at', true ) || self::is_past_event( $starts_at ?: $closes_at ) ) $past_models[] = $model;
+			if ( get_post_meta( $model->ID, '_mi_event_archived_at', true ) || self::event_dates_past( $model->ID ) ) $past_models[] = $model;
 			else $current_models[] = $model;
 		}
 		usort( $current_models, static function ( $a, $b ) use ( $model_dates ) {
@@ -1987,7 +2007,7 @@ final class MI_Portal {
 			<div class="mi-bus-routes" data-mi-bus-routes><div class="mi-bus-routes__heading"><h3 class="mi-bus-title">Pullman</h3><button type="button" class="mi-secondary" data-mi-add-bus-route>Aggiungi tratta</button></div><p class="mi-portal-muted">Indica le tratte tra cui potranno scegliere i partecipanti, per esempio RM-FCO o RM-Assisi. Le quote dipendono dalla modalità scelta nel passaggio «Servizi e quote».</p><p class="mi-portal-muted">I supplementi delle tratte si applicano solo con «Quote in base ai servizi scelti». Con una quota uguale per tutti il pullman è compreso; senza quote nel modulo gli importi non vengono calcolati.</p><div data-mi-bus-routes-list><?php foreach ( $bus_routes as $route ) : ?><div class="mi-bus-route"><input type="hidden" name="bus_route_id[]" value="<?php echo esc_attr( $route['id'] ); ?>"><label>Descrizione (facoltativa)<input name="bus_route_code[]" maxlength="60" value="<?php echo esc_attr( $route['label'] ); ?>" placeholder="Es. RM-FCO"></label><label>Supplemento (€)<input name="bus_route_price[]" value="<?php echo esc_attr( $route['price'] ); ?>" inputmode="decimal" placeholder="Es. 25,00"></label><button type="button" class="mi-icon-button" data-mi-remove-bus-route aria-label="Rimuovi questa tratta">×</button></div><?php endforeach; ?></div><template data-mi-bus-route-template><div class="mi-bus-route"><input type="hidden" name="bus_route_id[]" value=""><label>Descrizione (facoltativa)<input name="bus_route_code[]" maxlength="60" placeholder="Es. RM-FCO"></label><label>Supplemento (€)<input name="bus_route_price[]" inputmode="decimal" placeholder="Es. 25,00"></label><button type="button" class="mi-icon-button" data-mi-remove-bus-route aria-label="Rimuovi questa tratta">×</button></div></template></div>
 
 		</section>
-		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">5 di 9</span><h2>Date e posti</h2><div class="mi-wizard-grid"><label>Apertura iscrizioni<input type="text" inputmode="numeric" maxlength="16" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}" name="opens_at" value="<?php echo esc_attr( self::portal_date_input_value( $value( '_mi_registration_opens_at' ) ) ); ?>" placeholder="gg/mm/aaaa hh:mm" data-mi-opens><small>Facoltativa: se vuota, le iscrizioni aprono subito alla pubblicazione.</small></label><label>Chiusura iscrizioni<input type="text" inputmode="numeric" maxlength="16" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}" name="closes_at" value="<?php echo esc_attr( self::portal_date_input_value( '1' === $value( '_mi_registration_closes_auto' ) ? '' : $value( '_mi_registration_closes_at' ) ) ); ?>" placeholder="gg/mm/aaaa hh:mm" data-mi-closes><small>Facoltativa: se vuota, le iscrizioni chiudono 30 minuti prima dell’inizio dell’evento.</small></label><label>Data e ora di inizio<input type="text" inputmode="numeric" maxlength="16" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}" name="starts_at" value="<?php echo esc_attr( self::portal_date_input_value( $value( '_mi_event_starts_at' ) ) ); ?>" placeholder="gg/mm/aaaa hh:mm" data-mi-starts required></label><label>Posti disponibili<input type="number" min="1" max="10000" name="capacity" value="<?php echo esc_attr( max( 1, absint( $value( '_mi_capacity', 30 ) ) ) ); ?>" required></label></div><p class="mi-portal-muted">Formato richiesto: gg/mm/aaaa hh:mm. Ordine: apertura iscrizioni, chiusura iscrizioni, inizio evento. La chiusura e l’inizio non possono essere nel passato.</p><input type="hidden" name="availability_count_visible" value="0"><label class="mi-check"><input type="checkbox" name="availability_count_visible" value="1" <?php checked( '0' !== (string) $value( '_mi_availability_count_visible', '1' ) ); ?>> Mostra nel modulo di iscrizione il numero dei posti disponibili</label><fieldset class="mi-booking-limit" data-mi-booking-limit><legend>Quante persone può comprendere una prenotazione?</legend><label class="mi-check"><input type="radio" name="booking_limit_mode" value="ONE" <?php checked( ! $multiple_per_order ); ?>> Ogni persona si iscrive separatamente</label><label class="mi-check"><input type="radio" name="booking_limit_mode" value="MULTIPLE" <?php checked( $multiple_per_order ); ?>> Più persone nella stessa prenotazione</label><label data-mi-booking-limit-value>Fino a quante persone?<input type="number" name="max_per_order" min="2" max="20" value="<?php echo esc_attr( max( 2, $max_per_order ) ); ?>" required></label><small>Questo limite riguarda la singola prenotazione, non i posti complessivi dell’evento.</small></fieldset><label class="mi-check"><input type="checkbox" name="waitlist_enabled" value="1" data-mi-waitlist <?php checked( '1', $value( '_mi_waitlist_enabled' ) ); ?>> Attiva la lista d’attesa per partecipare all’evento quando i posti sono esauriti</label><label data-mi-waitlist-capacity>Capienza massima della lista d’attesa<input type="number" name="waitlist_capacity" min="1" max="10000" value="<?php echo esc_attr( min( 10000, max( 1, absint( $value( '_mi_waitlist_capacity', 20 ) ) ) ) ); ?>" required> <small>persone. Valore predefinito: 20. Quando è piena, non è possibile aggiungere altre richieste.</small></label><p class="mi-portal-muted" data-mi-travel-waitlist-notice hidden>Questa lista riguarda i posti all’evento. L’attesa di un passaggio in auto è gestita separatamente.</p><label data-mi-waitlist-offer>Tempo per accettare un posto liberato all’evento<input type="number" name="waitlist_offer_hours" min="1" max="168" value="<?php echo esc_attr( min( 168, max( 1, absint( $value( '_mi_waitlist_offer_hours', 48 ) ) ) ) ); ?>" required> <small>ore. La proposta scade dopo queste ore o alla scadenza comune, se precedente; se la scadenza comune è già passata non vengono inviate nuove proposte. Il valore consigliato è 48.</small></label></section>
+		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">5 di 9</span><h2>Date e posti</h2><div class="mi-wizard-grid"><label>Apertura iscrizioni<input type="text" inputmode="numeric" maxlength="16" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}" name="opens_at" value="<?php echo esc_attr( self::portal_date_input_value( $value( '_mi_registration_opens_at' ) ) ); ?>" placeholder="gg/mm/aaaa hh:mm" data-mi-opens><small>Facoltativa: se vuota, le iscrizioni aprono subito alla pubblicazione.</small></label><label>Chiusura iscrizioni<input type="text" inputmode="numeric" maxlength="16" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}" name="closes_at" value="<?php echo esc_attr( self::portal_date_input_value( '1' === $value( '_mi_registration_closes_auto' ) ? '' : $value( '_mi_registration_closes_at' ) ) ); ?>" placeholder="gg/mm/aaaa hh:mm" data-mi-closes><small>Facoltativa: se vuota, le iscrizioni chiudono 30 minuti prima dell’inizio dell’evento.</small></label><label>Data e ora di inizio<input type="text" inputmode="numeric" maxlength="16" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}" name="starts_at" value="<?php echo esc_attr( self::portal_date_input_value( $value( '_mi_event_starts_at' ) ) ); ?>" placeholder="gg/mm/aaaa hh:mm" data-mi-starts required></label><label>Data e ora di conclusione (facoltativa)<input type="text" inputmode="numeric" maxlength="16" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}" name="ends_at" value="<?php echo esc_attr( self::portal_date_input_value( $value( '_mi_event_ends_at' ) ) ); ?>" placeholder="gg/mm/aaaa hh:mm" data-mi-ends><small>Se manca, per la conservazione del registro email vale la data di inizio.</small></label><label>Posti disponibili<input type="number" min="1" max="10000" name="capacity" value="<?php echo esc_attr( max( 1, absint( $value( '_mi_capacity', 30 ) ) ) ); ?>" required></label></div><p class="mi-portal-muted">Formato richiesto: gg/mm/aaaa hh:mm. Ordine: apertura iscrizioni, chiusura iscrizioni, inizio evento. La chiusura e l’inizio non possono essere nel passato.</p><input type="hidden" name="availability_count_visible" value="0"><label class="mi-check"><input type="checkbox" name="availability_count_visible" value="1" <?php checked( '0' !== (string) $value( '_mi_availability_count_visible', '1' ) ); ?>> Mostra nel modulo di iscrizione il numero dei posti disponibili</label><fieldset class="mi-booking-limit" data-mi-booking-limit><legend>Quante persone può comprendere una prenotazione?</legend><label class="mi-check"><input type="radio" name="booking_limit_mode" value="ONE" <?php checked( ! $multiple_per_order ); ?>> Ogni persona si iscrive separatamente</label><label class="mi-check"><input type="radio" name="booking_limit_mode" value="MULTIPLE" <?php checked( $multiple_per_order ); ?>> Più persone nella stessa prenotazione</label><label data-mi-booking-limit-value>Fino a quante persone?<input type="number" name="max_per_order" min="2" max="20" value="<?php echo esc_attr( max( 2, $max_per_order ) ); ?>" required></label><small>Questo limite riguarda la singola prenotazione, non i posti complessivi dell’evento.</small></fieldset><label class="mi-check"><input type="checkbox" name="waitlist_enabled" value="1" data-mi-waitlist <?php checked( '1', $value( '_mi_waitlist_enabled' ) ); ?>> Attiva la lista d’attesa per partecipare all’evento quando i posti sono esauriti</label><label data-mi-waitlist-capacity>Capienza massima della lista d’attesa<input type="number" name="waitlist_capacity" min="1" max="10000" value="<?php echo esc_attr( min( 10000, max( 1, absint( $value( '_mi_waitlist_capacity', 20 ) ) ) ) ); ?>" required> <small>persone. Valore predefinito: 20. Quando è piena, non è possibile aggiungere altre richieste.</small></label><p class="mi-portal-muted" data-mi-travel-waitlist-notice hidden>Questa lista riguarda i posti all’evento. L’attesa di un passaggio in auto è gestita separatamente.</p><label data-mi-waitlist-offer>Tempo per accettare un posto liberato all’evento<input type="number" name="waitlist_offer_hours" min="1" max="168" value="<?php echo esc_attr( min( 168, max( 1, absint( $value( '_mi_waitlist_offer_hours', 48 ) ) ) ) ); ?>" required> <small>ore. La proposta scade dopo queste ore o alla scadenza comune, se precedente; se la scadenza comune è già passata non vengono inviate nuove proposte. Il valore consigliato è 48.</small></label></section>
 		<section class="mi-wizard-step"><span class="mi-portal-eyebrow">6 di 9</span><h2>Quali dati chiediamo?</h2><p>Nome e cognome sono sempre obbligatori per ogni partecipante.</p><fieldset data-mi-participant-scope <?php echo $multiple_per_order ? '' : 'hidden disabled'; ?>><legend>Dati aggiuntivi da compilare</legend><label class="mi-check"><input type="radio" name="participant_extra_scope" value="ONE" <?php checked( 'ONE', $value( '_mi_participant_extra_scope', 'ONE' ) ); ?>> Solo per uno degli iscritti (il primo, modificabile)</label><label class="mi-check"><input type="radio" name="participant_extra_scope" value="ALL" <?php checked( 'ALL', $value( '_mi_participant_extra_scope', 'ONE' ) ); ?>> Per tutti gli iscritti</label></fieldset><div class="mi-field-choice-list"><?php self::render_field_choices( $common_fields, $participant_fields, $participant_required ); ?></div><details class="mi-additional-fields"><summary>Ulteriori dati per alcuni eventi</summary><div class="mi-field-choice-list"><?php self::render_field_choices( $additional_fields, $participant_fields, $participant_required ); ?></div></details></section>
 		<section class="mi-wizard-step">
 			<span class="mi-portal-eyebrow">7 di 9</span><h2>Domande particolari</h2>
@@ -2121,6 +2141,7 @@ final class MI_Portal {
 		}
 		$sheet_url = get_post_meta( $event_id, '_mi_operational_sheet_url', true ) ? esc_url( MI_Sheet_Open::url( $event_id ) ) : '';
 		$sheet_missing = '1' === get_post_meta( $event_id, '_mi_sheet_missing', true );
+		$sheet_unavailable = '1' === get_post_meta( $event_id, '_mi_sheet_unavailable', true );
 		$registration_url = esc_url( (string) get_post_meta( $event_id, '_mi_registration_url', true ) );
 		if ( ! $registration_url ) $registration_url = esc_url( MI_Shortcode::url_iscrizione( $event_id ) );
 		// Genera il collegamento pubblico anche quando l'evento contiene un URL operativo.
@@ -2142,7 +2163,7 @@ final class MI_Portal {
 			echo '<div class="mi-event-outputs__success"><span aria-hidden="true">✓</span><div><strong>L’evento è pubblicato</strong><p>Il modulo di iscrizione è pronto. Puoi condividerlo con le persone interessate.</p></div></div>';
 			if ( class_exists( 'MI_Event_QR' ) ) MI_Event_QR::render( $event_id );
 			echo '<div class="mi-event-outputs__grid"><article class="mi-output-card mi-output-card--public"><span class="mi-output-card__audience">Per i partecipanti</span><h3>Condividi il modulo di iscrizione</h3><label>Link per le iscrizioni<div class="mi-output-copy"><input type="url" readonly value="' . esc_attr( $registration_url ) . '"><button type="button" class="mi-primary" data-mi-copy="' . esc_attr( $registration_url ) . '">Copia link</button></div></label><a class="mi-secondary mi-output-link" href="' . $registration_url . '" target="_blank" rel="noopener noreferrer">Apri il modulo <span aria-hidden="true">↗</span></a></article>';
-			echo '<article class="mi-output-card mi-output-card--internal"><span class="mi-output-card__audience">Per gli operatori</span><h3>Gestisci le iscrizioni</h3><p>Consulta e aggiorna i dati nel foglio Google dell’evento.</p><div class="mi-output-document"><span aria-hidden="true">▦</span><div><strong>Foglio iscrizioni</strong><small>' . esc_html( $event_title ) . '</small></div></div>' . ( $sheet_missing ? '<p class="mi-portal-notice mi-portal-error"><strong>Foglio non disponibile.</strong> Usa il comando qui sotto per ricrearlo dai dati conservati.</p>' : ( $sheet_url ? '<a class="mi-secondary mi-output-link" href="' . $sheet_url . '" target="_blank" rel="noopener noreferrer">Apri <span aria-hidden="true">↗</span></a><div class="mi-output-copy-action"><button type="button" class="mi-secondary mi-output-link" data-mi-copy="' . esc_attr( $sheet_url ) . '" data-mi-copy-success-label="Copiato">Copia il collegamento al foglio</button></div>' : '<p class="mi-portal-muted">Collegamento al foglio non ancora disponibile.</p>' ) );
+			echo '<article class="mi-output-card mi-output-card--internal"><span class="mi-output-card__audience">Per gli operatori</span><h3>Gestisci le iscrizioni</h3><p>Consulta e aggiorna i dati nel foglio Google dell’evento.</p><div class="mi-output-document"><span aria-hidden="true">▦</span><div><strong>Foglio iscrizioni</strong><small>' . esc_html( $event_title ) . '</small></div></div>' . ( $sheet_unavailable ? '<p class="mi-portal-notice" role="status">Verifica del foglio temporaneamente non disponibile. Riprova più tardi; il collegamento conservato non è stato sostituito.</p>' : '' ) . ( $sheet_missing && ! $sheet_unavailable ? '<p class="mi-portal-notice mi-portal-error"><strong>Foglio non disponibile.</strong> Usa il comando qui sotto per ricrearlo dai dati conservati.</p>' : ( $sheet_url ? '<a class="mi-secondary mi-output-link" href="' . $sheet_url . '" target="_blank" rel="noopener noreferrer">Apri <span aria-hidden="true">↗</span></a><div class="mi-output-copy-action"><button type="button" class="mi-secondary mi-output-link" data-mi-copy="' . esc_attr( $sheet_url ) . '" data-mi-copy-success-label="Copiato">Copia il collegamento al foglio</button></div>' : '<p class="mi-portal-muted">Collegamento al foglio non ancora disponibile.</p>' ) );
 			echo '<form method="post" class="mi-output-sheet-check"><input type="hidden" name="mi_portal_action" value="repair_event_sheet"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
 			wp_nonce_field( 'mi_portal_repair_event_sheet_' . $event_id, 'mi_portal_nonce' );
 			echo '<button type="submit" class="mi-secondary mi-output-link">Verifica o ricrea il foglio Google</button></form></article></div>';

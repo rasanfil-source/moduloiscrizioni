@@ -64,6 +64,7 @@ final class MI_Payment_Ledger {
 		$raw_date = (string) ( $input['data'] ?? '' );
 		$date = DateTimeImmutable::createFromFormat( '!Y-m-d', $raw_date, wp_timezone() );
 		if ( ! $date || $date->format( 'Y-m-d' ) !== $raw_date || $date->format( 'Y' ) < '1000' ) throw new InvalidArgumentException( 'Data effettiva non valida.' );
+		if ( $date > new DateTimeImmutable( 'today', wp_timezone() ) ) throw new InvalidArgumentException( 'La data effettiva del pagamento non può essere futura.' );
 		$id = (string) ( $input['request_id'] ?? '' );
 		if ( ! preg_match( '/^wp_[1-9][0-9]*_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/iD', $id ) ) throw new InvalidArgumentException( 'Identificativo del movimento non valido.' );
 		$reference = mb_substr( sanitize_text_field( $input['riferimento'] ?? '' ), 0, 120 );

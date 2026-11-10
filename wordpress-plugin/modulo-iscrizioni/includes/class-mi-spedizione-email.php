@@ -581,7 +581,15 @@ final class MI_Spedizione_Email {
 			if ( $processed >= 10 || microtime( true ) - $started >= 10 ) break;
 			$cursor = absint( $riga['id'] );
 			$event_payload = json_decode( (string) $riga['payload_json'], true );
-			$event_id = ! empty( $riga['registration_id'] ) ? MI_Event_Deletion::registration_event( $riga['registration_id'] ) : absint( $event_payload['event_id'] ?? 0 );
+			if ( ! empty( $riga['registration_id'] ) ) {
+				$event_id = MI_Event_Deletion::registration_event( $riga['registration_id'] );
+				if ( $wpdb->last_error ) {
+					$wpdb->update( $table, array( 'last_error' => 'Lettura iscrizione temporaneamente non disponibile. Invio in attesa di un nuovo tentativo.' ), array( 'id' => $riga['id'], 'status' => $riga['status'] ) );
+					continue;
+				}
+			} else {
+				$event_id = absint( $event_payload['event_id'] ?? 0 );
+			}
 			if ( ! $event_id ) {
 				$wpdb->update( $table, array( 'status' => 'TEST_PENDING' === $riga['status'] ? 'TEST_FAILED' : 'FAILED', 'last_error' => 'Iscrizione o evento non più disponibile. Nessun invio effettuato.' ), array( 'id' => $riga['id'], 'status' => $riga['status'] ) );
 				continue;
@@ -636,6 +644,7 @@ final class MI_Spedizione_Email {
 			$request = self::invia_istantanea( $destinatario, $istantanea, hash( 'sha256', home_url() . '|outbox|' . $id . $delivery_revision ), $invio_prova, $portal_test_copy ? 'PROVA_PUNTUALE' : null, true );
 			$riga['event_id'] = $event_id;
 			if ( is_array( $request ) ) {
+				$request['event_id'] = (string) $event_id;
 				$deliveries[] = array( 'row' => $riga, 'payload' => $request );
 				$leases[$event_id] = true;
 			} else self::registra_esito( $riga, $request );
@@ -715,6 +724,26 @@ final class MI_Spedizione_Email {
 		$istantanea['testo'] = $portal_test_copy ? "EMAIL DI PROVA DELLA COMUNICAZIONE\nCampione anonimizzato: nessuna email è stata inviata agli iscritti.\n\n" . (string) ( $istantanea['testo'] ?? '' ) : "MODALITÀ PROVA\nDestinatario originale: {$destinatario_originale}\n\n" . (string) ( $istantanea['testo'] ?? '' );
 		if ( ! $portal_test_copy && isset( $istantanea['identita_email'] ) && is_array( $istantanea['identita_email'] ) ) $istantanea['identita_email']['indirizzo_risposte'] = self::destinatario_prova();
 		return $istantanea;
+	}
+
+	/** Scadenze correnti: un rinvio dell'evento rinvia anche la manutenzione delle ricevute Google. */
+	public static function retention_event_deadlines( array $payload ) {
+		$ids = $payload['event_ids'] ?? null;
+		if ( ! is_array( $ids ) || count( $ids ) > 100 ) return new WP_Error( 'mi_retention_invalid', 'Elenco eventi non valido.', array( 'status' => 400 ) );
+		$deadlines = array();
+		foreach ( array_unique( array_map( 'absint', $ids ) ) as $event_id ) {
+			$event = get_post( $event_id );
+			if ( ! $event || MI_Event_Post_Type::EVENT_TYPE !== $event->post_type ) continue;
+			$raw = (string) get_post_meta( $event_id, '_mi_event_ends_at', true );
+			if ( '' === $raw ) $raw = (string) get_post_meta( $event_id, '_mi_event_starts_at', true );
+			$date = DateTimeImmutable::createFromFormat( '!Y-m-d\TH:i', $raw, wp_timezone() );
+			if ( ! $date || $date->format( 'Y-m-d\TH:i' ) !== $raw ) continue;
+			$start_raw = (string) get_post_meta( $event_id, '_mi_event_starts_at', true );
+			$start = DateTimeImmutable::createFromFormat( '!Y-m-d\TH:i', $start_raw, wp_timezone() );
+			if ( ! $start || $start->format( 'Y-m-d\TH:i' ) !== $start_raw || $date < $start ) continue;
+			$deadlines[(string) $event_id] = $date->modify( '+90 days' )->getTimestamp() * 1000;
+		}
+		return array( 'ok' => true, 'deadlines' => (object) $deadlines );
 	}
 
 	private static function invia_istantanea( $destinatario, $istantanea, $delivery_key, $invio_prova, $mode_override = null, $prepare_only = false ) {

@@ -10,7 +10,22 @@ function set_transient( $key, $value, $ttl ) { $GLOBALS['nonces'][$key] = $value
 class WP_Error { public function __construct( public $code, public $message, public $data = array() ) {} }
 class WP_REST_Request { public function __construct( private $data ) {} public function get_json_params() { return $this->data; } }
 class MI_Spedizione_Email { public static function accoda_comunicazione_operativa( $payload ) { return array( 'ok' => true, 'received' => $payload ); } }
-$wpdb = new class { public function prepare( $sql, ...$args ) { return $sql; } public function get_var( $sql ) { return 1; } };
+$wpdb = new class {
+    public $prefix = 'wp_', $receipts = array(), $fail = false;
+    public function prepare( $sql, ...$args ) { return array( $sql, $args ); }
+    public function query( $prepared ) {
+        list( $sql, $args ) = $prepared;
+        if ( str_starts_with( $sql, 'DELETE FROM wp_mi_workspace_nonces WHERE expires_at <' ) ) {
+            $this->receipts = array_filter( $this->receipts, static fn($expires) => $expires >= $args[0] );
+            return 0;
+        }
+        if ( ! str_starts_with( $sql, 'INSERT IGNORE INTO wp_mi_workspace_nonces' ) ) throw new RuntimeException( 'Unexpected nonce SQL' );
+        if ( $this->fail ) return false;
+        if ( isset( $this->receipts[$args[0]] ) ) return 0;
+        $this->receipts[$args[0]] = $args[1];
+        return 1;
+    }
+};
 require __DIR__ . '/../modulo-iscrizioni/includes/class-mi-workspace-client.php';
 require __DIR__ . '/../modulo-iscrizioni/includes/class-mi-rest-controller.php';
 function dispatch_envelope( $envelope ) { return MI_REST_Controller::workspace_command( new WP_REST_Request( $envelope ) ); }
@@ -21,8 +36,9 @@ if ( in_array( '--stdin', $argv, true ) ) {
     exit( is_wp_error( $result ) ? 1 : 0 );
 }
 function check_envelope( $ok, $message ) { if ( ! $ok ) throw new RuntimeException( $message ); }
-function envelope( $raw, $protocol = 2 ) {
+function envelope( $raw, $protocol = 2, $offset_ms = 0 ) {
     $e = array( 'protocollo' => $protocol, 'timestamp' => (int) floor( microtime( true ) * 1000 ), 'nonce' => bin2hex( random_bytes( 16 ) ), 'action' => 'QUEUE_OPERATIONAL_EMAILS' );
+    $e['timestamp'] += $offset_ms;
     if ( 2 === $protocol ) { $e['payload_firmato'] = $raw; $e['payload_hash'] = hash( 'sha256', $raw ); $content = $e['payload_hash']; }
     else { $e['payload'] = json_decode( $raw, true ); $content = MI_Workspace_Client::stable_json( $e['payload'] ); }
     $e['signature'] = rtrim( strtr( base64_encode( hash_hmac( 'sha256', $e['timestamp'] . "\n" . $e['nonce'] . "\n" . $e['action'] . "\n" . $content, MI_WORKSPACE_SHARED_SECRET, true ) ), '+/', '-_' ), '=' );
@@ -34,6 +50,17 @@ $e['payload'] = array( 'message' => 'unsigned replacement' );
 $result = dispatch_envelope( $e );
 check_envelope( ! is_wp_error( $result ) && $result['received'] === json_decode( $raw, true ), 'Command did not consume the authenticated JSON' );
 check_envelope( is_wp_error( dispatch_envelope( $e ) ), 'Replay accepted' );
+$ahead = envelope( $raw, 2, 110000 );
+check_envelope( ! is_wp_error( dispatch_envelope( $ahead ) ), 'Valid skew rejected' );
+$GLOBALS['nonces'] = array();
+check_envelope( dispatch_envelope( $ahead )->code === 'mi_workspace_replay', 'Cache eviction allowed replay' );
+check_envelope( $wpdb->receipts[hash('sha256',$ahead['nonce'])] === $ahead['timestamp'] + 120000, 'Receipt expires before signature' );
+$wpdb->receipts['expired'] = 1;
+$wpdb->fail = true;
+$retry = envelope( $raw );
+check_envelope( dispatch_envelope( $retry )->data['status'] === 503 && ! isset($wpdb->receipts['expired']), 'Failed SQL claim dispatched or stale receipt retained' );
+$wpdb->fail = false;
+check_envelope( ! is_wp_error( dispatch_envelope( $retry ) ), 'Failed claim prevented retry' );
 $legacy = envelope( '{"message":"old Apps Script"}', 1 );
 unset( $legacy['protocollo'] );
 check_envelope( dispatch_envelope( $legacy )['received']['message'] === 'old Apps Script', 'Legacy deployment broken' );

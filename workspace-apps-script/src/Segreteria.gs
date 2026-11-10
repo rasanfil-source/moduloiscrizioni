@@ -326,7 +326,7 @@ function generaVistaOperativaEvento_(idEvento, campiForzati) {
   }else applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, pagamenti);
   aggiungiColonneCronologiaEvento_(colonne,evento);
   anteponiColonnaProgressiva_(colonne);
-  const ordiniEconomici = new Set();
+  const referentiImporti = referentiImportiOrdine_(partecipanti);
   const righe = partecipanti.map(function (partecipante, indicePartecipante) {
     const iscrizione = iscrizioniPerCodice[String(partecipante.codice_ordine)];
     const numero = Number(partecipante.numero_partecipante) || 0;
@@ -338,11 +338,10 @@ function generaVistaOperativaEvento_(idEvento, campiForzati) {
     Object.keys(personale).forEach(key=>{
       const amount=partecipante[personale[key]];
       if(amount!=='' && amount!=null && Number.isFinite(Number(amount)))valori[key]=Number(amount)/100;
-      else if(ordiniEconomici.has(String(partecipante.codice_ordine)))valori[key]='';
+      else if(referentiImporti.get(String(partecipante.codice_ordine))!==partecipante)valori[key]='';
     });
     // I subtotali per metodo riguardano l'intera prenotazione: mostra ciascuno una sola volta.
-    if(ordiniEconomici.has(String(partecipante.codice_ordine)))['paid_cash','paid_transfer','paid_card'].forEach(key=>{valori[key]='';});
-    ordiniEconomici.add(String(partecipante.codice_ordine));
+    if(referentiImporti.get(String(partecipante.codice_ordine))!==partecipante)['paid_cash','paid_transfer','paid_card'].forEach(key=>{valori[key]='';});
     // Una replica parziale non conferma una ricevuta firmata, anche con la stessa revisione.
     const revision=String(iscrizione.workspace_revision||'');
     return { codice_ordine: String(partecipante.codice_ordine), numero_partecipante: numero, valori: valori, workspace_revision: revision && revision===String(iscrizione.replica_completa_revision) ? revision : null };
@@ -534,6 +533,16 @@ function creaCacheDecodificaVista_() {
     return options.get(key).get(field);
   };
   return {object:object,list:list,option:option};
+}
+
+/** I dati d'ordine compaiono una volta: prima persona attiva, altrimenti prima riga storica. */
+function referentiImportiOrdine_(partecipanti) {
+  const result=new Map();
+  partecipanti.forEach(persona=>{
+    const code=String(persona.codice_ordine), previous=result.get(code);
+    if(!previous || (String(previous.stato_partecipante||'ACTIVE').toUpperCase()!=='ACTIVE' && String(persona.stato_partecipante||'ACTIVE').toUpperCase()==='ACTIVE'))result.set(code,persona);
+  });
+  return result;
 }
 
 /** Gli importi di prenotazione restano sulla persona numero 1, se il filtro la include. */

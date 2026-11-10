@@ -14,8 +14,7 @@ final class MI_Portal_Management {
 			$period = 'past' === ( $_POST['period'] ?? '' ) ? 'past' : 'current'; $ids = array();
 			foreach ( get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'private', 'draft' ), 'numberposts' => -1 ) ) as $candidate ) {
 				if ( ! MI_Access::can_access_event( (int) $candidate->ID ) ) continue;
-				$end = get_post_meta( $candidate->ID, '_mi_event_starts_at', true ) ?: get_post_meta( $candidate->ID, '_mi_registration_closes_at', true );
-				$past = get_post_meta( $candidate->ID, '_mi_event_archived_at', true ) || MI_Portal::is_past_event( $end );
+				$past = get_post_meta( $candidate->ID, '_mi_event_archived_at', true ) || MI_Portal::event_dates_past( $candidate->ID );
 				if ( $past === ( 'past' === $period ) ) $ids[] = (int) $candidate->ID;
 			}
 			$result = MI_Management_Service::all_people( $ids, sanitize_text_field( wp_unslash( $_POST['query'] ?? '' ) ), absint( $_POST['offset'] ?? 0 ), '1' === ( $_POST['include_closed'] ?? '' ), strtoupper( sanitize_text_field( wp_unslash( $_POST['status'] ?? '' ) ) ), sanitize_key( wp_unslash( $_POST['sort'] ?? 'created_at' ) ) );
@@ -126,8 +125,7 @@ final class MI_Portal_Management {
 		$events = get_posts( $query );
 		$periods = array();
 		foreach ( $events as $event ) {
-			$end = get_post_meta( $event->ID, '_mi_event_starts_at', true ) ?: get_post_meta( $event->ID, '_mi_registration_closes_at', true );
-			$periods[$event->ID] = get_post_meta( $event->ID, '_mi_event_archived_at', true ) || MI_Portal::is_past_event( $end ) ? 'past' : 'current';
+			$periods[$event->ID] = get_post_meta( $event->ID, '_mi_event_archived_at', true ) || MI_Portal::event_dates_past( $event->ID ) ? 'past' : 'current';
 		}
 		$period = $periods[$event_id] ?? ( 'past' === ( $_GET['mi_portal_period'] ?? '' ) ? 'past' : 'current' );
 		if ( ! isset( $_GET['mi_portal_event'] ) && ! $event_id && ! $order && ! $registration_id ) {
