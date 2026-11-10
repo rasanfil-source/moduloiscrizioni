@@ -31,7 +31,7 @@
 .mi-registration__facts div { display: grid; gap: .1rem; }.mi-registration__facts dt { font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .09em; opacity: .75; }.mi-registration__facts dd { margin: 0; font-weight: 700; }
 .mi-registration__progress { max-width: 700px; margin: 0 auto; padding: 2rem 2rem 0; }
 .mi-registration__progress ol { display: grid; grid-template-columns: repeat(3,1fr); margin: 0; padding: 0; list-style: none; }
-.mi-registration__progress li { position: relative; display: grid; justify-items: center; gap: .45rem; color: #7a8590; font-size: .82rem; font-weight: 700; text-align: center; }
+.mi-registration__progress li { position: relative; display: grid; justify-items: center; gap: .45rem; color: #536170; font-size: .82rem; font-weight: 700; text-align: center; }
 .mi-registration__progress li::before { content: ""; position: absolute; z-index: 0; top: 15px; right: 50%; width: 100%; border-top: 2px solid var(--mi-border); }.mi-registration__progress li:first-child::before { display: none; }
 .mi-registration__progress li span { z-index: 1; display: grid; place-items: center; width: 32px; height: 32px; border: 2px solid var(--mi-border); border-radius: 50%; background: #fff; }
 .mi-registration__progress li[aria-current="step"] { color: var(--mi-primary-dark); }.mi-registration__progress li[aria-current="step"] span { border-color: var(--mi-primary); background: var(--mi-primary); color: #fff; }
