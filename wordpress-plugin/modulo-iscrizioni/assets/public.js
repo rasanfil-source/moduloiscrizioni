@@ -2,6 +2,7 @@
   'use strict';
 
   let qrGeneratorPromise = null;
+  let fieldErrorSequence = 0;
 
   document.querySelectorAll('.mi-registration[data-mi-config]').forEach((root) => {
     const core = globalThis.MIRegistrationCore;
@@ -92,21 +93,13 @@
 	  const message = 'Inserisci un numero di cellulare completo.';
 	  input.setCustomValidity(invalid ? message : '');
 	  const showError = invalid && (reveal || input.dataset.miPhoneTouched === '1');
-	  input.toggleAttribute('aria-invalid', showError);
-	  const error = input.parentElement?.querySelector('[data-mi-phone-error]');
-	  if (error) error.hidden = !showError;
+	  if (showError || input.dataset.miErrorShown === '1') updateFieldError(input);
 	  return !invalid;
 	}
 
 	function preparePhoneField(input) {
 	  if (!input || input.dataset.miPhoneValidation === '1') return;
 	  input.dataset.miPhoneValidation = '1';
-	  const error = document.createElement('small');
-	  error.className = 'mi-registration__field-error';
-	  error.dataset.miPhoneError = '1';
-	  error.textContent = 'Inserisci un numero di cellulare completo.';
-	  error.hidden = true;
-	  input.after(error);
 	  input.addEventListener('blur', () => { input.dataset.miPhoneTouched = '1'; validatePhoneField(input, true, true); });
 	  input.addEventListener('input', () => validatePhoneField(input));
 	  validatePhoneField(input);
@@ -488,15 +481,51 @@
 	  }
 	  const fields = Array.from(steps[currentStep - 1].querySelectorAll('input, select, textarea'));
 	  fields.filter((field) => field.type === 'tel').forEach((field) => validatePhoneField(field, true, true));
-	  const invalid = fields.find((field) => !field.checkValidity());
+	  fields.forEach(updateFieldError);
+	  const invalid = fields.find((field) => field.willValidate && !field.validity.valid);
 	  if (invalid) { revealInvalidField(invalid); return false; }
 	  return true;
 	}
 
+	function updateFieldError(field) {
+	  if (!field.willValidate) return;
+	  const invalid = !field.validity.valid;
+	  let error = field._miFieldError;
+	  if (invalid && !error) {
+	    error = document.createElement('small');
+	    error.id = `mi-field-error-${++fieldErrorSequence}`;
+	    error.className = 'mi-registration__field-error';
+	    field.after(error);
+	    field._miFieldError = error;
+	    const descriptions = (field.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+	    field.setAttribute('aria-describedby', [...descriptions, error.id].join(' '));
+	  }
+	  if (invalid) {
+	    field.setAttribute('aria-invalid', 'true');
+	    field.dataset.miErrorShown = '1';
+	  } else {
+	    field.removeAttribute('aria-invalid');
+	  }
+	  if (error) {
+	    error.textContent = invalid ? field.validationMessage : '';
+	    error.hidden = !invalid;
+	  }
+	}
+	form.noValidate = true;
+	['input', 'change'].forEach((type) => form.addEventListener(type, (event) => {
+	  const field = event.target;
+	  if (field.dataset.miErrorShown === '1') {
+	    if (field.type === 'tel') validatePhoneField(field);
+	    updateFieldError(field);
+	  }
+	}));
 	function revealInvalidField(field) {
+	  const step = field.closest('[data-mi-step]');
+	  const index = steps.indexOf(step);
+	  if (index >= 0 && currentStep !== index + 1) showStep(index + 1, false);
+	  updateFieldError(field);
 	  field.focus({ preventScroll: true });
 	  field.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
-	  field.reportValidity();
 	}
 
     function captureParticipants() {
@@ -898,7 +927,11 @@
         return;
       }
       validatePhoneField(buyerPhone, true, true);
-      if (!form.reportValidity()) return;
+      const fields = Array.from(form.querySelectorAll('input, select, textarea'));
+      fields.filter((field) => field.type === 'tel').forEach((field) => validatePhoneField(field, true, true));
+      fields.forEach(updateFieldError);
+      const invalidField = fields.find((field) => field.willValidate && !field.validity.valid);
+      if (invalidField) { revealInvalidField(invalidField); return; }
       if (!core.isValidPhone(String(buyerPhone?.value || ''))) {
 		showError('Inserisci un numero di cellulare completo.');
         return;

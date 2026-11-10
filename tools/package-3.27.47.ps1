@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$releaseVersion = '3.27.42'
+$releaseVersion = '3.27.47'
 $releaseRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $releaseSource = Join-Path $releaseRoot 'wordpress-plugin/modulo-iscrizioni'
 $releaseDist = Join-Path $releaseRoot 'dist'
@@ -17,7 +17,12 @@ $notes = Get-Content -LiteralPath (Join-Path $releaseRoot "docs/rilascio-$releas
 if (!$notes.Contains($releaseVersion)) { throw 'Note di rilascio incoerenti.' }
 $bootstrap = Get-Content -LiteralPath (Join-Path $releaseSource 'modulo-iscrizioni.php') -Raw
 if ($bootstrap -notmatch ('Version:\s*' + [regex]::Escape($releaseVersion) + '\b') -or $bootstrap -notmatch "define\( 'MI_VERSION', '$([regex]::Escape($releaseVersion))' \)") { throw 'Versione plugin incoerente.' }
-# Correzione solo WordPress: nessun nuovo sorgente Google necessario.
+$workspaceSource = Join-Path $releaseDist "Codice-Workspace-Progetto-$releaseVersion.gs"
+if (Test-Path -LiteralPath $workspaceSource) { throw 'Sorgente MODULI AUTONOMO gia generato: usare una nuova versione per contenuti diversi.' }
+node (Join-Path $PSScriptRoot 'prepara-codice-workspace.mjs')
+if ($LASTEXITCODE -ne 0 -or !(Test-Path -LiteralPath $workspaceSource)) { throw 'Sorgente MODULI AUTONOMO non generato.' }
+$workspaceHash = (Get-FileHash -LiteralPath $workspaceSource -Algorithm SHA256).Hash.ToLowerInvariant()
+"$workspaceHash  $([IO.Path]::GetFileName($workspaceSource))" | Set-Content -LiteralPath ($workspaceSource + '.sha256') -Encoding utf8
 node (Join-Path $PSScriptRoot 'asset-build/build.cjs') --check
 if ($LASTEXITCODE -ne 0) { throw 'Asset non aggiornati.' }
 $releaseFiles = @(Get-ChildItem -LiteralPath $releaseSource -Recurse -File -Force)
@@ -61,7 +66,3 @@ foreach ($previous in $previousArchives) {
  if ((Get-FileHash -LiteralPath $previous.Path -Algorithm SHA256).Hash -ne $previous.Hash) { throw "Archivio precedente alterato: $($previous.Path)" }
 }
 Write-Output "Verificati $($previousArchives.Count) archivi precedenti: tutti invariati."
-
-
-
-
