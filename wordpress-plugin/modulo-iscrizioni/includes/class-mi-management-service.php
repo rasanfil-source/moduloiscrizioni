@@ -4,6 +4,7 @@ require_once __DIR__ . '/class-mi-option-rules.php';
 require_once __DIR__ . '/class-mi-payment-people.php';
 require_once __DIR__ . '/class-mi-booking-search.php';
 require_once __DIR__ . '/class-mi-field-schema.php';
+require_once __DIR__ . '/class-mi-registration-timestamps.php';
 
 /** MySQL conserva i dati operativi; Google riceve la loro proiezione. */
 final class MI_Management_Service {
@@ -13,7 +14,7 @@ final class MI_Management_Service {
 		$event_ids = array_values( array_filter( array_map( 'intval', $event_ids ), array( 'MI_Access', 'can_access_event' ) ) );
 		if ( ! $event_ids ) return array( 'items' => array(), 'more' => false );
 		$where = 'r.event_id IN (' . implode( ',', $event_ids ) . ')';
-		$allowed_statuses = array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'WAITLIST_OFFERED', 'CANCELLED', 'EXPIRED' );
+		$allowed_statuses = array( 'CONFIRMED', 'PENDING_PAYMENT', 'TRAVEL_PENDING', 'WAITLISTED', 'WAITLIST_OFFERED', 'CANCELLED', 'EXPIRED' );
 		if ( in_array( $status, $allowed_statuses, true ) ) {
 			if ( 'CANCELLED' === $status ) $where .= " AND (p.status='CANCELLED' OR r.status='CANCELLED')";
 			elseif ( 'EXPIRED' === $status ) $where .= " AND (p.status='EXPIRED' OR r.status='EXPIRED')";
@@ -202,7 +203,7 @@ final class MI_Management_Service {
 			if ( $individual ) $where[] = "p.status='ACTIVE'";
 		}
 		$state = strtoupper( sanitize_key( (string) ( $context['state'] ?? '' ) ) );
-		if ( in_array( $state, array( 'CONFIRMED', 'PENDING_PAYMENT', 'WAITLISTED', 'WAITLIST_OFFERED', 'CANCELLED', 'EXPIRED' ), true ) ) {
+		if ( in_array( $state, array( 'CONFIRMED', 'PENDING_PAYMENT', 'TRAVEL_PENDING', 'WAITLISTED', 'WAITLIST_OFFERED', 'CANCELLED', 'EXPIRED' ), true ) ) {
 			if ( $individual && 'CANCELLED' === $state ) $where[] = "(p.status='CANCELLED' OR r.status='CANCELLED')";
 			elseif ( $individual && 'EXPIRED' === $state ) $where[] = "(p.status='EXPIRED' OR r.status='EXPIRED')";
 			else $where[] = $wpdb->prepare( 'r.status=%s', $state );
@@ -307,9 +308,10 @@ final class MI_Management_Service {
 				if ( ! $registration_ids ) return array( 'ok' => true, 'features' => array(), 'room_types' => array(), 'option_definitions' => array(), 'items' => array(), 'people' => array(), 'field_labels' => array(), 'rooms' => array(), 'updated_at' => gmdate( 'c' ), 'registration_url' => MI_Shortcode::url_iscrizione( $event_id ) );
 				$scope = ' AND r.id IN (' . implode( ',', $registration_ids ) . ')';
 			}
+			$show_timestamps = MI_Registration_Timestamps::enabled( $event_id );
 			$orders = $wpdb->get_results( $wpdb->prepare( "SELECT r.* FROM {$wpdb->prefix}mi_registrations r WHERE r.event_id=%d{$scope} ORDER BY r.id", $event_id ), ARRAY_A );
 			self::check_database();
-			$people = $wpdb->get_results( $wpdb->prepare( "SELECT p.id,p.registration_id,p.ticket_type_code,p.first_name,p.last_name,p.extra_json,p.options_json,p.room_code,p.status,p.deposit_due_cents FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d{$scope} ORDER BY p.id", $event_id ), ARRAY_A );
+			$people = $wpdb->get_results( $wpdb->prepare( "SELECT p.id,p.registration_id,p.ticket_type_code,p.first_name,p.last_name,p.extra_json,p.options_json,p.room_code,p.status,p.cancelled_at,p.deposit_due_cents FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d{$scope} ORDER BY p.id", $event_id ), ARRAY_A );
 			self::check_database();
 			$payments = $wpdb->get_results( $wpdb->prepare( "SELECT p.* FROM {$wpdb->prefix}mi_payments p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d{$scope} ORDER BY p.registration_id,p.id", $event_id ), ARRAY_A );
 			self::check_database();
@@ -390,6 +392,15 @@ final class MI_Management_Service {
 			foreach ( $options as $option ) if ( isset( $known_types[$option['code'] ?? ''] ) ) $room_types[$option['code']] = $known_types[$option['code']];
 			$unique_options = array();
 			foreach ( $options as $option ) if ( is_array( $option ) ) $unique_options[$option['code'] ?? $option['name'] ?? wp_json_encode( $option )] = $option;
+			if ( $show_timestamps ) {
+				$features['registration_timestamps'] = true;
+				$orders_by_id = array_column( $orders, null, 'id' );
+				$people_by_id = array_column( $people, null, 'id' );
+				foreach ( $individuals as &$individual ) $individual += MI_Registration_Timestamps::values( $orders_by_id[$individual['registration_id']], $people_by_id[$individual['id']] );
+				unset( $individual );
+				foreach ( $items as &$item ) $item += MI_Registration_Timestamps::values( $orders_by_id[$item['registration_id']] );
+				unset( $item );
+			}
 			$result = array( 'ok' => true, 'features' => $features, 'room_types' => $room_types, 'option_definitions' => array_values( $unique_options ), 'items' => $items, 'people' => $individuals, 'field_labels' => $field_labels, 'rooms' => $event_rooms, 'updated_at' => gmdate( 'c' ), 'registration_url' => MI_Shortcode::url_iscrizione( $event_id ) );
 			$result['payment_counts'] = self::payment_counts( $individuals );
 			if ( $cache_state ) {

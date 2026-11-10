@@ -39,13 +39,20 @@ function generaVistaDaProiezioneDiretta_(projection) {
   const cache=creaCacheDecodificaVista_();
   const evento=projection.event, idEvento=String(evento.id_evento), iscrizioni=projection.registrations, partecipanti=projection.participants, pagamenti=projection.payments;
   const iscrizioniPerCodice=iscrizioni.reduce((index,row)=>{index[String(row.codice_ordine)]=row;return index;},{});
-  const attive=partecipanti.filter(row=>iscrizioniPerCodice[String(row.codice_ordine)] && !['ANNULLATO','SCADUTO','CANCELLED','EXPIRED'].includes(String(iscrizioniPerCodice[String(row.codice_ordine)].stato).toUpperCase()) && String(row.stato_partecipante||'ACTIVE').toUpperCase()==='ACTIVE');
+  const cronologia=cache.object(evento.schema_vista_json).registration_timestamps===true;
+  const attive=partecipanti.filter(row=>{
+    const ordine=iscrizioniPerCodice[String(row.codice_ordine)];if(!ordine)return false;
+    const stato=String(ordine.stato).toUpperCase(),persona=String(row.stato_partecipante||'ACTIVE').toUpperCase();
+    if(cronologia)return !['SCADUTO','EXPIRED'].includes(stato)&&['ACTIVE','CANCELLED'].includes(persona);
+    return !['ANNULLATO','SCADUTO','CANCELLED','EXPIRED'].includes(stato)&&persona==='ACTIVE';
+  });
   const profilo=determinaProfiloVistaOperativa_(iscrizioni,attive,evento.profilo_operativo,cache);
   const catalogo=campiElencoOperativo_(true,attive,cache).reduce((index,field)=>{index[field.key]=field;return index;},{});
   const colonne=profilo.campi.filter(key=>!!catalogo[key]).map(key=>({key:key,label:catalogo[key].label,gruppo:gruppoCampoVistaOperativa_(key),comprimibile:['paid_cash','paid_transfer','paid_card'].includes(key)}));
   aggiungiColonneServizi_(colonne,decodificaElenco_(evento.servizi_json));
   aggiungiColonneDomande_(colonne,evento,iscrizioni,attive,cache);
   applicaSchemaColonneEvento_(colonne,evento,iscrizioni,attive,pagamenti,cache);
+  aggiungiColonneCronologiaEvento_(colonne,evento);
   anteponiColonnaProgressiva_(colonne);
   const ordiniEconomici=new Set();
   const righe=attive.map((persona,indice)=>{

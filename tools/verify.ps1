@@ -42,24 +42,26 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Sintassi PHP non valida: $file" }
     }
     $phpTests = @(
+        'email-model-audit.php', 'email-access-audit.php', 'email-jobs-audit.php', 'email-progress-retention.php', 'email-recipients-audit.php', 'email-outcomes-audit.php', 'audit-comproved-email.php', 'audit-schema-index.php',
+        'travel.php',
         'audit-275-rooms.php', 'audit-275-email-waitlist.php', 'audit-275-editor.php', 'email-regeneration.php', 'php-event-activity-migration.php',
         'group-links.php', 'public-slug.php',
         'audit-263-regressions.php', 'event-first-save.php', 'email-logo-override.php', 'deletion-preserve-file.php', 'event-qr.php', 'operational-email-deadline.php',
         'room-swap-entitlement.php', 'payment-history-date.php',
         'public-balance-card-deposit.php',
-        'accommodation-deadline.php', 'none-service-pricing.php', 'email-requeue.php', 'email-newlines.php',
+        'accommodation-deadline.php', 'none-service-pricing.php', 'email-requeue.php', 'email-newlines.php', 'email-body-typography.php', 'event-card-layout.php',
         'economic-read-consistency.php', 'portal-waitlist-cancellation.php', 'management-page-consistency.php', 'public-balance-one-scope.php', 'management-one-scope.php',
         'public-balance-deposit-consistency.php', 'event-duplication-cancellation.php', 'custom-date-fields.php',
         'option-key-duplicates.php', 'public-balance-deadline-receipt.php', 'management-deposit-totals.php', 'email-queue-fairness.php',
         'payment-date-filter.php', 'deposit-consistency.php', 'workspace-command-envelope.php',
         'audit-confirmed-admin.php', 'public-balance-audit-regressions.php', 'admin-economics.php', 'email-group-identity.php',
-        'portal-payment-report.php', 'communication-confirmation.php', 'portal-pwa.php', 'portal-loading.php', 'email-background.php', 'management-overview.php', 'management-overview-access.php',
+        'portal-payment-report.php', 'communication-confirmation.php', 'communication-bold.php', 'communication-cancellation-sample.php', 'communication-personalization.php', 'cancellation-demo.php', 'cancellation-diagnostics.php', 'communication-events-loading.php', 'registration-timestamps.php', 'registration-timestamps-management.php', 'registration-timestamps-projection.php', 'portal-pwa.php', 'portal-loading.php', 'email-background.php', 'management-overview.php', 'management-overview-access.php',
         'public-balance.php', 'public-balance-model.php', 'operational-profile.php', 'workspace-deployment-preflight.php',
         'option-rules.php', 'sheet-open.php', 'event-projection-transfer.php', 'rest-projection.php', 'workspace-schema.php', 'attendance-report.php',
 		'group-attendance.php', 'sheet-organization.php', 'audit-regressions.php', 'audit-dates-access-cache.php',
 		'reopened-payment-deadline.php', 'management-cross-event.php', 'percentage-deposit-unit.php',
-        'event-wizard.php', 'management-list.php', 'management-page-sql.php', 'payment-counts.php', 'code-image.php', 'assets.php',
-        'registration-failures.php', 'email-transaction-failures.php', 'event-cancellation-retry.php', 'attendance-idempotency.php', 'publication-stored-config.php',
+        'event-wizard.php', 'event-transport-save.php', 'management-list.php', 'management-page-sql.php', 'payment-counts.php', 'code-image.php', 'assets.php',
+        'registration-failures.php', 'email-transaction-failures.php', 'booking-update-email.php', 'portal-management-http-status.php', 'event-cancellation-retry.php', 'attendance-idempotency.php', 'publication-stored-config.php',
         'audit-registration-regressions.php', 'audit-outbox-recovery.php', 'audit-publication-regressions.php', 'payment-ledger.php'
     )
     foreach ($test in $phpTests) {

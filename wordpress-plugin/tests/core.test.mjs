@@ -17,6 +17,13 @@ test('la selezione viene normalizzata e sommata', () => {
   assert.equal(core.sumQuantities(selection), 5);
 });
 
+test('la caparra fissa viene limitata e ripartita per quota individuale come sul server', () => {
+  assert.equal(core.fixedDepositCents([100, 1000], 0, 500), 600);
+  assert.equal(core.fixedDepositCents([100, 1000], 101, 500), 651);
+  assert.equal(core.fixedDepositCents([100, 1000], 101, 0), 0);
+  assert.equal(core.fixedDepositCents([], 101, 500), 0);
+});
+
 test('il cellulare italiano viene completato con il prefisso internazionale', () => {
   assert.equal(core.normalizePhone('333 1234567'), '+39 333 1234567');
   assert.equal(core.normalizePhone('39 333 1234567'), '+39 333 1234567');

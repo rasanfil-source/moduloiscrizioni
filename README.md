@@ -21,12 +21,21 @@ Le richieste tra WordPress e Apps Script sono firmate. MySQL conserva il registr
 
 ## Documentazione
 
-- [Rilascio 3.26.275: audit, correzioni e aggiornamento GAS](docs/rilascio-3.26.275.md)
+- [Distribuzioni conservate: ultimi cinque rilasci](docs/distribuzioni-conservate.md)
+- [Download delle cinque release pubblicate](https://github.com/rasanfil-source/moduloiscrizioni/releases)
+- [Rilascio 3.27.41: correzioni degli audit email e permessi](docs/rilascio-3.27.41.md)
+- [Rilascio 3.27.40: pulsante Google e date nella scheda evento](docs/rilascio-3.27.40.md)
+- [Rilascio 3.27.39: tipografia uniforme delle email](docs/rilascio-3.27.39.md)
+- [Rilascio 3.27.38: carattere del promemoria partecipazione](docs/rilascio-3.27.38.md)
+- [Rilascio 3.27.37: origine degli annullamenti](docs/rilascio-3.27.37.md)
+- [Gestione degli spostamenti](docs/SPOSTAMENTI.md)
+- [Regole di assegnazione delle camere](docs/REGOLE_ASSEGNAZIONE_CAMERE.md)
 - [Plugin WordPress](wordpress-plugin/modulo-iscrizioni/README.md)
 - [Progetto Apps Script MODULI AUTONOMO](workspace-apps-script/README.md)
 - [Architettura e flussi operativi](PROGETTO.md)
 - [Schema dei dati](docs/SCHEMA_DATI.md)
 - [Contratto dell'interfaccia](UX-CONTRACT.md) e [sistema grafico](DESIGN.md)
+- [Icona del portale: asset, manifest, trasparenza e avvio PWA](docs/ICONA_PORTALE_E_PWA.md)
 - [Manuale della segreteria](docs/manuale-segretario/Manuale_del_segretario.docx)
 - [Sicurezza](SECURITY.md)
 

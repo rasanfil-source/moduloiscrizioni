@@ -75,11 +75,18 @@ class AuditOutboxDatabase {
         throw new RuntimeException('Unexpected audit SQL: ' . $sql);
     }
     function get_results($sql, $mode) {
-        if (!preg_match('/WHERE status IN \(([^)]+)\) AND attempts < (\d+)/', $sql, $m)) throw new RuntimeException('Unexpected audit SELECT');
-        $states = array_map(fn($v) => trim($v, " '"), explode(',', $m[1]));
-        return array_values(array_filter($this->rows, fn($row) => in_array($row['status'], $states, true) && $row['attempts'] < (int) $m[2]));
+        $normal=str_contains($sql,"status IN ('PENDING')");$test=str_contains($sql,"status IN ('TEST_PENDING')");
+        return array_values(array_filter($this->rows, fn($r)=>$r['attempts']<5&&(($normal&&$r['status']==='PENDING')||($test&&$r['status']==='TEST_PENDING'))));
     }
-    function get_var($sql) { return count($this->get_results($sql, ARRAY_A)); }
+    function get_var($sql) {
+        if(str_contains($sql,'GET_LOCK')||str_contains($sql,'RELEASE_LOCK'))return 1;
+        if(str_contains($sql,"template_type='PORTAL_COMMUNICATION_TEST'")&&!str_contains($sql,'status IN ('))return 0;
+        return count($this->get_results($sql,ARRAY_A));
+    }
+    function update($table,$data,$where,...$args) {
+        if($this->rows[$where['id']]['status']!==$where['status'])return 0;
+        $this->rows[$where['id']]=array_merge($this->rows[$where['id']],$data);return 1;
+    }
 }
 require __DIR__ . '/../modulo-iscrizioni/includes/class-mi-spedizione-email.php';
 foreach (['OPERATIVO', 'PROVA'] as $auditMode) {
@@ -87,16 +94,13 @@ foreach (['OPERATIVO', 'PROVA'] as $auditMode) {
     MI_Workspace_Client::$calls = 0;
     $wpdb = new AuditOutboxDatabase();
     $wpdb->rows[1] = ['id' => 1, 'registration_id' => null, 'recipient' => 'recipient@example.invalid', 'template_type' => 'EVENT_NOTICE', 'payload_json' => json_encode(['event_id' => 42, 'email_preview' => ['attivo' => true, 'oggetto' => 'Audit sintetico', 'testo' => 'Messaggio sintetico', 'html' => '<p>Messaggio sintetico</p>']]), 'attempts' => 4, 'status' => $auditMode === 'PROVA' ? 'TEST_PENDING' : 'PENDING', 'processing_started_at' => null];
-    $interrupted = false;
-    try { MI_Spedizione_Email::spedisci_coda(); } catch (RuntimeException $error) {
-        if (!str_starts_with($error->getMessage(), 'Simulated process interruption')) throw $error;
-        $interrupted = true;
-    }
-    $crashedStatus = $wpdb->rows[1]['status'];
-    $wpdb->rows[1]['processing_started_at'] = gmdate('Y-m-d H:i:s', time() - 16 * 60);
     MI_Spedizione_Email::spedisci_coda();
-    MI_Spedizione_Email::spedisci_coda();
-    $bug = $interrupted && $wpdb->rows[1]['attempts'] === 5 && in_array($wpdb->rows[1]['status'], ['FAILED', 'TEST_FAILED'], true) && MI_Workspace_Client::$calls === 1 && $scheduled === 0;
-    echo json_encode(['case' => 'fifth_attempt_interrupted', 'mode' => $auditMode, 'regression_passed' => $bug, 'status_at_interruption' => $crashedStatus, 'status_after_two_recovery_runs' => $wpdb->rows[1]['status'], 'attempts' => $wpdb->rows[1]['attempts'], 'delivery_calls' => MI_Workspace_Client::$calls, 'retries_scheduled' => $scheduled]) . "\n";
-    if (!$bug) throw new RuntimeException('Outbox reproduction failed');
+    $failed=$auditMode==='PROVA'?'TEST_FAILED':'FAILED';
+    if($wpdb->rows[1]['status']!==$failed||$wpdb->rows[1]['attempts']!==5||MI_Workspace_Client::$calls!==1||!$wpdb->rows[1]['last_error'])throw new RuntimeException('Caught interruption did not leave visible terminal outcome');
+    // Una terminazione forzata di PHP non può essere catturata: simula la riga persistente.
+    $wpdb->rows[1]['status']=$auditMode==='PROVA'?'TEST_SENDING':'SENDING';
+    $wpdb->rows[1]['processing_started_at']=gmdate('Y-m-d H:i:s',time()-16*60);
+    MI_Spedizione_Email::spedisci_coda();MI_Spedizione_Email::spedisci_coda();
+    if($wpdb->rows[1]['status']!==$failed||$wpdb->rows[1]['attempts']!==5||MI_Workspace_Client::$calls!==1)throw new RuntimeException('Stale fifth attempt was resent or stranded');
+    echo "PASS: $auditMode fifth-attempt interruption remains visible, stale claim recovers without duplicate delivery.\n";
 }

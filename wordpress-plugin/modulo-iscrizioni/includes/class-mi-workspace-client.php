@@ -63,7 +63,7 @@ final class MI_Workspace_Client {
 		// lo stesso foglio grazie all'idempotenza dell'operazione remota.
 		$timeout = 'PROIETTA_EVENTO' === $action ? 240 : ( 'ELIMINA_DATI_EVENTO' === $action ? 110 : ( 'LEGGI_MODIFICHE_FOGLIO' === $action ? 45 : ( 'INVIA_EMAIL_PROVA' === $action ? 30 : 15 ) ) );
 		if ( 'CONFERMA_MODIFICHE_FOGLIO' === $action ) $timeout = 180;
-		if ( in_array( $action, array( 'INVIA_EMAIL_PROVA', 'INVIA_EMAIL_CONFERMA', 'INVIA_EMAIL_CONFERMA_MITTENTE' ), true ) ) $timeout = 60;
+		if ( in_array( $action, array( 'INVIA_EMAIL_PROVA', 'INVIA_EMAIL_CONFERMA', 'INVIA_EMAIL_CONFERMA_MITTENTE', 'INVIA_EMAIL_LOTTO' ), true ) ) $timeout = 60;
 		if ( in_array( $action, array( 'VERIFICA_FOGLI_EVENTO', 'ORGANIZZA_FOGLI_EVENTO' ), true ) ) $timeout = 60;
 		// Le consegne includono la revisione e Google respinge le scritture successive alla rimozione.
 		// Per email ed eliminazioni il lock resta attivo fino al completamento dell'operazione esterna.
@@ -125,6 +125,7 @@ final class MI_Workspace_Client {
 				'EMAIL_QUOTA_EXCEEDED' => 'quota giornaliera Google esaurita',
 				'EMAIL_BUSY' => 'un altro invio è in corso',
 				'EVENT_BUSY' => 'è in corso un aggiornamento Google; riprova tra poco',
+				'WORKSPACE_BUSY' => 'Google sta elaborando un’altra operazione; attendi qualche secondo e riprova',
 				'DELETION_CONFLICT' => 'esiste una cancellazione con identificativo o scelta differenti',
 				'INVALID_DELETION' => 'i parametri della cancellazione non sono validi',
 				'SHARED_EVENT_SHEET' => 'il foglio risulta collegato anche a un altro evento',

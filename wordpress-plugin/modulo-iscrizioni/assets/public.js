@@ -48,6 +48,23 @@
 	let currentStep = 1;
     let requestKey = makeRequestKey();
     let participantValues = [];
+    let bookingTravel;
+    function travelForRow(row) {
+      const choice = globalThis.MITravel?.capture(participantsRoot) || bookingTravel;
+      if (!choice) return undefined;
+      if (choice.mode === 'NEED' && Array.isArray(choice.assignments)) {
+        const rows = Array.from(participantsRoot.querySelectorAll('.mi-registration__participant'));
+        let seatIndex = rows.indexOf(row);
+        for (const offer of choice.assignments) {
+          if (seatIndex < Number(offer.seats || 0)) { const {assignments,...bookingChoice}=choice; return {...bookingChoice, driver_id:Number(offer.driver_id)||0, price_cents:Number(offer.price_cents)||0}; }
+          seatIndex -= Number(offer.seats || 0);
+        }
+        const {assignments,...bookingChoice}=choice; return {...bookingChoice, driver_id:0, price_cents:0};
+      }
+      if (choice.mode !== 'DRIVER') return choice;
+      const first = participantsRoot.querySelector('.mi-registration__participant');
+      return row === first ? choice : {mode:'OWN'};
+    }
 	function prefillFirstBookingFromContact() {
 	  const firstParticipant = participantsRoot.querySelector('.mi-registration__participant');
 	  if (!firstParticipant) return;
@@ -143,6 +160,16 @@
       return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(Math.max(0, cents) / 100);
     }
 
+    function amountCents(value) {
+      let amount = String(value ?? '').trim().replace(/\s+/g, '');
+      if (/^\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/.test(amount)) amount = amount.replace(/\./g, '').replace(',', '.');
+      else if (/^\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?$/.test(amount)) amount = amount.replace(/,/g, '');
+      else if (/^\d+(?:[.,]\d{1,2})?$/.test(amount)) amount = amount.replace(',', '.');
+      else return 0;
+      const numeric = Number(amount);
+      return Number.isFinite(numeric) && numeric > 0 ? Math.round(numeric * 100) : 0;
+    }
+
 	function pendingPaymentConfirmation(name, economicSummary = {}) {
 	  const total = Math.max(0, Number(economicSummary.total_cents) || 0);
 	  if (economicSummary.mode === 'DEPOSIT_BALANCE') {
@@ -177,6 +204,32 @@
       return Object.fromEntries(Array.from(root.querySelectorAll('[data-mi-order-option]')).map((input) => [input.dataset.miOrderOption, core.clampQuantity(input.value, input.max)]));
     }
 
+    function fixedDepositEstimate(total) {
+      const rows = Array.from(participantsRoot.querySelectorAll('.mi-registration__participant'));
+      const fixed = Math.max(0, Number(config.event.deposit_fixed_cents) || 0);
+      if (!rows.length) return Math.min(total, fixed * totalQuantity());
+      const options = config.event.pricing_mode === 'ZERO' ? [] : (config.event.options || []);
+      const optionPrices = Object.fromEntries(options.map((option) => [option.code, Number(option.price_cents) || 0]));
+      const ticketTypes = Object.fromEntries((config.event.ticket_types || []).map((ticket) => [ticket.code, ticket]));
+      const personTotals = rows.map((row) => {
+        const ticket = ticketTypes[row.dataset.miTicketType];
+        const base = config.event.pricing_mode === 'FIXED'
+          ? Number(config.event.fixed_price_cents) || 0
+          : (config.event.pricing_mode === 'CALCULATED' ? Number(ticket?.price_cents) || 0 : 0);
+        const selected = Array.from(row.querySelectorAll('[data-mi-participant-option]')).reduce((sum, input) => sum + (optionPrices[input.dataset.miParticipantOption] || 0) * participantOptionQuantity(input), 0);
+        return base + selected;
+      });
+      const sharedTotal = Object.entries(orderOptionSelection()).reduce((sum, [code, quantity]) => sum + quantity * (optionPrices[code] || 0), 0);
+      return Math.min(total, core.fixedDepositCents(personTotals, sharedTotal, fixed));
+    }
+
+    function travelPending() {
+      return Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).some(row => {
+        const travel = travelForRow(row);
+        return travel?.mode === 'NEED' && travel.fallback === 'REQUIRED' && !travel.driver_id;
+      });
+    }
+
     function renderEconomicSummary() {
       if (!economicSummary) return;
       const total = totalCents();
@@ -191,13 +244,16 @@
       balanceRow.hidden = mode !== 'DEPOSIT_BALANCE';
       paymentMethodsRow.hidden = !['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(mode) || paymentMethods.length === 0;
       economicSummary.querySelector('[data-mi-payment-methods]').textContent = paymentMethods.join(', ');
-      if (mode === 'FULL_PAYMENT') {
+      if (travelPending()) {
+        initialRow.hidden = balanceRow.hidden = paymentMethodsRow.hidden = true;
+        economicSummary.querySelector('[data-mi-economic-note]').textContent = 'Quota prevista dell’evento. Nessun pagamento è richiesto finché non sono assegnati tutti i passaggi necessari.';
+      } else if (mode === 'FULL_PAYMENT') {
         economicSummary.querySelector('[data-mi-initial-label]').textContent = 'Versamento previsto:';
         economicSummary.querySelector('[data-mi-initial]').textContent = formatCurrency(total);
         economicSummary.querySelector('[data-mi-economic-note]').textContent = 'Il modulo registra l’iscrizione; il versamento sarà registrato manualmente dall’organizzazione.';
       } else if (mode === 'DEPOSIT_BALANCE') {
 		const fixedDeposit = config.event.deposit_mode === 'FIXED';
-		const initial = fixedDeposit ? Math.min(total, Number(config.event.deposit_fixed_cents || 0) * totalQuantity()) : Math.round(total * Number(config.event.deposit_percentage || 30) / 100);
+		const initial = fixedDeposit ? fixedDepositEstimate(total) : Math.round(total * Number(config.event.deposit_percentage || 30) / 100);
 		economicSummary.querySelector('[data-mi-initial-label]').textContent = fixedDeposit ? 'Caparra fissa:' : `Caparra (${config.event.deposit_percentage}%):`;
         economicSummary.querySelector('[data-mi-initial]').textContent = formatCurrency(initial);
         economicSummary.querySelector('[data-mi-balance]').textContent = formatCurrency(total - initial);
@@ -231,7 +287,7 @@
 	  backButton.hidden = currentStep === 1;
 	  nextButton.hidden = currentStep === 3;
 	  submitButton.hidden = currentStep !== 3;
-      paymentInstructionsNote.hidden = currentStep !== 3 || totalCents() <= 0 || !['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(config.event.economic_mode);
+      paymentInstructionsNote.hidden = currentStep !== 3 || travelPending() || totalCents() <= 0 || !['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(config.event.economic_mode);
       paymentInstructionsNote.textContent = `Nell’email di conferma ${totalQuantity() > 1 ? 'delle prenotazioni' : 'della prenotazione'} riceverai le istruzioni per il pagamento.`;
 	  nextButton.textContent = currentStep === 2 ? 'Vai alla conferma' : 'Continua';
 	  updateStickySummary();
@@ -259,13 +315,49 @@
       };
       const buyerName = [buyerFirstName.value, buyerLastName.value].filter(Boolean).join(' ');
       const total = totalCents();
+      let pendingTravelNote = '';
       summary.classList.toggle('is-free', total === 0);
+      if (config.event.travel?.enabled) {
+        if (travelPending() && total !== 0) {
+          const pending = document.createElement('p');
+          pending.textContent = 'La partecipazione è subordinata al passaggio. Il posto all’evento resta riservato fino al termine delle assegnazioni. Nessun pagamento dell’evento è richiesto durante l’attesa.';
+          summary.append(pending);
+        }
+        const travel = globalThis.MITravel?.capture(participantsRoot) || bookingTravel;
+        if (travel?.mode) {
+          const detail = document.createElement('p');
+          const offeredSeats = Number(travel.seats) || 0;
+          const pluralBooking = totalQuantity() > 1;
+          const assignedRides = Array.isArray(travel.assignments) ? travel.assignments.reduce((sum, ride) => sum + (Number(ride.seats) || 0), 0) : (travel.driver_id ? 1 : 0);
+          const assignedPeople = Math.min(totalQuantity(), assignedRides);
+          const allHaveRide = assignedPeople >= totalQuantity();
+          const needSummary = allHaveRide ? 'Passaggio selezionato per ' + assignedPeople + (assignedPeople === 1 ? ' persona' : ' persone') : (assignedPeople > 0 ? 'Passaggio selezionato per ' + assignedPeople + ' su ' + totalQuantity() + ' persone; gli altri posti sono in attesa' : 'Richiesta di passaggio in attesa');
+          const offeredSeatsText = offeredSeats > 0 ? ` · ${pluralBooking ? 'Offrite' : 'Offri'} ${offeredSeats} ${offeredSeats === 1 ? 'posto' : 'posti'} auto` : '';
+          const contributionCents = amountCents(travel.price);
+          const contributionText = offeredSeats > 0 && contributionCents > 0 ? ` (${pluralBooking ? 'riceverete' : 'riceverai'} ${formatCurrency(contributionCents)} da ciascun passeggero che accetterà il passaggio)` : '';
+          const names = {
+            OWN: 'Viaggio organizzato autonomamente',
+            DRIVER: `Viaggio in auto${offeredSeatsText}${contributionText}`,
+            NEED: needSummary
+          };
+          detail.textContent = names[travel.mode] || '';
+          if (travel.mode === 'NEED' && travel.fallback === 'REQUIRED') detail.textContent += ' · Partecipazione subordinata al passaggio';
+          if (total === 0 && travel.mode === 'NEED' && !allHaveRide) {
+            pendingTravelNote = travel.fallback === 'REQUIRED'
+              ? ' (Richiesta di passaggio in attesa · Partecipazione subordinata al passaggio)'
+              : ' (Richiesta di passaggio in attesa)';
+          } else {
+            summary.append(detail);
+          }
+        }
+      }
       if (total === 0) {
         const freeRegistration = document.createElement('p');
         freeRegistration.className = 'mi-registration__free-confirmation';
         const freeRegistrationText = document.createElement('strong');
         freeRegistrationText.textContent = `Iscrizione di ${buyerName}`;
         freeRegistration.append(freeRegistrationText);
+        if (pendingTravelNote) freeRegistration.append(document.createTextNode(pendingTravelNote));
         summary.append(freeRegistration);
         return;
       }
@@ -278,8 +370,11 @@
       });
       const orderSelection = orderOptionSelection();
       const selectedOrderOptions = options.filter((option) => option.scope === 'ORDER').map((option) => ({ option, quantity: Number(orderSelection[option.code]) || 0 })).filter((item) => item.quantity > 0).map((item) => ({ ...item, cost: item.quantity * (Number(item.option.price_cents) || 0) }));
-      const deposit = total > 0 && config.event.economic_mode === 'DEPOSIT_BALANCE'
-        ? (config.event.deposit_mode === 'FIXED' ? Math.min(total, (Number(config.event.deposit_fixed_cents) || 0) * totalQuantity()) : Math.round(total * Number(config.event.deposit_percentage || 30) / 100))
+      const singleQuotaOnly = participantCosts.length > 0
+        && participantCosts.every(({ base, selected }) => base === participantCosts[0].base && selected.length === 0)
+        && selectedOrderOptions.length === 0;
+      const deposit = !travelPending() && total > 0 && config.event.economic_mode === 'DEPOSIT_BALANCE'
+		? (config.event.deposit_mode === 'FIXED' ? Math.min(total, core.fixedDepositCents(participantCosts.map(({ subtotal }) => subtotal), selectedOrderOptions.reduce((sum, item) => sum + item.cost, 0), Number(config.event.deposit_fixed_cents) || 0)) : Math.round(total * Number(config.event.deposit_percentage || 30) / 100))
         : 0;
       const optionCategory = (option) => {
         const code = String(option.code || ''), name = String(option.name || ''), category = String(option.category || '');
@@ -348,33 +443,40 @@
           identity.className = 'mi-registration__booking-person';
           const heading = document.createElement('strong');
           heading.textContent = `${cost.participant.firstName} ${cost.participant.lastName}`;
-          const description = document.createElement('span');
-          description.textContent = compactDescription(cost);
-          const amount = document.createElement('strong');
-          amount.className = 'mi-registration__booking-amount';
-          amount.textContent = formatCurrency(cost.subtotal);
-          identity.append(heading, description);
-          item.append(identity, amount);
+          identity.append(heading);
+          if (!singleQuotaOnly) {
+            const description = document.createElement('span');
+            description.textContent = compactDescription(cost);
+            const amount = document.createElement('strong');
+            amount.className = 'mi-registration__booking-amount';
+            amount.textContent = formatCurrency(cost.subtotal);
+            identity.append(description);
+            item.append(identity, amount);
+          } else item.append(identity);
           list.append(item);
         });
         const totals = document.createElement('div');
         totals.className = 'mi-registration__booking-totals';
-        renderTotals(totals);
+        if (!singleQuotaOnly) renderTotals(totals);
         overview.append(title, bookingName, list, totals);
         summary.append(overview);
-        const details = document.createElement('details');
-        details.className = 'mi-registration__cost-details';
-        const detailsSummary = document.createElement('summary');
-        detailsSummary.textContent = 'Dettaglio dei costi';
-        const detailedCosts = document.createElement('div');
-        participantCosts.forEach((cost) => renderParticipantDetail(detailedCosts, cost));
-        renderTotals(detailedCosts, true);
-        details.append(detailsSummary, detailedCosts);
-        summary.append(details);
+        if (!singleQuotaOnly) {
+          const details = document.createElement('details');
+          details.className = 'mi-registration__cost-details';
+          const detailsSummary = document.createElement('summary');
+          detailsSummary.textContent = 'Dettaglio dei costi';
+          const detailedCosts = document.createElement('div');
+          participantCosts.forEach((cost) => renderParticipantDetail(detailedCosts, cost));
+          renderTotals(detailedCosts, true);
+          details.append(detailsSummary, detailedCosts);
+          summary.append(details);
+        }
       } else {
         line(summary, 'Iscrizione a nome di', buyerName);
-        participantCosts.forEach((cost) => renderParticipantDetail(summary, cost));
-        renderTotals(summary, true);
+        if (!singleQuotaOnly) {
+          participantCosts.forEach((cost) => renderParticipantDetail(summary, cost));
+          renderTotals(summary, true);
+        } else participantCosts.forEach(({ participant }) => line(summary, 'Partecipante', `${participant.firstName} ${participant.lastName}`));
       }
     }
 
@@ -398,6 +500,7 @@
 	}
 
     function captureParticipants() {
+      bookingTravel = globalThis.MITravel?.capture(participantsRoot) || bookingTravel;
 	  const previousValues = participantValues;
       participantValues = Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).map((row) => {
 		const key = `${row.dataset.miTicketType}:${row.dataset.miTicketIndex}`;
@@ -408,6 +511,7 @@
         lastName: row.querySelector('[data-mi-last-name]')?.value || '',
 		fields: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-field]')).map((input) => [input.dataset.miParticipantField, input.type === 'tel' ? core.normalizePhone(input.value) : input.value.trim()])),
 		options: Object.fromEntries(Array.from(row.querySelectorAll('[data-mi-participant-option]')).map((input) => [input.dataset.miParticipantOption, String(participantOptionQuantity(input))])),
+		travel: travelForRow(row) || previous.travel,
 		noAccommodation: Boolean(row.querySelector('[data-mi-no-accommodation]')?.checked)
 		};
 	  });
@@ -417,7 +521,7 @@
       captureParticipants();
       const quantity = totalQuantity();
 	  const participantsHeading = form.querySelector('[data-mi-participants-heading]');
-	  if (participantsHeading) participantsHeading.textContent = quantity > 1 ? 'Prenotazioni' : 'Prenotazione';
+	  if (participantsHeading) participantsHeading.textContent = config.event.travel?.enabled ? 'Partecipanti' : quantity > 1 ? 'Prenotazioni' : 'Prenotazione';
       renderEconomicSummary();
 	  updateStickySummary();
       participantsRoot.replaceChildren();
@@ -441,7 +545,7 @@
         row.dataset.miTicketType = ticket.code;
         row.dataset.miTicketIndex = String(ticket.position);
         const legend = document.createElement('legend');
-		legend.textContent = quantity > 1 ? `Prenotazione ${index + 1}` : 'Prenotazione';
+		legend.textContent = config.event.travel?.enabled ? `Partecipante ${index + 1}` : quantity > 1 ? `Prenotazione ${index + 1}` : 'Prenotazione';
         const grid = document.createElement('div');
         grid.className = 'mi-registration__grid';
         grid.append(
@@ -466,9 +570,14 @@
 		  grid.append(answers);
 		}
 		appendParticipantOptionGroups(grid, (config.event.options || []).filter((option) => option.scope === 'TICKET'), previous, index);
+
         row.append(legend, grid);
 		participantsRoot.append(row);
       });
+      if (config.event.travel?.enabled) {
+        const party = [...participantsRoot.querySelectorAll('.mi-registration__participant')].map((row,index) => ({key:row.dataset.miTicketType+':'+row.dataset.miTicketIndex,label:([row.querySelector('[data-mi-first-name]').value,row.querySelector('[data-mi-last-name]').value].filter(Boolean).join(' ') || 'Partecipante '+(index+1))}));
+        participantsRoot.append(globalThis.MITravel.render(config, bookingTravel, 'booking', party));
+      }
 	  prefillFirstBookingFromContact();
       renderEconomicSummary();
       updateStickySummary();
@@ -661,6 +770,7 @@
 		first_name: participant.firstName.trim(),
 		last_name: participant.lastName.trim(),
 		fields: participant.fields || {},
+		travel: participant.travel,
 		options: participant.options || {}
 		};
 	  });
@@ -758,7 +868,16 @@
       notice.scrollIntoView({ block: 'center' });
       return true;
     }
-    participantsRoot.addEventListener('input', () => accommodationNotice?.remove());
+    participantsRoot.addEventListener('input', () => {
+      accommodationNotice?.remove();
+    });
+    participantsRoot.addEventListener('change', () => {
+      renderEconomicSummary();
+      if (buyerEmail) buyerEmail.required = Boolean(config.event.availability?.full && config.event.waitlist_enabled) || Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).some(row => {
+        const travel = travelForRow(row);
+        return travel?.mode === 'NEED' || (travel?.mode === 'DRIVER' && Number(travel.seats) > 0);
+      });
+    });
 	nextButton.addEventListener('click', () => {
 	  if (!currentStepIsValid()) return;
 	  if (currentStep === 2 && confirmMissingAccommodation()) return;
@@ -796,6 +915,7 @@
         tickets: ticketSelection(),
 		order_options: orderOptionSelection(),
         participants: participantPayload(),
+        travel_booking: config.event.travel?.enabled ? globalThis.MITravel.capture(participantsRoot) : undefined,
 		buyer: {
           first_name: String(formData.get('buyerFirstName') || '').trim(),
           last_name: String(formData.get('buyerLastName') || '').trim(),
@@ -824,12 +944,14 @@
 		  .map((value) => String(value || '').trim())
 		  .filter(Boolean)
 		  .join(' ');
-		const successText = result.status === 'WAITLISTED'
+		const successText = result.status === 'TRAVEL_PENDING'
+          ? 'Richiesta registrata: la partecipazione è subordinata al passaggio. Il posto all’evento è riservato fino al termine dei passaggi e non è richiesto alcun pagamento durante l’attesa. Riceverai per email il collegamento per gestire gli spostamenti.'
+          : result.status === 'WAITLISTED'
 		  ? `Richiesta inserita in lista d’attesa. Riceverai gli aggiornamenti alla casella: ${confirmationEmail}`
 		  : result.status === 'PENDING_PAYMENT'
 			? pendingPaymentConfirmation(confirmationName, result.economic_summary)
 			: '';
-        if (result.status === 'WAITLISTED' || result.status === 'PENDING_PAYMENT') {
+        if (result.status === 'WAITLISTED' || result.status === 'PENDING_PAYMENT' || result.status === 'TRAVEL_PENDING') {
           successBox.textContent = successText;
         } else {
           const successHeading = document.createElement('h2');

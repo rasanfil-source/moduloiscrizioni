@@ -42,9 +42,12 @@ foreach(['registrations'=>'registrations','items'=>'registration_items','partici
  $wpdb->query('DROP TABLE IF EXISTS wp_mi_'.$name);check(false!==$wpdb->query('CREATE TABLE wp_mi_'.$name.' ('.$m[1].') ENGINE=InnoDB'),$wpdb->last_error);
 }
 $wpdb->query('DROP TABLE IF EXISTS wp_mi_booking_codes');$wpdb->query('CREATE TABLE wp_mi_booking_codes(event_id BIGINT PRIMARY KEY,prefix VARCHAR(16),sequence BIGINT) ENGINE=InnoDB');
+$wpdb->query('DROP TABLE IF EXISTS wp_mi_travel');$wpdb->query("CREATE TABLE wp_mi_travel (participant_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,registration_id BIGINT UNSIGNED NOT NULL,event_id BIGINT UNSIGNED NOT NULL,mode VARCHAR(16) NOT NULL,seats SMALLINT UNSIGNED NOT NULL DEFAULT 0,price_cents INT UNSIGNED NOT NULL DEFAULT 0,origin VARCHAR(180) NOT NULL DEFAULT '',departure_at DATETIME NULL,required_ride TINYINT(1) NOT NULL DEFAULT 0,state VARCHAR(24) NOT NULL DEFAULT 'NONE',driver_id BIGINT UNSIGNED NULL,offer_expires_at DATETIME NULL,decision_deadline_at DATETIME NULL,created_at DATETIME NOT NULL,KEY registration_id (registration_id),KEY event_queue (event_id,state,created_at),KEY driver_seats (driver_id,state,offer_expires_at)) ENGINE=InnoDB");
 foreach([42,43]as$id){
- check(false!==$wpdb->query("INSERT INTO wp_mi_registrations (id,order_code,event_id,status,buyer_first_name,buyer_last_name,buyer_email,buyer_phone,total_qty,total_cents,initial_due_cents,idempotency_key,created_at,snapshot_json) VALUES ($id,'TEST$id',$id,'CONFIRMED','Test','Locale','','',1,100,100,'key$id',NOW(),'{}')"),$wpdb->last_error);
+ $status=42===$id?'TRAVEL_PENDING':'CONFIRMED';
+ check(false!==$wpdb->query("INSERT INTO wp_mi_registrations (id,order_code,event_id,status,buyer_first_name,buyer_last_name,buyer_email,buyer_phone,total_qty,total_cents,initial_due_cents,idempotency_key,created_at,snapshot_json) VALUES ($id,'TEST$id',$id,'$status','Test','Locale','person@example.invalid','',1,100,100,'key$id',NOW(),'{}')"),$wpdb->last_error);
  $wpdb->query("INSERT INTO wp_mi_participants (id,registration_id,first_name,last_name,extra_json) VALUES ($id,$id,'Test','Persona','{}')");
+ $wpdb->query("INSERT INTO wp_mi_travel (participant_id,registration_id,event_id,mode,created_at) VALUES ($id,$id,$id,'OWN',NOW())");
  $wpdb->query("INSERT INTO wp_mi_payments (id,registration_id,effective_at,amount_cents,payment_source,created_at) VALUES ($id,$id,NOW(),100,'CASH',NOW())");
  $wpdb->query("INSERT INTO wp_mi_rooms VALUES ($id,'A','Camera',2)");
  $wpdb->query("INSERT INTO wp_mi_email_outbox (registration_id,recipient,template_type,payload_json,status,created_at) VALUES (0,'test@example.invalid','EVENT_MANAGER_READY','{\"event_id\":$id}','PREVIEW',NOW())");
@@ -54,9 +57,10 @@ $wpdb->query("UPDATE wp_mi_registrations SET buyer_email='person@example.invalid
 $allowed=false;check(is_wp_error(MI_Event_Deletion::begin(42,$preview['fingerprint'],$request,'trash','Evento 42',true)),'Permissions bypassed');$allowed=true;
 $wpdb->query('UPDATE wp_mi_payments SET amount_cents=200 WHERE id=42');
 check(is_wp_error(MI_Event_Deletion::begin(42,$preview['fingerprint'],$request,'trash','Evento 42',true)),'Stale preview accepted');
+$posts[42]->post_title='Evento A &amp; B all&#8217;Abbazia';
 $preview=MI_Event_Deletion::preview(42);
 check(is_wp_error(MI_Event_Deletion::begin(42,$preview['fingerprint'],$request,'trash','Wrong title',true)),'Wrong title accepted');
-check(!is_wp_error(MI_Event_Deletion::begin(42,$preview['fingerprint'],$request,'trash','Evento 42',true)),'Cannot start');
+check(!is_wp_error(MI_Event_Deletion::begin(42,$preview['fingerprint'],$request,'trash','Evento A & B all’Abbazia',true)),'Cannot confirm decoded title');
 check(is_wp_error(MI_Event_Deletion::enter(42)),'Writes allowed after deletion began');
 $worker_command=[PHP_BINARY];
 if(PHP_OS_FAMILY==='Windows')$worker_command=array_merge($worker_command,['-n','-d','extension_dir='.dirname(PHP_BINARY).'/ext','-d','extension=mysqli']);
@@ -70,7 +74,7 @@ check((int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_participants')===2,'SQL ro
 $calls=MI_Workspace_Client::$calls;
 $result=MI_Event_Deletion::advance(42);check(!is_wp_error($result)&&$result['stage']==='done','Retry did not finish');
 check(MI_Workspace_Client::$calls===$calls,'Repeated successful Google phase');
-foreach(['registrations','participants','payments','rooms']as$table)check((int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_'.$table)===1,'Wrong cleanup '.$table);
+foreach(['registrations','participants','payments','rooms','travel']as$table)check((int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_'.$table)===1,'Wrong cleanup '.$table);
 $notice=$wpdb->get_row("SELECT * FROM wp_mi_email_outbox WHERE template_type='EVENT_DELETED_NOTICE'",ARRAY_A);
 check($notice&&$notice['status']==='TEST_PENDING'&&(int)$notice['registration_id']===0,'Avviso eliminato o modalità errata');
 check(str_contains($notice['payload_json'],'office@example.invalid'),'Contatto assente');

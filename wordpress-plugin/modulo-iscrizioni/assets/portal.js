@@ -82,9 +82,17 @@ document.addEventListener('DOMContentLoaded', () => {
         option.hidden = foreign;
       });
       if (select.selectedOptions[0] && select.selectedOptions[0].disabled) select.value = '';
-      select.required = Array.from(select.options).some(option => option.value && option.dataset.group === group.value);
+      const available = Array.from(select.options).filter(option => option.value && !option.disabled);
+      if (!select.value && available.length === 1) select.value = available[0].value;
+      select.required = available.length > 0;
+      select.disabled = !available.length;
+      const panel = select.closest('[data-mi-event-group-link-panel]');
+      if (panel) panel.hidden = !available.length;
+      const address = panel?.querySelector('[data-mi-event-group-link-address]');
+      if (address) address.textContent = select.selectedOptions[0]?.dataset.address || '';
     };
     group.addEventListener('change', refresh);
+    select.addEventListener('change', refresh);
     refresh();
   });
   // Sposta la navigazione esistente e i relativi collegamenti autorizzati, senza duplicare le azioni.
@@ -128,6 +136,19 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   const form = document.querySelector('.mi-event-wizard');
   if (form) {
+    form.querySelectorAll('.mi-custom-question').forEach((row) => {
+      const type = row.querySelector('select[name="custom_question_type[]"]');
+      const options = row.querySelector('[data-mi-custom-question-options]');
+      const input = options?.querySelector('textarea');
+      if (!type || !options || !input) return;
+      const updateOptions = () => {
+        const enabled = type.value === 'select';
+        options.hidden = !enabled;
+        input.disabled = !enabled;
+      };
+      type.addEventListener('change', updateOptions);
+      updateOptions();
+    });
     const steps = [...form.querySelectorAll('.mi-wizard-step')];
     const back = form.querySelector('[data-mi-back]');
     const next = form.querySelector('[data-mi-next]');
@@ -218,7 +239,16 @@ document.addEventListener('DOMContentLoaded', () => {
 		const multipleBooking = form.querySelector('[name="booking_limit_mode"]:checked')?.value === 'MULTIPLE';
 		const bookingLimit = multipleBooking ? value('max_per_order') : '1';
         const review = form.querySelector('[data-mi-review]');
-		if (review) review.innerHTML = `<strong>${value('title')}</strong><span>Inizio: ${value('starts_at')}</span><span>Chiusura iscrizioni: ${value('closes_at')}</span><span>Posti: ${value('capacity')}</span><span>Massimo per prenotazione: ${bookingLimit}</span>`;
+		if (review) {
+		  const transports = [form.querySelector('[data-mi-bus-enabled]')?.checked ? 'Pullman' : '', form.querySelector('[name="travel_enabled"]')?.checked ? 'Passaggi condivisi in auto' : ''].filter(Boolean);
+		  const category = form.querySelector('[data-mi-event-group-link]');
+		  const lines = [value('title'), `Inizio: ${value('starts_at')}`, `Chiusura iscrizioni: ${effectiveClosingText()}`, `Posti all’evento: ${value('capacity')}`, `Massimo per prenotazione: ${bookingLimit}`, `Spostamenti: ${transports.join(' e ') || 'Organizzazione autonoma'}`, `Lista d’attesa per partecipare all’evento: ${form.querySelector('[data-mi-waitlist]')?.checked ? 'attiva' : 'non attiva'}`];
+		  const pricingChoice = form.querySelector('[data-mi-pricing]');
+		  if (pricingChoice) lines.push(`Quote: ${pricingChoice.selectedOptions[0].textContent.trim()}`);
+		  if (form.querySelector('[data-mi-bus-enabled]')?.checked) lines.push(pricingChoice?.value === 'CALCULATED' ? 'Pullman: si applicano i supplementi delle tratte scelte.' : pricingChoice?.value === 'FIXED' ? 'Pullman compreso nella quota uguale per tutti, senza supplementi.' : 'Il modulo non calcola quote per il pullman.');
+		  if (category?.value && !category.disabled) lines.push(`Link del gruppo: ${category.selectedOptions[0].textContent.trim()}`, category.selectedOptions[0].dataset.address || '');
+		  review.replaceChildren(...lines.map((text, lineIndex) => { const node = document.createElement(lineIndex ? 'span' : 'strong'); node.textContent = text; return node; }));
+		}
 		renderConfirmationPreview();
       }
     };
@@ -258,6 +288,21 @@ document.addEventListener('DOMContentLoaded', () => {
       show();
     }, true);
     save?.addEventListener('click', () => validateWizardRelations());
+    const linkChoices = form.querySelectorAll('[name="event_link_mode"]');
+    const updateLinkChoice = () => {
+      const permanent = form.querySelector('[name="event_link_mode"]:checked')?.value === 'PERMANENT';
+      const select = form.querySelector('[data-mi-event-group-link]');
+      const hasLinks = select && Array.from(select.options).some(o => o.value && !o.disabled);
+      const panel = form.querySelector('[data-mi-event-group-link-panel]');
+      if (panel) panel.hidden = !permanent;
+      if (select) { select.disabled = !permanent || !hasLinks; select.required = permanent; select.setCustomValidity(permanent && !hasLinks ? 'Configura prima un link permanente nella sezione Gruppi.' : ''); if(permanent && !hasLinks) select.disabled=false; }
+      const individual = form.querySelector('[data-mi-individual-link]');
+      if (individual) { individual.hidden = permanent; individual.querySelector('input').disabled = permanent; }
+    };
+    linkChoices.forEach(choice => choice.addEventListener('change', () => { updateLinkChoice(); show(); }));
+    form.querySelector('[data-mi-event-group-link]')?.addEventListener('change', show);
+    form.querySelector('[name="activity_id"]')?.addEventListener('change', updateLinkChoice);
+    updateLinkChoice();
     const pricing = form.querySelector('[data-mi-pricing]');
 	const waitlist = form.querySelector('[data-mi-waitlist]');
 	const waitlistOffer = form.querySelector('[data-mi-waitlist-offer]');
@@ -324,7 +369,8 @@ document.addEventListener('DOMContentLoaded', () => {
 	  const price = service.closest('.mi-service-fee')?.querySelector('input[name^="service_price"]');
 	  const updateService = () => {
 		if (!price) return;
-		const active = pricing?.value === 'CALCULATED' && service.checked;
+        price.closest('label').hidden = !service.checked;
+		const active = pricing?.value === 'CALCULATED' && service.checked && Boolean(form.querySelector('[data-mi-accessory-enabled]')?.checked);
 		price.disabled = !active;
 		price.required = active;
 		if (!service.checked) price.value = '';
@@ -336,13 +382,59 @@ document.addEventListener('DOMContentLoaded', () => {
 	const busRoutes = form.querySelector('[data-mi-bus-routes]');
 	const busRoutesList = form.querySelector('[data-mi-bus-routes-list]');
 	const busRouteTemplate = form.querySelector('[data-mi-bus-route-template]');
+	const busEnabled = form.querySelector('[data-mi-bus-enabled]');
+	const travelEnabled = form.querySelector('[name="travel_enabled"]');
+	const transportNone = form.querySelector('[data-mi-transport-none]');
 	const updateBusRoutes = () => {
 	  const active = pricing?.value === 'CALCULATED';
 	  const extra = form.querySelector('[data-mi-extra-services]');
 	  if(extra){extra.hidden=!active;extra.querySelectorAll('input,select').forEach(input=>{input.disabled=!active;});}
-	  if (busRoutes) busRoutes.hidden = !active;
-	  busRoutes?.querySelectorAll('input').forEach((input) => { input.disabled = !active; });
+	  const enabled = Boolean(busEnabled?.checked);
+	  if (busRoutes) busRoutes.hidden = !enabled;
+	  busRoutes?.querySelectorAll('input').forEach((input) => {
+	    const isPrice = input.name === 'bus_route_price[]';
+	    input.disabled = !enabled;
+	    if (isPrice) input.required = enabled && active;
+	  });
+	  form.querySelectorAll('[data-mi-bus-price-help]').forEach(note => {
+	    note.hidden = !enabled;
+	    note.textContent = active ? 'La quota di ogni tratta si aggiunge ai servizi scelti. Puoi indicare zero.' : pricing?.value === 'FIXED' ? 'Il pullman è compreso nella quota uguale per tutti, senza supplementi per tratta.' : 'Le tratte restano selezionabili; il modulo non calcola quote per il pullman.';
+	  });
 	};
+	const addBusRoute = () => {
+	  if (!busRouteTemplate || !busRoutesList || busRoutesList.children.length >= 12) return null;
+	  const row = busRouteTemplate.content.firstElementChild.cloneNode(true);
+	  row.querySelector('input[name="bus_route_price[]"]').value = '0,00';
+	  busRoutesList.append(row);
+	  updateBusRoutes();
+	  return row;
+	};
+	const updateTransport = () => {
+	  const enabled = Boolean(travelEnabled?.checked);
+	  const details = form.querySelector('[data-mi-travel-settings-details]');
+	  const priceMode = form.querySelector('[name="travel_price_mode"]');
+	  if (details) {
+	    details.hidden = !enabled;
+	    details.querySelectorAll('input, select, textarea').forEach(input => { input.disabled = !enabled || (input.name === 'travel_price' && priceMode?.value !== 'FIXED'); });
+	    const price = details.querySelector('[name="travel_price"]');
+	    if (price) { price.closest('label').hidden = priceMode?.value !== 'FIXED'; price.required = enabled && priceMode?.value === 'FIXED'; }
+	    const deadline = details.querySelector('[name="travel_deadline"]');
+	    if (deadline) deadline.required = enabled;
+	  }
+	  form.querySelectorAll('[data-mi-travel-waitlist-notice]').forEach(note => { note.hidden = !enabled; });
+	  if (transportNone && (busEnabled?.checked || enabled)) transportNone.checked = false;
+	  if (transportNone) transportNone.required = !busEnabled?.checked && !enabled;
+	  if (busEnabled?.checked && !busRoutesList?.children.length) addBusRoute();
+	  updateBusRoutes();
+	};
+	transportNone?.addEventListener('change', () => {
+	  if (transportNone.checked) { if (busEnabled) busEnabled.checked = false; if (travelEnabled) travelEnabled.checked = false; }
+	  updateTransport();
+	});
+	busEnabled?.addEventListener('change', updateTransport);
+	travelEnabled?.addEventListener('change', updateTransport);
+	form.querySelector('[name="travel_price_mode"]')?.addEventListener('change', updateTransport);
+	updateTransport();
 	form.querySelector('[data-mi-add-extra]')?.addEventListener('click',()=>{
 	  const list=form.querySelector('[data-mi-extra-list]'),template=form.querySelector('[data-mi-extra-template]');
 	  if(!list||!template||list.children.length>=20)return;
@@ -350,16 +442,11 @@ document.addEventListener('DOMContentLoaded', () => {
 	});
 	form.querySelector('[data-mi-extra-list]')?.addEventListener('click',event=>{event.target.closest('[data-mi-remove-extra]')?.closest('.mi-extra-service')?.remove();});
 	form.querySelector('[data-mi-add-bus-route]')?.addEventListener('click', () => {
-	  if (!busRouteTemplate || !busRoutesList) return;
-	  if (busRoutesList.children.length >= 12) return;
-	  const row = busRouteTemplate.content.firstElementChild.cloneNode(true);
-	  busRoutesList.append(row);
-	  row.querySelector('input[name="bus_route_price[]"]')?.setAttribute('required', '');
-	  row.querySelector('input[name="bus_route_code[]"]')?.focus();
+	  addBusRoute()?.querySelector('input[name="bus_route_code[]"]')?.focus();
 	});
 	busRoutesList?.addEventListener('click', (event) => {
 	  const remove = event.target.closest('[data-mi-remove-bus-route]');
-	  if (remove) remove.closest('.mi-bus-route')?.remove();
+	  if (remove) { remove.closest('.mi-bus-route')?.remove(); updateTransport(); }
 	});
     form.querySelectorAll('[data-mi-required]').forEach((required) => required.addEventListener('change', () => {
       const enabled = form.querySelector(`[data-mi-field="${required.dataset.miRequired}"]`);
@@ -376,9 +463,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const pricingLabel = pricing?.closest('label');
     const serviceFees = [...form.querySelectorAll('.mi-service-fee')];
     const serviceIntroduction = serviceFees.length ? [serviceFees[0].previousElementSibling, serviceFees[0].previousElementSibling?.previousElementSibling] : [];
-	const servicePricingNodes = [overnight?.closest('label'), rooms, ...serviceIntroduction, ...serviceFees, busRoutes, participationFee].filter(Boolean);
+	const servicePricingNodes = [overnight?.closest('label'), rooms, ...serviceIntroduction, form.querySelector('[data-mi-accessory-enabled]')?.closest('label'), participationFee].filter(Boolean);
     if (pricingLabel && overnight?.closest('label')) {
-	  pricingLabel.firstChild.textContent = 'Come sarà l’evento?';
+	  pricingLabel.firstChild.textContent = 'Come sono determinate le quote?';
 	  const step = overnight.closest('.mi-wizard-step');
 	  step?.insertBefore(pricingLabel, overnight.closest('label'));
 	  const pricingHelp = form.querySelector('#mi-pricing-help');
@@ -451,6 +538,9 @@ document.addEventListener('DOMContentLoaded', () => {
 	  servicePricingNodes.forEach((node) => { node.hidden = pricing.value !== 'CALCULATED'; });
 	  updateOvernight();
 	  serviceUpdaters.forEach((updateService) => updateService());
+      const accessory = form.querySelector('[data-mi-accessory-details]');
+      if (accessory) accessory.hidden = pricing.value !== 'CALCULATED' || !form.querySelector('[data-mi-accessory-enabled]')?.checked;
+      form.querySelectorAll('[data-mi-service-fee]').forEach(input => { input.disabled = pricing.value !== 'CALCULATED' || !form.querySelector('[data-mi-accessory-enabled]')?.checked; });
 	  updateBusRoutes();
 	  updateEconomic();
 	  const freeEvent = pricing.value === 'ZERO';
@@ -466,6 +556,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	  renderConfirmationPreview();
 	};
     pricing?.addEventListener('change', updatePricing);
+    form.querySelector('[data-mi-accessory-enabled]')?.addEventListener('change', updatePricing);
     economic?.addEventListener('change', updateEconomic);
 	form.addEventListener('input', (event) => { if (event.target.matches('input[name="fixed_price"],input[name="participation_price"],input[name^="accommodation_price["],input[name^="service_price["],input[name="bus_route_price[]"],input[name="extra_service_price[]"]')) updateEconomic(); });
 	form.addEventListener('change', (event) => { if (event.target.matches('input[name="fixed_price"],input[name="participation_price"],input[name^="accommodation_price["],input[name^="service_price["],input[name="bus_route_price[]"],input[name="extra_service_price[]"],input[name="overnight"],[data-mi-accommodation],[data-mi-service-fee]')) updateEconomic(); });
@@ -474,7 +565,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const opensAt = form.querySelector('[data-mi-opens]');
     const closesAt = form.querySelector('[data-mi-closes]');
     const startsAt = form.querySelector('[data-mi-starts]');
-    const dateFields = [opensAt, closesAt, startsAt].filter(Boolean);
+    const dateFields = [opensAt, closesAt, startsAt, form.querySelector('[name="travel_deadline"]')].filter(Boolean);
     const lateRegistrationNotice = form.querySelector('[data-mi-late-registration-notice]');
     if (lateRegistrationNotice) lateRegistrationNotice.hidden = true;
     const formatItalianDateInput = (field) => {
@@ -519,10 +610,22 @@ document.addEventListener('DOMContentLoaded', () => {
       latest.setFullYear(latest.getFullYear() + 10);
       field.setCustomValidity(date > latest ? 'La data dell’evento non può essere oltre dieci anni nel futuro.' : '');
     };
+    const effectiveClosingDate = () => {
+      if (closesAt?.value) return parseItalianDate(closesAt.value);
+      const start = parseItalianDate(startsAt?.value || '');
+      if (start) start.setMinutes(start.getMinutes() - 30);
+      return start;
+    };
+    const effectiveClosingText = () => {
+      const date = effectiveClosingDate();
+      if (!date) return 'Da definire';
+      const pad = value => String(value).padStart(2, '0');
+      return pad(date.getDate())+'/'+pad(date.getMonth()+1)+'/'+date.getFullYear()+' '+pad(date.getHours())+':'+pad(date.getMinutes())+(closesAt?.value ? '' : ' (automatica)');
+    };
     const updateDateLimits = () => {
       dateFields.forEach((field) => validateFourDigitYear(field));
       const opening = parseItalianDate(opensAt?.value || '');
-      const closing = parseItalianDate(closesAt?.value || '');
+      const closing = effectiveClosingDate();
       const start = parseItalianDate(startsAt?.value || '');
       if (opening && closing && closing <= opening) closesAt.setCustomValidity('La chiusura deve essere successiva all’apertura delle iscrizioni.');
       if (lateRegistrationNotice) lateRegistrationNotice.hidden = !(closing && start && start < closing);
@@ -721,6 +824,45 @@ document.addEventListener('DOMContentLoaded', () => {
 		updateSubmitVisibility();
 	});
 	bindQuickEventForms();
+
+	const descriptionField = document.querySelector('.mi-event-wizard textarea[name="description"]');
+	if (descriptionField) {
+	  const applyDescriptionBold = () => {
+		const value = descriptionField.value;
+		const start = descriptionField.selectionStart;
+		const end = descriptionField.selectionEnd;
+		const before = value.slice(0, start);
+		const selected = value.slice(start, end);
+		const after = value.slice(end);
+		let nextValue; let selectionStart; let selectionEnd;
+		if (start === end) {
+		  nextValue = before + '****' + after;
+		  selectionStart = selectionEnd = start + 2;
+		} else if (before.endsWith('**') && after.startsWith('**')) {
+		  nextValue = before.slice(0, -2) + selected + after.slice(2);
+		  selectionStart = start - 2; selectionEnd = end - 2;
+		} else if (selected.startsWith('**') && selected.endsWith('**')) {
+		  nextValue = before + selected.slice(2, -2) + after;
+		  selectionStart = start; selectionEnd = end - 4;
+		} else {
+		  nextValue = before + '**' + selected + '**' + after;
+		  selectionStart = start + 2; selectionEnd = end + 2;
+		}
+		if (nextValue.length > descriptionField.maxLength) {
+		  const caption = descriptionField.closest('.mi-wizard-step')?.querySelector('.mi-description-format small');
+		  if (caption) { const original = caption.textContent; caption.textContent = 'Non c’è spazio sufficiente per aggiungere il grassetto.'; window.setTimeout(() => { caption.textContent = original; }, 1800); }
+		  return;
+		}
+		descriptionField.value = nextValue;
+		descriptionField.focus();
+		descriptionField.setSelectionRange(selectionStart, selectionEnd);
+		descriptionField.dispatchEvent(new Event('input', { bubbles: true }));
+	  };
+	  document.querySelectorAll('.mi-event-wizard [data-mi-description-bold]').forEach((button) => button.addEventListener('click', applyDescriptionBold));
+	  descriptionField.addEventListener('keydown', (event) => {
+		if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'b') { event.preventDefault(); applyDescriptionBold(); }
+	  });
+	}
 
 	document.addEventListener('click', (event) => {
 	  const opener = event.target.closest('[data-mi-cancel-dialog-open]');
@@ -1111,3 +1253,44 @@ document.querySelectorAll('[name="mi_annual_attendance_report"]').forEach(toggle
  const update=()=>fields.forEach(field=>{field.disabled=!toggle.checked;field.required=toggle.checked;});
  toggle.addEventListener('change',update);update();
 });
+
+// Il generatore QR amministrativo arriva solo quando viene aperta una scheda
+// che contiene il controllo, anche se quella scheda è stata caricata via AJAX.
+(() => {
+  let loadPromise = null;
+  const loadScript = (source) => new Promise((resolve, reject) => {
+    if (!source) { reject(new Error('Sorgente QR non disponibile.')); return; }
+    const script = document.createElement('script');
+    script.src = source;
+    script.async = true;
+    script.addEventListener('load', resolve, { once: true });
+    script.addEventListener('error', () => reject(new Error('Caricamento QR non riuscito.')), { once: true });
+    document.head.append(script);
+  });
+  const scan = () => {
+    const root = document.querySelector('[data-mi-event-qr]');
+    if (!root || loadPromise) return;
+    loadPromise = (async () => {
+      if (typeof globalThis.qrcode !== 'function') await loadScript(root.dataset.miQrGeneratorSrc || '');
+      await loadScript(root.dataset.miEventQrSrc || '');
+    })().catch((error) => {
+      loadPromise = null;
+      const status = root.querySelector('[data-mi-qr-status]');
+      const button = root.querySelector('[data-mi-qr-download]');
+      if (status) status.textContent = error instanceof Error ? error.message : 'Il controllo QR non è disponibile.';
+      if (button) {
+        button.disabled = false;
+        button.textContent = 'Riprova a caricare il QR';
+        button.addEventListener('click', () => {
+          loadPromise = null;
+          button.disabled = true;
+          button.textContent = 'Caricamento QR…';
+          scan();
+        }, { once: true });
+      }
+    });
+  };
+  const observer = new MutationObserver(scan);
+  if (document.body) observer.observe(document.body, { childList: true, subtree: true });
+  scan();
+})();

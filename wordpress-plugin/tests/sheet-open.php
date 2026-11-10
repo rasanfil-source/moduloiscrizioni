@@ -2,8 +2,10 @@
 define( 'ABSPATH', __DIR__ );
 
 class WP_Error {
-	public function __construct( public $code, private $message ) {}
+	public function __construct( public $code, private $message, private $data = null ) {}
 	public function get_error_message() { return $this->message; }
+	public function get_error_code() { return $this->code; }
+	public function get_error_data() { return $this->data; }
 }
 function is_wp_error( $value ) { return $value instanceof WP_Error; }
 function check( $condition, $message ) { if ( ! $condition ) throw new RuntimeException( $message ); }
@@ -117,3 +119,18 @@ check( MI_Sheet_Open::step( 42 )['ready'], 'Large projection did not open.' );
 check( 2 === count( $GLOBALS['wpdb']->queries ), 'Receipt used one UPDATE per registration.' );
 check( 150 === count( array_filter( $GLOBALS['wpdb']->rows, static function ( $row ) { return 'SYNCED' === $row['workspace_status']; } ) ), 'Batched receipt missed registrations.' );
 echo "PASS: proiezione diretta, ricevuta accorpata, identità del foglio, modifiche pendenti e concorrenza.\n";
+
+$GLOBALS['wpdb']->rows[0]['workspace_status']='PENDING';
+foreach ([new WP_Error('mi_workspace_busy','Lock occupato'),new WP_Error('mi_workspace_rejected','Google occupato',['remote_code'=>'WORKSPACE_BUSY']),new WP_Error('mi_workspace_rejected','Evento occupato',['remote_code'=>'EVENT_BUSY'])] as $busy) {
+ $GLOBALS['remote']=$busy;
+ $waiting=MI_Sheet_Open::step(42);
+ check(!is_wp_error($waiting) && !$waiting['ready'] && $waiting['retry_after']===3 && !empty($waiting['token']),'Lock occupato trasformato in errore');
+ MI_Sheet_Open::refresh_background(42);
+ check(empty($GLOBALS['transients']['mi_sheet_failures_42']),'Lock occupato incrementa il backoff');
+ $next=wp_next_scheduled('mi_refresh_event_sheet',[42]);
+ check($next>=time()+1 && $next<=time()+4,'Recupero lock non riprogrammato a breve');
+}
+$GLOBALS['remote']=new WP_Error('mi_workspace_rejected','Errore effettivo',['remote_code'=>'INVALID_SIGNATURE']);
+check(is_wp_error(MI_Sheet_Open::step(42)),'Errore effettivo trattato come attesa');
+unset($GLOBALS['remote']);
+echo "PASS: lock locale/remoto in attesa breve senza backoff; errori reali conservati.\n";

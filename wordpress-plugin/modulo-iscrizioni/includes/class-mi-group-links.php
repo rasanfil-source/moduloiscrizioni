@@ -41,7 +41,8 @@ final class MI_Group_Links {
 			$original = (string) ( $row['original'] ?? '' );
 			if ( $original && ( $original !== $slug || ! isset( $existing[ $original ] ) ) ) return new WP_Error( 'mi_links_immutable', 'Un indirizzo già salvato resta permanente. Aggiungi un nuovo link per usare un altro indirizzo.' );
 			$reserved = array( 'v', 'wp-admin', 'wp-login', 'wp-json', 'wp-content', 'wp-includes', 'feed', 'comments', 'author', 'category', 'tag', 'search', 'page', 'embed', 'attachment', 'index', 'xmlrpc', 'robots', 'sitemap', 'favicon', 'wp-sitemap' );
-			if ( in_array( $slug, $reserved, true ) || 0 === strpos( $slug, 'wp-' ) || get_page_by_path( $slug, OBJECT, get_post_types( array( 'public' => true ) ) ) ) return new WP_Error( 'mi_links_reserved', 'L’indirizzo /' . $slug . ' è riservato o già utilizzato da una pagina del sito.' );
+			$page_collision = ! isset( $existing[ $slug ] ) && get_page_by_path( $slug, OBJECT, get_post_types( array( 'public' => true ) ) );
+			if ( in_array( $slug, $reserved, true ) || 0 === strpos( $slug, 'wp-' ) || $page_collision ) return new WP_Error( 'mi_links_reserved', 'L’indirizzo /' . $slug . ' è riservato o già utilizzato da una pagina del sito.' );
 			$owner = absint( get_option( 'mi_group_link_' . $slug, 0 ) );
 			if ( $owner && $owner !== (int) $group_id ) return new WP_Error( 'mi_links_taken', 'L’indirizzo /' . $slug . ' è già riservato a un altro gruppo.' );
 			$links[ $slug ] = array(
@@ -171,7 +172,7 @@ final class MI_Group_Links {
 	}
 
 	public static function event_field( $groups, $selected ) { ?>
-		<label>Categoria / link permanente<select name="group_link" data-mi-event-group-link><option value="">Scegli una categoria, oppure nessuna se il gruppo non usa link permanenti</option><?php foreach ( $groups as $group ) : foreach ( self::links( $group->ID ) as $slug => $link ) : if ( empty( $link['enabled'] ) && $slug !== $selected ) continue; ?><option value="<?php echo esc_attr( $slug ); ?>" data-group="<?php echo esc_attr( $group->ID ); ?>" <?php selected( $slug, $selected ); ?>><?php echo esc_html( $link['label'] . ' — /' . $slug . ( empty( $link['enabled'] ) ? ' (disattivato)' : '' ) ); ?></option><?php endforeach; endforeach; ?></select><small>Se il gruppo ha link permanenti, scegli quello corretto: solo gli eventi associati appariranno su quel link. Il link individuale dell’evento resta disponibile.</small></label>
+		<div data-mi-event-group-link-panel><label>Quale link permanente del gruppo vuoi usare?<select name="group_link" data-mi-event-group-link aria-describedby="mi-event-group-link-help mi-event-group-link-address"><option value="">Scegli una categoria del gruppo</option><?php foreach ( $groups as $group ) : foreach ( self::links( $group->ID ) as $slug => $link ) : if ( empty( $link['enabled'] ) && $slug !== $selected ) continue; ?><option value="<?php echo esc_attr( $slug ); ?>" data-group="<?php echo esc_attr( $group->ID ); ?>" data-address="<?php echo esc_url( home_url( '/' . $slug ) ); ?>" <?php selected( $slug, $selected ); ?>><?php echo esc_html( $link['label'] . ( empty( $link['enabled'] ) ? ' (disattivato)' : '' ) ); ?></option><?php endforeach; endforeach; ?></select></label><p id="mi-event-group-link-help" class="mi-portal-muted">Alla pubblicazione l’evento sarà associato alla categoria scelta. Il link del gruppo apre il prossimo evento pubblicato della categoria; resta disponibile anche il link individuale dell’evento.</p><p id="mi-event-group-link-address" class="mi-portal-muted" data-mi-event-group-link-address></p></div>
 		<?php
 	}
 }

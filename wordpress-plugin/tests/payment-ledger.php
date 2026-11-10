@@ -25,6 +25,24 @@ rejected($base,['request_id'=>'wp_7_------------------------------------']);
 rejected($base,['metodo'=>'ALTRO']);
 rejected($base,['tipo'=>'ALTRO']);
 rejected($base,['nota'=>'4111 1111 1111 1111']);
+rejected($base,['nota'=>'4111111111111111']);
+rejected($base,['nota'=>'378282246310005']);
+// Riferimenti sintetici con Luhn valido: non sono carte e non vanno troncati.
+function audit_numeric_reference($length) {
+ $prefix='1'.str_repeat('0',$length-2);
+ for($checkDigit=0;$checkDigit<10;$checkDigit++) {
+  $candidate=$prefix.$checkDigit;$sum=0;$double=false;
+  for($i=strlen($candidate)-1;$i>=0;$i--){$n=(int)$candidate[$i];if($double){$n*=2;if($n>9)$n-=9;}$sum+=$n;$double=!$double;}
+  if($sum%10===0)return $candidate;
+ }
+ throw new RuntimeException('Riferimento sintetico non generato');
+}
+foreach([13,17,19,20,27] as $length) {
+ $reference=audit_numeric_reference($length);
+ check(MI_Payment_Ledger::normalize(array_replace($base,['riferimento'=>$reference]))['external_reference']===$reference,'Riferimento numerico respinto');
+}
+$reference='IT'.'00'.'A'.audit_numeric_reference(22);
+check(MI_Payment_Ledger::normalize(array_replace($base,['riferimento'=>$reference]))['external_reference']===$reference,'Sottosequenza IBAN scambiata per carta');
 echo "Controlli PHP del registro pagamenti superati.\n";
 
 define('ARRAY_A','ARRAY_A');

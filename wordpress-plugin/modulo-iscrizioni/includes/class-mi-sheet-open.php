@@ -44,7 +44,13 @@ final class MI_Sheet_Open {
 				delete_transient( 'mi_sheet_failures_' . $event_id );
 				delete_transient( 'mi_sheet_worker_' . $event_id );
 				wp_clear_scheduled_hook( 'mi_refresh_event_sheet', array( $event_id ) );
-			} else set_transient( 'mi_sheet_worker_' . $event_id, $result['token'], 600 );
+			} else {
+				set_transient( 'mi_sheet_worker_' . $event_id, $result['token'], 600 );
+				if ( ! empty( $result['retry_after'] ) ) {
+					wp_clear_scheduled_hook( 'mi_refresh_event_sheet', array( $event_id ) );
+					wp_schedule_single_event( time() + max( 1, (int) $result['retry_after'] ), 'mi_refresh_event_sheet', array( $event_id ) );
+				}
+			}
 		} finally { self::$working = false; }
 	}
 	public static function url( $event_id ) { return add_query_arg( 'mi_open_sheet', absint( $event_id ), home_url( '/' ) ); }
@@ -109,6 +115,10 @@ final class MI_Sheet_Open {
 			$request = MI_Event_Projection::request_payload( $event_id, $background, $current );
 			if ( ! hash_equals( $current['fingerprint'], $request['snapshot']['fingerprint'] ) ) throw new RuntimeException( 'I dati sono cambiati durante l’apertura. Riprova.' );
 			$result = MI_Workspace_Client::request( 'PROIETTA_EVENTO', $request['payload'] );
+			if ( is_wp_error( $result ) ) {
+				$error_data = $result->get_error_data();
+				if ( 'mi_workspace_busy' === $result->get_error_code() || in_array( $error_data['remote_code'] ?? '', array( 'WORKSPACE_BUSY', 'EVENT_BUSY' ), true ) ) $result = array( 'busy' => true );
+			}
 			if ( is_wp_error( $result ) ) throw new RuntimeException( $result->get_error_message() );
 			if ( ! empty( $result['busy'] ) ) {
 				$session['busy_since'] = $session['busy_since'] ?? time();

@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class MI_Activator {
-	const SCHEMA_REVISION = 2;
+	const SCHEMA_REVISION = 6;
 	public static function activate() {
 		self::create_tables();
 		self::add_roles_and_capabilities();
@@ -15,6 +15,9 @@ final class MI_Activator {
 		wp_unschedule_hook( 'mi_sync_workspace_pending' );
 		wp_unschedule_hook( 'mi_sync_workspace_registration' );
 		wp_unschedule_hook( 'mi_spedisci_email_in_coda' );
+		wp_unschedule_hook( 'mi_prepara_comunicazioni' );
+		wp_unschedule_hook( 'mi_web_push_registration' );
+		wp_unschedule_hook( 'mi_riprova_notifica_pubblicazione' );
 		wp_unschedule_hook( 'mi_expire_registrations' );
 		wp_unschedule_hook( 'mi_pulisci_bozze_cestinate' );
 		wp_unschedule_hook( 'mi_organizza_fogli_evento' );
@@ -82,6 +85,7 @@ final class MI_Activator {
 		global $wpdb;
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
+		if ( class_exists( 'MI_Travel' ) ) MI_Travel::create_table();
 		$charset = $wpdb->get_charset_collate();
 		$registrations = $wpdb->prefix . 'mi_registrations';
 		$items = $wpdb->prefix . 'mi_registration_items';
@@ -182,6 +186,17 @@ final class MI_Activator {
 			KEY registration_id (registration_id),
 			KEY participant_status (registration_id,status),
 			KEY room_occupancy (room_code,status,registration_id)
+		) ENGINE=InnoDB {$charset};" );
+
+		$cancellation_tokens = $wpdb->prefix . 'mi_cancellation_tokens';
+		dbDelta( "CREATE TABLE {$cancellation_tokens} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			participant_id bigint(20) unsigned NOT NULL,
+			token_hash char(64) NOT NULL,
+			created_at datetime NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY token_hash (token_hash),
+			KEY participant_id (participant_id)
 		) ENGINE=InnoDB {$charset};" );
 
 		dbDelta( "CREATE TABLE {$counters} (
@@ -318,8 +333,26 @@ final class MI_Activator {
 		self::backfill_ticket_counters( $ticket_counters, $registrations, $items );
 		update_option( 'mi_db_version', MI_VERSION, false );
 		// Completa la migrazione degli indici prima di registrare lo schema come aggiornato.
-		$audit_index = $wpdb->get_results( "SHOW INDEX FROM {$registration_events} WHERE Key_name='type_actor'", ARRAY_A );
-		if ( ! $wpdb->last_error && array_column( (array) $audit_index, 'Column_name' ) === array( 'event_type', 'actor_label' ) ) update_option( 'mi_db_schema_revision', self::SCHEMA_REVISION, false );
+		if ( self::repair_audit_index( $registration_events ) ) update_option( 'mi_db_schema_revision', self::SCHEMA_REVISION, false );
+	}
+
+	/** dbDelta non sostituisce un indice omonimo con colonne differenti. */
+	private static function repair_audit_index( $table ) {
+		global $wpdb;
+		$read_columns = static function () use ( $wpdb, $table ) {
+			$rows = $wpdb->get_results( "SHOW INDEX FROM {$table} WHERE Key_name='type_actor'", ARRAY_A );
+			if ( $wpdb->last_error ) return null;
+			usort( $rows, static function ( $a, $b ) { return (int) $a['Seq_in_index'] <=> (int) $b['Seq_in_index']; } );
+			return array_column( $rows, 'Column_name' );
+		};
+		$expected = array( 'event_type', 'actor_label' );
+		$columns = $read_columns();
+		if ( null === $columns ) return false;
+		if ( $expected === $columns ) return true;
+		// Un solo ALTER: un errore non lascia intenzionalmente una tabella senza indice.
+		$drop = $columns ? 'DROP INDEX type_actor, ' : '';
+		if ( false === $wpdb->query( "ALTER TABLE {$table} {$drop}ADD INDEX type_actor (event_type,actor_label)" ) ) return false;
+		return $expected === $read_columns();
 	}
 
 	private static function backfill_ticket_counters( $ticket_counters, $registrations, $items ) {
@@ -329,7 +362,7 @@ final class MI_Activator {
 			$wpdb->prepare(
 				"INSERT INTO {$ticket_counters} (event_id, ticket_type_code, confirmed_count, waitlisted_count, updated_at)
 				 SELECT r.event_id, i.ticket_type_code,
-				 SUM(CASE WHEN r.status IN ('CONFIRMED','PENDING_PAYMENT','WAITLIST_OFFERED') AND r.capacity_released_at IS NULL THEN i.quantity ELSE 0 END),
+				 SUM(CASE WHEN r.status IN ('CONFIRMED','PENDING_PAYMENT','WAITLIST_OFFERED','TRAVEL_PENDING') AND r.capacity_released_at IS NULL THEN i.quantity ELSE 0 END),
 				 SUM(CASE WHEN r.status = 'WAITLISTED' AND r.capacity_released_at IS NULL THEN i.quantity ELSE 0 END), %s
 				 FROM {$items} i INNER JOIN {$registrations} r ON r.id = i.registration_id
 				 GROUP BY r.event_id, i.ticket_type_code

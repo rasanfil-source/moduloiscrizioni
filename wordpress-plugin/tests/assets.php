@@ -35,9 +35,10 @@ require MI_PLUGIN_DIR . 'includes/class-mi-shortcode.php';
 $post = new WP_Post();
 $enqueued_scripts = array();
 MI_Shortcode::maybe_enqueue_assets();
-verify_asset( array_keys( $enqueued_scripts ) === array( 'mi-core', 'mi-public' ) );
+verify_asset( array_keys( $enqueued_scripts ) === array( 'mi-core', 'mi-travel', 'mi-public' ) );
 verify_asset( $enqueued_scripts['mi-core']['deps'] === array() );
-verify_asset( $enqueued_scripts['mi-public']['deps'] === array( 'mi-core' ) );
+verify_asset( $enqueued_scripts['mi-travel']['deps'] === array() );
+verify_asset( $enqueued_scripts['mi-public']['deps'] === array( 'mi-core', 'mi-travel' ) );
 foreach ( $enqueued_scripts as $script ) {
 	verify_asset( $script['args']['in_footer'] === true && $script['args']['strategy'] === 'defer' );
 }

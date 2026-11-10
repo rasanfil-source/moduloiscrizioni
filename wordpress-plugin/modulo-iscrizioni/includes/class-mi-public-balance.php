@@ -124,8 +124,18 @@ final class MI_Public_Balance {
 		foreach ( $opts as $o ) if ( ! in_array( $o['code'], $editable_codes, true ) && ! empty( $o['quantity'] ) ) $locked[] = array( 'name' => $o['name'], 'accommodation' => MI_Option_Rules::is_accommodation( $definitions[$o['code']] ?? $o ), 'price' => (int) $o['unit_price_cents'] * (int) $o['quantity'] );
 		$editable_selected = 0; foreach ( $opts as $option ) if ( in_array( $option['code'] ?? '', $editable_codes, true ) ) $editable_selected += (int) ( $option['unit_price_cents'] ?? 0 ) * (int) ( $option['quantity'] ?? 0 );
 		$fixed = $managed ? (int) $individual['total'] - $editable_selected : 0;
-		$extra = self::decode( $p['extra_json'] ); $email = sanitize_email( $extra['email'] ?? $r['buyer_email'] );
+		$extra = self::decode( $p['extra_json'] ); $email = self::participant_email( $extra, $r['buyer_email'] ?? '' );
 		return array( 'success' => true, 'row' => $id, 'persona' => array( 'nome' => $p['first_name'], 'cognome' => $p['last_name'], 'email_masked' => self::masked_email( $email ), 'siglaAlloggio' => $p['room_code'], 'alloggio' => $p['room_code'], 'locked' => $locked, 'services' => $editable, 'fixed' => $fixed, 'paid' => $managed ? (int) $individual['paid'] : 0, 'deposit' => $managed && 'DEPOSIT_BALANCE' === $r['economic_mode'] ? (int) $individual['deposit'] : 0, 'managed' => $managed, 'shared' => count( $active ) > 1, 'token' => self::token( $event, $id ), 'version' => $b['version'] ) );
+	}
+	/** Risolve i nomi storici del campo email personale prima del recapito del referente. */
+	private static function participant_email( $extra, $fallback = '' ) {
+		$extra = is_array( $extra ) ? $extra : array();
+		foreach ( array( 'participant_email', 'email' ) as $key ) {
+			$email = sanitize_email( $extra[ $key ] ?? '' );
+			if ( is_email( $email ) ) return $email;
+		}
+		$fallback = sanitize_email( $fallback );
+		return is_email( $fallback ) ? $fallback : '';
 	}
 	private static function public_receipt( $receipt ) {
 		$receipt['email_masked'] = self::masked_email( $receipt['email'] ?? '' );
@@ -276,11 +286,13 @@ final class MI_Public_Balance {
 				$last_person = end( $people ); $selected = (int) $last_person['row'];
 				foreach ( $bundles as $bundle ) foreach ( $bundle['people'] as $registered ) if ( (int) $registered['id'] === $selected ) {
 					$extra = self::decode( $registered['extra_json'] );
-					$email = sanitize_email( $extra['email'] ?? '' );
-					if ( ! is_email( $email ) ) $email = sanitize_email( $bundle['registration']['buyer_email'] );
+					$email = self::participant_email( $extra, $bundle['registration']['buyer_email'] ?? '' );
 				}
-				if ( ! is_email( $email ) ) throw new InvalidArgumentException( 'Non è presente un’email valida nella prenotazione. Inseriscila per ricevere il riepilogo.' );
-				$receipt['email'] = $email;
+				if ( ! is_email( $email ) ) {
+					if ( ! $preview ) throw new InvalidArgumentException( 'Non è presente un’email valida nella prenotazione. Inseriscila per ricevere il riepilogo.' );
+				} else {
+					$receipt['email'] = $email;
+				}
 			}
 			$receipt['causale'] = 'Saldo ' . get_the_title( $event ) . ' — ' . implode( ', ', array_column( $receipt['people'], 'name' ) );
 			// La scadenza riaperta parte dall'ora di conferma. Il riepilogo economico resta valido

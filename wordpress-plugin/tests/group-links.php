@@ -54,6 +54,8 @@ if(in_array('--waiting',$argv,true)){$meta[12]['_mi_group_cover_image_id']=99;ec
 check_links(!isset(MI_Group_Links::links(12)['12cesteroma']['upload_index']),'Nessun indice upload persistito');
 $pages['existing-page']=(object)['ID'=>1];
 foreach(['wp-admin','v','123','a/b','https://example.invalid','bad space','-a','a--b',str_repeat('a',61),'existing-page','altragita'] as $slug)check_links(is_wp_error(MI_Group_Links::validate(12,[row_link($slug)])),'Collisione o nome non valido: '.$slug);
+$pages['12cesteroma']=(object)['ID'=>2];$unchanged=row_link('12cesteroma');$unchanged['original']='12cesteroma';
+check_links(!is_wp_error(MI_Group_Links::validate(12,[$unchanged])),'Una pagina successiva non deve impedire di modificare un link permanente già assegnato');
 check_links(is_wp_error(MI_Group_Links::validate(13,[row_link('12cesteroma')])),'Indirizzo non assegnabile ad altro gruppo');
 check_links(is_wp_error(MI_Group_Links::validate(12,[row_link('new'),row_link('new')])),'Duplicati nello stesso invio');
 check_links(is_wp_error(MI_Group_Links::validate(12,[array_merge(row_link('new'),['original'=>'12cesteroma'])])),'Indirizzo permanente immutabile');

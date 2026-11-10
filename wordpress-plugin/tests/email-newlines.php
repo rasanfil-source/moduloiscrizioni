@@ -6,7 +6,7 @@ function wp_slash($value) { return is_array($value) ? array_map('wp_slash', $val
 function wp_unslash($value) { return is_array($value) ? array_map('wp_unslash', $value) : (is_string($value) ? stripslashes($value) : $value); }
 function get_post_meta($id, $key, $single = true) { return $GLOBALS['email_meta'][$id][$key] ?? ''; }
 function update_post_meta($id, $key, $value) { $GLOBALS['email_meta'][$id][$key] = wp_unslash($value); }
-function get_option($key, $default = null) { return $default; }
+function get_option($key, $default = null) { return $GLOBALS['email_test_options'][$key] ?? $default; }
 function get_bloginfo($key) { return 'Segreteria'; }
 function get_the_title($id) { return 'Evento'; }
 function get_post_thumbnail_id($id) { return 0; }
@@ -45,8 +45,8 @@ foreach (['ZERO', 'NONE', 'CALCULATED'] as $mode) {
         foreach (['anno', 'quando', 'nessuno', 'saranno'] as $word) {
             expect(str_contains($preview['testo'], $word) && str_contains($preview['html'], $word), 'parola alterata: ' . $word);
         }
-        expect(('ZERO' !== $mode) === str_contains($preview['testo'], 'Bonifico'), 'filtro pagamento testo');
-        expect(('ZERO' !== $mode) === str_contains($preview['html'], 'Bonifico'), 'filtro pagamento HTML');
+        expect((!in_array($mode,['ZERO','NONE'],true)) === str_contains($preview['testo'], 'Bonifico'), 'filtro pagamento testo');
+        expect((!in_array($mode,['ZERO','NONE'],true)) === str_contains($preview['html'], 'Bonifico'), 'filtro pagamento HTML');
         // Un secondo salvataggio non deve reintrodurre la corruzione.
         MI_Modello_Email::salva_testo_portale(42, wp_slash('Conferma'), wp_slash($stored['text']));
         expect($stored['text'] === get_post_meta(42, '_mi_email_template')['text'], 'salvataggio non idempotente');
@@ -72,6 +72,15 @@ expect(!str_contains($snapshot['html'], '.nn'), 'HTML storico non riparato insie
 $literal = 'IscrizionennConserva anno quando nessuno saranno. nnQuando: n**Dove:**';
 $snapshot = MI_Modello_Email::ripara_istantanea_codifica(['testo' => $literal, 'html' => '']);
 expect($snapshot['testo'] === str_replace('**', '', $literal), 'lettere n interpretate semanticamente');
+$internalCode = MI_Modello_Email::ripara_istantanea_codifica([
+    'identificativo' => ['codice' => 'ORD-4521'],
+    'testo' => "Codice: ORD-4521\nCodice: 4521 per il cancello\nCodice iscrizione: ORD-4521\nNota: resta",
+    'html' => '<p><strong>Codice:</strong> ORD-4521</p><p><strong>Codice:</strong> 4521 per il cancello</p>',
+]);
+expect(!str_contains($internalCode['testo'], 'ORD-4521') && !str_contains($internalCode['html'], 'ORD-4521'), 'codice interno non rimosso');
+expect(str_contains($internalCode['testo'], 'Codice: 4521 per il cancello') && str_contains($internalCode['html'], 'Codice:</strong> 4521 per il cancello'), 'riga libera “Codice” rimossa');
+$freeCodeLine = MI_Modello_Email::ripara_istantanea_codifica(['testo' => 'Codice: 4521 per il cancello', 'html' => '<p><strong>Codice:</strong> 4521 per il cancello</p>']);
+expect(str_contains($freeCodeLine['testo'], 'Codice: 4521 per il cancello') && str_contains($freeCodeLine['html'], 'Codice:</strong> 4521 per il cancello'), 'testo libero senza identificativo rimosso');
 foreach (["\n", "\r\n", "\r", '\n', '\r\n', "\\\n", "\\\r\n", '&#10;'] as $separator) {
     $marked = '**Voce:** uno' . $separator . '**Altra:** due' . $separator . $separator . 'Ultima riga';
     $snapshot = MI_Modello_Email::ripara_istantanea_codifica(['testo' => $marked, 'html' => '']);

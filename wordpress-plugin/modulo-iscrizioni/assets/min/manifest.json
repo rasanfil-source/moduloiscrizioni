@@ -11,23 +11,28 @@
   },
   "core.js": {
     "file": "min/core.js",
-    "source": "fb6e08eac7b616f637139852ee681b190091bf796ef64f3c46b7b3a1d0d86969",
-    "hash": "9357f935c40b372d8a04e6e5647c4103378924cd03681fb6c00a10c818cf3ca4"
+    "source": "ea173849bf102fe98ea50632ea24beb4bdd49f57ba7c95fb05e3a45276a37611",
+    "hash": "432a6f495072bfe25bcd2026b1a8ab8d66975c71dbe48e68b6a976a0302d3a1d"
   },
   "event-qr.js": {
     "file": "min/event-qr.js",
     "source": "d4728436a03c365b5c568001c61485945535736b8c33609eeed93684f654669f",
     "hash": "db836880f5026fe242dcae0bfb75c672cae73b84801d66d599992837ade59ee9"
   },
+  "portal-communications.js": {
+    "file": "min/portal-communications.js",
+    "source": "ed5d3c4e47eed1a57714d9b3fb56cec6b3f2675577a0dce5087374f35485cadc",
+    "hash": "2e29a8d6da8d05b65681ec189a50bc273f38064043ebabad3996369c19b08c19"
+  },
   "portal-management.css": {
     "file": "min/portal-management.css",
-    "source": "1d25cc5d7780df438b269717c8c93ff537c12f1551335e1d35cbc6c1cd74faad",
-    "hash": "4bed3ef0ce97051ff68514aa5a5f0c1fbb6db5608ebf2ea3ce78935bae943c0a"
+    "source": "f2d0344b4812ce853a7ccafc89fabe48fff9acb3385ed34b7f601e4ab0b462c3",
+    "hash": "7f2161135861eaac21241b013a288443d7a079d9cd9e90374c7ae50c5b49f056"
   },
   "portal-management.js": {
     "file": "min/portal-management.js",
-    "source": "383b45f25c1cecfe99fbfc087ce4c3e415ca68f9f249dad2b51489b8af8d4070",
-    "hash": "0b3a7814acf07d3d695a8b658c3e10aa87103525197fa144d6705494d286282a"
+    "source": "d97adceda52f6b618a9e8e77fcbaaca07cd31b6c00d2562d84a241274e23c3c4",
+    "hash": "daf72e7faf068e3458faf92b3d221675e0e31d4070d90ee2b2eac7312442f4cd"
   },
   "portal-payments.css": {
     "file": "min/portal-payments.css",
@@ -56,13 +61,13 @@
   },
   "portal.css": {
     "file": "min/portal.css",
-    "source": "d1737ab7be8279001f6638e1d51f4094ff8e33a96715fd40323d8ed13a21d8c2",
-    "hash": "973d5d79937fd1fe04b160bcc4e813cf58c8bdc614bf42a28b54d65caa35228f"
+    "source": "42b41b185aba8dcd08af4ad25399df9115e5c859c18a65270617f19a6465993c",
+    "hash": "62834ba0deb996194b65c0466e2978601e7e059c6f4838b379a30dba6c1e00d9"
   },
   "portal.js": {
     "file": "min/portal.js",
-    "source": "bb0214da39046618030f689a714f3ba7a910f81b4e7593dd194504fd49ec6bb7",
-    "hash": "8543dcdb3fb2f54a54ec800288ac33d315e468aca06ac28413aefeacd5060bf9"
+    "source": "647f391def8944b365b185d6ee19d0784d42363a28806118a361069c393b6498",
+    "hash": "19127fb04444bb4f262cae9f97fa25d39ceb1bdb4711223a66be5b00a5b776b6"
   },
   "public-balance.css": {
     "file": "min/public-balance.css",
@@ -76,17 +81,22 @@
   },
   "public.css": {
     "file": "min/public.css",
-    "source": "ba137252f9d89252c2a0b9d8a847f1c0d2aa21058a5636dd344537f831d76ec3",
-    "hash": "15c748531bd6fd23502b7d1cd5d961c4d078f75925ceedfb116ea3385a465dcd"
+    "source": "9fa594492caceb70d87efef0b46505a7494041f0ebfc80de1c520aa55280489c",
+    "hash": "5aaad73b30c05afe8e3c40e0fee1f251950775b5b8de843bbaba877c73b3560e"
   },
   "public.js": {
     "file": "min/public.js",
-    "source": "d9630ee386ffe314076e0b2e96e673079647135b76acfdd26c6def345cc880cb",
-    "hash": "023e193c06b1c4123c5f5605e5a46bae8980bde69e4440f640ec15ce0b5f2bbe"
+    "source": "2c2a494c63c144ad4a41f93dd12c58ddc6eb38b476aa1896cd6fe3aa4039c23b",
+    "hash": "07913ca152fc531f63c6888bd7eb724b5a069b96c2335873ea46670e3b9543dc"
   },
   "qrcode-generator-2.0.4.js": {
     "file": "min/qrcode-generator-2.0.4.js",
     "source": "d7b28c149212ffed35751e69f672a1d1718d0e6b22e492b5ac801942ed75535a",
     "hash": "aa16820550b1b326bbc221383bf89de4eef7d5688874cf34fb9769c3fb0eab3f"
+  },
+  "travel.js": {
+    "file": "min/travel.js",
+    "source": "1c6f1a2036f96c9697a59d5df716adbe06d46e0f9d3e47117bc7d56d4a6179b7",
+    "hash": "49f8b72c7fb7a2d56db0db2238d9f05aafd9e6f30d401cef13524eaf219821ad"
   }
 }

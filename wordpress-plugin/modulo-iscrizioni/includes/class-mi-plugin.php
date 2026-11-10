@@ -25,8 +25,10 @@ final class MI_Plugin {
 		MI_Admin::boot();
 		MI_Modello_Email::avvia();
 		MI_Spedizione_Email::avvia();
+		MI_Email_Jobs::boot();
 		MI_Workspace_Settings::boot();
 		MI_REST_Controller::boot();
+		MI_Travel::boot();
 		MI_Shortcode::boot();
 		MI_Portal::boot();
 		add_action( 'template_redirect', array( 'MI_Public_Balance', 'route' ), -110 );

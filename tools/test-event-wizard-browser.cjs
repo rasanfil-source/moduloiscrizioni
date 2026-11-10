@@ -3,10 +3,11 @@ const fs=require('fs'),http=require('http'),assert=require('node:assert/strict')
 const chromium=require(process.env.MI_PLAYWRIGHT_MODULE||'playwright')[process.env.MI_BROWSER_ENGINE||'chromium'];
 const php=process.env.MI_PHP_BINARY||'php';
 const server=http.createServer((req,res)=>{
- if(req.url==='/portal.js'){res.setHeader('Content-Type','text/javascript');return res.end(fs.readFileSync('wordpress-plugin/modulo-iscrizioni/assets/portal.js'));}
+ const pathname=new URL(req.url,'http://localhost').pathname;
+ if(['/portal.js','/portal.css'].includes(pathname)){res.setHeader('Content-Type',pathname.endsWith('.js')?'text/javascript':'text/css');return res.end(fs.readFileSync('wordpress-plugin/modulo-iscrizioni/assets/'+(process.env.MI_TEST_MIN?'min/':'')+pathname.slice(1)));}
  const id=new URL(req.url,'http://localhost').searchParams.get('mi_copy_from')||'0';
- const html=execFileSync(php,['wordpress-plugin/tests/event-wizard.php',id,'--html'],{encoding:'utf8'});
- res.setHeader('Content-Type','text/html; charset=utf-8');res.end('<!doctype html><style>.mi-wizard-step{display:none}.mi-wizard-step.is-active{display:block}[hidden]{display:none!important}</style>'+html+'<script src="/portal.js"></script>');
+ const html=execFileSync(php,['wordpress-plugin/tests/event-wizard.php',id,'--html',...(req.url.includes('transport-model')?['--transport-model']:[])],{encoding:'utf8'});
+ res.setHeader('Content-Type','text/html; charset=utf-8');res.end('<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/portal.css"><style>body{margin:0;background:#f5f7fa;font:16px/1.5 system-ui}*{box-sizing:border-box}.mi-portal{max-width:960px;margin:auto;padding:20px}[hidden]{display:none!important}</style><main class="mi-portal" data-mi-portal-scope="reserved">'+html+'</main><script src="/portal.js"></script></html>');
 });
 (async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({...(process.env.MI_BROWSER_ENGINE?{}:{channel:'msedge'}),headless:true});try{
  const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:'+server.address().port);
@@ -14,6 +15,9 @@ const server=http.createServer((req,res)=>{
  assert.equal(await page.locator('[name=title]').inputValue(),'Nuovo ciclo');assert.equal(await page.locator('[name=capacity]').inputValue(),'77');assert.equal(await page.locator('[name=max_per_order]').inputValue(),'8');
  assert.equal(await page.locator('[name="custom_question_label[]"]').first().inputValue(),'Allergie');assert.equal(await page.locator('[name=closes_at]').inputValue(),'');
  for(let i=0;i<3;i++)await page.locator('[data-mi-next]').click();
+ assert.match(await page.locator('.mi-wizard-step.is-active h2').innerText(),/Spostamenti/);
+ assert.equal(await page.locator('[name=travel_deadline]').isDisabled(),true);
+ await page.locator('[data-mi-transport-none]').check();await page.locator('[data-mi-next]').click();
  await page.locator('[name=booking_limit_mode][value=ONE]').check();
  assert.deepEqual(errors,[]);assert.notEqual(await page.locator('[data-mi-participant-scope]').getAttribute('disabled'),null);
  await page.locator('[name=booking_limit_mode][value=MULTIPLE]').check();assert.equal(await page.locator('[data-mi-participant-scope]').getAttribute('disabled'),null);
@@ -21,5 +25,65 @@ const server=http.createServer((req,res)=>{
  assert.equal(await page.locator('[data-mi-participant-scope]').isVisible(),true);
  await page.locator('[data-mi-back]').click();await page.locator('[name=booking_limit_mode][value=ONE]').check();await page.locator('[data-mi-next]').click();
  assert.equal(await page.locator('[data-mi-participant-scope]').isVisible(),false);assert.deepEqual(errors,[]);
- console.log('Wizard browser: model reload, title retained, fields copied and single/multiple conditional question passed.');
+ await page.close();
+ fs.mkdirSync('output/revisione-evento-3.26.281',{recursive:true});
+ for(const width of [390,1280]){
+  const demo=await browser.newPage({viewport:{width,height:1000}}),faults=[];demo.on('pageerror',e=>faults.push(e.message));
+  await demo.goto('http://127.0.0.1:'+server.address().port);
+  const field=name=>demo.locator(`[name="${name}"]`),next=()=>demo.locator('[data-mi-next]').click();
+  await field('title').fill('Giornata ad Assisi <img src=x onerror=alert(1)>');await field('activity_id').selectOption('12');
+  assert.equal(await field('group_link').inputValue(),'');assert.equal(await field('group_link').evaluate(el=>el.required),false);
+  for(let n=0;n<3;n++)await next();
+  assert.equal(await demo.locator('[data-mi-transport-none]').isChecked(),false);
+  await demo.locator('[data-mi-bus-enabled]').check();assert.equal(await demo.locator('.mi-bus-route').count(),1);
+  await field('bus_route_code[]').fill('Roma — Assisi');await field('bus_route_price[]').fill('15,00');
+  await field('travel_enabled').check();assert.equal(await demo.locator('[data-mi-transport-none]').isChecked(),false);
+  assert.equal(await demo.locator('[data-mi-bus-enabled]').isChecked(),true);
+  await field('travel_price_mode').selectOption('DRIVER');assert.equal(await field('travel_price').isDisabled(),true);
+  await next();assert.match(await demo.locator('.mi-wizard-step.is-active h2').innerText(),/Spostamenti/,'Missing travel deadline should block');
+  await field('travel_deadline').fill('011120271000');
+  assert.equal(await field('travel_deadline').inputValue(),'01/11/2027 10:00');
+  await demo.screenshot({path:`output/revisione-evento-3.26.281/spostamenti-${width}${process.env.MI_TEST_MIN?'-min':''}.png`,fullPage:true});
+  await next();assert.equal(await demo.locator('[data-mi-travel-waitlist-notice]').isVisible(),true);
+  assert.equal(await field('waitlist_enabled').isChecked(),false);await field('waitlist_enabled').check();
+  assert.equal(await field('waitlist_offer_hours').isDisabled(),false);
+  await field('closes_at').fill('01/11/2027 12:00');await field('starts_at').fill('02/11/2027 12:00');
+  await field('closes_at').fill('');
+  await demo.screenshot({path:`output/revisione-evento-3.26.281/date-posti-${width}${process.env.MI_TEST_MIN?'-min':''}.png`,fullPage:true});
+  for(let n=0;n<3;n++)await next();
+  assert.match(await demo.locator('.mi-wizard-step.is-active h2').innerText(),/Servizi e quote/);
+  await demo.locator('[data-mi-pricing]').selectOption('CALCULATED');
+  await demo.locator('[data-mi-accessory-enabled]').check();
+  assert.equal(await demo.locator('[data-mi-accessory-details]').isVisible(),true);
+  await demo.locator('[data-mi-service-fee]').first().check();
+  assert.equal(await demo.locator('[name="service_price[colazione]"]').isVisible(),true);
+  await demo.locator('[name="service_price[colazione]"]').fill('5');
+  assert.match(await demo.locator('[data-mi-bus-price-help]').last().innerText(),/si aggiunge/);
+  await demo.locator('[data-mi-pricing]').selectOption('FIXED');await field('fixed_price').fill('40');
+  assert.equal(await demo.locator('[data-mi-accessory-details]').isHidden(),true);
+  assert.equal(await demo.locator('[data-mi-service-fee]').first().isDisabled(),true);
+  assert.match(await demo.locator('[data-mi-bus-price-help]').last().innerText(),/compreso nella quota/);
+  await next();await demo.locator('[name=event_link_mode][value=PERMANENT]').check();assert.equal(await field('group_link').isVisible(),true);assert.equal(await field('group_link').inputValue(),'');
+  assert.match(await demo.locator('[data-mi-review]').innerText(),/02\/11\/2027 11:30 \(automatica\)/);
+  await field('group_link').selectOption('gite');assert.match(await demo.locator('[data-mi-event-group-link-address]').innerText(),/\/gite$/);
+  assert.equal(await demo.locator('[data-mi-review] img').count(),0);assert.match(await demo.locator('[data-mi-review]').innerText(),/Pullman e Passaggi condivisi/);
+  assert.equal(await demo.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Wizard overflows viewport');
+  await demo.screenshot({path:`output/revisione-evento-3.26.281/controllo-${width}${process.env.MI_TEST_MIN?'-min':''}.png`,fullPage:true});
+  // Le quote non devono cancellare le scelte di trasporto. Torna da 9 a 4.
+  for(let n=0;n<5;n++)await demo.locator('[data-mi-back]').click();
+  assert.equal(await field('bus_route_code[]').inputValue(),'Roma — Assisi');assert.equal(await field('bus_route_price[]').inputValue(),'15,00');
+  await demo.locator('[data-mi-transport-none]').check();assert.equal(await field('travel_deadline').isDisabled(),true);
+  await next();assert.equal(await demo.locator('[data-mi-travel-waitlist-notice]').isHidden(),true);assert.equal(await field('waitlist_enabled').isChecked(),true);
+  await demo.locator('[data-mi-back]').click();await field('travel_enabled').check();assert.equal(await field('travel_deadline').inputValue(),'01/11/2027 10:00');
+  for(let n=0;n<3;n++)await demo.locator('[data-mi-back]').click();
+  await field('activity_id').selectOption('13');assert.equal(await field('group_link').inputValue(),'unico');
+  await field('activity_id').selectOption('14');assert.equal(await field('group_link').isDisabled(),false);
+  assert.equal(await demo.locator('[data-mi-event-group-link-panel]').evaluate(el=>el.hidden),false);
+  await demo.goto('http://127.0.0.1:'+server.address().port+'/?mi_copy_from=42&transport-model=1');
+  assert.equal(await field('group_link').inputValue(),'gite');assert.equal(await field('travel_enabled').isChecked(),true);
+  assert.equal(await demo.locator('[data-mi-bus-enabled]').isChecked(),true);assert.equal(await field('bus_route_code[]').inputValue(),'Roma');
+  assert.equal(await field('bus_route_price[]').inputValue(),'15,00');assert.equal(await field('travel_price_mode').inputValue(),'DRIVER');
+  assert.equal(await field('travel_deadline').isDisabled(),false);assert.deepEqual(faults,[]);await demo.close();
+ }
+ console.log('PASS wizard browser: model copy, nine-step navigation, mixed transport, conditional validation, independent waitlists, pricing changes, safe review, group links, desktop/mobile'+(process.env.MI_TEST_MIN?' (minified)':''));
 }finally{await browser.close();server.close();}})().catch(e=>{console.error(e);server.close();process.exitCode=1;});

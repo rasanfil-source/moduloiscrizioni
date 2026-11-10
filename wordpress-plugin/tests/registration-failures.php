@@ -94,6 +94,7 @@ class FaultDatabase {
  function insert($table,$data,...$args){if($table==='wp_mi_email_outbox'&&strlen($data['template_type'])>40)return false;if($this->failure==='outbox'&&$table==='wp_mi_email_outbox')return false;$this->writes++;$this->insert_id++;
   if($table==='wp_mi_registrations')$this->registration=$data+['id'=>$this->insert_id,'workspace_status'=>'PENDING'];return 1;
  }
+ function delete($table,$where,...$args){$this->last_error='';return 1;}
  function update($table,$data,...$args){$this->last_error='';$this->writes++;if($table==='wp_mi_registrations')$this->registration=array_replace($this->registration,$data);return 1;}
 }
 $event=['id'=>42,'title'=>'Evento sintetico','capacity'=>10,'opens_at'=>'','closes_at'=>'2099-01-01T12:00','pricing_mode'=>'ZERO','economic_mode'=>'REGISTRATION_ONLY','waitlist_enabled'=>false,'ticket_types'=>[['code'=>'a','name'=>'Quota','price_cents'=>0,'max_per_order'=>4,'capacity'=>10]],'participant_fields'=>[],'options'=>[],'privacy_url'=>'https://example.invalid/privacy','privacy_policy_version'=>'1','privacy_consent_id'=>'privacy-test'];

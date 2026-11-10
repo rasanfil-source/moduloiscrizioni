@@ -72,7 +72,8 @@ final class MI_Payment_Ledger {
 		return array( 'transaction_kind' => 'INCASSO' === $kind ? 'PAYMENT' : 'REFUND', 'movement_kind' => $kind, 'installment_kind' => 'OTHER', 'effective_at' => $date->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' ), 'amount_cents' => $cents, 'payment_source' => $source, 'external_reference' => $reference, 'administrative_note' => $note, 'origin_channel' => 'WORDPRESS', 'origin_id' => strtolower( $id ) );
 	}
 	private static function contains_card( $value ) {
-		preg_match_all( '/(?:\d[ -]?){13,19}/', $value, $matches );
+		// Solo numeri completi di 15–16 cifre; mai sottosequenze di CRO o IBAN.
+		preg_match_all( '/(?<![A-Za-z0-9])(?<!\d[ -])(?:\d[ -]?){14,15}\d(?![ -]?\d)(?![A-Za-z0-9])/', $value, $matches );
 		foreach ( $matches[0] as $candidate ) {
 			$digits = preg_replace( '/\D/', '', $candidate ); $sum = 0; $double = false;
 			for ( $i = strlen( $digits ) - 1; $i >= 0; $i-- ) { $n = (int) $digits[$i]; if ( $double ) { $n *= 2; if ( $n > 9 ) $n -= 9; } $sum += $n; $double = ! $double; }

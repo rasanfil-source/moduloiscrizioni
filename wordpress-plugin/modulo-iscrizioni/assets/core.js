@@ -18,6 +18,16 @@
     return Object.values(selection || {}).reduce((sum, value) => sum + clampQuantity(value, 20), 0);
   }
 
+  function fixedDepositCents(personTotals, sharedTotal, fixedPerPerson) {
+    const totals = (Array.isArray(personTotals) ? personTotals : []).map(value => Math.max(0, Math.round(Number(value) || 0)));
+    if (!totals.length) return 0;
+    const shared = Math.max(0, Math.round(Number(sharedTotal) || 0));
+    const fixed = Math.max(0, Math.round(Number(fixedPerPerson) || 0));
+    const baseShare = Math.floor(shared / totals.length);
+    const remainder = shared % totals.length;
+    return totals.reduce((sum, total, index) => sum + Math.min(total + baseShare + (index < remainder ? 1 : 0), fixed), 0);
+  }
+
   function normalizePhone(value) {
     const trimmed = String(value || '').trim();
     const digits = trimmed.replace(/\D/g, '');
@@ -35,5 +45,5 @@
     return /^\+[1-9][0-9().\s-]{6,30}$/.test(normalizePhone(value));
   }
 
-  target.MIRegistrationCore = Object.freeze({ clampQuantity, normalizeSelection, sumQuantities, normalizePhone, isValidPhone });
+  target.MIRegistrationCore = Object.freeze({ clampQuantity, normalizeSelection, sumQuantities, fixedDepositCents, normalizePhone, isValidPhone });
 }(globalThis));

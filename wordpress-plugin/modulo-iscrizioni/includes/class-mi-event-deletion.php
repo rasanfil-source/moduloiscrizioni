@@ -7,7 +7,7 @@ final class MI_Event_Deletion {
 	private static $leases = array();
 	private static $finalizing = 0;
 	private const CHILDREN = array( 'mi_registration_items', 'mi_participants', 'mi_payments', 'mi_registration_events', 'mi_email_outbox' );
-	private const DIRECT = array( 'mi_event_counters', 'mi_ticket_counters', 'mi_event_revisions', 'mi_rooms', 'mi_management_state', 'mi_management_requests', 'mi_booking_codes' );
+	private const DIRECT = array( 'mi_event_counters', 'mi_ticket_counters', 'mi_event_revisions', 'mi_rooms', 'mi_management_state', 'mi_management_requests', 'mi_booking_codes', 'mi_travel' );
 	private const FINGERPRINT_ORDER = array(
 		'mi_registrations'        => 'id',
 		'mi_event_counters'       => 'event_id',
@@ -17,6 +17,7 @@ final class MI_Event_Deletion {
 		'mi_management_state'     => 'event_id',
 		'mi_management_requests'  => 'request_id',
 		'mi_booking_codes'        => 'event_id',
+		'mi_travel'               => 'participant_id',
 	);
 
 	public static function boot() {
@@ -163,7 +164,7 @@ final class MI_Event_Deletion {
 			}
 			$preview = self::preview( $id );
 			if ( ! hash_equals( $preview['fingerprint'], $fingerprint ) ) throw new RuntimeException( 'I dati sono cambiati. Controlla il riepilogo aggiornato e conferma nuovamente.' );
-			if ( $preview['counts']['Iscrizioni'] && $title !== $preview['title'] ) throw new RuntimeException( 'Riscrivi esattamente il titolo dell’evento.' );
+			if ( $preview['counts']['Iscrizioni'] && html_entity_decode( (string) $title, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) !== html_entity_decode( (string) $preview['title'], ENT_QUOTES | ENT_HTML5, 'UTF-8' ) ) throw new RuntimeException( 'Riscrivi esattamente il titolo dell’evento.' );
 			$job = array( 'request' => $request, 'mode' => $mode, 'stage' => 'google', 'title' => $preview['title'], 'sheet_url' => $preview['sheet_url'], 'sheet_id' => $preview['sheet_id'], 'page_id' => $preview['page_id'], 'actor' => get_current_user_id(), 'error' => '' );
 			self::save_job( $id, $job );
 			return $job;

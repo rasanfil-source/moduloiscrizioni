@@ -9,6 +9,7 @@ function wp_get_current_user() { return get_user_by( 'id', 1 ); }
 function get_user_by( $field, $id ) { return $GLOBALS['users'][$id] ?? false; }
 function user_can( $user, $cap ) { return in_array( $cap, $user->caps, true ); }
 function get_user_meta( $id, $key, $single ) { return $GLOBALS['scope'][$id][$key] ?? array(); }
+function is_admin() { return true; }
 function get_post_meta( $id, $key, $single ) { return 9; }
 function get_transient( $key ) { return $GLOBALS['cache'][$key] ?? false; }
 function set_transient( $key, $data, $ttl ) { $GLOBALS['cache'][$key] = $data; }
@@ -49,6 +50,17 @@ $GLOBALS['scope'][2]['_mi_access_suspended']=1;
 check_audit(!MI_Access::can_access_event(42,2)&&MI_Access::event_ids(2)===array(),'Suspended session retained event access');
 unset($GLOBALS['scope'][2]['_mi_access_suspended']);
 class MI_Event_Post_Type {const EVENT_TYPE='mi_event';}
+class AuditSuspendedEventQuery {
+    public $values = array( 'post_type' => 'mi_event' );
+    public function is_main_query() { return true; }
+    public function get( $key ) { return $this->values[ $key ] ?? ''; }
+    public function set( $key, $value ) { $this->values[ $key ] = $value; }
+}
+$GLOBALS['scope'][1]['_mi_access_suspended'] = 1;
+check_audit( ! MI_Access::is_global_manager( 1 ) && array() === MI_Access::activity_ids( 1 ) && array() === MI_Access::event_ids( 1 ) && ! MI_Access::can_access_activity( 9, 1 ), 'Suspended global manager retained global role or activity scope' );
+$suspended_query = new AuditSuspendedEventQuery(); MI_Access::scope_event_list( $suspended_query );
+check_audit( array( 0 ) === $suspended_query->get( 'post__in' ), 'Suspended global manager still sees event list' );
+unset( $GLOBALS['scope'][1]['_mi_access_suspended'] );
 function get_post_type($id){return $id===1000?'post':'mi_event';}
 function get_post($id){return (object)['post_status'=>'draft','post_author'=>2];}
 foreach(['edit_post','delete_post','read_post'] as $cap){

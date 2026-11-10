@@ -7,6 +7,7 @@ const config=fs.readFileSync(new URL('../src/Config.gs',import.meta.url),'utf8')
 const setup=fs.readFileSync(new URL('../src/Setup.gs',import.meta.url),'utf8');
 const builder=fs.readFileSync(new URL('../../tools/prepara-codice-workspace.mjs',import.meta.url),'utf8');
 const webApp=fs.readFileSync(new URL('../src/WebApp.gs',import.meta.url),'utf8');
+const groups=fs.readFileSync(new URL('../src/Gruppi.gs',import.meta.url),'utf8');
 
 test('schema capability is advertised only by the autonomous project',()=>{
  for(const standalone of [false,true]){
@@ -44,4 +45,33 @@ test('the standalone bundle disables every central workbook accessor before Goog
  assert.equal(propertyReads,0);
  assert.match(builder,/const MI_STANDALONE_MODE = true/);
  assert.match(builder,/const codiceProgetto = `const MI_STANDALONE_MODE = true/);
+});
+
+test('a malformed legacy group image no longer blocks group listing or synchronization',()=>{
+ const rows=[
+  {id_gruppo:'0',nome:'Gruppo errato',slug:'gruppo-errato',stato:'ATTIVO',logo_url:'http://bad.example/logo.png',immagine_url:'' ,_row:2},
+  {id_gruppo:'0',nome:'Gruppo valido',slug:'gruppo-valido',stato:'ATTIVO',logo_url:'https://ok.example/logo.png',immagine_url:'',_row:3},
+ ];
+ const writes=[];const requests=[];
+ const context=vm.createContext({
+  MI_SHEETS:{GROUPS:'Gruppi'},
+  convertiRigheInOggetti_:()=>rows,
+  ottieniSchedaObbligatoria_:()=>({getRange:(row,column)=>({setValue:value=>writes.push([row,column,value])})}),
+  normalizzaTesto_:(value,max)=>String(value??'').trim().slice(0,max),
+  inviaComandoWordPress_:(action,payload)=>{requests.push(payload);return {group_id:payload.slug==='gruppo-errato'?4:9};},
+  aggiungiControllo_:()=>{},
+  Session:{getActiveUser:()=>({getEmail:()=> 'segreteria@example.invalid'})},
+ });
+ vm.runInContext(groups,context);
+ const listed=context.elencaGruppi();
+ assert.equal(listed.length,2);
+ assert.equal(listed[0].logo_url,'');
+ assert.match(listed[0].avviso_asset,/non HTTPS/);
+ const synced=context.sincronizzaGruppiConWordPress();
+ assert.equal(synced.updated,2);
+ assert.equal(synced.warning,true);
+ assert.equal(requests.length,2);
+ assert.equal(requests[0].logo_url,'');
+ assert.equal(requests[1].logo_url,'https://ok.example/logo.png');
+ assert.deepEqual(writes,[[2,1,'4'],[3,1,'9']]);
 });

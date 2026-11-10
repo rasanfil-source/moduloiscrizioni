@@ -16,12 +16,18 @@ final class MI_Event_Post_Type {
 	public static function boot() {
 		add_action( 'init', array( __CLASS__, 'register_types' ) );
 		add_action( 'add_meta_boxes', array( __CLASS__, 'add_meta_boxes' ) );
+		add_action( 'save_post_' . self::EVENT_TYPE, array( __CLASS__, 'initialize_registration_timestamps' ), 5, 3 );
 		add_action( 'save_post_' . self::EVENT_TYPE, array( __CLASS__, 'save_event' ), 10, 2 );
 		add_action( 'save_post_' . self::EVENT_TYPE, array( __CLASS__, 'publish_revision' ), 30, 2 );
 		add_action( 'save_post_' . self::ACTIVITY_TYPE, array( __CLASS__, 'save_activity' ), 10, 2 );
 		add_filter( 'manage_' . self::EVENT_TYPE . '_posts_columns', array( __CLASS__, 'event_columns' ) );
 		add_action( 'manage_' . self::EVENT_TYPE . '_posts_custom_column', array( __CLASS__, 'render_event_column' ), 10, 2 );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'admin_assets' ) );
+	}
+
+	/** Solo i nuovi eventi adottano le colonne: il salvataggio di un evento esistente non le attiva. */
+	public static function initialize_registration_timestamps( $post_id, $post, $update ) {
+		if ( ! $update && self::EVENT_TYPE === $post->post_type ) add_post_meta( $post_id, '_mi_registration_timestamps', '1', true );
 	}
 
 	public static function register_types() {
@@ -115,6 +121,7 @@ final class MI_Event_Post_Type {
 		$event_location = (string) get_post_meta( $post->ID, '_mi_event_location', true );
 		$capacity = max( 1, absint( get_post_meta( $post->ID, '_mi_capacity', true ) ?: 30 ) );
 		$waitlist = '1' === get_post_meta( $post->ID, '_mi_waitlist_enabled', true );
+		$waitlist_capacity = min( 10000, max( 1, absint( get_post_meta( $post->ID, '_mi_waitlist_capacity', true ) ?: 20 ) ) );
 		$waitlist_offer_hours = min( 168, max( 1, absint( get_post_meta( $post->ID, '_mi_waitlist_offer_hours', true ) ?: 48 ) ) );
 		$pricing_mode = get_post_meta( $post->ID, '_mi_pricing_mode', true ) ?: 'NONE';
 		$fixed_price_cents = max( 0, (int) get_post_meta( $post->ID, '_mi_fixed_price_cents', true ) );
@@ -166,6 +173,7 @@ final class MI_Event_Post_Type {
 			<p><label for="mi_event_starts_at"><strong>Data e ora dell’evento</strong></label><br><input id="mi_event_starts_at" name="mi_event_starts_at" type="datetime-local" value="<?php echo esc_attr( $event_starts_at ); ?>"></p>
 			<p><label for="mi_event_location"><strong>Luogo dell’evento</strong></label><br><input id="mi_event_location" name="mi_event_location" type="text" maxlength="180" value="<?php echo esc_attr( $event_location ); ?>" placeholder="Es. Piazza San Pietro, Roma"></p>
 			<p><label><input name="mi_waitlist_enabled" type="checkbox" value="1" <?php checked( $waitlist ); ?>> Attiva automaticamente la lista d’attesa a esaurimento posti</label></p>
+			<p><label for="mi_waitlist_capacity"><strong>Capienza massima lista d’attesa</strong></label><br><input id="mi_waitlist_capacity" name="mi_waitlist_capacity" type="number" min="1" max="10000" value="<?php echo esc_attr( $waitlist_capacity ); ?>"> persone<br><small>Quando la lista è piena, il modulo non accetta altre richieste. Valore predefinito: 20 persone.</small></p>
 			<p><label for="mi_waitlist_offer_hours"><strong>Tempo per accettare un posto liberato</strong></label><br><input id="mi_waitlist_offer_hours" name="mi_waitlist_offer_hours" type="number" min="1" max="168" value="<?php echo esc_attr( $waitlist_offer_hours ); ?>"> ore<br><small>La proposta scade dopo queste ore o alla scadenza comune dell’evento, se precedente. Se la scadenza comune è già passata, non vengono inviate nuove proposte.</small></p>
 			<h3 class="mi-admin-section-title">Quote e pagamenti</h3>
 			<p data-mi-reopened-payment-setting data-mi-service-pricing-saved="<?php echo esc_attr( $service_pricing_saved ? '1' : '0' ); ?>" <?php echo $reopened_payment_visible ? '' : 'hidden'; ?>><label for="mi_reopened_payment_hours"><strong>Tempo per pagare dopo una rettifica</strong></label><br><input id="mi_reopened_payment_hours" name="mi_reopened_payment_hours" type="number" min="1" max="168" value="<?php echo esc_attr( $reopened_payment_hours ); ?>"> ore<br><small>Se la rettifica riapre un pagamento e la scadenza comune è trascorsa o troppo vicina, concede almeno queste ore; una scadenza futura più lontana resta valida. Senza scadenza comune non viene creato un nuovo termine. L’offerta della lista d’attesa ha un termine dedicato, limitato dalla scadenza comune se presente.</small></p>
@@ -178,8 +186,6 @@ final class MI_Event_Post_Type {
 			<fieldset data-mi-economic-payments><legend><strong>Fonti di pagamento ammesse</strong></legend><label><input type="checkbox" name="mi_payment_methods[]" value="BANK_TRANSFER" <?php checked( in_array( 'BANK_TRANSFER', $payment_methods, true ) ); ?>> Bonifico</label><br><label><input type="checkbox" name="mi_payment_methods[]" value="CARD" <?php checked( in_array( 'CARD', $payment_methods, true ) ); ?>> Carta</label><br><label><input type="checkbox" name="mi_payment_methods[]" value="CASH" <?php checked( in_array( 'CASH', $payment_methods, true ) ); ?>> Contante</label></fieldset>
 			<p class="description" data-mi-economic-help aria-live="polite"></p>
 			<h3 class="mi-admin-section-title">Comunicazioni e richieste</h3>
-			<p><label for="mi_identifier_display"><strong>Identificativo nell’email</strong></label><br><select id="mi_identifier_display" name="mi_identifier_display"><option value="NONE" <?php selected( $identifier_display, 'NONE' ); ?>>Non mostrare</option><option value="TEXT" <?php selected( $identifier_display, 'TEXT' ); ?>>Testo</option><option value="QR" <?php selected( $identifier_display, 'QR' ); ?>>QR facoltativo</option><option value="BARCODE" <?php selected( $identifier_display, 'BARCODE' ); ?>>Barcode facoltativo</option></select></p>
-			<p class="description">QR e barcode sono scelte dell’organizzatore. Il payload resta legato all’evento e al codice ordine, senza dati personali.</p>
 			<p><label><input name="mi_marketing_enabled" type="checkbox" value="1" <?php checked( $marketing_enabled ); ?>> Chiedi: “Vuoi essere avvisato delle future iniziative?”</label></p>
 			<p><label><input name="mi_special_requests_enabled" type="checkbox" value="1" <?php checked( $special_requests_enabled ); ?>> Mostra il campo facoltativo “Richieste particolari”</label></p>
 		</div>
@@ -323,6 +329,7 @@ final class MI_Event_Post_Type {
 		$capacity = isset( $_POST['mi_capacity'] ) ? min( 10000, max( 1, absint( $_POST['mi_capacity'] ) ) ) : 30;
 		update_post_meta( $post_id, '_mi_capacity', $capacity );
 		update_post_meta( $post_id, '_mi_waitlist_enabled', isset( $_POST['mi_waitlist_enabled'] ) ? '1' : '0' );
+		update_post_meta( $post_id, '_mi_waitlist_capacity', min( 10000, max( 1, absint( $_POST['mi_waitlist_capacity'] ?? 20 ) ) ) );
 		update_post_meta( $post_id, '_mi_waitlist_offer_hours', min( 168, max( 1, absint( $_POST['mi_waitlist_offer_hours'] ?? 48 ) ) ) );
 		if ( isset( $_POST['mi_reopened_payment_hours'] ) ) update_post_meta( $post_id, '_mi_reopened_payment_hours', min( 168, max( 1, absint( $_POST['mi_reopened_payment_hours'] ) ) ) );
 		$payment_deadline_at = isset( $_POST['mi_payment_deadline_at'] ) ? sanitize_text_field( wp_unslash( $_POST['mi_payment_deadline_at'] ) ) : '';

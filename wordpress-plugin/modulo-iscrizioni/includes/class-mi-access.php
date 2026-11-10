@@ -43,12 +43,14 @@ final class MI_Access {
 	}
 
 	public static function is_global_manager( $user_id = 0 ) {
+		if ( self::is_suspended( $user_id ) ) return false;
 		$user = $user_id ? get_user_by( 'id', $user_id ) : wp_get_current_user();
 		return $user && ( user_can( $user, 'manage_options' ) || user_can( $user, 'mi_manage_all_events' ) );
 	}
 
 	public static function activity_ids( $user_id = 0 ) {
 		$user_id = $user_id ?: get_current_user_id();
+		if ( self::is_suspended( $user_id ) ) return array();
 		if ( self::is_global_manager( $user_id ) ) {
 			return 'ALL';
 		}
@@ -136,7 +138,7 @@ final class MI_Access {
 	}
 
 	public static function scope_event_list( $query ) {
-		if ( ! is_admin() || ! $query->is_main_query() || MI_Event_Post_Type::EVENT_TYPE !== $query->get( 'post_type' ) || self::is_global_manager() ) {
+		if ( ! is_admin() || ! $query->is_main_query() || MI_Event_Post_Type::EVENT_TYPE !== $query->get( 'post_type' ) ) {
 			return;
 		}
 		$user_id = get_current_user_id();
@@ -144,6 +146,7 @@ final class MI_Access {
 			$query->set( 'post__in', array( 0 ) );
 			return;
 		}
+		if ( self::is_global_manager( $user_id ) ) return;
 		$user = get_user_by( 'id', $user_id );
 		if ( $user && in_array( 'mi_assigned_event_manager', (array) $user->roles, true ) ) {
 			$scope = self::event_ids( $user_id );

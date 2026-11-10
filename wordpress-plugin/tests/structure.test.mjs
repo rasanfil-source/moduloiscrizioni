@@ -460,8 +460,8 @@ test('i dati dimostrativi sono riservati a bozze, amministratori ed email in ant
 test('il wizard guidato crea solo bozze e rende gli alloggi condizionali', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const script = await read('assets/portal.js');
-  assert.match(portal, /1 di 8/);
-  assert.match(portal, /8 di 8/);
+  assert.match(portal, /1 di 9/);
+  assert.match(portal, /9 di 9/);
   assert.match(portal, /post_status' => 'draft'/);
   assert.match(portal, /Vuoi partire dalla configurazione di un evento precedente/);
 	assert.match(portal, /array_merge\( \$current_models, array_slice\( \$past_models, 0, 10 \) \)/);
@@ -640,7 +640,7 @@ test('la coda email resta sicura fino all’attivazione operativa', async () => 
   assert.doesNotMatch(sender, /wp_mail\s*\(/);
   assert.doesNotMatch(sender, /MI-PROVA-0001/);
   assert.match(sender, /'PROVA' === self::modalita\(\).*'TEST_PENDING'/s);
-  assert.match(sender, /\$destinatario = \$invio_prova \? \$destinatario_prova : \$riga\['recipient'\]/);
+  assert.match(sender, /\$destinatario = \$invio_prova \? \( \$portal_test_copy \?[\s\S]*?: \$destinatario_prova \) : \$riga\['recipient'\]/);
   assert.match(sender, /Destinatario originale:/);
   assert.match(sender, /\['oggetto'\] = '\[PROVA\] '/);
   assert.match(sender, /TEST_SENDING/);
@@ -677,7 +677,7 @@ test('prova e operativo generano sia la conferma iscritto sia la notifica alla s
 	assert.match(model, /function crea_istantanea_nuova_iscrizione_segreteria/);
 	assert.match(model, /Nuova prenotazione —/);
 	assert.match(model, /crea_istantanea_istituzionale/);
-	assert.match(sender, /\$destinatario = \$invio_prova \? \$destinatario_prova : \$riga\['recipient'\]/);
+	assert.match(sender, /\$destinatario = \$invio_prova \? \( \$portal_test_copy \?[\s\S]*?: \$destinatario_prova \) : \$riga\['recipient'\]/);
 	assert.match(sender, /Destinatario originale:/);
 });
 
@@ -844,12 +844,14 @@ test('le email non mostrano identificativi testuali o grafici', async () => {
   const model = await read('includes/class-mi-modello-email.php');
   const postType = await read('includes/class-mi-event-post-type.php');
   const sender = await read('includes/class-mi-spedizione-email.php');
-  assert.match(postType, /QR facoltativo/);
+  assert.doesNotMatch(postType, /QR facoltativo/);
   assert.match(model, /payload_qr/);
   assert.match(model, /'modalita' => 'NONE'/);
   assert.match(sender, /identificativo/);
-  assert.match(sender, /Le istantanee in coda non devono mostrare il codice interno/);
-  assert.match(sender, /Codice\(\?: iscrizione\)\?/);
+  assert.match(sender, /Normalizza prima di azzerare i metadati dell’identificativo/);
+  assert.match(model, /Nasconde solo la riga che contiene esattamente il codice ordine interno/);
+  assert.match(model, /preg_quote\( \$order_code/);
+  assert.doesNotMatch(sender, /preg_replace\( '\/\^Codice/);
   assert.doesNotMatch(model, /buyer_email/);
 });
 
@@ -864,7 +866,10 @@ test('il QR grafico usa una libreria locale MIT senza servizi esterni', async ()
   assert.match(script, /createSvgTag/);
   assert.match(script, /window\.qrcode/);
   assert.match(library, /qrcode/);
-  assert.match(licence, /MIT/i);
+  assert.match(licence, /Copyright \(c\) 2009 Kazuhiko Arase/i);
+  assert.match(licence, /Permission is hereby granted, free of charge/i);
+  assert.match(licence, /THE SOFTWARE IS PROVIDED "AS IS"/i);
+  assert.doesNotMatch(licence, /texto integrale.*in questo file/i);
   assert.doesNotMatch(script.replaceAll('http://www.w3.org/2000/svg', ''), /https?:\/\//);
 });
 
@@ -880,6 +885,12 @@ test('la gestione economica distingue i quattro casi senza attivare riscossioni'
   assert.match(eventType, /CASH/);
   assert.match(service, /deposit_percentage/);
   assert.doesNotMatch(eventType, /IBAN|numero della carta|payment_url/i);
+});
+
+test('la caparra fissa del riepilogo usa la ripartizione individuale', async () => {
+  const script = await read('assets/public.js');
+  assert.match(script, /fixedDeposit \? fixedDepositEstimate\(total\)/);
+  assert.match(script, /core\.fixedDepositCents\(participantCosts\.map\(\(\{ subtotal \}\)/);
 });
 
 test('la pubblicazione richiede una configurazione economica coerente', async () => {
@@ -1513,7 +1524,7 @@ test('gli eventi annullati restano nella gestione come tessere compatte', async 
 test('il wizard crea una bozza completa e mostra collegamenti espliciti', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const script = await read('assets/portal.js');
-  assert.match(portal, /1 di 8/);
+  assert.match(portal, /1 di 9/);
   assert.match(portal, /name="description"/);
   assert.match(portal, /name="cover_image"/);
 	assert.match(portal, /data-mi-max-bytes="2097152"/);
@@ -1692,7 +1703,7 @@ test('presentazione e operatori usano testi sintetici e informazioni concrete', 
   assert.match(portal, /data-mi-max-lines="6"/);
   assert.doesNotMatch(portal, /Gli a capo saranno mantenuti nel modulo/);
   assert.match(portal, /self::limit_text_lines/);
-  assert.match(shortcode, /nl2br\( esc_html\( \$event\['description'\] \) \)/);
+  assert.match(shortcode, /wp_kses\( self::format_description\( \$event\['description'\] \), array\( 'strong' => array\(\), 'br' => array\(\) \) \)/);
   assert.match(script, /textarea\[data-mi-max-lines\]/);
   assert.match(portal, /\$selected_group_names/);
   assert.match(portal, /\$selected_event_names/);
@@ -1827,15 +1838,15 @@ test('le quote accessorie usano righe compatte senza grandi spazi vuoti', async 
 
 test('la scelta economica mostra le tre modalità richieste nell ordine stabilito', async () => {
   const portal = await read('includes/class-mi-portal.php');
-  const start = portal.indexOf('Come sarà l’evento?');
+  const start = portal.indexOf('Come sono determinate le quote?');
   const free = portal.indexOf('Iscrizione senza quote nel modulo', start);
   const fixed = portal.indexOf('Quota uguale per tutti', start);
-  const services = portal.indexOf('In base ai servizi scelti', start);
+  const services = portal.indexOf('Quote in base ai servizi scelti', start);
   const participation = portal.indexOf('Quota di partecipazione per persona', services);
   const selectEnd = portal.indexOf('</select>', start);
   const fixedPrice = portal.indexOf('name="fixed_price"', selectEnd);
   assert.ok(start >= 0 && free > start && fixed > free && services > fixed && participation > services && selectEnd > services && fixedPrice > selectEnd);
-  assert.match(portal.slice(start, selectEnd), /value="ZERO"[\s\S]*Iscrizione senza quote nel modulo[\s\S]*value="FIXED"[\s\S]*Quota uguale per tutti[\s\S]*value="CALCULATED"[\s\S]*In base ai servizi scelti/);
+  assert.match(portal.slice(start, selectEnd), /value="ZERO"[\s\S]*Iscrizione senza quote nel modulo[\s\S]*value="FIXED"[\s\S]*Quota uguale per tutti[\s\S]*value="CALCULATED"[\s\S]*Quote in base ai servizi scelti/);
   assert.doesNotMatch(portal.slice(start, selectEnd), /Ticket|Nessuna quota base/);
 });
 
@@ -1848,6 +1859,24 @@ test('Crea evento apre un wizard nuovo e non eredita la bozza precedente', async
 test('il wizard non mostra la nota ridondante sull email del referente', async () => {
   const schema = await read('includes/class-mi-field-schema.php');
   assert.doesNotMatch(schema, /Può essere diversa dall’email del referente/);
+});
+
+test('la presentazione evento offre un grassetto semplice e sicuro', async () => {
+  const portal = await read('includes/class-mi-portal.php');
+  const script = await read('assets/portal.js');
+  const shortcode = await read('includes/class-mi-shortcode.php');
+  assert.match(portal, /data-mi-description-bold aria-label="Applica o togli il grassetto"/);
+  assert.match(portal, /Seleziona il testo e premi B o Ctrl\+B/);
+  assert.match(script, /descriptionField\.addEventListener\('keydown'/);
+  assert.match(script, /before \+ '\*\*' \+ selected \+ '\*\*'/);
+  assert.match(shortcode, /esc_html\( \(string\) \$description \)/);
+  assert.match(shortcode, /wp_kses\( self::format_description\( \$event\['description'\] \), array\( 'strong' => array\(\), 'br' => array\(\) \) \)/);
+});
+
+test('il riepilogo finale del wizard evita dettagli superflui sulle due liste', async () => {
+  const script = await read('assets/portal.js');
+  assert.match(script, /Lista d’attesa per partecipare all’evento/);
+  assert.doesNotMatch(script, /Attesa di un passaggio: disponibile anche se la lista d’attesa dell’evento non è attiva/);
 });
 
 test('ogni sistemazione dispone di un costo che entra nelle opzioni economiche', async () => {
@@ -1864,11 +1893,11 @@ test('ogni sistemazione dispone di un costo che entra nelle opzioni economiche',
 test('il wizard mostra soltanto i costi coerenti con il tipo di evento', async () => {
   const portal = await read('includes/class-mi-portal.php');
   const script = await read('assets/portal.js');
-  const pricingStart = portal.indexOf('Come sarà l’evento?');
+  const pricingStart = portal.indexOf('Come sono determinate le quote?');
   const pricingEnd = portal.indexOf('</select>', pricingStart);
   const pricingSelect = portal.slice(pricingStart, pricingEnd);
   assert.ok(pricingStart >= 0 && pricingEnd > pricingStart);
-  assert.match(pricingSelect, /Iscrizione senza quote nel modulo[\s\S]*Quota uguale per tutti[\s\S]*In base ai servizi scelti/);
+  assert.match(pricingSelect, /Iscrizione senza quote nel modulo[\s\S]*Quota uguale per tutti[\s\S]*Quote in base ai servizi scelti/);
   assert.match(portal, /data-mi-fixed-price[\s\S]*name="fixed_price"/);
   assert.match(portal, /Quota di partecipazione per persona[\s\S]*Si aggiunge alle quote dei servizi scelti e si applica a ogni iscritto/);
   assert.doesNotMatch(portal.match(/Modalità di pagamento richiesta<select[\s\S]*?<\/select>/)[0], /PRICE_ONLY|Prezzo solamente informativo|Nessun pagamento previsto/);
@@ -1929,6 +1958,10 @@ test('la conferma multipersona anticipa il riepilogo e richiude il dettaglio dei
   assert.match(script, /heading\.textContent = `\$\{cost\.participant\.firstName\} \$\{cost\.participant\.lastName\}`/);
   assert.match(script, /amount\.className = 'mi-registration__booking-amount'/);
   assert.match(script, /amount\.textContent = formatCurrency\(cost\.subtotal\)/);
+  assert.match(script, /offeredSeats === 1 \? 'posto' : 'posti'/);
+  assert.match(script, /pluralBooking \? 'Offrite' : 'Offri'/);
+  assert.match(script, /amountCents\(travel\.price\)/);
+  assert.match(script, /riceverete.*da ciascun passeggero che accetterà il passaggio/);
   assert.match(script, /compactDescription\(cost\)/);
   assert.match(script, /detailsSummary\.textContent = 'Dettaglio dei costi'/);
   assert.match(script, /line\(parent, 'Totale'/);
@@ -1941,6 +1974,12 @@ test('la conferma multipersona anticipa il riepilogo e richiude il dettaglio dei
   assert.match(css, /\.mi-registration__cost-details/);
   assert.match(script, /specialRequestsInput\.rows = 3/);
   assert.match(css, /\.mi-registration__special-requests\{display:block;width:min\(100%,560px\);margin:1rem auto 1\.25rem\}/);
+});
+
+test('la scelta senza passaggio descrive l esito delle persone rimaste senza auto', async () => {
+  const script = await read('assets/travel.js');
+  assert.match(script, /party\.length > 1 \? 'Annulla la partecipazione delle persone senza passaggio'/);
+  assert.match(script, /party\.length > 1 \? 'Parteciperanno comunque e si organizzeranno diversamente'/);
 });
 
 test('la scheda iscritto omette i controlli economici della prenotazione', async () => {
@@ -2038,7 +2077,7 @@ test('il riepilogo di un evento gratuito mostra soltanto il nome dell iscrizione
   const publicScript = await read('assets/public.js');
   const publicCss = await read('assets/public.css');
   assert.match(publicScript, /summary\.classList\.toggle\('is-free', total === 0\)/);
-  assert.match(publicScript, /if \(total === 0\)[\s\S]*freeRegistrationText\.textContent = `Iscrizione di \$\{buyerName\}`[\s\S]*summary\.append\(freeRegistration\);[\s\S]*return;/);
+  assert.match(publicScript, /if \(travelPending\(\) && total !== 0\)[\s\S]*pendingTravelNote = travel\.fallback === 'REQUIRED'[\s\S]*Richiesta di passaggio in attesa · Partecipazione subordinata al passaggio[\s\S]*freeRegistrationText\.textContent = `Iscrizione di \$\{buyerName\}`[\s\S]*freeRegistration\.append\(document\.createTextNode\(pendingTravelNote\)\)[\s\S]*summary\.append\(freeRegistration\);[\s\S]*return;/);
   assert.match(publicCss, /\.mi-registration__confirmation-summary\.is-free/);
 });
 

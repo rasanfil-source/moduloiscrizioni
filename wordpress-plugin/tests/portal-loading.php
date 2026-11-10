@@ -18,9 +18,10 @@ foreach ([null,'manage','management','registrations','groups','payments','paymen
     foreach ([false,true] as $logged) {
         $_GET=['mi_portal'=>'1'];if ($view!==null) $_GET['mi_portal_view']=$view;$assets=[];
         MI_Portal::assets();
-        $management=$logged&&in_array($view,[null,'management','registrations','groups'],true);
-        // Il foglio di stile della gestione serve anche alla barra degli eventi.
-        if (count(array_filter($assets,fn($h)=>$h==='mi-portal-management'))!==($management?2:1)) throw new Exception('Management assets: '.$view);
+        $managementScript=$logged&&in_array($view,[null,'management','registrations','groups'],true);
+        $managementStyles=$logged&&in_array($view,[null,'management','registrations'],true);
+        // Dal rilascio 278 gli stili sono condizionali quanto gli script.
+        if (count(array_filter($assets,fn($h)=>$h==='mi-portal-management'))!==((int)$managementScript+(int)$managementStyles)) throw new Exception('Management assets: '.$view);
         if (in_array('mi-portal-payments',$assets,true)!==($logged&&in_array($view,['payments','payment-report'],true))) throw new Exception('Payment assets: '.$view);
     }
 }

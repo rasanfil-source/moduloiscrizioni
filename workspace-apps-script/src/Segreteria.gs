@@ -127,7 +127,7 @@ function generaElencoOperativoConLock_(eventId, fields, options) {
   const sheet = ottieniSchedaObbligatoria_(MI_SHEETS.OPERATIONAL_LIST); const event = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS)).find(function (row) { return String(row.id_evento) === String(eventId); }) || {};
   const registrations = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(function (row) { return String(row.id_evento) === String(eventId) && ['ANNULLATO', 'SCADUTO', 'CANCELLED', 'EXPIRED'].indexOf(String(row.stato).toUpperCase()) < 0; }); const byOrder = registrations.reduce(function (result, row) { result[String(row.codice_ordine)] = row; return result; }, {});
   const operational = indiceStatoOperativo_(); const payments = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS)); const labels = campiElencoOperativo_().reduce(function (result, field) { result[field.key] = field.label; return result; }, {});
-	const rows = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).filter(function (row) { return !!byOrder[String(row.codice_ordine)] && ['CANCELLED', 'EXPIRED'].indexOf(String(row.stato_partecipante || 'ACTIVE').toUpperCase()) < 0; }).map(function (participant) { const registration = byOrder[String(participant.codice_ordine)]; const data = decodificaOggetto_(participant.dati_aggiuntivi_json); Object.assign(data, operational[String(participant.codice_ordine)+'|'+Number(participant.numero_partecipante)] || {}); if (!corrispondeFiltriReport_(options.filtri, registration, participant, data)) return null; const row = fields.map(function (field) { return neutralizzaFormula_(valoreCampoElenco_(field, event, registration, participant, data, payments), 1000); }); row._orderCode = String(participant.codice_ordine); return row; }).filter(Boolean);
+	const rows = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).filter(function (row) { return !!byOrder[String(row.codice_ordine)] && ['CANCELLED', 'EXPIRED'].indexOf(String(row.stato_partecipante || 'ACTIVE').toUpperCase()) < 0; }).map(function (participant) { const registration = byOrder[String(participant.codice_ordine)]; const data = decodificaOggetto_(participant.dati_aggiuntivi_json); Object.assign(data, operational[String(participant.codice_ordine)+'|'+Number(participant.numero_partecipante)] || {}); if (!corrispondeFiltriReport_(options.filtri, registration, participant, data)) return null; const row = fields.map(function (field) { return neutralizzaFormula_(valoreCampoElenco_(field, event, registration, participant, data, payments), 1000); }); row._orderCode = String(participant.codice_ordine); row._participantNumber = Number(participant.numero_partecipante) || 0; return row; }).filter(Boolean);
 	const grouping = normalizzaScelteReport_(options.raggruppamenti, fields, 5).map(function (field) { return fields.indexOf(field); }).filter(function (index) { return index >= 0; });
 	const ordering = normalizzaScelteReport_(options.ordinamento, fields, 5).map(function (field) { return fields.indexOf(field); }).filter(function (index) { return index >= 0; });
 	const sortColumns = grouping.concat(ordering).filter(function (column, index, list) { return list.indexOf(column) === index; });
@@ -294,12 +294,13 @@ function generaVistaOperativaEvento_(idEvento, campiForzati) {
   const eventi = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.EVENTS));
   const evento = eventi.find(function (riga) { return String(riga.id_evento) === idEvento; });
   if (!evento) throw new Error('Evento non trovato.');
+  const cronologia=decodificaOggetto_(evento.schema_vista_json).registration_timestamps===true;
   const iscrizioni = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.REGISTRATIONS)).filter(function (riga) {
-    return String(riga.id_evento) === idEvento && ['ANNULLATO', 'SCADUTO', 'CANCELLED', 'EXPIRED'].indexOf(String(riga.stato).toUpperCase()) < 0;
+    return String(riga.id_evento) === idEvento && (cronologia?['SCADUTO','EXPIRED']:['ANNULLATO', 'SCADUTO', 'CANCELLED', 'EXPIRED']).indexOf(String(riga.stato).toUpperCase()) < 0;
   });
   const iscrizioniPerCodice = iscrizioni.reduce(function (indice, riga) { indice[String(riga.codice_ordine)] = riga; return indice; }, {});
   const partecipanti = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS)).filter(function (riga) {
-		return !!iscrizioniPerCodice[String(riga.codice_ordine)] && ['CANCELLED', 'EXPIRED'].indexOf(String(riga.stato_partecipante || 'ACTIVE').toUpperCase()) < 0;
+		return !!iscrizioniPerCodice[String(riga.codice_ordine)] && (cronologia?['EXPIRED']:['CANCELLED', 'EXPIRED']).indexOf(String(riga.stato_partecipante || 'ACTIVE').toUpperCase()) < 0;
   });
   const pagamenti = convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PAYMENTS));
   const statoOperativo = indiceStatoOperativo_();
@@ -323,6 +324,7 @@ function generaVistaOperativaEvento_(idEvento, campiForzati) {
     const scelte=[...new Set(espliciti)].filter(key=>typeof key==='string'&&/^[a-z][a-z0-9_-]{0,79}$/.test(key));
     colonne.splice(0,colonne.length,...scelte.map(key=>Object.assign({key:key,label:key,gruppo:gruppoCampoVistaOperativa_(key),comprimibile:false},disponibili[key]||{})));
   }else applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, pagamenti);
+  aggiungiColonneCronologiaEvento_(colonne,evento);
   anteponiColonnaProgressiva_(colonne);
   const ordiniEconomici = new Set();
   const righe = partecipanti.map(function (partecipante, indicePartecipante) {
@@ -446,6 +448,8 @@ function campiElencoOperativo_(includiDinamici, partecipantiLetti, cache) {
     { key: 'email', label: 'Email' }, { key: 'phone', label: 'Cellulare' }, { key: 'birth_date', label: 'Data di nascita' }, { key: 'document_type', label: 'Tipo documento' }, { key: 'document_number', label: 'Numero documento' }, { key: 'document_issue_date', label: 'Data di rilascio del documento' }, { key: 'document_expiry', label: 'Scadenza documento' }, { key: 'document_country', label: 'Paese di rilascio' }, { key: 'nationality', label: 'Nazionalità' }, { key: 'room', label: 'Alloggio' }, { key: 'transport', label: 'Pullman/trasporto' }, { key: 'breakfast', label: 'Colazione' },
     { key: 'lunch', label: 'Pranzo' }, { key: 'insurance', label: 'Assicurazione' }, { key: 'emergency_contact', label: 'Contatto di emergenza' }, { key: 'options', label: 'Altre opzioni' }, { key: 'total', label: 'Totale' }, { key: 'paid', label: 'Incassato' }, { key: 'paid_cash', label: 'Contanti (prenotazione)' }, { key: 'paid_transfer', label: 'Bonifico (prenotazione)' }, { key: 'paid_card', label: 'Carta/PayPal (prenotazione)' }, { key: 'balance', label: 'Da incassare' }, { key: 'special_requests', label: 'Richieste particolari' }
   ];
+  const travelLabels={travel_mode:'Spostamento',travel_seats:'Posti auto offerti',travel_origin:'Partenza',travel_departure:'Orario partenza',travel_state:'Stato passaggio',travel_driver:'Conducente',travel_required:'Partecipa solo con passaggio',travel_contribution:'Contributo al conducente A/R',travel_offer_expiry:'Scadenza proposta auto'};
+  Object.keys(travelLabels).forEach(key=>fields.push({key:key,label:travelLabels[key]}));
 	if (includiDinamici === false) return fields.concat([{key:'document_expiry_date',label:'Scadenza documento'}]);
   const known = fields.reduce(function (result, field) { result[field.key] = true; return result; }, {});
   (partecipantiLetti || convertiRigheInOggetti_(ottieniSchedaObbligatoria_(MI_SHEETS.PARTICIPANTS))).forEach(function (participant) {
@@ -466,6 +470,16 @@ function anteponiColonnaProgressiva_(colonne) {
   const colonna = indice >= 0 ? colonne.splice(indice, 1)[0] : { key: 'participant_number', label: 'N.', gruppo: 'persona', comprimibile: false };
   colonna.label = 'N.';
   colonne.unshift(colonna);
+}
+
+/** Le date sono automatiche e restano in coda, prima del codice quando presente. */
+function aggiungiColonneCronologiaEvento_(colonne,evento) {
+  if(decodificaOggetto_(evento.schema_vista_json).registration_timestamps!==true)return;
+  const codici=colonne.filter(c=>c.key==='order_code');
+  const dati=colonne.filter(c=>!['order_code','registration_time','cancellation_time'].includes(c.key));
+  if(!dati.some(c=>c.key==='status'))dati.push({key:'status',label:'Stato',gruppo:'persona',comprimibile:false});
+  dati.push({key:'registration_time',label:'Iscrizione (data e ora)',gruppo:'persona',comprimibile:false},{key:'cancellation_time',label:'Cancellazione (data e ora)',gruppo:'persona',comprimibile:false});
+  colonne.splice(0,colonne.length,...dati,...codici);
 }
 
 function valoreCampoElenco_(field, event, registration, participant, data, payments, cache) {
@@ -493,7 +507,7 @@ function valoreCampoElenco_(field, event, registration, participant, data, payme
 }
 
 function etichettaStatoIscrizione_(value) {
-  const labels = { PENDING_PAYMENT: 'Da pagare', IN_ATTESA_PAGAMENTO: 'Da pagare', CONFIRMED: 'Confermata', CONFERMATA: 'Confermata', WAITLISTED: 'Lista d’attesa', WAITLIST_OFFERED: 'Posto proposto', CANCELLED: 'Annullata', EXPIRED: 'Scaduta per mancato pagamento', ACTIVE: 'Attiva', CANCELLED_PARTICIPANT: 'Annullata' };
+  const labels = { PENDING_PAYMENT: 'Da pagare', IN_ATTESA_PAGAMENTO: 'Da pagare', CONFIRMED: 'Confermata', CONFERMATA: 'Confermata', TRAVEL_PENDING: 'In attesa di passaggio', WAITLISTED: 'Lista d’attesa', WAITLIST_OFFERED: 'Posto proposto', CANCELLED: 'Annullata', EXPIRED: 'Scaduta per mancato pagamento', ACTIVE: 'Attiva', CANCELLED_PARTICIPANT: 'Annullata' };
   return labels[String(value || '').toUpperCase()] || String(value || '');
 }
 
@@ -522,15 +536,13 @@ function creaCacheDecodificaVista_() {
   return {object:object,list:list,option:option};
 }
 
-/** Le colonne economiche appartengono alla prenotazione anche nei report per persona. */
+/** Gli importi di prenotazione restano sulla persona numero 1, se il filtro la include. */
 function limitaImportiAUnaRigaPerOrdine_(rows, fields) {
   const monetary = ['total', 'paid', 'paid_cash', 'paid_transfer', 'paid_card', 'balance'];
-  const seen = Object.create(null);
   rows.forEach(function (row) {
     const code = row._orderCode;
     if (!code) return;
-    if (seen[code]) fields.forEach(function (field, index) { if (monetary.indexOf(field) >= 0) row[index] = ''; });
-    seen[code] = true;
+    if (Number(row._participantNumber) !== 1) fields.forEach(function (field, index) { if (monetary.indexOf(field) >= 0) row[index] = ''; });
   });
   return rows;
 }
