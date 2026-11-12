@@ -104,11 +104,11 @@ test('domande e tratte conservano identificativi stabili quando cambia il testo'
   assert.doesNotMatch(portal, /'pullman-' \. \$route_slug/);
 });
 
-test('Workspace crea iscrizioni manuali attraverso i controlli autorevoli WordPress', async () => {
+test('MODULI AUTONOMO non espone creazione manuale tramite il segreto Workspace', async () => {
   const rest = await read('includes/class-mi-rest-controller.php');
   const service = await read('includes/class-mi-registration-service.php');
-  assert.match(rest, /GET_MANUAL_REGISTRATION_SCHEMA/);
-  assert.match(rest, /CREATE_MANUAL_REGISTRATION/);
+  assert.doesNotMatch(rest, /GET_MANUAL_REGISTRATION_SCHEMA/);
+  assert.doesNotMatch(rest, /CREATE_MANUAL_REGISTRATION/);
   assert.match(rest, /MI_Registration_Service::create\( \$event_id, \$registration, \$key, false, 'WORKSPACE_UI', true \)/);
   assert.match(service, /\$trusted_operator = false/);
   assert.match(service, /! \$allow_unpublished && ! \$trusted_operator/);
@@ -740,7 +740,7 @@ test('l’outbox conserva e mostra una revisione immutabile dell’anteprima', a
   assert.match(model, /hash\(\s*'sha256'/);
   assert.match(service, /email_preview/);
   assert.match(admin, /Anteprima email conservata/);
-  assert.match(admin, /MI_Modello_Email::sanitizza_html_email/);
+  assert.match(admin, /sandbox=""[\s\S]*srcdoc="<\?php echo esc_attr\( MI_Modello_Email::componi_html/);
 });
 
 test('l’anteprima storica conserva il branding dell’attività', async () => {
@@ -1737,9 +1737,9 @@ test('la conferma replica richiede la revisione corrente e non una ricevuta prec
   assert.doesNotMatch(service, /scrub_relay_only_fields/);
 });
 
-test('Workspace può creare gruppi WordPress e risolverli per slug', async () => {
+test('il comando storico di creazione gruppi Workspace non è esposto', async () => {
   const rest = await read('includes/class-mi-rest-controller.php');
-  assert.match(rest, /CREATE_GROUP/);
+  assert.doesNotMatch(rest, /CREATE_GROUP/);
   assert.match(rest, /create_group_from_workspace/);
   assert.match(rest, /get_page_by_path/);
   assert.match(rest, /group_slug/);
@@ -1765,7 +1765,7 @@ test('i promemoria operativi passano dalla coda protetta e le bozze restano in a
   const controller = await read('includes/class-mi-rest-controller.php');
   const sender = await read('includes/class-mi-spedizione-email.php');
   const model = await read('includes/class-mi-modello-email.php');
-  assert.match(controller, /QUEUE_OPERATIONAL_EMAILS/);
+  assert.doesNotMatch(controller, /QUEUE_OPERATIONAL_EMAILS/);
 	assert.match(controller, /GET_EMAIL_MODE/);
   assert.match(controller, /verify_workspace_envelope/);
   assert.match(sender, /accoda_comunicazione_operativa/);

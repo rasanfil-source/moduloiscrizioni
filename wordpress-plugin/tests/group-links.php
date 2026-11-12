@@ -72,7 +72,8 @@ check_links(is_wp_error(MI_Group_Links::validate_event_link(12,'12cesteroma')),'
 check_links(MI_Group_Links::validate_event_link(12,'12cesteroma','12cesteroma')==='12cesteroma','Evento esistente conserva categoria disattivata');
 check_links(is_wp_error(MI_Group_Links::validate_event_link(13,'12cesteeventi')),'Categoria di altro gruppo respinta');
 check_links(MI_Group_Links::validate_event_link(12,'')==='','Nessuna categoria ammessa');
-MI_Group_Links::save(12,MI_Group_Links::validate(12,[row_link('12cesteroma')]));
+check_links(is_wp_error(MI_Group_Links::validate(12,[row_link('12cesteroma')])),'Nuova riga non sovrascrive categoria esistente');
+MI_Group_Links::save(12,MI_Group_Links::validate(12,[array_merge(row_link('12cesteroma'),['original'=>'12cesteroma'])]));
 add_event(100,12,'12cesteroma','2026-12-10T10:00');
 add_event(101,12,'12cesteroma','2026-11-10T10:00');
 add_event(102,12,'12cesteeventi','2026-10-30T10:00');
@@ -89,6 +90,9 @@ $published[101]['closes_at']='2026-10-28T12:00';check_links(MI_Group_Links::next
 add_event(110,12,'12cesteroma','2026-10-29T08:00');check_links(MI_Group_Links::next_event(12,'12cesteroma')===110,'Evento resta visibile nel giorno corrente');
 unset($posts[110]);
 $_SERVER['REQUEST_URI']='/12cesteroma?mi_iscrizione=999';
+$pages['12cesteroma']->post_status='publish';
+check_links(MI_Group_Links::route()===null,'Pagina pubblicata successivamente oscurata dal link del gruppo');
+unset($pages['12cesteroma']);
 try{MI_Group_Links::route();throw new RuntimeException('Redirect mancante');}catch(RedirectResult $e){check_links($e->url==='https://example.invalid/?mi_iscrizione=101'&&$e->status===302&&$no_cache,'Redirect temporaneo senza cache e senza query estranee');}
 $posts[12]->post_status='draft';check_links(MI_Group_Links::route()===null,'Gruppo non pubblico non esposto');$posts[12]->post_status='publish';
 check_links(isset($GLOBALS['mi_test_actions']['litespeed_control_set_nocache']),'Hook che esclude la cache non invocato');

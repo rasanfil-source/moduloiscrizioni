@@ -34,9 +34,10 @@ export function fixture() {
   }
   const book={sheets:new Map(),getId:()=> 'synthetic-book',getSheetByName(name){return this.sheets.get(name)||null;},insertSheet(name){const sheet=new Sheet(name);this.sheets.set(name,sheet);return sheet;},getSheets(){return [...this.sheets.values()];}};
   const sheet=book.insertSheet('Dati operativi');
-  function context(){
+  function context(bundle){
     const ctx=vm.createContext({SpreadsheetApp:{ProtectionType:{SHEET:'SHEET'},flush:()=>{}},PropertiesService:{getScriptProperties:()=>({getProperty:k=>properties.get(k)||null,setProperty:(k,v)=>properties.set(k,v),deleteProperty:k=>properties.delete(k)})}});
-    for(const file of ['Core','FoglioIncrementale','SincronizzazioneManuale','AccessoGestione','ProiezioneIncrementale','ProiezioneDiretta'])vm.runInContext(fs.readFileSync(new URL('../../src/'+file+'.gs',import.meta.url),'utf8'),ctx);
+    if(bundle)vm.runInContext(bundle,ctx);
+    else for(const file of ['Core','FoglioIncrementale','SincronizzazioneManuale','AccessoGestione','ProiezioneIncrementale','ProiezioneDiretta'])vm.runInContext(fs.readFileSync(new URL('../../src/'+file+'.gs',import.meta.url),'utf8'),ctx);
     ctx.proteggiProiezione_=(target,editable=[])=>{target.editable=editable;};
     return ctx;
   }

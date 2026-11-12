@@ -37,6 +37,12 @@ final class MI_Event_Read_Cache {
 		$json = wp_json_encode( $model );
 		if ( ! is_string( $json ) || strlen( $json ) > 32000000 ) return;
 		$data = gzcompress( $json, 1 );
-		if ( false !== $data && strlen( $data ) < 4000000 ) set_transient( 'mi_read_226_' . absint( $event_id ), array( 'token' => $token, 'data' => base64_encode( $data ) ), 300 );
+		if ( false === $data ) return;
+		$cached = array( 'token' => $token, 'data' => base64_encode( $data ) );
+		global $wpdb;
+		$packet = (int) $wpdb->get_var( 'SELECT @@max_allowed_packet' );
+		// Include base64, serializzazione e margine per escaping SQL e nome opzione.
+		$limit = min( 524288, max( 0, (int) ( ( $packet - 8192 ) / 2 ) ) );
+		if ( strlen( serialize( $cached ) ) <= $limit ) set_transient( 'mi_read_226_' . absint( $event_id ), $cached, 300 );
 	}
 }

@@ -1,5 +1,23 @@
 'use strict';
 
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil((async () => {
+    const subscription = event.newSubscription || (event.oldSubscription?.options
+      ? await self.registration.pushManager.subscribe(event.oldSubscription.options) : null);
+    if (!subscription) return;
+    // Se la sessione è scaduta, il portale registrerà la nuova sottoscrizione al prossimo accesso.
+    try {
+      const response = await fetch(MI_PUSH_AJAX + '?action=mi_web_push_context', { credentials: 'same-origin', cache: 'no-store' });
+      const context = await response.json();
+      if (!response.ok || !context.success || !context.data?.nonce) return;
+      const saved = await fetch(MI_PUSH_AJAX, { method: 'POST', credentials: 'same-origin', body: new URLSearchParams({
+        action: 'mi_web_push_subscription', nonce: context.data.nonce, operation: 'subscribe', subscription: JSON.stringify(subscription.toJSON()),
+      }) });
+      if (!saved.ok) return;
+    } catch (_) { /* Il prossimo accesso ritenta la registrazione. */ }
+  })());
+});
+
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
 });

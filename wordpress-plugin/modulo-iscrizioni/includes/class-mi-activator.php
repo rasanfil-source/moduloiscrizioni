@@ -5,9 +5,7 @@ defined( 'ABSPATH' ) || exit;
 final class MI_Activator {
 	const SCHEMA_REVISION = 9;
 	public static function activate() {
-		self::create_tables();
-		self::add_roles_and_capabilities();
-		self::ensure_default_groups();
+		self::upgrade_schema( true );
 		self::ensure_schedule();
 	}
 
@@ -28,11 +26,44 @@ final class MI_Activator {
 
 	public static function maybe_upgrade() {
 		if ( MI_VERSION !== get_option( 'mi_db_version' ) || self::SCHEMA_REVISION !== (int) get_option( 'mi_db_schema_revision', 0 ) ) {
-			self::create_tables();
+			self::upgrade_schema( false );
+		}
+		if ( get_option( 'mi_schema_upgrade_failed', false ) ) add_action( 'admin_notices', array( __CLASS__, 'schema_notice' ) );
+		self::ensure_schedule();
+	}
+
+	public static function schema_notice() {
+		if ( ! current_user_can( 'manage_options' ) ) return;
+		echo '<div class="notice notice-error"><p>Modulo iscrizioni: aggiornamento del database incompleto. Il sistema ritenterà tra cinque minuti. Se il problema persiste, verificare i permessi ALTER/CREATE del database e il registro errori del server.</p></div>';
+	}
+
+	private static function upgrade_schema( $activation ) {
+		global $wpdb;
+		$retry_key = 'mi_schema_retry_' . self::SCHEMA_REVISION;
+		if ( ! $activation && get_transient( $retry_key ) ) return;
+		$lock = 'mi_schema_' . md5( DB_NAME . ':' . $wpdb->prefix );
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $lock ) ) ) return;
+		try {
+			if ( ! $activation && get_transient( $retry_key ) ) return;
+			if ( ! $activation && MI_VERSION === get_option( 'mi_db_version' ) && self::SCHEMA_REVISION === (int) get_option( 'mi_db_schema_revision' ) ) return;
+			set_transient( $retry_key, 1, 300 );
+			if ( ! self::create_tables() ) {
+				update_option( 'mi_schema_upgrade_failed', true, false );
+				error_log( 'MI_SCHEMA_UPGRADE_INCOMPLETE' );
+				return;
+			}
 			self::add_roles_and_capabilities();
 			self::ensure_default_groups();
+			update_option( 'mi_db_schema_revision', self::SCHEMA_REVISION, false );
+			update_option( 'mi_db_version', MI_VERSION, false );
+			delete_option( 'mi_schema_upgrade_failed' );
+			delete_transient( $retry_key );
+		} catch ( Throwable $error ) {
+			update_option( 'mi_schema_upgrade_failed', true, false );
+			error_log( 'MI_SCHEMA_UPGRADE_INCOMPLETE' );
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) );
 		}
-		self::ensure_schedule();
 	}
 
 	public static function cron_schedules( $schedules ) {
@@ -341,10 +372,9 @@ final class MI_Activator {
 		$wpdb->query( "UPDATE {$registrations} SET payment_deadline_at = expires_at WHERE payment_deadline_at IS NULL AND expires_at IS NOT NULL AND status IN ('CONFIRMED','PENDING_PAYMENT')" );
 
 		self::backfill_ticket_counters( $ticket_counters, $registrations, $items );
-		update_option( 'mi_db_version', MI_VERSION, false );
 		// Completa la migrazione degli indici prima di registrare lo schema come aggiornato.
 		$nonce_primary = $wpdb->get_row( "SHOW INDEX FROM {$nonce_table} WHERE Key_name='PRIMARY'", ARRAY_A );
-		if ( self::repair_audit_index( $registration_events ) && 'nonce_hash' === ( $nonce_primary['Column_name'] ?? '' ) ) update_option( 'mi_db_schema_revision', self::SCHEMA_REVISION, false );
+		return self::repair_audit_index( $registration_events ) && 'nonce_hash' === ( $nonce_primary['Column_name'] ?? '' );
 	}
 
 	/** dbDelta non sostituisce un indice omonimo con colonne differenti. */

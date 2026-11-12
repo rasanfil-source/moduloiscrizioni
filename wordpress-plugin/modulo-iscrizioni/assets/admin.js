@@ -234,7 +234,7 @@
 
   addButton.addEventListener('click', () => {
     const row = document.createElement('tr');
-    row.innerHTML = '<td><input name="mi_ticket_code[]" pattern="[a-z0-9-]+" required></td><td><input name="mi_ticket_name[]" required></td><td><input name="mi_ticket_price[]" type="number" min="0" step="0.01" value="0.00" required></td><td><input name="mi_ticket_max[]" type="number" min="1" max="20" value="5" required></td><td><input name="mi_ticket_capacity[]" type="number" min="0" max="10000" value="0"><small>0 = capienza evento</small></td><td><button type="button" class="button mi-remove-ticket">Rimuovi</button></td>';
+    row.innerHTML = '<td><input name="mi_ticket_code[]" pattern="[a-z0-9\\-]+" required></td><td><input name="mi_ticket_name[]" required></td><td><input name="mi_ticket_price[]" type="number" min="0" step="0.01" value="0.00" required></td><td><input name="mi_ticket_max[]" type="number" min="1" max="20" value="5" required></td><td><input name="mi_ticket_capacity[]" type="number" min="0" max="10000" value="0"><small>0 = capienza evento</small></td><td><button type="button" class="button mi-remove-ticket">Rimuovi</button></td>';
     table.tBodies[0].append(row);
     row.querySelector('input').focus();
   });
@@ -242,7 +242,7 @@
   const optionTable = document.querySelector('#mi-options tbody');
   document.querySelector('#mi-add-option')?.addEventListener('click', () => {
     const row = document.createElement('tr');
-    row.innerHTML = '<td><input name="mi_option_code[]" pattern="[a-z0-9-]+" required></td><td><input name="mi_option_name[]" required></td><td><select name="mi_option_scope[]"><option value="ORDER">Ordine</option><option value="TICKET">Partecipante</option></select></td><td><input name="mi_option_price[]" type="number" min="0" step="0.01" required value="0.00"></td><td><input name="mi_option_max[]" type="number" min="1" max="20" value="1"></td><td><button type="button" class="button mi-remove-option">Rimuovi</button></td>';
+    row.innerHTML = '<td><input name="mi_option_code[]" pattern="[a-z0-9\\-]+" required></td><td><input name="mi_option_name[]" required></td><td><select name="mi_option_scope[]"><option value="ORDER">Ordine</option><option value="TICKET">Partecipante</option></select></td><td><input name="mi_option_price[]" type="number" min="0" step="0.01" required value="0.00"></td><td><input name="mi_option_max[]" type="number" min="1" max="20" value="1"></td><td><button type="button" class="button mi-remove-option">Rimuovi</button></td>';
     optionTable?.append(row);
   });
   optionTable?.addEventListener('click', (event) => {
@@ -253,7 +253,7 @@
 	document.getElementById('mi-add-custom-field')?.addEventListener('click', () => {
 	  const index = `new_${Date.now()}_${customFieldTable?.rows.length || 0}`;
 	  const row = document.createElement('tr');
-	  row.innerHTML = `<td><input name="mi_custom_field_key[${index}]" pattern="[a-z0-9_-]+" placeholder="es. parrocchia"></td><td><input name="mi_custom_field_label[${index}]" required placeholder="Scrivi la domanda"></td><td><select name="mi_custom_field_type[${index}]"><option value="text">Risposta breve</option><option value="yesno">Sì / No</option><option value="textarea">Risposta lunga</option><option value="date">Data</option><option value="select">Scelta singola</option><option value="email">Email</option><option value="tel">Cellulare</option></select></td><td><input name="mi_custom_field_options[${index}]" placeholder="Opzione A | Opzione B"></td><td><select name="mi_custom_field_retention[${index}]"><option value="STANDARD">WordPress e Sheets</option><option value="SHEETS_ONLY">Escludi dalle copie di riepilogo</option></select></td><td><input type="hidden" name="mi_custom_field_required[${index}]" value="0"><input name="mi_custom_field_required[${index}]" type="checkbox" value="1"></td><td><button type="button" class="button mi-remove-custom-field">Rimuovi</button></td>`;
+	  row.innerHTML = `<td><input name="mi_custom_field_key[${index}]" pattern="[a-z0-9_\\-]+" placeholder="es. parrocchia"></td><td><input name="mi_custom_field_label[${index}]" required placeholder="Scrivi la domanda"></td><td><select name="mi_custom_field_type[${index}]"><option value="text">Risposta breve</option><option value="yesno">Sì / No</option><option value="textarea">Risposta lunga</option><option value="date">Data</option><option value="select">Scelta singola</option><option value="email">Email</option><option value="tel">Cellulare</option></select></td><td><input name="mi_custom_field_options[${index}]" placeholder="Opzione A | Opzione B"></td><td><select name="mi_custom_field_retention[${index}]"><option value="STANDARD">WordPress e Sheets</option><option value="SHEETS_ONLY">Escludi dalle copie di riepilogo</option></select></td><td><input type="hidden" name="mi_custom_field_required[${index}]" value="0"><input name="mi_custom_field_required[${index}]" type="checkbox" value="1"></td><td><button type="button" class="button mi-remove-custom-field">Rimuovi</button></td>`;
 	  customFieldTable?.append(row);
 	  row.querySelector('input')?.focus();
 	});

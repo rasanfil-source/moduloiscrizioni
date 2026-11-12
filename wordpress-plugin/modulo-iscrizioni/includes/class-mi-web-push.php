@@ -12,6 +12,7 @@ final class MI_Web_Push {
 	public static function boot() {
 		add_action( 'template_redirect', array( __CLASS__, 'serve_worker' ), -130 );
 		add_action( 'wp_ajax_' . self::AJAX_ACTION, array( __CLASS__, 'save_subscription' ) );
+		add_action( 'wp_ajax_mi_web_push_context', array( __CLASS__, 'subscription_context' ) );
 		add_action( self::CRON_HOOK, array( __CLASS__, 'send_registration' ), 10, 3 );
 	}
 
@@ -261,7 +262,7 @@ final class MI_Web_Push {
 			'redirection' => 0,
 			'headers' => array(
 				'Authorization' => 'vapid t=' . $token . ', k=' . $keys['public'],
-				'TTL' => '60',
+				'TTL' => '86400',
 				'Content-Type' => 'application/octet-stream',
 				'Content-Encoding' => 'aes128gcm',
 			),
@@ -347,6 +348,12 @@ final class MI_Web_Push {
 		}
 	}
 
+	public static function subscription_context() {
+		if ( ! is_user_logged_in() || ! self::user_can_manage_portal() ) wp_send_json_error( array( 'message' => 'Accesso richiesto.' ), 403 );
+		nocache_headers();
+		wp_send_json_success( array( 'nonce' => wp_create_nonce( 'mi_web_push' ) ) );
+	}
+
 	public static function serve_worker() {
 		if ( ! isset( $_GET[ self::WORKER_QUERY ] ) || ! is_scalar( $_GET[ self::WORKER_QUERY ] ) || '1' !== (string) wp_unslash( $_GET[ self::WORKER_QUERY ] ) ) return;
 		$worker = MI_PLUGIN_DIR . 'assets/portal-push-sw.js';
@@ -356,6 +363,7 @@ final class MI_Web_Push {
 		header( 'X-Content-Type-Options: nosniff' );
 		$path = wp_parse_url( home_url( '/' ), PHP_URL_PATH );
 		header( 'Service-Worker-Allowed: ' . trailingslashit( $path ?: '/' ) );
+		echo 'const MI_PUSH_AJAX = ' . wp_json_encode( set_url_scheme( admin_url( 'admin-ajax.php' ), 'https' ) ) . ';' . "\n";
 		readfile( $worker );
 		exit;
 	}

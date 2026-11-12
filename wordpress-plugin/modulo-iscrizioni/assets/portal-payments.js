@@ -41,10 +41,17 @@ function init(root) {
   const discard=document.createElement('button');discard.type='button';discard.textContent='Svuota la bozza del movimento';form.querySelector('.mi-payment-actions').append(discard);
   discard.onclick=()=>{if(busy||pending){say('Verifica l’esito della registrazione prima di svuotare il modulo.',true);return;}form.reset();unlock();if(selected)choose(selected);};
   const money = cents => (Number(cents) / 100).toLocaleString('it-IT', {style:'currency', currency:'EUR'});
+  const amountCents = value => {
+    let text=String(value||'0').trim();
+    if (/^\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/.test(text)) text=text.replace(/\./g,'').replace(',','.');
+    else if (/^\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?$/.test(text)) text=text.replace(/,/g,'');
+    else text=text.replace(',','.');
+    return Math.round(Number(text)*100);
+  };
   let individual = null, matchedPeople = [];
   const peopleBox=document.createElement('fieldset');peopleBox.className='mi-payment-people';peopleBox.dataset.paymentPeople='1';fields.prepend(peopleBox);
   peopleBox.before(field('rata').closest('label'));
-  function updatePeopleAmount(reset=false) {
+  function updatePeopleAmount(reset=false,keepAmount=false) {
     if(!individual)return;
     const incoming=field('tipo').value==='INCASSO',requiresRefundPerson=!incoming&&individual.requires_refund_allocation;peopleBox.hidden=!incoming&&!requiresRefundPerson;
     field('rata').closest('label').hidden=!incoming||!individual.deposit_plan;
@@ -52,11 +59,7 @@ function init(root) {
     if(!incoming){
       if(reset)field('importo').value='';
       const selected=[...peopleBox.querySelectorAll('input:checked')],person=individual.people.find(item=>item.id===Number(selected[0]?.value));
-      let amountText=String(field('importo').value||'0').trim();
-      if (/^\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/.test(amountText)) amountText=amountText.replace(/\./g,'').replace(',','.');
-      else if (/^\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?$/.test(amountText)) amountText=amountText.replace(/,/g,'');
-      else amountText=amountText.replace(',','.');
-      const amount=Math.round(Number(amountText)*100);
+      const amount=amountCents(field('importo').value);
       const validSelection=!requiresRefundPerson||selected.length===1;
       const validAmount=!person||!Number.isFinite(amount)||amount<1||amount<=person.paid;
       field('importo').setCustomValidity(!validSelection?'Seleziona una sola persona.':!validAmount?'Il rimborso supera quanto versato dalla persona selezionata.':'');
@@ -75,10 +78,13 @@ function init(root) {
     if(!individual.deposit_plan)field('rata').value='FULL';
     else if(reset||field('rata').selectedOptions[0]?.disabled)field('rata').value=allNeedDeposit?'DEPOSIT':needsDeposit?'FULL':'BALANCE';
     const total=people.reduce((sum,person)=>sum+(field('rata').value==='DEPOSIT'?person.deposit_missing:person.balance),0);
-    field('importo').value=(total/100).toFixed(2).replace('.',',');
-    field('importo').setCustomValidity(individual.ready&&total>0?'':individual.message||'Seleziona almeno una persona.');
-    save.disabled=!individual.ready||total<1;
-    peopleBox.querySelector('[data-selection-total]').textContent=people.length+' '+(people.length===1?'persona':'persone')+' · '+money(total);
+    field('importo').readOnly=people.length!==1;
+    if(!keepAmount)field('importo').value=(total/100).toFixed(2).replace('.',',');
+    const amount=amountCents(field('importo').value);
+    const valid=individual.ready&&amount>0&&amount<=total&&(people.length===1||amount===total);
+    field('importo').setCustomValidity(valid?'':individual.message||'Indica un importo positivo entro il residuo della persona selezionata.');
+    save.disabled=!valid;
+    peopleBox.querySelector('[data-selection-total]').textContent=people.length+' '+(people.length===1?'persona':'persone')+' · '+money(total)+(people.length===1?' · Puoi registrare anche un versamento parziale.':'');
   }
   function showPeople(position, matched=[]) {
     individual=position;matchedPeople=matched;peopleBox.replaceChildren();if(!position){peopleBox.hidden=true;return;}
@@ -211,7 +217,7 @@ function init(root) {
   });
   retryDetail.addEventListener('click', () => { if (selected) choose(selected); });
   field('tipo').addEventListener('change', () => { if(reversal){reversal.closest('label').hidden=field('tipo').value==='INCASSO';reversal.value='';}field('importo').setCustomValidity('');save.disabled=false;showPeople(individual,matchedPeople); });
-  field('importo').addEventListener('input',()=>{if(field('tipo').value!=='INCASSO')updatePeopleAmount();});
+  field('importo').addEventListener('input',()=>updatePeopleAmount(false,true));
   form.addEventListener('submit', async e => {
     e.preventDefault();
     if (busy || !selected) return;

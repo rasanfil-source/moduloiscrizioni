@@ -1,4 +1,4 @@
-const MI_SCHEMA_VERSION = '1.14.0';
+const MI_SCHEMA_VERSION = '1.14.1';
 const MI_SHEETS = Object.freeze({
   CONFIG: 'Configurazione',
   GROUPS: 'Gruppi',

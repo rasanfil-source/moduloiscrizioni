@@ -39,6 +39,7 @@ final class MI_Group_Links {
 			if ( isset( $seen[ $slug ] ) ) return new WP_Error( 'mi_links_duplicate', 'Hai inserito due volte lo stesso indirizzo.' );
 			$seen[ $slug ] = true;
 			$original = (string) ( $row['original'] ?? '' );
+			if ( '' === $original && isset( $existing[ $slug ] ) ) return new WP_Error( 'mi_links_duplicate', 'Questo indirizzo esiste già nel gruppo. Modifica la riga esistente.' );
 			if ( $original && ( $original !== $slug || ! isset( $existing[ $original ] ) ) ) return new WP_Error( 'mi_links_immutable', 'Un indirizzo già salvato resta permanente. Aggiungi un nuovo link per usare un altro indirizzo.' );
 			$reserved = array( 'v', 'wp-admin', 'wp-login', 'wp-json', 'wp-content', 'wp-includes', 'feed', 'comments', 'author', 'category', 'tag', 'search', 'page', 'embed', 'attachment', 'index', 'xmlrpc', 'robots', 'sitemap', 'favicon', 'wp-sitemap' );
 			$page_collision = ! isset( $existing[ $slug ] ) && get_page_by_path( $slug, OBJECT, get_post_types( array( 'public' => true ) ) );
@@ -122,6 +123,8 @@ final class MI_Group_Links {
 		$slug = self::request_slug( wp_unslash( $_SERVER['REQUEST_URI'] ?? '' ) );
 		$group_id = $slug ? absint( get_option( 'mi_group_link_' . $slug, 0 ) ) : 0;
 		if ( ! $group_id ) return;
+		$page = get_page_by_path( $slug, OBJECT, get_post_types( array( 'public' => true ) ) );
+		if ( $page && 'publish' === $page->post_status ) return;
 		$group = get_post( $group_id );
 		$link = self::links( $group_id )[ $slug ] ?? null;
 		if ( ! $group || MI_Event_Post_Type::GROUP_TYPE !== $group->post_type || 'publish' !== $group->post_status || ! $link || empty( $link['enabled'] ) ) return;

@@ -33,4 +33,6 @@ WordPress prepara il foglio al momento della richiesta firmata. La segreteria pu
 
 ## Sorgenti
 
-I file `.gs` in `src` descrivono i flussi di accesso, sincronizzazione, proiezione, report ed email. Il generatore verifica la sintassi e produce il singolo sorgente autonomo in `dist`.
+I file `.gs` in `src` includono librerie condivise e codice storico conservato per i test. Il generatore conserva le dipendenze dei soli ingressi operativi dichiarati in `tools/workspace-standalone.mjs`, elimina le interfacce centrali inutilizzate, verifica la sintassi e produce il singolo sorgente autonomo in `dist`. Un file già generato non viene sovrascritto.
+
+Eseguire `attivaCronWordPress` dall'editor del progetto autonomo per installare il trigger periodico. La funzione è idempotente. Il trigger avvia il cron WordPress e la manutenzione delle ricevute email, senza inviare autonomamente messaggi. `verificaMittentiEmailAutorizzati` resta disponibile per autorizzare gli alias Gmail.

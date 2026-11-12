@@ -49,13 +49,8 @@ final class MI_REST_Controller {
 		$action = strtoupper( sanitize_key( (string) ( $envelope['action'] ?? '' ) ) );
 		$payload = $verified;
 		if ( 'GET_EVENT_PROJECTION' === $action ) return self::event_projection_for_workspace( $payload );
-		if ( 'CREATE_EVENT_DRAFT' === $action ) return self::create_event_draft_from_workspace( $payload );
-		if ( 'CREATE_GROUP' === $action ) return self::create_group_from_workspace( $payload );
-		if ( 'GET_MANUAL_REGISTRATION_SCHEMA' === $action ) return self::manual_registration_schema( $payload );
-		if ( 'CREATE_MANUAL_REGISTRATION' === $action ) return self::create_manual_registration( $payload );
 		if ( 'GET_EMAIL_MODE' === $action ) return array( 'ok' => true, 'mode' => MI_Spedizione_Email::modalita() );
 		if ( 'GET_EMAIL_RETENTION' === $action ) return MI_Spedizione_Email::retention_event_deadlines( $payload );
-		if ( 'QUEUE_OPERATIONAL_EMAILS' === $action ) return MI_Spedizione_Email::accoda_comunicazione_operativa( $payload );
 		return new WP_Error( 'mi_workspace_action_not_allowed', 'Azione Workspace non consentita.', array( 'status' => 403 ) );
 	}
 

@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import {standaloneSource,entryPoints} from '../../tools/workspace-standalone.mjs';
+import {fixture,view} from './helpers/projection-sheet.mjs';
 
 const config=fs.readFileSync(new URL('../src/Config.gs',import.meta.url),'utf8');
 const setup=fs.readFileSync(new URL('../src/Setup.gs',import.meta.url),'utf8');
@@ -25,11 +27,23 @@ test('schema capability is advertised only by the autonomous project',()=>{
  }
 });
 
-test('the complete standalone source parses with the retirement guard enabled',()=>{
+test('the generated standalone source keeps operational entry points and removes retired interfaces',async()=>{
  const directory=new URL('../src/',import.meta.url);
  const names=fs.readdirSync(directory).filter(name=>name.endsWith('.gs')).sort();
- const bundle='const MI_STANDALONE_MODE = true;\n'+names.map(name=>fs.readFileSync(new URL(name,directory),'utf8')).join('\n');
+ const bundle=await standaloneSource(names.map(name=>fs.readFileSync(new URL(name,directory),'utf8')).join('\n'));
  assert.doesNotThrow(()=>new vm.Script(bundle));
+ const context=vm.createContext({});vm.runInContext(bundle,context);
+ for(const name of entryPoints)assert.equal(typeof context[name],'function',name);
+ for(const name of ['sincronizzaGruppiConWordPress','configuraCartellaDiLavoro','registraIscrizioneCentrale_','apriConfigurazioneElencoOperativo','inviaCodaEmailDiTest'])assert.equal(context[name],undefined,name);
+ context.creaRispostaJson_=value=>value;context.verificaBusta_=()=>({ok:true});
+ assert.equal(context.doGet({}).standalone,true);
+ const state=context.doPost({postData:{contents:JSON.stringify({action:'STATO_SCHEMA',payload:{}})}});
+ assert.equal(state.direct_projection,true);assert.equal(state.central_workbook,false);
+ const f=fixture(),c=f.context(bundle),v=view();
+ c.scriviProiezioneEvento_(f.sheet,v);f.calls.length=0;
+ c.scriviProiezioneEvento_(f.sheet,v);assert.equal(f.calls.length,0);
+ f.sheet.cells[1][1]='Nome modificato';
+ assert.equal(c.modificheCorrentiFoglio_(f.sheet).changes.length,1);
 });
 
 test('the standalone bundle disables every central workbook accessor before Google is touched',()=>{
@@ -43,8 +57,7 @@ test('the standalone bundle disables every central workbook accessor before Goog
  context.onOpen();
  assert.equal(activeReads,0);
  assert.equal(propertyReads,0);
- assert.match(builder,/const MI_STANDALONE_MODE = true/);
- assert.match(builder,/const codiceProgetto = `const MI_STANDALONE_MODE = true/);
+ assert.match(builder,/await standaloneSource\(codice\)/);
 });
 
 test('a malformed legacy group image no longer blocks group listing or synchronization',()=>{

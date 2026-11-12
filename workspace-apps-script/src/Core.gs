@@ -14,6 +14,12 @@ function neutralizzaFormula_(value, maxLength) {
   return /^[=+\-@]/.test(text) ? "'" + text : text;
 }
 
+// Una risposta del modulo è testo libero: conserva paragrafi e spazi interni.
+function testoCellaOperativa_(value) {
+  const text=String(value??'').replace(/\r\n?/g,'\n').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g,' ').trim();
+  return /^[=+@-]/.test(text)?"'"+text:text;
+}
+
 function serializzaInModoStabile_(value) {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return '[' + value.map(serializzaInModoStabile_).join(',') + ']';

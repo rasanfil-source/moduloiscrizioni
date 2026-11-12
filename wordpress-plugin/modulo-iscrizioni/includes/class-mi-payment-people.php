@@ -3,6 +3,11 @@ defined( 'ABSPATH' ) || exit;
 
 /** Quote individuali e attribuzioni: i versamenti aggregati restano distinti dalle quote personali. */
 final class MI_Payment_People {
+	private static function sort_remainders( &$remainders ) {
+		uksort( $remainders, static function ( $left, $right ) use ( $remainders ) {
+			return ( $remainders[$right] <=> $remainders[$left] ) ?: ( (int) $left <=> (int) $right );
+		} );
+	}
 	/** Conserva le scadenze nelle modifiche logistiche e nelle posizioni economiche invariate. */
 	public static function payment_deadline_changes( array $registration, $covered, $economic_change ) {
 		if ( ! in_array( $registration['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) return array();
@@ -71,7 +76,7 @@ final class MI_Payment_People {
 			$product = $total * $target; $deposits[$id] = $sum ? intdiv( $product, $sum ) : 0;
 			$remainders[$id] = $sum ? $product % $sum : 0; $assigned += $deposits[$id];
 		}
-		arsort( $remainders, SORT_NUMERIC );
+		self::sort_remainders( $remainders );
 		foreach ( $remainders as $id => $remainder ) { if ( $assigned >= $target ) break; $deposits[$id]++; $assigned++; }
 		return $deposits;
 	}
@@ -151,7 +156,7 @@ final class MI_Payment_People {
 				}
 				$assigned += $row['deposit'];
 			} unset( $row );
-			if ( $remainders ) { arsort( $remainders, SORT_NUMERIC ); foreach ( $remainders as $id => $remainder ) { if ( $assigned >= $deposit_total ) break; $rows[$id]['deposit']++; $assigned++; } }
+			if ( $remainders ) { self::sort_remainders( $remainders ); foreach ( $remainders as $id => $remainder ) { if ( $assigned >= $deposit_total ) break; $rows[$id]['deposit']++; $assigned++; } }
 			if ( $assigned !== $deposit_total ) {
 				$deposits_known = false;
 				$issue = 'La caparra complessiva non coincide con le quote individuali. Verifica la prenotazione.';
@@ -210,7 +215,11 @@ final class MI_Payment_People {
 			if ( $due < 1 ) throw new InvalidArgumentException( 'Una delle persone selezionate ha già versato questa quota. Aggiorna la selezione.' );
 			$plan[] = array( 'participant_id' => (int) $id, 'name' => $person['name'], 'amount_cents' => $due ); $total += $due;
 		}
-		if ( $total !== $amount ) throw new InvalidArgumentException( 'L’importo deve corrispondere esattamente alle quote delle persone selezionate. Ricarica la prenotazione se è stata aggiornata.' );
+		if ( 1 === count( $plan ) && $amount > 0 && $amount < $total ) {
+			$plan[0]['amount_cents'] = $amount;
+			return $plan;
+		}
+		if ( $total !== $amount ) throw new InvalidArgumentException( 'Per un versamento parziale seleziona una sola persona e indica un importo entro il suo residuo. Per più persone occorre il totale delle quote selezionate.' );
 		return $plan;
 	}
 	public static function refund_plan( array $position, array $ids, $amount ) {

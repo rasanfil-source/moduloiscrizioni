@@ -871,7 +871,7 @@ final class MI_Admin {
 		<?php if ( ! empty( $preview['identificativo'] ) && is_array( $preview['identificativo'] ) && 'NONE' !== ( $preview['identificativo']['modalita'] ?? 'NONE' ) ) : ?><p><strong>Identificativo <?php echo esc_html( $preview['identificativo']['modalita'] ); ?>:</strong> <code><?php echo esc_html( $preview['identificativo']['codice'] ?? '' ); ?></code></p><?php endif; ?>
 		<p><strong>Oggetto:</strong> <?php echo esc_html( $preview['oggetto'] ?? '' ); ?></p>
 		<p><strong>Preheader:</strong> <?php echo esc_html( $preview['preheader'] ?? '' ); ?></p>
-		<div class="card" style="max-width:900px"><?php echo MI_Modello_Email::sanitizza_html_email( MI_Modello_Email::componi_html( $preview ) ); ?></div>
+		<iframe title="Anteprima email" sandbox="" referrerpolicy="no-referrer" style="width:100%;max-width:900px;height:650px;border:1px solid #ccc" srcdoc="<?php echo esc_attr( MI_Modello_Email::componi_html( $preview ) ); ?>"></iframe>
 		<h3>Versione testo semplice</h3><pre style="white-space:pre-wrap;max-width:900px"><?php echo esc_html( $preview['testo'] ?? '' ); ?></pre>
 		<p><small>Revisione: <code><?php echo esc_html( substr( (string) ( $preview['revisione'] ?? '' ), 0, 12 ) ); ?></code></small></p>
 		<?php endif; ?><?php endif; ?>

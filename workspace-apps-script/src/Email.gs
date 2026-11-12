@@ -73,27 +73,35 @@ function pulisciRicevuteEmail_ (props, context) {
     console.error('EMAIL_RETENTION_DEFERRED',String(error));
     props.setProperty('MI_EMAIL_LEDGER_CLEANED_AT',String(now));return;
   }
+  const lock=LockService.getScriptLock();
+  if(!lock.tryLock(100))return {ok:false,busy:true};
+  try {
+  // Un invio concorrente può aver spostato ricevute fra proprietà e archivio.
+  // Per cancellare usiamo soltanto le righe e i valori riletti sotto lock.
+  const currentSheet=archivioRicevuteEmail_(props,{},false);
+  const currentRows=currentSheet&&currentSheet.getLastRow()>1?currentSheet.getRange(2,1,currentSheet.getLastRow()-1,2).getValues():[];
+  const currentProperties=props.getProperties();
   const expired=(key,value)=>{
-    const parts=String(value||'').split('|'), sent=Number(parts[1]), deadline=Number(deadlines[events.get(key)]||0);
+    const parts=String(value||'').split('|'), sent=Number(parts[1]), deadline=Number(deadlines[parts[2]]||0);
     return parts[0]==='ACCEPTED'&&sent>0&&Number.isFinite(sent)&&deadline>0&&now>deadline&&now-sent>90*86400000;
   };
   // Elimina blocchi dal basso: un'interruzione non sovrascrive ricevute recenti o SENDING.
   let end=-1;
-  for(let i=rows.length-1;i>=-1;i--){
-    if(i>=0&&expired(String(rows[i][0]),rows[i][1])){if(end<0)end=i;}
-    else if(end>=0){sheet.deleteRows(i+3,end-i);end=-1;}
+  for(let i=currentRows.length-1;i>=-1;i--){
+    if(i>=0&&expired(String(currentRows[i][0]),currentRows[i][1])){if(end<0)end=i;}
+    else if(end>=0){currentSheet.deleteRows(i+3,end-i);end=-1;}
   }
-  if(sheet)SpreadsheetApp.flush();
-  keys.forEach(key=>{if(expired(key,all[key]))props.deleteProperty(key);});
+  if(currentSheet)SpreadsheetApp.flush();
+  Object.keys(currentProperties).filter(key=>/^MI_EMAIL_DELIVERY_[a-f0-9]{64}$/.test(key)).forEach(key=>{if(expired(key,currentProperties[key]))props.deleteProperty(key);});
   props.setProperty('MI_EMAIL_LEDGER_CLEANED_AT',String(now));
+  } finally {lock.releaseLock();}
 }
 
 /** Riutilizza il cron già installato; nessun invio email, nessun nuovo trigger. */
 function manutenzioneRicevuteEmail() {
   const props=PropertiesService.getScriptProperties();
   if(Date.now()-Number(props.getProperty('MI_EMAIL_LEDGER_CLEANED_AT')||0)<86400000)return {ok:true,invariato:true};
-  const lock=LockService.getScriptLock();if(!lock.tryLock(100))return {ok:false,busy:true};
-  try{pulisciRicevuteEmail_(props,{});return {ok:true};}finally{lock.releaseLock();}
+  return pulisciRicevuteEmail_(props,{})||{ok:true};
 }
 
 /** Coda WordPress firmata. Registra l'intento prima dell'invio per consentire la verifica degli esiti incerti. */
@@ -126,7 +134,6 @@ function eseguiConsegnaEmail_(payload, context) {
     const key='MI_EMAIL_DELIVERY_'+p.delivery_key;
     let previous;
     try {
-      pulisciRicevuteEmail_(props,context);
       assicuraSpazioRicevuteEmail_(props,context);
       previous=cercaRicevutaEmail_(props,context,key);
     } catch (error) { return {ok:false,error:'EMAIL_STORAGE_UNAVAILABLE'}; }

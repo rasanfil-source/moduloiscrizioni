@@ -32,7 +32,7 @@ function pianoProiezioneIncrementale_(vista,mappa,correnti,intestazioni) {
   const order=columns.findIndex(c=>c.key==='_ordine'), number=columns.findIndex(c=>c.key==='_numero');
   const progressive=columns.findIndex(c=>c.key==='participant_number');
   const identity=row=>JSON.stringify([String(row[order]),Number(row[number])]);
-  const incoming=vista.righe.map((r,i)=>columns.map(c=>c.key==='_numero'?r.numero_partecipante:c.key==='_ordine'?r.codice_ordine:c.key==='participant_number'?i+1:typeof r.valori[c.key]==='number'&&Number.isFinite(r.valori[c.key])?r.valori[c.key]:neutralizzaFormula_(r.valori[c.key],5000)));
+  const incoming=vista.righe.map((r,i)=>columns.map(c=>c.key==='_numero'?r.numero_partecipante:c.key==='_ordine'?r.codice_ordine:c.key==='participant_number'?i+1:typeof r.valori[c.key]==='number'&&Number.isFinite(r.valori[c.key])?r.valori[c.key]:testoCellaOperativa_(r.valori[c.key])));
   const savedNumbers=new Map();
   let maximum=0;
   if(mappa._ordine&&mappa._numero&&mappa.participant_number)correnti.forEach(row=>{
@@ -61,8 +61,8 @@ function pianoProiezioneIncrementale_(vista,mappa,correnti,intestazioni) {
     remaining.forEach(row=>rows.push(row));
   }
   return {columns:columns,rows:rows,structural:schemaChanged,header:columns.map(c=>c.label),
-    header_changed:schemaChanged||!righeProiezioneUguali_(intestazioni,columns.map(c=>c.label)),
-    blocks:blocchiRigheProiezione_(schemaChanged?[]:correnti,rows,2),old_rows:correnti.length,read_only:vista.sola_lettura===true};
+    header_changed:schemaChanged||!righeProiezioneUguali_(intestazioni.slice(0,columns.length),columns.map(c=>c.label)),
+    blocks:blocchiRigheProiezione_(schemaChanged?[]:correnti.map(row=>row.slice(0,columns.length)),rows,2),old_rows:correnti.length,read_only:vista.sola_lettura===true};
 }
 
 /** Il giornale persistente registra prima le righe da aggiornare.

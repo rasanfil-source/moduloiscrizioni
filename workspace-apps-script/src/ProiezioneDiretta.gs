@@ -123,7 +123,7 @@ function aggiornaPagamentiDaProiezione_(book, projection, readOnly) {
   // Ripara anche una scheda creata da un tentativo interrotto prima della scrittura.
   proteggiProiezione_(sheet);sheet.setFrozenRows(1);
   const headers=['Movimento','Prenotazione','Data','Tipo','Importo (€)','Metodo','Riferimento','Operatore','Nota'];
-  const rows=payments.slice().sort((a,b)=>(Date.parse(a.data_effettiva)||0)-(Date.parse(b.data_effettiva)||0)).map(row=>[row.id_pagamento,row.codice_ordine,row.data_effettiva,row.tipo_movimento,(['RIMBORSO','STORNO','REFUND'].includes(String(row.tipo_movimento).toUpperCase())?-1:1)*Math.abs(Number(row.importo_centesimi)||0)/100,row.fonte_pagamento,row.riferimento_esterno,row.etichetta_operatore,row.nota_amministrativa].map(value=>typeof value==='string'?neutralizzaFormula_(value,5000):value));
+  const rows=payments.slice().sort((a,b)=>(Date.parse(a.data_effettiva)||0)-(Date.parse(b.data_effettiva)||0)).map(row=>[row.id_pagamento,row.codice_ordine,row.data_effettiva,row.tipo_movimento,(['RIMBORSO','STORNO','REFUND'].includes(String(row.tipo_movimento).toUpperCase())?-1:1)*Math.abs(Number(row.importo_centesimi)||0)/100,row.fonte_pagamento,row.riferimento_esterno,row.etichetta_operatore,row.nota_amministrativa].map(value=>typeof value==='string'?testoCellaOperativa_(value):value));
   estendiGrigliaProiezione_(sheet,rows.length+1,headers.length);
   const oldCount=Math.max(0,sheet.getLastRow()-1),old=oldCount?sheet.getRange(2,1,oldCount,headers.length).getValues():[];
   if(!righeProiezioneUguali_(sheet.getRange(1,1,1,headers.length).getValues()[0],headers))sheet.getRange(1,1,1,headers.length).setValues([headers]).setFontWeight('bold');

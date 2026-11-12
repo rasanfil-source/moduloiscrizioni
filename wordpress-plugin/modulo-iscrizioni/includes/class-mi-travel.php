@@ -438,11 +438,15 @@ final class MI_Travel {
 		global $wpdb;
 		$events = $wpdb->get_col( "SELECT DISTINCT t.event_id FROM {$wpdb->prefix}mi_travel t JOIN {$wpdb->prefix}mi_registrations r ON r.id=t.registration_id WHERE t.state IN ('WAITING','OFFERED') OR r.status='TRAVEL_PENDING' ORDER BY t.event_id" );
 		foreach ( (array) $events as $event ) {
-			self::maintain( $event );
-			$config = self::config( $event );
-			if ( ! $config['enabled'] || ! self::local_timestamp( $config['deadline'] ) || self::local_timestamp( $config['deadline'] ) > time() ) continue;
-			$pending = $wpdb->get_col( $wpdb->prepare( "SELECT t.participant_id FROM {$wpdb->prefix}mi_travel t JOIN {$wpdb->prefix}mi_registrations r ON r.id=t.registration_id JOIN {$wpdb->prefix}mi_participants p ON p.id=t.participant_id WHERE t.event_id=%d AND t.required_ride=1 AND t.state<>'ASSIGNED' AND r.status='TRAVEL_PENDING' AND p.status='ACTIVE' AND (t.decision_deadline_at IS NULL OR t.decision_deadline_at<=%s)", $event, current_time( 'mysql', true ) ) );
-			foreach ( (array) $pending as $id ) MI_Registration_Service::cancel_participant( $id, 'TRAVEL_DEADLINE' );
+			try {
+				self::maintain( $event );
+				$config = self::config( $event );
+				if ( ! $config['enabled'] || ! self::local_timestamp( $config['deadline'] ) || self::local_timestamp( $config['deadline'] ) > time() ) continue;
+				$pending = $wpdb->get_col( $wpdb->prepare( "SELECT t.participant_id FROM {$wpdb->prefix}mi_travel t JOIN {$wpdb->prefix}mi_registrations r ON r.id=t.registration_id JOIN {$wpdb->prefix}mi_participants p ON p.id=t.participant_id WHERE t.event_id=%d AND t.required_ride=1 AND t.state<>'ASSIGNED' AND r.status='TRAVEL_PENDING' AND p.status='ACTIVE' AND (t.decision_deadline_at IS NULL OR t.decision_deadline_at<=%s)", $event, current_time( 'mysql', true ) ) );
+				foreach ( (array) $pending as $id ) MI_Registration_Service::cancel_participant( $id, 'TRAVEL_DEADLINE' );
+			} finally {
+				if ( class_exists( 'MI_Event_Deletion' ) ) MI_Event_Deletion::release( $event );
+			}
 		}
 	}
 	public static function maintain( $event_id ) {

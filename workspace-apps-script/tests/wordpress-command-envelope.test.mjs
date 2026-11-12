@@ -25,7 +25,7 @@ function send(payload) {
     }}
   });
   for (const file of ['Core.gs','Segreteria.gs']) vm.runInContext(readFileSync(new URL(`workspace-apps-script/src/${file}`,root),'utf8'),context);
-  context.inviaComandoWordPress_('QUEUE_OPERATIONAL_EMAILS',payload);
+  context.inviaComandoWordPress_('GET_EMAIL_RETENTION',payload);
   return envelope;
 }
 const payload = {message:'Città 🌍 / prova', extra:{}, list:[], nested:{empty:{}, values:[{},[]]}, amount:1};

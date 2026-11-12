@@ -2,6 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture,view} from './helpers/projection-sheet.mjs';
 
+test('extra operator column causes no writes on an unchanged projection',()=>{
+  const f=fixture(),c=f.context(),v=view();c.scriviProiezioneEvento_(f.sheet,v);
+  const width=f.sheet.getLastColumn();f.sheet.cells[0][width]='Nota locale';f.sheet.cells[1][width]='Conservare';
+  f.calls.length=0;c.scriviProiezioneEvento_(f.sheet,v);
+  assert.equal(f.calls.length,0);assert.equal(f.sheet.cells[1][width],'Conservare');
+});
+
+test('operative text preserves multiline, long contents and formula protection',()=>{
+  const f=fixture(),c=f.context(),v=view(),text='Prima riga\nSeconda  riga\n'+'x'.repeat(6000);
+  v.righe[0].valori.first_name=text;c.scriviProiezioneEvento_(f.sheet,v);
+  assert.equal(f.sheet.cells[1][1],text);
+  assert.equal(c.testoCellaOperativa_('=1+2\nnota'),"'=1+2\nnota");
+  assert.equal(c.modificheCorrentiFoglio_(f.sheet).changes.length,0);
+});
+
 test('one changed person writes one operational row and one baseline row out of 1000',()=>{
   const f=fixture(),c=f.context(),v=view(1000);c.scriviProiezioneEvento_(f.sheet,v);f.calls.length=0;
   v.righe[450].valori.first_name='Nome corretto';

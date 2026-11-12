@@ -6,6 +6,9 @@
   const label = root.querySelector('[data-mi-web-push-label]');
   const status = root.querySelector('[data-mi-web-push-status]');
   let statusTimeout = null;
+  const preferenceKey = 'mi-push-enabled:' + (root.dataset.workerScope || '/');
+  const remember = (enabled) => { try { localStorage.setItem(preferenceKey, enabled ? '1' : '0'); } catch (_) {} };
+  const wasEnabled = () => { try { return localStorage.getItem(preferenceKey) === '1'; } catch (_) { return false; } };
   const supported = window.isSecureContext
     && 'serviceWorker' in navigator
     && 'PushManager' in window
@@ -108,9 +111,13 @@
   }
 
   if (Notification.permission === 'granted') {
-    getRegistration().then((registration) => registration.pushManager.getSubscription()).then(async (subscription) => {
+    getRegistration().then(async (registration) => {
+      const current = await registration.pushManager.getSubscription();
+      return current || (wasEnabled() ? registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64UrlToBytes(root.dataset.publicKey || '') }) : null);
+    }).then(async (subscription) => {
       if (!subscription) return;
       await postSubscription('subscribe', subscription.toJSON());
+      remember(true);
       setActive(true);
       showStatus('Notifiche attive su questo dispositivo.', 4000);
     }).catch(() => {
@@ -129,6 +136,7 @@
     showStatus('');
     try {
       if (disabling) {
+        remember(false);
         const registration = await getRegistration();
         const subscription = await registration.pushManager.getSubscription();
         if (subscription) {
@@ -160,6 +168,7 @@
         });
       }
       await postSubscription('subscribe', subscription.toJSON());
+      remember(true);
       setActive(true);
       showStatus('Notifiche attive su questo dispositivo.', 4000);
     } catch (error) {

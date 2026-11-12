@@ -33,6 +33,17 @@ check(!empty(MI_Payment_Ledger::save(1,$refund_first)['saved']),'rimborso che ri
 $reopened=$wpdb->get_row('SELECT status,expires_at,payment_deadline_at FROM wp_mi_registrations WHERE id=1',ARRAY_A);
 check($reopened['status']==='PENDING_PAYMENT'&&strtotime($reopened['expires_at'].' UTC')>time()&&$reopened['expires_at']===$reopened['payment_deadline_at'],'rimborso riaperto con scadenza futura coerente');
 check((int)$wpdb->get_var("SELECT COUNT(*) FROM wp_mi_registrations WHERE id=1 AND status='PENDING_PAYMENT' AND capacity_released_at IS NULL AND expires_at IS NOT NULL AND expires_at <= UTC_TIMESTAMP()")===0,'il cron non deve selezionare la prenotazione appena riaperta dopo rimborso');
+$partial=$deposit;$partial['request_id']='wp_7_12345678-1234-4234-8234-123456789a01';$partial['importo']='4';
+check(!empty(MI_Payment_Ledger::save(1,$partial)['saved']),'caparra parziale salvata');
+check(!empty(MI_Payment_Ledger::save(1,$partial)['replayed']),'retry caparra parziale senza duplicazione');
+check($wpdb->get_var('SELECT status FROM wp_mi_registrations WHERE id=1')==='PENDING_PAYMENT','caparra parziale non conferma prima della copertura');
+$remaining=MI_Payment_Ledger::detail(1)['saldo']['individual']['people'][0];
+check($remaining['paid']===9400&&$remaining['deposit_missing']===600,'residuo parziale esatto');
+$partial['request_id']='wp_7_12345678-1234-4234-8234-123456789a02';$partial['importo']='6.01';
+check(empty(MI_Payment_Ledger::save(1,$partial)['saved']),'oltre residuo caparra rifiutato');
+$partial['request_id']='wp_7_12345678-1234-4234-8234-123456789a03';$partial['importo']='6';
+check(!empty(MI_Payment_Ledger::save(1,$partial)['saved']),'seconda quota caparra salvata');
+check($wpdb->get_var('SELECT status FROM wp_mi_registrations WHERE id=1')==='CONFIRMED','conferma dopo copertura intera caparra');
 $refund['request_id']='wp_7_12345678-1234-4234-8234-123456789ac0';$refund['importo']='260';check(empty(MI_Payment_Ledger::save(1,$refund)['saved']),'rimborso superiore al versato personale rifiutato');
 $refund['request_id']='wp_7_12345678-1234-4234-8234-123456789ac1';$refund['importo']='10';$refund['participant_ids']='[1,2]';check(empty(MI_Payment_Ledger::save(1,$refund)['saved']),'rimborso ambiguo su più persone rifiutato');
 $full=MI_Payment_People::calculate(

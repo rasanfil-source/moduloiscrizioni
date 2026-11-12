@@ -1,5 +1,6 @@
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import vm from 'node:vm';
+import {standaloneSource} from './workspace-standalone.mjs';
 
 // Genera il sorgente MODULI AUTONOMO senza includere configurazioni private.
 const radice = new URL('../', import.meta.url);
@@ -10,8 +11,8 @@ const nomi = (await readdir(directory)).filter(nome => nome.endsWith('.gs')).sor
 const componi = async elenco => (await Promise.all(elenco.map(async nome => `// Sorgente: ${nome}\n${await readFile(new URL(nome, directory), 'utf8')}`))).join('\n\n');
 const codice = await componi(nomi);
 // La modalità autonoma limita il progetto ai fogli evento collegati a WordPress.
-const codiceProgetto = `const MI_STANDALONE_MODE = true;\n` + codice;
+const codiceProgetto = await standaloneSource(codice);
 new vm.Script(codiceProgetto);
 const destinazioneProgetto = new URL(`dist/Codice-Workspace-Progetto-${versione}.gs`, radice);
-await writeFile(destinazioneProgetto, codiceProgetto, 'utf8');
+await writeFile(destinazioneProgetto, codiceProgetto, {encoding:'utf8',flag:'wx'});
 console.log(`Sorgente MODULI AUTONOMO verificato e generato: ${destinazioneProgetto.pathname}`);

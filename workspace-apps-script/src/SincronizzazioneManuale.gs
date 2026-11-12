@@ -253,7 +253,7 @@ function confermaModificheFoglio_(payload) {
       const revision=Number(receipt.workspace_revision), versioned=Number.isSafeInteger(revision) && revision>0;
       const cell=sheet.getRange(position+2,columns[receipt.key]);
       if (cell.getDisplayValue()!==receipt.after && !(versioned && cell.getDisplayValue()===receipt.accepted)) return;
-      cell.setNumberFormat('@').setValue(neutralizzaFormula_(receipt.accepted,5000)); updated++;
+      cell.setNumberFormat('@').setValue(testoCellaOperativa_(receipt.accepted)); updated++;
       if (versioned) {
         const stored=JSON.parse(String(baseRows[basePosition][3]||'{}'));
         if(receipt.accepted===receipt.before)delete stored[receipt.key];
