@@ -21,11 +21,12 @@ jobs:
           php-version: '8.3'
           extensions: mbstring, openssl
           coverage: none
+      - name: Install build and test dependencies
+        run: npm ci --prefix tools/asset-build
       - name: Verify Workspace and WordPress behavior
         run: node --test workspace-apps-script/tests/*.test.mjs wordpress-plugin/tests/*.test.mjs
       - name: Verify generated assets
         run: |
-          npm ci --prefix tools/asset-build
           node tools/asset-build/build.cjs --check
           node tools/asset-build/verify.cjs
       - name: Verify public balance workflow and actual payments
