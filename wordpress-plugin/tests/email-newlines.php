@@ -40,7 +40,7 @@ foreach (['ZERO', 'NONE', 'CALCULATED'] as $mode) {
         $snapshot = MI_Modello_Email::crea_istantanea(42, ['{{evento.data}}' => '18 ottobre', '{{pagamento.istruzioni}}' => 'Bonifico']);
         $preview = json_decode(wp_json_encode(['email_preview' => $snapshot]), true)['email_preview'];
         expect(str_contains($preview['testo'], "registrata.\n\nQuando: 18 ottobre"), 'snapshot testo senza paragrafi');
-        expect(str_contains($preview['testo'], "Sant'Eugenio\nStato: Iscrizione\n\nConserva"), 'snapshot testo corrotto');
+        expect(str_contains($preview['testo'], "Sant'Eugenio\nStato: Iscrizione\n\nRiferimenti dell’iscrizione:"), 'snapshot testo corrotto');
         expect(str_contains($preview['html'], 'Eugenio<br><strong>Stato:</strong>'), 'snapshot HTML corrotto');
         foreach (['anno', 'quando', 'nessuno', 'saranno'] as $word) {
             expect(str_contains($preview['testo'], $word) && str_contains($preview['html'], $word), 'parola alterata: ' . $word);

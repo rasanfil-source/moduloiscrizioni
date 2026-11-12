@@ -59,7 +59,7 @@ test('una replica conferma soltanto celle coincidenti e conserva una modifica su
 });
 
 test('la lettura diretta riprende il giornale e usa il registro privato, mai DB_MODULI',()=>{
- const sheet={};let opened=0,resumed=0;
+ const sheet={getParent:()=>({getSheetByName:()=>null})};let opened=0,resumed=0;
  const context=vm.createContext({
   LockService:{getScriptLock:()=>({waitLock:()=>{},releaseLock:()=>{}})},
   ottieniSchedaObbligatoria_:()=>{throw Error('DB_MODULI accessed');},

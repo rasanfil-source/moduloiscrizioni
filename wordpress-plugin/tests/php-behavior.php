@@ -185,7 +185,7 @@ expect( false !== strpos( $email_html, 'max-width:600px' ), 'card email da 600px
 expect( false !== strpos( $email_html, 'opacity:0;color:transparent' ), 'preheader nascosto incompleto' );
 expect( false !== strpos( $email_html, '<meta name="viewport"' ) && false !== strpos( $email_html, 'border:1px solid #e4e8ef' ), 'struttura responsive del modello email assente' );
 expect( false !== strpos( $email_html, 'role="presentation"' ) && false !== strpos( $email_html, 'cellpadding="0"' ) && false !== strpos( $email_html, 'bgcolor="#151b38"' ), 'markup email-safe incompleto' );
-expect( false !== strpos( $email_html, 'Assistenza' ) && false !== strpos( $email_html, 'border-radius:12px' ) && false !== strpos( $email_html, 'font-style:italic' ), 'componenti del restyling email assenti' );
+expect( false !== strpos( $email_html, 'Per assistenza' ) && false !== strpos( $email_html, 'border-radius:12px' ) && false !== strpos( $email_html, 'font-style:italic' ), 'componenti del restyling email assenti' );
 expect( false !== strpos( $email_html, 'https://example.invalid/copertina.jpg' ) && false !== strpos( $email_html, 'font-size:17px' ), 'banner evento o testo leggibile assenti nell email' );
 
 $repaired_email = MI_Modello_Email::ripara_istantanea_codifica( array( 'testo' => 'Carissimo,\n\nla tua iscrizione è registrata.\n\n**Quando:** 18/10/2026\n**Dove:** Roma.\n**Codice iscrizione:** TEST-1\n**Stato:** Confermata.\n\nInformativa (Roma).\nLa finalità resta pastorale. I dati saranno cancellati dopo un anno.&#x20;', 'html' => '' ) );

@@ -51,6 +51,7 @@ final class MI_REST_Controller {
 		if ( 'GET_EVENT_PROJECTION' === $action ) return self::event_projection_for_workspace( $payload );
 		if ( 'GET_EMAIL_MODE' === $action ) return array( 'ok' => true, 'mode' => MI_Spedizione_Email::modalita() );
 		if ( 'GET_EMAIL_RETENTION' === $action ) return MI_Spedizione_Email::retention_event_deadlines( $payload );
+		if ( 'ADVANCE_PROJECTION_GENERATION' === $action ) return MI_Event_Projection::advance_generation( $payload );
 		return new WP_Error( 'mi_workspace_action_not_allowed', 'Azione Workspace non consentita.', array( 'status' => 403 ) );
 	}
 

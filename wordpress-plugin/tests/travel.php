@@ -274,7 +274,7 @@ $lateOwnRow=travel_row($lateOwn);$lateCancelRow=travel_row($lateCancel);
 check_travel($lateOwnRow['state']==='WAITING'&&$lateCancelRow['state']==='WAITING'&&!empty($lateOwnRow['decision_deadline_at'])&&!empty($lateCancelRow['decision_deadline_at']),'Required passengers did not receive the grace deadline');
 $graceDeadline=strtotime($lateOwnRow['decision_deadline_at'].' UTC');
 check_travel(abs($graceDeadline-time()-86400)<8,'Grace period was not 24 hours from driver loss');
-check_travel((int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM wp_mi_email_outbox WHERE registration_id=%d AND template_type='TRAVEL_UPDATE' AND payload_json LIKE %s",$lateOwnRow['registration_id'],'%organizzarti autonomamente%'))>0,'Passenger was not told how to resolve a lost ride');
+check_travel((int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM wp_mi_email_outbox WHERE registration_id=%d AND template_type='TRAVEL_UPDATE' AND payload_json LIKE %s",$lateOwnRow['registration_id'],'%spostamento autonomo%'))>0,'Passenger was not told how to resolve a lost ride');
 $GLOBALS['meta'][45]['_mi_travel']['deadline']=wp_date('Y-m-d\\TH:i',time()-60);
 $lateOwnToken=hash_hmac('sha256','mi-travel|'.$lateOwnRow['participant_id'],wp_salt('auth'));
 check_travel(true===MI_Travel::decide($lateOwnRow['participant_id'],$lateOwnToken,'own'),'Passenger could not choose independent travel after assignment deadline');
@@ -405,3 +405,19 @@ foreach (['TOGETHER'=>155,'EXPIRE'=>156] as $decision=>$eventId) {
  check_travel((int)$counts['confirmed_count']===1&&(int)$counts['waitlisted_count']===($decision==='EXPIRE'?0:2),'Wrong queue counters after '.$decision);
 }
 echo "PASS partial offer deferral and expiry release one seat and promote next person.\n";
+foreach(['BOOKING'=>157,'PERSON'=>158] as $action=>$eventId){
+ $eventCopy=array_replace($choiceEvent,['id'=>$eventId]);
+ $wpdb->insert('wp_mi_event_revisions',['event_id'=>$eventId,'revision_number'=>1,'config_hash'=>str_repeat('e',64),'config_json'=>json_encode($eventCopy),'created_at'=>gmdate('Y-m-d H:i:s')]);
+ $GLOBALS['meta'][$eventId]=['_mi_published_revision_id'=>$wpdb->insert_id,'_mi_capacity'=>1,'_mi_waitlist_enabled'=>'1'];
+ $seat=MI_Registration_Service::create($eventId,$singlePayload,bin2hex(random_bytes(16)));
+ $pair=MI_Registration_Service::create($eventId,$choicePayload,bin2hex(random_bytes(16)));
+ $next=MI_Registration_Service::create($eventId,array_replace($singlePayload,['waitlist_accepted'=>true]),bin2hex(random_bytes(16)));
+ MI_Registration_Service::cancel_registration($wpdb->get_var($wpdb->prepare('SELECT id FROM wp_mi_registrations WHERE order_code=%s',$seat['order_code'])),'TEST',true,false);
+ $offer=$wpdb->get_row($wpdb->prepare('SELECT * FROM wp_mi_registrations WHERE order_code=%s',$pair['order_code']));
+ check_travel(!empty($offer['waitlist_partial_type']),'Missing partial fixture');
+ if($action==='BOOKING')MI_Registration_Service::cancel_registration($offer['id'],'TEST',true,false);
+ else MI_Registration_Service::cancel_participant($wpdb->get_var($wpdb->prepare('SELECT id FROM wp_mi_participants WHERE registration_id=%d ORDER BY id LIMIT 1',$offer['id'])),'TEST');
+ $promotedCode=$action==='BOOKING'?$next['order_code']:$pair['order_code'];
+ check_travel($wpdb->get_var($wpdb->prepare('SELECT status FROM wp_mi_registrations WHERE order_code=%s',$promotedCode))==='WAITLIST_OFFERED','Cancellation failed to reoffer freed partial seat');
+}
+echo "PASS partial cancellations promote the next booking or the remaining person.\n";

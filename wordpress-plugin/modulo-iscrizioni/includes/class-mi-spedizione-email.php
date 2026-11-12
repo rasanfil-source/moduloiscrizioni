@@ -107,8 +107,8 @@ final class MI_Spedizione_Email {
 		if ( $wpdb->last_error ) throw new RuntimeException( 'Destinatari dell’avviso non disponibili.' );
 		$title = html_entity_decode( get_the_title( $event_id ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 		$contact = self::destinatario_evento( $event_id );
-		$body = '<p>Ti informiamo che l’evento <strong>' . esc_html( $title ) . '</strong> è stato eliminato dal programma e la tua prenotazione non è più attiva.</p><p>Per maggiori ragguagli, scrivi a <a href="mailto:' . esc_attr( $contact ) . '">' . esc_html( $contact ) . '</a>.</p>';
-		$snapshot = MI_Modello_Email::crea_istantanea_istituzionale( $event_id, 'Evento eliminato — ' . $title, 'Comunicazione relativa alla tua prenotazione.', $body, "L’evento {$title} è stato eliminato dal programma e la tua prenotazione non è più attiva.\nPer maggiori ragguagli, scrivi a: {$contact}." );
+		$body = '<p>Si comunica che l’evento <strong>' . esc_html( $title ) . '</strong> è stato eliminato dal programma e la prenotazione non è più attiva.</p><p>Per maggiori informazioni, scrivere a <a href="mailto:' . esc_attr( $contact ) . '">' . esc_html( $contact ) . '</a>.</p>';
+		$snapshot = MI_Modello_Email::crea_istantanea_istituzionale( $event_id, 'Evento eliminato — ' . $title, 'Comunicazione relativa alla prenotazione.', $body, "L’evento {$title} è stato eliminato dal programma e la prenotazione non è più attiva.\nPer maggiori informazioni, scrivere a: {$contact}." );
 		$snapshot['identita_email']['indirizzo_risposte'] = $contact;
 		foreach ( array_unique( array_column( $rows, 'buyer_email' ) ) as $recipient ) {
 			if ( ! is_email( $recipient ) ) continue;

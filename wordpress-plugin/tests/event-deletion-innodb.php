@@ -54,6 +54,8 @@ foreach([42,43]as$id){
 }
 $wpdb->query("INSERT INTO wp_mi_cancellation_tokens (participant_id,token_hash,created_at) VALUES (42,REPEAT(CHAR(97),64),NOW()),(43,REPEAT(CHAR(98),64),NOW())");
 $request='12345678-1234-4234-8234-123456789abc';$preview=MI_Event_Deletion::preview(42);
+$wpdb->query("UPDATE wp_mi_registrations SET workspace_status='SYNCED',workspace_attempts=3,workspace_synced_at=UTC_TIMESTAMP() WHERE event_id=42");
+check(MI_Event_Deletion::preview(42)['fingerprint']===$preview['fingerprint'],'Cron invalida conferma eliminazione');
 $wpdb->query("UPDATE wp_mi_registrations SET buyer_email='person@example.invalid' WHERE event_id=42");$preview=MI_Event_Deletion::preview(42);
 $allowed=false;check(is_wp_error(MI_Event_Deletion::begin(42,$preview['fingerprint'],$request,'trash','Evento 42',true)),'Permissions bypassed');$allowed=true;
 $wpdb->query('UPDATE wp_mi_payments SET amount_cents=200 WHERE id=42');

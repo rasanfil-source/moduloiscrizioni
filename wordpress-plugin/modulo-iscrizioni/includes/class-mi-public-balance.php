@@ -161,9 +161,9 @@ final class MI_Public_Balance {
 		$text .= "\nTotale: " . $money( $receipt['total'] ) . "\nVersato (esclusi rimborsi effettuati): " . $money( $receipt['paid'] ) . "\nSaldo da versare: " . $money( $receipt['balance'] ) . "\nCausale: " . $receipt['causale'];
 		if ( $receipt['balance'] > 0 && in_array( 'BANK_TRANSFER', $payment['methods'], true ) ) $text .= "\nIBAN: " . $payment['iban'] . "\nIntestatario: " . $payment['holder'];
 		if ( $receipt['balance'] > 0 && in_array( 'CARD', $payment['methods'], true ) ) $text .= "\nPagamento con carta: " . $payment['cardUrl'];
-		foreach ( $receipt['people'] as $person ) if ( ! empty( $person['missing'] ) ) $text .= "\n\nPrima dell’evento — " . $person['name'] . ': ' . implode( ', ', $person['missing'] ) . '. Rispondi a questa email con le informazioni richieste.';
+		foreach ( $receipt['people'] as $person ) if ( ! empty( $person['missing'] ) ) $text .= "\n\nPrima dell’evento — " . $person['name'] . ': ' . implode( ', ', $person['missing'] ) . '. Le informazioni richieste possono essere comunicate rispondendo a questa email.';
 		$snapshot = MI_Modello_Email::crea_istantanea( $event, array() );
-		$snapshot['attivo'] = true; $snapshot['oggetto'] = 'Ecco il tuo saldo e le istruzioni di pagamento — ' . get_the_title( $event ); $snapshot['testo'] = $text;
+		$snapshot['attivo'] = true; $snapshot['oggetto'] = 'Riepilogo del saldo e istruzioni di pagamento — ' . get_the_title( $event ); $snapshot['testo'] = $text;
 		$snapshot['titolo'] = 'Riepilogo della prenotazione'; $snapshot['preheader'] = 'Importi, scadenze e indicazioni aggiornate.'; $snapshot['html'] = self::email_body( $event, $receipt, $payment );
 		$snapshot['identita_email']['indirizzo_risposte'] = $payment['contact'];
 		$snapshot['identificativo'] = array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' );

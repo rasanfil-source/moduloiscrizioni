@@ -209,6 +209,10 @@ final class MI_Payment_Ledger {
 				$status = $covered ? 'CONFIRMED' : 'PENDING_PAYMENT';
 				$changes['status'] = $status;
 				if ( 'CONFIRMED' === $status ) $changes['expires_at'] = null;
+				elseif ( in_array( $r['workspace_last_error'] ?? '', array( 'payment_expiry_review_required', 'payment_deadline_review_required' ), true ) ) {
+					$changes['workspace_last_error'] = $r['workspace_last_error'];
+					$changes['expires_at'] = null;
+				}
 				elseif ( 'PENDING_PAYMENT' !== $r['status'] ) {
 					$deadline = MI_Registration_Service::reopened_payment_deadline( $r );
 					$changes['expires_at'] = $deadline;

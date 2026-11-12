@@ -704,6 +704,7 @@ final class MI_Portal {
 		$allowed_templates = array_merge( array( 'PRE_DEPARTURE_REMINDER', 'BALANCE_REMINDER', 'PARTICIPATION_CANCELLATION_REMINDER' ), array_keys( self::custom_communication_types() ) );
 		if ( ! in_array( $template, $allowed_templates, true ) ) return self::redirect_portal_result( 'Tipo di comunicazione non valido.', true, 'communications' );
 		$message = mb_substr( sanitize_textarea_field( $input['message'] ?? '' ), 0, 4000 );
+		$message = MI_Modello_Email::uniforma_testo_comunicazione( $message );
 		if ( '' === trim( $message ) && ! in_array( $template, array( 'BALANCE_REMINDER', 'PARTICIPATION_CANCELLATION_REMINDER' ), true ) ) return self::redirect_portal_result( 'Inserisci il messaggio.', true, 'communications' );
 		if ( '' === trim( $message ) ) $message = MI_Modello_Email::default_communication_message( $template );
 		global $wpdb;
@@ -1505,6 +1506,7 @@ final class MI_Portal {
 			echo '<section><h2>Conferma comunicazione</h2><h3>' . esc_html( get_the_title( $draft['event_id'] ) ) . '</h3><p>' . esc_html( $draft['count'] ) . ' email per le prenotazioni selezionate.</p>';
 			echo '<p><strong>' . ( 'OPERATIVO' === $display_mode ? 'Invio ai destinatari reali' : ( 'PROVA' === $display_mode ? 'Invio esclusivamente alla casella di prova' : 'Solo preparazione, senza invio' ) ) . '</strong></p>';
 			if ( ! empty( $draft['excluded'] ) ) echo '<p>' . esc_html( $draft['excluded'] ) . ' prenotazioni escluse perché prive di un recapito email valido.</p>';
+			$draft['message'] = MI_Modello_Email::uniforma_testo_comunicazione( $draft['message'] );
 			if ( 'publish' !== get_post_status( $draft['event_id'] ) ) echo '<p>Evento non pubblicato: verranno salvate soltanto anteprime, senza invio.</p>';
 			echo '<details><summary>Destinatari delle prenotazioni</summary><p>' . esc_html( implode( ', ', $draft['emails'] ) ) . '</p></details><h3>Testo del messaggio</h3>';
 			if ( 'BALANCE_REMINDER' === $draft['template_type'] ) echo '<p>Il testo sarà personalizzato per ogni prenotazione sostituendo i segnaposto con saldo, scadenza e causale. Il collegamento al riepilogo viene aggiunto automaticamente.</p>' . MI_Modello_Email::formatta_comunicazione( $draft['message'] );
@@ -1541,7 +1543,7 @@ final class MI_Portal {
 		$types = array_merge( array( 'PRE_DEPARTURE_REMINDER' => 'Informazioni prima dell’evento', 'PARTICIPATION_CANCELLATION_REMINDER' => 'Verifica della partecipazione', 'BALANCE_REMINDER' => 'Promemoria del saldo' ), $custom_types );
 		$initial_type = isset( $types[ $edit['template_type'] ?? '' ] ) ? $edit['template_type'] : 'PRE_DEPARTURE_REMINDER';
 		foreach ( $types as $code => $label ) echo '<option value="' . esc_attr( $code ) . '" data-mi-message="' . esc_attr( MI_Modello_Email::default_communication_message( $code ) ) . '" data-mi-help="' . esc_attr( MI_Modello_Email::default_communication_help( $code ) ) . '" ' . selected( $initial_type, $code, false ) . '>' . esc_html( $label ) . '</option>';
-		$initial_message = $edit['message'] ?? MI_Modello_Email::default_communication_message( $initial_type );
+		$initial_message = MI_Modello_Email::uniforma_testo_comunicazione( $edit['message'] ?? MI_Modello_Email::default_communication_message( $initial_type ) );
 		$initial_help = MI_Modello_Email::default_communication_help( $initial_type );
 		echo '</select></label><label>Messaggio<small data-mi-communication-help role="status" aria-live="polite">' . esc_html( $initial_help ) . '</small><textarea name="message" data-mi-communication-message rows="8" maxlength="4000">' . esc_textarea( $initial_message ) . '</textarea></label><button type="button" class="mi-secondary" data-mi-communication-reset hidden>Ripristina testo suggerito</button><p class="mi-portal-muted">Grassetto: **testo** · Corsivo: *testo* · Elenco: una riga per voce preceduta da - . I segnaposto disponibili cambiano in base al tipo di messaggio.</p><button class="mi-primary" type="submit">Controlla anteprima e destinatari</button></form>';
 		if ( current_user_can( 'mi_manage_all_events' ) || current_user_can( 'manage_options' ) ) {

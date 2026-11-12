@@ -955,8 +955,18 @@ final class MI_Admin {
 		}
 		$activity_id = isset( $_POST['mi_activity_id'] ) ? absint( $_POST['mi_activity_id'] ) : 0;
 		$post_id = absint( $postarr['ID'] ?? 0 );
-		// save_event rifiuta tutti i nuovi metadati: conserva la pubblicazione precedente.
-		if ( $post_id && function_exists( 'get_post_status' ) && 'publish' === get_post_status( $post_id ) && ! MI_Amount::valid_event_prices( $_POST ) ) return $data;
+		$end = sanitize_text_field( wp_unslash( $_POST['mi_event_ends_at'] ?? '' ) );
+		$end_valid = '' === $end ? true : MI_Registration_Service::validate_event_end( sanitize_text_field( wp_unslash( $_POST['mi_event_starts_at'] ?? '' ) ), $end );
+		if ( ! MI_Amount::valid_event_prices( $_POST ) || is_wp_error( $end_valid ) ) {
+			MI_Event_Post_Type::reject_save( $post_id );
+			$previous = $post_id ? get_post( $post_id ) : null;
+			if ( $previous && 'publish' === $previous->post_status ) {
+				$data['post_title'] = wp_slash( $previous->post_title );
+				$data['post_content'] = wp_slash( $previous->post_content );
+				$data['post_excerpt'] = wp_slash( $previous->post_excerpt );
+			} else $data['post_status'] = 'draft';
+			return $data;
+		}
 		$current_activity_id = $post_id ? absint( get_post_meta( $post_id, '_mi_activity_id', true ) ) : 0;
 		$activity_stable = true;
 		if ( $post_id && $current_activity_id && $activity_id !== $current_activity_id ) {

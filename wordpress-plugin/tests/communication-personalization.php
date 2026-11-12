@@ -27,21 +27,21 @@ foreach ( $links as $index => $link ) {
 $GLOBALS['email_meta'][42] = array();
 $values = array( '{{evento.titolo}}' => 'Evento sintetico', '{{sottoscrittore.nome_completo}}' => 'Referente diverso dai partecipanti' );
 $many = MI_Modello_Email::crea_istantanea_operativa( 42, $values, 'PARTICIPATION_CANCELLATION_REMINDER', '', '', $links, true, false );
-expect( str_starts_with( $many['testo'], 'Buongiorno Maria Rossi e Paolo Bianchi,' ), 'Saluto familiare senza i nomi dei partecipanti' );
+expect( str_starts_with( $many['testo'], 'Buongiorno Maria Rossi e Paolo Bianchi.' ), 'Saluto familiare senza i nomi dei partecipanti' );
 $single = MI_Modello_Email::crea_istantanea_operativa( 42, $values, 'PARTICIPATION_CANCELLATION_REMINDER', '', '', array( $links[0] ), true, false );
-expect( str_starts_with( $single['testo'], 'Buongiorno Maria Rossi,' ), 'Saluto individuale non personalizzato' );
+expect( str_starts_with( $single['testo'], 'Buongiorno Maria Rossi.' ), 'Saluto individuale non personalizzato' );
 expect( ! str_contains( $single['html'], 'Referente diverso' ) && ! str_contains( $single['html'], 'Persona di prova' ), 'Invio operativo usa nome del referente o campione' );
 expect( str_contains( $single['html'], '<strong>annullare la relativa iscrizione</strong>' ), 'Testo suggerito perde il grassetto' );
 expect( str_contains( $many['html'], '<strong>annullare la relativa iscrizione</strong>' ), 'Testo neutro assente dalla prenotazione multipla' );
 expect( ! str_contains( $single['html'], 'ti scriviamo per sapere' ), 'Introduzione ridondante rimasta' );
 foreach ( array( $single, $many ) as $snapshot ) {
 	$html = MI_Modello_Email::componi_html( $snapshot ); $plain = MI_Modello_Email::componi_testo( $snapshot );
-	expect( strpos( $html, 'A presto!' ) < strpos( $html, '>Assistenza<' ), 'Firma HTML dopo Assistenza' );
-	expect( strpos( $plain, 'A presto!' ) < strpos( $plain, 'Assistenza:' ), 'Firma testo dopo Assistenza' );
+	expect( strpos( $html, 'A presto!' ) < strpos( $html, '>Per assistenza<' ), 'Firma HTML dopo Assistenza' );
+	expect( strpos( $plain, 'A presto!' ) < strpos( $plain, 'Per assistenza — Scrivere a:' ), 'Firma testo dopo Assistenza' );
 }
 $demo_values = $values; $demo_values['{{sottoscrittore.nome_completo}}'] = 'Persona di prova';
 $demo = MI_Modello_Email::crea_istantanea_operativa( 42, $demo_values, 'PARTICIPATION_CANCELLATION_REMINDER', '', '', array(), false, true );
-expect( str_starts_with( $demo['testo'], 'Buongiorno Persona di prova,' ), 'Campione di prova non anonimizzato' );
+expect( str_starts_with( $demo['testo'], 'Buongiorno Persona di prova.' ), 'Campione di prova non anonimizzato' );
 if ( in_array( '--render', $argv, true ) ) {
 	file_put_contents( dirname( __DIR__, 2 ) . '/output/cancellazione-prova-3.27.33/operativo.html', MI_Modello_Email::componi_html( $single ) );
 	file_put_contents( dirname( __DIR__, 2 ) . '/output/cancellazione-prova-3.27.33/email.html', MI_Modello_Email::componi_html( $demo ) );

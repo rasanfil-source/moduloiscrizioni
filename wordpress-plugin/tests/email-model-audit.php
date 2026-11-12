@@ -40,8 +40,8 @@ foreach ([['REGISTRATION_ONLY',0,false],['FULL_PAYMENT',0,false],['DEPOSIT_BALAN
     $wait=MI_Modello_Email::crea_istantanea_lista_attesa(42,$values);
     $offer=MI_Modello_Email::crea_istantanea_offerta_lista_attesa(42,$values,'https://example.invalid/offer?token=test','domani');
     foreach (['html','testo'] as $format) {
-        expect(str_contains($wait[$format],$expected?'Per ora non devi pagare né fare altro.':'Per ora non devi fare altro.'),'Istruzione attesa incoerente: '.$mode.'/'.$total.'/'.$format);
-        expect(str_contains($offer[$format],'Non effettuare pagamenti')===$expected,'Istruzione offerta incoerente: '.$mode.'/'.$total.'/'.$format);
+        expect(str_contains($wait[$format],$expected?'Al momento non sono richiesti pagamenti né altre azioni.':'Al momento non sono richieste altre azioni.'),'Istruzione attesa incoerente: '.$mode.'/'.$total.'/'.$format);
+        expect(str_contains($offer[$format],'Il pagamento potrà essere effettuato')===$expected,'Istruzione offerta incoerente: '.$mode.'/'.$total.'/'.$format);
         expect(str_contains($offer[$format],'Accetta il posto')&&str_contains($offer[$format],'Rinuncia'),'Scelte offerta perse');
     }
     expect($offer['action_url']==='https://example.invalid/offer?token=test','Link risposta alterato');

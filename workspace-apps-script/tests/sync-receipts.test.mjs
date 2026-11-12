@@ -24,6 +24,18 @@ test('normalization back to baseline leaves no receipt and old no-op receipts ar
  assert.equal(e.value,'Nuova modifica');assert.equal(e.base.first_name,'Anna');
 });
 const receipt={order_code:'DEMO',number:1,key:'first_name',before:'Anna',after:'Anna Maria ',accepted:'Anna Maria'};
+test('lettura dopo conferma e seconda modifica usano la ricevuta autorevole',()=>{
+ const e=environment(),payload={event_id:'42',direct_projection:true};
+ e.c.confermaModificheFoglio_({...payload,confirmations:[{...receipt,workspace_revision:'8'}]});
+ assert.equal(e.c.leggiModificheEventoMysql_(payload).changes.length,0);
+ e.value='Anna Nuova';
+ const changes=e.c.leggiModificheEventoMysql_(payload).changes;
+ assert.equal(changes[0].before,'Anna Maria');
+ e.c.confermaModificheFoglio_({...payload,confirmations:[{...changes[0],accepted:'Anna Nuova',workspace_revision:'9'}]});
+ assert.equal(e.c.leggiModificheEventoMysql_(payload).changes.length,0);
+ e.c.allineaBaseConVista_(e.sheet,{righe:[{codice_ordine:'DEMO',numero_partecipante:1,workspace_revision:'9',valori:{first_name:'Anna Nuova'}}]});
+ assert.equal(e.base.first_name,'Anna Nuova');
+});
 test('more than 500 distinct receipts are confirmed and replay preserves subsequent edits',()=>{
  const count=501,values=Array.from({length:count},()=> 'Anna Maria '),stored=Array.from({length:count},()=>({}));
  const baseRows=values.map((value,index)=>['BOOK'+index,1,JSON.stringify({first_name:'Anna'}),'{}']);
@@ -62,11 +74,11 @@ test('more than 500 distinct receipts are confirmed and replay preserves subsequ
  assert.equal(values[count-1],'Modifica successiva');
  assert.equal(locks,0);
 });
-test('ricevuta normalizzata sblocca la proiezione solo dopo la replica canonica',()=>{
+test('ricevuta legacy normalizzata aggiorna la base immediatamente',()=>{
  const e=environment();const vista={righe:[{codice_ordine:'DEMO',numero_partecipante:1,valori:{first_name:'Anna Maria'}}]};
  e.c.allineaBaseConVista_(e.sheet,vista);assert.equal(e.base.first_name,'Anna');
  assert.equal(e.c.confermaModificheFoglio_({event_id:'42',direct_projection:true,confirmations:[receipt]}).updated,1);
- assert.equal(e.value,'Anna Maria');assert.equal(e.base.first_name,'Anna','receipt must not invent a completed replica');
+ assert.equal(e.value,'Anna Maria');assert.equal(e.base.first_name,'Anna Maria','legacy receipt updates its accepted cell');
  e.c.allineaBaseConVista_(e.sheet,vista);assert.equal(e.base.first_name,'Anna Maria');assert.equal(e.c.modificheCorrentiFoglio_(e.sheet).changes.length,0);assert.equal(e.locks,0);
 });
 test('ricevuta tardiva non cancella una nuova modifica e il retry è innocuo',()=>{

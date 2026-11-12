@@ -18,7 +18,7 @@ assert.match(model, /<td width="60" valign="top"[^>]*>.*\$logo/s);
 assert.doesNotMatch(model, /background-repeat:no-repeat;">' \. \$logo/);
 assert.match(model, /<strong>Quando:<\/strong>.*<br><strong>Dove:<\/strong>.*<br><strong>Stato:<\/strong>/s);
 assert.doesNotMatch(model, /<strong>Codice iscrizione:<\/strong> \{\{ordine\.codice\}\}/);
-assert.match(model, /margin:24px 0 0;[^']*<strong>Conserva questa email:<\/strong>/);
+assert.match(model, /margin:24px 0 0;[^']*<strong>Riferimenti dell’iscrizione:<\/strong>/);
 assert.match(model, /function uniforma_grafica_corpo/);
 assert.match(model, /Quando:\|Dove:\|Codice iscrizione:\|Stato:/);
 assert.match(model, /\$settings\['html'\] = self::uniforma_grafica_corpo/);

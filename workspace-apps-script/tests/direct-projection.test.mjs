@@ -6,6 +6,13 @@ import {gzipSync,gunzipSync} from 'node:zlib';
 import {createHash} from 'node:crypto';
 
 const source=fs.readFileSync(new URL('../src/ProiezioneDiretta.gs',import.meta.url),'utf8');
+test('restore advances the canonical generation outside Google lock before retry',()=>{
+ let locks=0,called=0;
+ const context=vm.createContext({PropertiesService:{getScriptProperties:()=>({getProperty:key=>key==='MI_DIRECT_GENERATION_42'?JSON.stringify({generation:'99',hash:'previous'}):null})},inviaComandoWordPress_:(action,payload)=>{assert.equal(locks,0);assert.equal(action,'ADVANCE_PROJECTION_GENERATION');assert.equal(payload.generation,'99');called++;return {ok:true,generation:'100'};},LockService:{getScriptLock:()=>{locks++;throw Error('Premature lock');}}});
+ vm.runInContext(source,context);context.caricaProiezioneDiretta_=()=>({});context.validaProiezioneDiretta_=()=>{};
+ const result=context.proiettaEventoDaWordPress_({event_id:'42',projection_generation:'2',projection_hash:'restored',fingerprint:'canonical'});
+ assert.equal(result.ready,false);assert.equal(result.retry_after,3);assert.equal(called,1);
+});
 const projection={
  event:{id_evento:'42',titolo:'Evento',profilo_operativo:'MINIMO',schema_vista_json:'{"fields":[],"options":[],"pricing":"ZERO"}',servizi_json:'[]',domande_json:'[]'},
  registrations:[{codice_ordine:'ORD-42',id_evento:'42',workspace_revision:'3',stato:'CONFIRMED'}],

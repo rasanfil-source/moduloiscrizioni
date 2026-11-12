@@ -97,3 +97,19 @@ $GLOBALS['audit_post_status']='draft';
 ob_start();$view->invoke(null);$html=ob_get_clean();
 if(str_contains($html,'<strong>Invio ai destinatari reali</strong>')||!str_contains($html,'<strong>Solo preparazione, senza invio</strong>'))throw new Exception('Draft preview announces real delivery');
 echo "PASS: draft preview consistently announces preparation without delivery.\n";
+// The actual Messages form and preview must show the same neutral presets as delivery.
+$_GET=[];ob_start();$view->invoke(null);$form=ob_get_clean();
+preg_match_all('/<option value="(PRE_DEPARTURE_REMINDER|PARTICIPATION_CANCELLATION_REMINDER|BALANCE_REMINDER)"[^>]*data-mi-message="([^"]*)"/', $form, $presets, PREG_SET_ORDER);
+if(count($presets)!==3)throw new Exception('Messages presets missing');
+foreach($presets as $preset){
+ $text=html_entity_decode($preset[2],ENT_QUOTES|ENT_HTML5,'UTF-8');
+ if($text!==MI_Modello_Email::default_communication_message($preset[1])||preg_match('/\b(tua|tuo|ti|puoi|leggi|contatta)\b/iu',$text))throw new Exception('Messages preset differs or uses familiar tone: '.$preset[1]);
+}
+$legacy='Ti ricordiamo che per la tua iscrizione a {{evento.titolo}} resta da versare il saldo.';
+$transients['mi_comm_7_testtoken']['message']=$legacy;
+$_GET=['mi_comm_edit'=>'testtoken'];ob_start();$view->invoke(null);$form=ob_get_clean();
+if(!str_contains($form,'Per l’iscrizione a {{evento.titolo}} resta da versare il saldo.</textarea>'))throw new Exception('Legacy draft still shown with familiar tone');
+$_GET=['mi_comm_preview'=>'testtoken'];ob_start();$view->invoke(null);$preview=ob_get_clean();
+if(!str_contains($preview,'Per l’iscrizione a {{evento.titolo}} resta da versare il saldo.')||str_contains($preview,'Ti ricordiamo'))throw new Exception('Legacy preview differs from neutral draft');
+if($transients['mi_comm_7_testtoken']['message']!==$legacy)throw new Exception('Rendering overwrote stored draft');
+echo "PASS: Messaggi, tre testi precompilati impersonali, bozze storiche e anteprima coerenti senza sovrascrittura.\n";

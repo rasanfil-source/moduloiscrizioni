@@ -4,6 +4,8 @@ defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/class-mi-amount.php';
 
 final class MI_Event_Post_Type {
+	private static $rejected_saves = array();
+	public static function reject_save( $post_id ) { self::$rejected_saves[(int) $post_id] = true; }
 	const EVENT_TYPE = 'mi_event';
 	// Identificativo del tipo evento usato nelle query e nelle associazioni WordPress.
 	const ACTIVITY_TYPE = 'mi_activity';
@@ -306,6 +308,7 @@ final class MI_Event_Post_Type {
 			return;
 		}
 		if ( ! MI_Amount::valid_event_prices( $_POST ) ) {
+			self::reject_save( $post_id );
 			set_transient( 'mi_publication_error_' . get_current_user_id(), 'Metadati dell’evento non salvati: correggi gli importi vuoti o non validi. Tutte le impostazioni precedenti sono state conservate, non soltanto i prezzi.', MINUTE_IN_SECONDS );
 			return;
 		}
@@ -314,6 +317,7 @@ final class MI_Event_Post_Type {
 		$event_ends_at = sanitize_text_field( wp_unslash( $_POST['mi_event_ends_at'] ?? get_post_meta( $post_id, '_mi_event_ends_at', true ) ) );
 		$end_valid = '' === $event_ends_at ? true : MI_Registration_Service::validate_event_end( sanitize_text_field( wp_unslash( $_POST['mi_event_starts_at'] ?? '' ) ), $event_ends_at );
 		if ( is_wp_error( $end_valid ) ) {
+			self::reject_save( $post_id );
 			set_transient( 'mi_publication_error_' . get_current_user_id(), $end_valid->get_error_message(), MINUTE_IN_SECONDS );
 			return;
 		}
@@ -478,6 +482,7 @@ final class MI_Event_Post_Type {
 	}
 
 	public static function publish_revision( $post_id, $post ) {
+		if ( ! empty( self::$rejected_saves[(int) $post_id] ) ) return;
 		if ( 'publish' !== $post->post_status || wp_is_post_revision( $post_id ) || wp_is_post_autosave( $post_id ) ) {
 			return;
 		}

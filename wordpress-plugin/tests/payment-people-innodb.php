@@ -34,11 +34,14 @@ $reopened=$wpdb->get_row('SELECT status,expires_at,payment_deadline_at FROM wp_m
 check($reopened['status']==='PENDING_PAYMENT'&&strtotime($reopened['expires_at'].' UTC')>time()&&$reopened['expires_at']===$reopened['payment_deadline_at'],'rimborso riaperto con scadenza futura coerente');
 check((int)$wpdb->get_var("SELECT COUNT(*) FROM wp_mi_registrations WHERE id=1 AND status='PENDING_PAYMENT' AND capacity_released_at IS NULL AND expires_at IS NOT NULL AND expires_at <= UTC_TIMESTAMP()")===0,'il cron non deve selezionare la prenotazione appena riaperta dopo rimborso');
 $partial=$deposit;$partial['request_id']='wp_7_12345678-1234-4234-8234-123456789a01';$partial['importo']='4';
+$wpdb->update('wp_mi_registrations',['expires_at'=>null,'workspace_last_error'=>'payment_expiry_review_required'],['id'=>1]);
 check(!empty(MI_Payment_Ledger::save(1,$partial)['saved']),'caparra parziale salvata');
 check(!empty(MI_Payment_Ledger::save(1,$partial)['replayed']),'retry caparra parziale senza duplicazione');
 check($wpdb->get_var('SELECT status FROM wp_mi_registrations WHERE id=1')==='PENDING_PAYMENT','caparra parziale non conferma prima della copertura');
 $remaining=MI_Payment_Ledger::detail(1)['saldo']['individual']['people'][0];
 check($remaining['paid']===9400&&$remaining['deposit_missing']===600,'residuo parziale esatto');
+$review=$wpdb->get_row('SELECT expires_at,workspace_last_error FROM wp_mi_registrations WHERE id=1',ARRAY_A);
+check($review['expires_at']===null&&$review['workspace_last_error']==='payment_expiry_review_required','parziale conserva revisione scadenza sospesa');
 $partial['request_id']='wp_7_12345678-1234-4234-8234-123456789a02';$partial['importo']='6.01';
 check(empty(MI_Payment_Ledger::save(1,$partial)['saved']),'oltre residuo caparra rifiutato');
 $partial['request_id']='wp_7_12345678-1234-4234-8234-123456789a03';$partial['importo']='6';

@@ -34,7 +34,7 @@ function wp_date($f,$t=null,$tz=null){return (new DateTimeImmutable('@'.($t??tim
 function wp_create_nonce($a){return 'fixture';}
 function wp_nonce_field(...$a){}
 function esc_textarea($v){return esc_html($v);}
-class MI_Modello_Email {static function default_communication_message($v){return 'Messaggio di prova';}static function default_communication_help($v){return 'Testo suggerito';}}
+class MI_Modello_Email {static function uniforma_testo_comunicazione($text){return $text;}static function default_communication_message($v){return 'Messaggio di prova';}static function default_communication_help($v){return 'Testo suggerito';}}
 function paginate_links($args){return '<a class="page-numbers" href="'.esc_url(str_replace('%#%','2',$args['base'])).'">2</a>';}
 class MI_Access {static $scope=[42];static $suspended=false;static function event_ids(){return self::$scope;}static function can_access_event($id){return self::$scope==='ALL'||in_array($id,self::$scope,true);}static function is_suspended(){return self::$suspended;}}
 class MI_Event_Post_Type {const EVENT_TYPE='mi_event';}

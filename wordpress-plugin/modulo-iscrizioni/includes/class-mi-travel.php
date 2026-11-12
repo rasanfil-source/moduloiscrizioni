@@ -217,29 +217,29 @@ final class MI_Travel {
 		}
 		foreach ( $driver_notices as $notice ) {
 			$passengers = array_values( array_unique( $notice['passengers'] ) );
-			$message = 1 === count( $passengers ) ? $passengers[0] . ' ha scelto un posto sulla tua auto.' : implode( ', ', $passengers ) . ' hanno scelto posti sulla tua auto.';
-			self::notify_locked( $notice['driver'], 'Nuovi passeggeri per il tuo viaggio', $message . ' Consulta il viaggio per i contatti e il riepilogo dei passeggeri.' );
+			$message = 1 === count( $passengers ) ? $passengers[0] . ' ha scelto un posto sull’auto indicata.' : implode( ', ', $passengers ) . ' hanno scelto posti sull’auto indicata.';
+			self::notify_locked( $notice['driver'], 'Nuovi passeggeri per il viaggio', $message . ' Il riepilogo del viaggio riporta i contatti e il riepilogo dei passeggeri.' );
 		}
 		if ( $management ) self::notify_locked(
 			array( 'participant_id' => $management[0]['participant_id'], 'registration_id' => (int) $registration_id, 'event_id' => (int) $event['id'], 'buyer_email' => $buyer_email ),
-			'Spostamenti: gestisci il tuo viaggio',
-			'Consulta gli spostamenti, i passaggi assegnati e le proposte delle persone della prenotazione. Il contributo per il passaggio, andata e ritorno, viene corrisposto direttamente al conducente ed è separato dalle eventuali quote dell’evento.',
+			'Spostamenti: riepilogo del viaggio',
+			'Dal collegamento è possibile consultare gli spostamenti, i passaggi assegnati e le proposte delle persone della prenotazione. Il contributo per il passaggio, andata e ritorno, viene corrisposto direttamente al conducente ed è separato dalle eventuali quote dell’evento.',
 			$management
 		);
 	}
 	private static function token( $id ) { return hash_hmac( 'sha256', 'mi-travel|' . (int) $id, wp_salt( 'auth' ) ); }
 	public static function url( $id ) { return add_query_arg( array( 'mi_travel' => (int) $id, 'travel_token' => self::token( $id ) ), home_url( '/' ) ); }
 	public static function pending_email( $event_id, array $management ) {
-		$message = 'La partecipazione è subordinata all’assegnazione dei passaggi richiesti. Il posto all’evento è riservato fino al termine delle assegnazioni. Durante l’attesa non è richiesto alcun pagamento dell’evento. Ogni proposta di passaggio indica il termine entro cui accettare il posto auto riservato. Il contributo A/R viene versato direttamente al conducente. Dal collegamento personale puoi gestire il passaggio, scegliere di organizzarti autonomamente oppure annullare la partecipazione.';
+		$message = 'La partecipazione è subordinata all’assegnazione dei passaggi richiesti. Il posto all’evento è riservato fino al termine delle assegnazioni. Durante l’attesa non è richiesto alcun pagamento dell’evento. Ogni proposta di passaggio indica il termine entro cui accettare il posto auto riservato. Il contributo A/R viene versato direttamente al conducente. Dal collegamento personale è possibile gestire il passaggio, scegliere uno spostamento autonomo oppure annullare la partecipazione.';
 		$html = '<p>' . esc_html( $message ) . '</p>';
 		foreach ( $management as $person ) {
 			$name = esc_html( $person['name'] ?? '' );
 			$travel_url = ! empty( $person['participant_id'] ) ? self::url( (int) $person['participant_id'] ) : '';
-			$html .= '<p>' . $name . ': <a href="' . esc_url( $travel_url ) . '">Gestisci spostamenti e partecipazione</a>';
-			if ( ! empty( $person['url'] ) ) $html .= ' · <a href="' . esc_url( $person['url'] ) . '">Annulla la partecipazione</a>';
+			$html .= '<p>' . $name . ': <a href="' . esc_url( $travel_url ) . '">Gestione spostamenti e partecipazione</a>';
+			if ( ! empty( $person['url'] ) ) $html .= ' · <a href="' . esc_url( $person['url'] ) . '">Annullamento della partecipazione</a>';
 			$html .= '</p>';
 		}
-		return MI_Modello_Email::crea_istantanea_istituzionale( $event_id, 'Partecipazione in attesa di passaggio', 'Richiesta registrata: attendi il passaggio.', $html, $message );
+		return MI_Modello_Email::crea_istantanea_istituzionale( $event_id, 'Partecipazione in attesa di passaggio', 'Richiesta registrata: in attesa di passaggio.', $html, $message );
 	}
 	private static function notify_locked( array $row, $subject, $message, array $management = array() ) {
 		if ( empty( $row['buyer_email'] ) ) return;
@@ -253,9 +253,9 @@ final class MI_Travel {
 			$url = self::url( $person['participant_id'] );
 			$label = trim( (string) ( $person['name'] ?? '' ) );
 			$label = $label ? $label . ': ' : '';
-			$html .= ( count( $management ) > 1 ? '<li>' : '<p>' ) . esc_html( $label ) . '<a href="' . esc_url( $url ) . '">Gestisci gli spostamenti</a>' . ( count( $management ) > 1 ? '</li>' : '</p>' );
+			$html .= ( count( $management ) > 1 ? '<li>' : '<p>' ) . esc_html( $label ) . '<a href="' . esc_url( $url ) . '">Gestione degli spostamenti</a>' . ( count( $management ) > 1 ? '</li>' : '</p>' );
 			$text .= "\n" . $label . $url;
-			$actions[] = array( 'label' => $label ? rtrim( $label ) . ' — gestisci gli spostamenti' : 'Gestisci gli spostamenti', 'url' => $url );
+			$actions[] = array( 'label' => $label ? rtrim( $label ) . ' — gestione degli spostamenti' : 'Gestione degli spostamenti', 'url' => $url );
 		}
 		if ( count( $management ) > 1 ) $html .= '</ul>';
 		$event_id = ! empty( $row['event_id'] ) ? (int) $row['event_id'] : (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$wpdb->prefix}mi_registrations WHERE id=%d", $row['registration_id'] ) ); self::check();
@@ -303,7 +303,7 @@ final class MI_Travel {
 			$audit_extra = array();
 			if ( 'ACTIVE' === $row['person_status'] && in_array( $row['booking_status'], array( 'WAITLISTED', 'WAITLIST_OFFERED' ), true ) ) continue;
 			if ( ! self::admitted( $row ) ) {
-				if ( 'ASSIGNED' === $row['state'] && ! empty( $row['driver_id'] ) && isset( $by_id[$row['driver_id']] ) && self::driver_active( $by_id[$row['driver_id']] ) ) self::queue_update( $notifications, $by_id[$row['driver_id']], 'Posto auto liberato', $row['first_name'] . ' ' . $row['last_name'] . ' non partecipa più all’evento; il posto sulla tua auto è libero.' );
+				if ( 'ASSIGNED' === $row['state'] && ! empty( $row['driver_id'] ) && isset( $by_id[$row['driver_id']] ) && self::driver_active( $by_id[$row['driver_id']] ) ) self::queue_update( $notifications, $by_id[$row['driver_id']], 'Posto auto liberato', $row['first_name'] . ' ' . $row['last_name'] . ' non partecipa più all’evento; il posto sull’auto indicata è libero.' );
 				$previous_state = $row['state']; $previous_driver_id = $row['driver_id'];
 				$row = array_merge( $row, array( 'state' => 'CLOSED', 'driver_id' => null, 'offer_expires_at' => null, 'decision_deadline_at' => null ) );
 				$audit_extra = array( 'previous_state' => $previous_state, 'previous_driver_id' => $previous_driver_id, 'reason' => 'PARTICIPATION_INACTIVE' );
@@ -320,14 +320,14 @@ final class MI_Travel {
 					$decision_deadline = gmdate( 'Y-m-d H:i:s', $decision_timestamp );
 				}
 				$row = array_merge( $row, array( 'state' => 'WAITING', 'driver_id' => null, 'offer_expires_at' => null, 'decision_deadline_at' => $decision_deadline ) );
-				$details = $decision_deadline ? ' Non ci sono 24 ore complete per una nuova proposta. Puoi organizzarti autonomamente o annullare la partecipazione entro ' . wp_date( 'd/m/Y H:i', strtotime( $decision_deadline . ' UTC' ), wp_timezone() ) . '.' : ' Cerchiamo un’altra disponibilità fino al termine delle assegnazioni.';
+				$details = $decision_deadline ? ' Non ci sono 24 ore complete per una nuova proposta. È possibile scegliere uno spostamento autonomo o annullare la partecipazione entro ' . wp_date( 'd/m/Y H:i', strtotime( $decision_deadline . ' UTC' ), wp_timezone() ) . '.' : ' Cerchiamo un’altra disponibilità fino al termine delle assegnazioni.';
 				$participation = ! empty( $row['required_ride'] ) ? ' La partecipazione resta riservata e il pagamento dell’evento è sospeso mentre cerchiamo una soluzione.' : ' L’iscrizione resta attiva secondo le condizioni di pagamento dell’evento.';
 				self::queue_update( $notifications, $row, 'Il passaggio assegnato non è più disponibile', 'Il passaggio assegnato non è più disponibile.' . $participation . $details );
 				$audit_extra = array( 'previous_state' => $previous_state, 'previous_driver_id' => $previous_driver_id, 'decision_deadline_at' => $decision_deadline, 'reason' => 'DRIVER_UNAVAILABLE' );
 			} elseif ( 'OFFERED' === $row['state'] && strtotime( $row['offer_expires_at'] . ' UTC' ) <= time() ) {
 				$previous_state = $row['state']; $previous_driver_id = $row['driver_id'];
 				$row = array_merge( $row, array( 'state' => 'EXPIRED', 'driver_id' => null, 'offer_expires_at' => null ) );
-				self::queue_update( $notifications, $row, 'Proposta di passaggio scaduta', 'Il termine di 24 ore è trascorso e il posto è nuovamente disponibile. Puoi rientrare in lista o organizzarti autonomamente dal collegamento personale, entro il termine dei passaggi.' );
+				self::queue_update( $notifications, $row, 'Proposta di passaggio scaduta', 'Il termine di 24 ore è trascorso e il posto è nuovamente disponibile. È possibile rientrare in lista o scegliere uno spostamento autonomo dal collegamento personale, entro il termine dei passaggi.' );
 				$audit_extra = array( 'previous_state' => $previous_state, 'previous_driver_id' => $previous_driver_id, 'reason' => 'OFFER_EXPIRED' );
 			} else continue;
 			self::write( $row['participant_id'], array_intersect_key( $row, array_flip( array( 'state', 'driver_id', 'offer_expires_at', 'decision_deadline_at' ) ) ) );
@@ -348,7 +348,7 @@ final class MI_Travel {
 			self::write( $row['participant_id'], array( 'mode' => 'OWN', 'state' => 'NONE', 'required_ride' => 0, 'driver_id' => null, 'offer_expires_at' => null, 'decision_deadline_at' => null ) );
 			$closed_row = array_merge( $row, array( 'mode' => 'OWN', 'state' => 'NONE', 'required_ride' => 0, 'driver_id' => null, 'offer_expires_at' => null, 'decision_deadline_at' => null ) );
 			self::audit_locked( $closed_row, 'TRAVEL_AUTONOMOUS', array( 'previous_state' => 'WAITING', 'reason' => $decision_expired ? 'DECISION_WINDOW_EXPIRED' : 'TRAVEL_DEADLINE' ), 'SYSTEM' );
-			self::queue_update( $notifications, $closed_row, 'Nessun passaggio assegnato', 'Non è stato assegnato un passaggio. L’iscrizione resta attiva secondo le condizioni di pagamento dell’evento. Dovrai raggiungere il luogo organizzandoti autonomamente.' );
+			self::queue_update( $notifications, $closed_row, 'Nessun passaggio assegnato', 'Non è stato assegnato un passaggio. L’iscrizione resta attiva secondo le condizioni di pagamento dell’evento. Il luogo dell’evento dovrà essere raggiunto con mezzi autonomi.' );
 		}
 		// Una proposta concede sempre 24 ore complete e non supera il termine finale.
 		if ( ! $deadline || time() + self::OFFER_SECONDS > $deadline || get_post_meta( $event_id, '_mi_event_cancellation_job', true ) || get_post_meta( $event_id, '_mi_event_cancelled_at', true ) ) { self::flush_updates( $notifications ); return; }
@@ -363,7 +363,7 @@ final class MI_Travel {
 				if ( ( $available[$driver['participant_id']] ?? 0 ) < 1 || (int) $driver['participant_id'] === (int) $row['participant_id'] ) continue;
 				$data = array( 'state' => 'OFFERED', 'driver_id' => $driver['participant_id'], 'price_cents' => $driver['price_cents'], 'origin' => $driver['origin'], 'departure_at' => $driver['departure_at'], 'offer_expires_at' => gmdate( 'Y-m-d H:i:s', time() + self::OFFER_SECONDS ) );
 				self::write( $row['participant_id'], $data ); $row = array_merge( $row, $data );
-				self::queue_update( $notifications, $row, 'Passaggio disponibile', self::describe( $row ) . '.' . self::driver_contact_text( $driver ) . ' Accetta o rifiuta entro ' . wp_date( 'd/m/Y H:i', strtotime( $row['offer_expires_at'] . ' UTC' ), wp_timezone() ) . '. Il posto è riservato a te fino alla scadenza.' );
+				self::queue_update( $notifications, $row, 'Passaggio disponibile', self::describe( $row ) . '.' . self::driver_contact_text( $driver ) . ' Accettazione o rinuncia entro ' . wp_date( 'd/m/Y H:i', strtotime( $row['offer_expires_at'] . ' UTC' ), wp_timezone() ) . '. Il posto è riservato fino alla scadenza.' );
 				self::audit_locked( $row, 'TRAVEL_OFFERED' );
 				--$available[$driver['participant_id']];
 				break;
@@ -409,7 +409,7 @@ final class MI_Travel {
 			self::check( $wpdb->update( $wpdb->prefix . 'mi_registrations', array( 'status' => $target, 'initial_due_cents' => $economic['initial_due_cents'], 'balance_cents' => $economic['balance_cents'], 'expires_at' => $deadline, 'payment_deadline_at' => $deadline ), array( 'id' => $id ) ) );
 			if ( class_exists( 'MI_Management_Service' ) ) MI_Management_Service::auto_assign_rooms_locked( $id );
 			$travel_row = array( 'participant_id' => (int) $wpdb->get_var( $wpdb->prepare( "SELECT participant_id FROM {$wpdb->prefix}mi_travel WHERE registration_id=%d ORDER BY participant_id LIMIT 1", $id ) ), 'registration_id' => $id, 'buyer_email' => $row['buyer_email'] );
-			$message = 'La gestione dei passaggi per la prenotazione è stata aggiornata. ' . ( 'PENDING_PAYMENT' === $target ? 'La partecipazione è ora da pagare. Consulta il riepilogo dell’evento: ' . MI_Portal::status_url( $id, $row['order_code'], $row['buyer_email'] ) : 'La partecipazione è confermata.' );
+			$message = 'La gestione dei passaggi per la prenotazione è stata aggiornata. ' . ( 'PENDING_PAYMENT' === $target ? 'La partecipazione è ora da pagare. Il riepilogo dell’evento è disponibile al collegamento: ' . MI_Portal::status_url( $id, $row['order_code'], $row['buyer_email'] ) : 'La partecipazione è confermata.' );
 			self::notify_locked( $travel_row, 'Partecipazione aggiornata', $message );
 		} else return;
 		MI_Registration_Service::mark_workspace_changed_locked( $id );
@@ -486,8 +486,8 @@ final class MI_Travel {
 				if ( ! $driver || ! self::driver_active( $driver ) ) throw new InvalidArgumentException( 'Il passaggio non è più disponibile.' );
 				$row['state'] = 'accept' === $action ? 'ASSIGNED' : 'DECLINED';
 				if ( 'accept' === $action ) {
-					self::notify_locked( $driver, 'Passaggio accettato', $row['first_name'] . ' ' . $row['last_name'] . ' ha accettato il passaggio proposto. Consulta il viaggio per i contatti.' );
-					self::notify_locked( $row, 'Passaggio assegnato', self::describe( $row ) . '. Consulta il viaggio per i contatti del conducente.' );
+					self::notify_locked( $driver, 'Passaggio accettato', $row['first_name'] . ' ' . $row['last_name'] . ' ha accettato il passaggio proposto. Il riepilogo del viaggio riporta i contatti.' );
+					self::notify_locked( $row, 'Passaggio assegnato', self::describe( $row ) . '. Il riepilogo del viaggio riporta i contatti del conducente.' );
 				}
 				if ( 'decline' === $action ) { $released_driver = $driver; $released_message = $row['first_name'] . ' ' . $row['last_name'] . ' ha rifiutato la proposta; il posto è di nuovo disponibile.'; $row['driver_id'] = null; }
 				$row['decision_deadline_at'] = null;

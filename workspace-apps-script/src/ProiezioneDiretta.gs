@@ -137,6 +137,14 @@ function proiettaEventoDaWordPress_(payload) {
   if(payload&&payload.background===true&&Number(PropertiesService.getScriptProperties().getProperty('MI_INTERACTIVE_OPEN_UNTIL')||0)>started)return {ok:true,ready:false,busy:true,retry_after:3};
   const projection=caricaProiezioneDiretta_(payload), eventId=String((payload||{}).event_id||'');validaProiezioneDiretta_(eventId,projection);
   timings.load_ms=Date.now()-started;
+  // Recupero monotono: fuori dal lock Google, chiedi al registro autorevole
+  // di superare il contatore rimasto nel progetto dopo un restore del database.
+  const previousGeneration=JSON.parse(PropertiesService.getScriptProperties().getProperty('MI_DIRECT_GENERATION_'+eventId)||'null');
+  if(previousGeneration && Number(payload.projection_generation)<=Number(previousGeneration.generation) && (Number(payload.projection_generation)<Number(previousGeneration.generation)||String(payload.projection_hash)!==previousGeneration.hash)){
+    const advanced=inviaComandoWordPress_('ADVANCE_PROJECTION_GENERATION',{event_id:eventId,generation:previousGeneration.generation,fingerprint:String(payload.fingerprint||'')});
+    if(!advanced||advanced.ok!==true)throw new Error('PROJECTION_RECOVERY_DEFERRED');
+    return {ok:true,ready:false,busy:true,retry_after:3};
+  }
   const lock=LockService.getScriptLock();if((payload||{}).background===true){if(!lock.tryLock(100))return {ok:true,ready:false,busy:true,retry_after:3};}else if(!lock.tryLock(1000))return {ok:true,ready:false,busy:true,retry_after:3};
   const lockedAt=Date.now();timings.lock_wait_ms=lockedAt-started-timings.load_ms;
   try{

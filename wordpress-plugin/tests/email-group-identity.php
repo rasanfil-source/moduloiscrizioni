@@ -30,7 +30,7 @@ $snapshot = MI_Modello_Email::crea_istantanea(42, []);
 expect($snapshot['identita_email']['nome_mittente'] === 'Segreteria', 'fallback identità default');
 expect(str_contains(MI_Modello_Email::componi_testo($snapshot), MI_Modello_Email::NOME_SEGRETERIA), 'firma default assente');
 echo "Group identity and signature: OK\n";
-$snapshot = MI_Modello_Email::crea_istantanea_annullamento_partecipazione_iscritto(42, 'Persona Esempio');
+$snapshot = MI_Modello_Email::crea_istantanea_annullamento_partecipazione_iscritto(42, 'Persona Esempio', '', 1);
 expect(str_contains($snapshot['html'], 'Persona Esempio') && str_contains($snapshot['testo'], 'Persona Esempio'), 'persona cancellata assente');
 expect(!str_contains($snapshot['testo'], 'annullata dalla segreteria') && str_contains($snapshot['testo'], 'altre partecipazioni'), 'conferma parziale ambigua');
 $travel_cancel = MI_Modello_Email::crea_istantanea_annullamento_partecipazione_iscritto(42, 'Persona Esempio', 'TRAVEL_DEADLINE');
@@ -95,5 +95,5 @@ expect($values['{{sottoscrittore.nome_completo}}'] === 'Maria Luisa Esempio', 'n
 expect(in_array('{{sottoscrittore.nome}}', MI_Modello_Email::segnaposto_ammessi(), true), 'segnaposto nome non ammesso');
 MI_Modello_Email::salva_testo_portale(42, wp_slash('Conferma'), wp_slash('Ciao {{sottoscrittore.nome}},'));
 $snapshot = MI_Modello_Email::crea_istantanea(42, $values);
-expect(str_contains($snapshot['html'], 'Ciao Maria Luisa,') && str_contains($snapshot['testo'], 'Ciao Maria Luisa,'), 'solo nome assente da HTML o testo');
+expect(str_contains($snapshot['html'], 'Buongiorno Maria Luisa Esempio.') && str_contains($snapshot['testo'], 'Buongiorno Maria Luisa Esempio.'), 'saluto storico non aggiornato con nome completo e punto');
 echo "First-name confirmation placeholder: OK\n";

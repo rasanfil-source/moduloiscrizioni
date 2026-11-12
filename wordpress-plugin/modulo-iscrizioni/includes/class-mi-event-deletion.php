@@ -109,6 +109,14 @@ final class MI_Event_Deletion {
 		wp_cache_delete( $key, 'options' );
 		if ( get_option( $key ) !== $job ) throw new RuntimeException( 'Avanzamento non salvato. Riprova.' );
 	}
+	private static function fingerprint_rows( $table, array $rows ) {
+		foreach ( $rows as &$row ) {
+			if ( 'mi_registrations' === $table ) foreach ( array_keys( $row ) as $key ) if ( 0 === strpos( $key, 'workspace_' ) ) unset( $row[$key] );
+			if ( 'mi_email_outbox' === $table ) foreach ( array( 'status', 'attempts', 'sent_at', 'last_error', 'processing_started_at' ) as $key ) unset( $row[$key] );
+		}
+		unset( $row );
+		return $rows;
+	}
 	public static function preview( $id ) {
 		global $wpdb;
 		$post = get_post( $id );
@@ -134,14 +142,14 @@ final class MI_Event_Deletion {
 			$order_by = self::FINGERPRINT_ORDER[ $table ];
 			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}{$table} WHERE event_id=%d ORDER BY {$order_by}", $id ), ARRAY_A );
 			if ( $wpdb->last_error ) throw new RuntimeException( 'Riepilogo non disponibile.' );
-			hash_update( $hash, wp_json_encode( $rows ) );
+			hash_update( $hash, wp_json_encode( self::fingerprint_rows( $table, $rows ) ) );
 		}
 		foreach ( self::CHILDREN as $table ) {
 			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT c.* FROM {$wpdb->prefix}{$table} c JOIN {$wpdb->prefix}mi_registrations r ON r.id=c.registration_id WHERE r.event_id=%d ORDER BY c.id", $id ), ARRAY_A );
 			if ( $wpdb->last_error ) throw new RuntimeException( 'Riepilogo non disponibile.' );
-			hash_update( $hash, wp_json_encode( $rows ) );
+			hash_update( $hash, wp_json_encode( self::fingerprint_rows( $table, $rows ) ) );
 		}
-		hash_update( $hash, wp_json_encode( $event_emails ) );
+		hash_update( $hash, wp_json_encode( self::fingerprint_rows( 'mi_email_outbox', $event_emails ) ) );
 		$data['fingerprint'] = hash_final( $hash );
 		return $data;
 	}

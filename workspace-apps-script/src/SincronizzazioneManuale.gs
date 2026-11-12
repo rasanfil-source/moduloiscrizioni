@@ -213,6 +213,14 @@ function leggiModificheEventoMysql_(payload) {
     // ricevuta WordPress ancora valida può riaprire una griglia parziale.
     if (typeof riprendiScritturaProiezione_==='function') riprendiScritturaProiezione_(sheet);
     const result=modificheCorrentiFoglio_(sheet);
+    // Le ricevute firmate sono autorevoli già prima della prossima proiezione.
+    const ledger=sheet.getParent().getSheetByName('_MI_BASE'), accepted=new Map();
+    if(ledger&&ledger.getLastRow()>1)ledger.getRange(2,1,ledger.getLastRow()-1,4).getValues().forEach(row=>accepted.set(JSON.stringify([String(row[0]),Number(row[1])]),JSON.parse(String(row[3]||'{}'))));
+    result.changes=result.changes.flatMap(change=>{
+      const receipt=accepted.get(JSON.stringify([change.order_code,change.number]))?.[change.key];
+      if(!receipt)return [change];
+      return change.after===receipt.accepted?[]:[Object.assign({},change,{before:receipt.accepted})];
+    });
     if (!result.initialized) throw new Error('Aggiorna il foglio evento prima di sincronizzarlo.');
     return {ok:true,changes:result.changes,errors:result.errors};
   } finally {lock.releaseLock();}
@@ -247,19 +255,27 @@ function confermaModificheFoglio_(payload) {
     receipts.forEach(receipt=>{
       if (!campoModificabileFoglio_(receipt.key) || !columns[receipt.key] || typeof receipt.accepted!=='string') return;
       const identity=JSON.stringify([String(receipt.order_code),Number(receipt.number)]);
-      if (!base[identity] || String(base[identity][receipt.key]??'')!==receipt.before) return;
+      if (!base[identity]) return;
       const position=positions.get(identity), basePosition=basePositions.get(identity);
       if (position==null || basePosition==null) return;
       const revision=Number(receipt.workspace_revision), versioned=Number.isSafeInteger(revision) && revision>0;
+      const stored=JSON.parse(String(baseRows[basePosition][3]||'{}'));
+      const previous=stored[receipt.key];
+      const canonical=previous?previous.accepted:String(base[identity][receipt.key]??'');
+      if(canonical!==receipt.before && !(versioned&&previous&&previous.revision===revision&&previous.accepted===receipt.accepted))return;
       const cell=sheet.getRange(position+2,columns[receipt.key]);
       if (cell.getDisplayValue()!==receipt.after && !(versioned && cell.getDisplayValue()===receipt.accepted)) return;
       cell.setNumberFormat('@').setValue(testoCellaOperativa_(receipt.accepted)); updated++;
       if (versioned) {
-        const stored=JSON.parse(String(baseRows[basePosition][3]||'{}'));
-        if(receipt.accepted===receipt.before)delete stored[receipt.key];
-        else stored[receipt.key]={before:receipt.before,accepted:receipt.accepted,revision:revision};
+        const original=previous?previous.before:receipt.before;
+        if(receipt.accepted===original)delete stored[receipt.key];
+        else stored[receipt.key]={before:original,accepted:receipt.accepted,revision:revision};
         baseRows[basePosition][3]=JSON.stringify(stored);
         baseSheet.getRange(basePosition+2,4).setValue(baseRows[basePosition][3]);
+      } else {
+        const values=JSON.parse(String(baseRows[basePosition][2]));values[receipt.key]=receipt.accepted;
+        baseRows[basePosition][2]=JSON.stringify(values);
+        baseSheet.getRange(basePosition+2,3).setValue(baseRows[basePosition][2]);
       }
     }); SpreadsheetApp.flush();
     } finally {proteggiProiezione_(sheet,editable);}

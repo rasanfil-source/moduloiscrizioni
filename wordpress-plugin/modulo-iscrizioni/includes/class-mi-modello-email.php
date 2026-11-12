@@ -187,9 +187,9 @@ final class MI_Modello_Email {
 			'reply_to'    => self::EMAIL_SEGRETERIA,
 			'internal_recipients' => array(),
 			'subject'   => 'Iscrizione confermata — {{evento.titolo}}',
-			'preheader' => 'La tua iscrizione è stata registrata. Qui trovi il riepilogo e le prossime indicazioni.',
-			'html'      => '<p style="margin:0 0 16px;">Ciao {{sottoscrittore.nome_completo}},</p><p style="margin:0 0 20px;">la tua iscrizione a <strong>{{evento.titolo}}</strong> è stata registrata.</p><p style="margin:0 0 20px;"><strong>Quando:</strong> {{evento.data}}<br><strong>Dove:</strong> {{evento.luogo}}<br><strong>Stato:</strong> {{ordine.stato}}<br><strong>Partecipazione:</strong> {{ordine.riepilogo}}</p><p style="margin:0 0 20px;"><strong>Situazione economica:</strong><br>{{ordine.riepilogo_economico}}</p><p style="margin:0 0 20px;"><strong>Indicazioni per il pagamento:</strong><br>{{pagamento.istruzioni}}<br><strong>Scadenza:</strong> {{pagamento.scadenza}}<br><strong>Causale:</strong> {{pagamento.causale}}</p><p style="margin:24px 0 0;"><strong>Conserva questa email:</strong> contiene i riferimenti utili per la tua iscrizione.</p>',
-			'text'      => "Ciao {{sottoscrittore.nome_completo}},\n\nla tua iscrizione a {{evento.titolo}} è stata registrata.\n\nQuando: {{evento.data}}\nDove: {{evento.luogo}}\nStato: {{ordine.stato}}\nPartecipazione: {{ordine.riepilogo}}\n\nSituazione economica: {{ordine.riepilogo_economico}}\nIndicazioni per il pagamento: {{pagamento.istruzioni}}\nScadenza: {{pagamento.scadenza}}\nCausale: {{pagamento.causale}}\n\nConserva questa email: contiene i riferimenti utili per la tua iscrizione.",
+			'preheader' => 'L’iscrizione è stata registrata. Di seguito il riepilogo e le prossime indicazioni.',
+			'html'      => '<p style="margin:0 0 16px;">Buongiorno {{sottoscrittore.nome_completo}}.</p><p style="margin:0 0 20px;">L’iscrizione a <strong>{{evento.titolo}}</strong> è stata registrata.</p><p style="margin:0 0 20px;"><strong>Quando:</strong> {{evento.data}}<br><strong>Dove:</strong> {{evento.luogo}}<br><strong>Stato:</strong> {{ordine.stato}}<br><strong>Partecipazione:</strong> {{ordine.riepilogo}}</p><p style="margin:0 0 20px;"><strong>Situazione economica:</strong><br>{{ordine.riepilogo_economico}}</p><p style="margin:0 0 20px;"><strong>Indicazioni per il pagamento:</strong><br>{{pagamento.istruzioni}}<br><strong>Scadenza:</strong> {{pagamento.scadenza}}<br><strong>Causale:</strong> {{pagamento.causale}}</p><p style="margin:24px 0 0;"><strong>Riferimenti dell’iscrizione:</strong> questa email contiene i riferimenti utili per l’iscrizione.</p>',
+			'text'      => "Buongiorno {{sottoscrittore.nome_completo}}.\n\nL’iscrizione a {{evento.titolo}} è stata registrata.\n\nQuando: {{evento.data}}\nDove: {{evento.luogo}}\nStato: {{ordine.stato}}\nPartecipazione: {{ordine.riepilogo}}\n\nSituazione economica: {{ordine.riepilogo_economico}}\nIndicazioni per il pagamento: {{pagamento.istruzioni}}\nScadenza: {{pagamento.scadenza}}\nCausale: {{pagamento.causale}}\n\nRiferimenti dell’iscrizione: questa email contiene i riferimenti utili per l’iscrizione.",
 			'footer'    => 'A presto!',
 		);
 		$saved = get_post_meta( $event_id, '_mi_email_template', true );
@@ -197,18 +197,96 @@ final class MI_Modello_Email {
 		if ( empty( $settings['sender_name'] ) ) $settings['sender_name'] = self::NOME_SEGRETERIA;
 		if ( empty( $settings['reply_to'] ) || 'wordpress@parrocchiasanteugenio.it' === strtolower( $settings['reply_to'] ) ) $settings['reply_to'] = self::EMAIL_SEGRETERIA;
 		$settings = self::ripara_modello_testuale( $settings );
+		foreach ( array( 'subject', 'preheader', 'html', 'text', 'footer' ) as $field ) $settings[$field] = self::uniforma_testo_comunicazione( $settings[$field], 'html' === $field );
 		$settings['html'] = self::uniforma_grafica_corpo( $settings['html'] );
 		return $settings;
 	}
 
 	/** Uniforma la grafica dei modelli senza modificare il testo personalizzato. */
+
+	/** Aggiorna soltanto formulazioni standard note, lasciando intatti markup e URL personalizzati. */
+	public static function uniforma_testo_comunicazione( $text, $html = false ) {
+		$replace = static function ( $part ) {
+			$part = strtr( $part, array(
+				'Ti ricordiamo che per la tua iscrizione' => 'Per l’iscrizione',
+				'Se i tuoi programmi sono cambiati, puoi aggiornare la tua partecipazione.' => 'In caso di variazioni è possibile aggiornare la partecipazione.',
+				'Conserva questa email:' => 'Riferimenti dell’iscrizione:',
+				'i posti disponibili per l’iniziativa stanno per esaurirsi.' => 'I posti disponibili per l’iniziativa stanno per esaurirsi.',
+				'chiediamo cortesemente di **annullare la relativa iscrizione**' => 'si chiede cortesemente di **annullare la relativa iscrizione**',
+				'Potremo così offrire il posto a chi è in lista d’attesa.' => 'Sarà così possibile offrire il posto a chi è in lista d’attesa.',
+			) );
+			$part = strtr( $part, array(
+				'La tua iscrizione' => 'L’iscrizione',
+				'la tua iscrizione' => 'l’iscrizione',
+				'la tua richiesta' => 'la richiesta',
+				'la tua prenotazione' => 'la prenotazione',
+				'alla tua prenotazione' => 'alla prenotazione',
+				'la tua partecipazione' => 'la partecipazione',
+				'per la tua partecipazione' => 'per la partecipazione',
+				'con la tua richiesta' => 'con la richiesta',
+				'Qui trovi il riepilogo' => 'Di seguito il riepilogo',
+				'per la tua iscrizione' => 'per l’iscrizione',
+				'Conserva questa email: contiene' => 'Riferimenti dell’iscrizione: questa email contiene',
+				'Per ora non devi pagare né fare altro.' => 'Al momento non sono richiesti pagamenti né altre azioni.',
+				'Per ora non devi fare altro.' => 'Al momento non sono richieste altre azioni.',
+				'Per ora non devi fare nulla.' => 'Al momento non sono richieste azioni.',
+				'riceverai un’altra email' => 'sarà inviata un’altra email',
+				'Li abbiamo riservati per te fino a ' => 'Li abbiamo riservati fino alla seguente data: ',
+				'Apri il collegamento e scegli' => 'Basta aprire il collegamento e scegliere',
+				'Se non rispondi entro il termine' => 'Se non si risponde entro il termine',
+				'Non effettuare pagamenti prima di aver accettato.' => 'Il pagamento potrà essere effettuato soltanto dopo l’accettazione.',
+				'Accetta o rinuncia entro ' => 'Accettazione o rinuncia entro ',
+				'Rispondi alla proposta' => 'Risposta alla proposta',
+				'Scegli chi partecipa oppure attendi due posti insieme entro ' => 'Scelta del partecipante o attesa di due posti insieme entro ',
+				'si è liberato 1 dei 2 posti che hai richiesto.' => 'si è liberato 1 dei 2 posti richiesti.',
+				'Se vuoi accettare il posto, scegli chi parteciperà.' => 'Per accettare il posto è necessario scegliere chi parteciperà.',
+				'Se preferite partecipare insieme, scegli di attendere due posti. Entrambi resterete in lista' => 'Per partecipare insieme è possibile scegliere di attendere due posti. Entrambe le persone resteranno in lista',
+				'Accetta 1 posto e scegli chi partecipa' => 'Accettazione di 1 posto e scelta del partecipante',
+				'Attendi 2 posti insieme' => 'Attesa di 2 posti insieme',
+				'Ti ricordiamo che l’evento si avvicina. Leggi con attenzione le indicazioni aggiornate qui sotto e contatta l’organizzazione se hai domande.' => 'L’evento si avvicina. Si raccomanda di leggere con attenzione le indicazioni aggiornate riportate di seguito. Per chiarimenti è possibile contattare l’organizzazione.',
+				'Ti ricordiamo che per l’iscrizione' => 'Per l’iscrizione',
+				'Ti chiediamo di effettuare il pagamento' => 'Il pagamento deve essere effettuato',
+				'usa il collegamento personale qui sotto' => 'è possibile utilizzare il collegamento personale riportato di seguito',
+				'Se i tuoi programmi sono cambiati, puoi aggiornare la partecipazione.' => 'In caso di variazioni è possibile aggiornare la partecipazione.',
+				'ti informiamo che ' => 'Si comunica che ',
+				'Ti informiamo che ' => 'Si comunica che ',
+				'Ti confermiamo che ' => 'Si conferma che ',
+				'La segreteria ti contatterà separatamente se sono necessari rimborsi o altri adempimenti.' => 'Se saranno necessari rimborsi o altri adempimenti, seguirà una comunicazione separata della segreteria.',
+				'Per maggiori ragguagli, scrivi a' => 'Per maggiori informazioni, scrivere a',
+				'Se desideri chiarimenti, puoi contattare la segreteria scrivendo a' => 'Per chiarimenti è possibile contattare la segreteria scrivendo a',
+				'Controlla l’importo e la scadenza.' => 'Importo e scadenza del pagamento.',
+				'Congratulazioni! Il tuo evento è stato pubblicato.' => 'L’evento è stato pubblicato.',
+				'Apri prenotazione' => 'Dettagli della prenotazione',
+				'Apri elenco iscritti' => 'Elenco iscritti',
+				'Apri l’evento' => 'Pagina dell’evento',
+				'Gestisci iscrizioni' => 'Gestione iscrizioni',
+				'Contatta l’organizzazione' => 'Da verificare con l’organizzazione',
+				'Per domande o variazioni, rispondi direttamente a questa email.' => 'È possibile rispondere direttamente a questa email.',
+				'Annulla la tua iscrizione' => 'Annullamento dell’iscrizione',
+				'Annulla l’iscrizione di ' => 'Annullamento dell’iscrizione di ',
+				'puoi provare la conferma di cancellazione.' => 'è possibile provare la conferma di cancellazione.',
+				'Controlla stato e saldo' => 'Stato e saldo',
+				'Se il pulsante non funziona, apri:' => 'Se il pulsante non funziona, è possibile utilizzare questo collegamento:',
+				'Ciao {{sottoscrittore.nome_completo}},' => 'Buongiorno {{sottoscrittore.nome_completo}}.',
+				'Gentile {{sottoscrittore.nome_completo}},' => 'Buongiorno {{sottoscrittore.nome_completo}}.',
+				'Ciao {{sottoscrittore.nome}},' => 'Buongiorno {{sottoscrittore.nome_completo}}.',
+				'Gentile {{sottoscrittore.nome}},' => 'Buongiorno {{sottoscrittore.nome_completo}}.',
+			) );
+			return $part;
+		};
+		if ( ! $html ) return $replace( (string) $text );
+		$parts = preg_split( '/(<[^>]*>)/s', (string) $text, -1, PREG_SPLIT_DELIM_CAPTURE );
+		foreach ( $parts as $index => $part ) if ( 0 === $index % 2 ) $parts[$index] = $replace( $part );
+		return implode( '', $parts );
+	}
+
 	private static function uniforma_grafica_corpo( $html ) {
 		$html = (string) $html;
 		$etichette = 'Quando:|Dove:|Codice iscrizione:|Stato:|Partecipazione:';
 		$html = (string) preg_replace( '#(?<!<strong>)(' . $etichette . ')(?!</strong>)#u', '<strong>$1</strong>', $html );
 		return (string) preg_replace_callback( '#<p\b([^>]*)>(.*?)</p>#is', static function ( $match ) {
 			$attributes = $match[1];
-			$margin = false !== stripos( $match[2], 'Conserva questa email:' ) ? '24px 0 0' : '0 0 16px';
+			$margin = false !== stripos( $match[2], 'Riferimenti dell’iscrizione:' ) || false !== stripos( $match[2], 'Conserva questa email:' ) ? '24px 0 0' : '0 0 16px';
 			if ( preg_match( '/\bstyle=([\'\"])(.*?)\1/is', $attributes ) ) {
 				$attributes = (string) preg_replace_callback( '/\bstyle=([\'\"])(.*?)\1/is', static function ( $style ) use ( $margin ) {
 					$declarations = preg_match( '/(?:^|;)\s*margin\s*:/i', $style[2] )
@@ -253,7 +331,7 @@ final class MI_Modello_Email {
 			'{{pagamento.importo_dovuto}}' => '20,00 €',
 			'{{pagamento.saldo}}'         => '20,00 €',
 			'{{pagamento.metodi}}'        => 'Bonifico',
-			'{{pagamento.istruzioni}}'    => 'Bonifico: usa il codice iscrizione come causale.',
+			'{{pagamento.istruzioni}}'    => 'Bonifico: utilizzare il codice iscrizione come causale.',
 			'{{pagamento.scadenza}}'      => '5 settembre 2026, ore 23:59',
 			'{{pagamento.causale}}'       => 'MI-ESEMPIO-0001',
 			'{{legale.privacy_url}}'      => 'https://example.invalid/privacy',
@@ -349,10 +427,10 @@ final class MI_Modello_Email {
 		$title = sanitize_text_field( (string) ( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) ) );
 		$summary = sanitize_text_field( (string) ( $values['{{ordine.riepilogo}}'] ?? '' ) );
 		$snapshot['oggetto'] = 'Richiesta in lista d’attesa — ' . $title;
-		$next_step = ! empty( $values['_payment_expected'] ) ? 'Per ora non devi pagare né fare altro.' : 'Per ora non devi fare altro.';
-		$snapshot['preheader'] = 'La richiesta è stata registrata. Per ora non devi fare nulla.';
-		$snapshot['html'] = '<p>Ciao ' . esc_html( $name ) . ',</p><p>la tua richiesta per <strong>' . esc_html( $title ) . '</strong> è stata inserita in lista d’attesa.</p>' . ( $summary ? '<p><strong>Partecipazione:</strong> ' . esc_html( $summary ) . '</p>' : '' ) . '<p>Il posto non è ancora confermato. ' . esc_html( $next_step ) . '</p><p>Se si libereranno posti compatibili con la tua richiesta, riceverai un’altra email con il termine entro cui accettare o rinunciare.</p>';
-		$snapshot['testo'] = "Ciao {$name},\n\nla tua richiesta per {$title} è stata inserita in lista d’attesa.\n\nIl posto non è ancora confermato. {$next_step}\n\nSe si libereranno posti compatibili con la tua richiesta, riceverai un’altra email con il termine entro cui accettare o rinunciare.";
+		$next_step = ! empty( $values['_payment_expected'] ) ? 'Al momento non sono richiesti pagamenti né altre azioni.' : 'Al momento non sono richieste altre azioni.';
+		$snapshot['preheader'] = 'La richiesta è stata registrata. Al momento non sono richieste azioni.';
+		$snapshot['html'] = '<p>Buongiorno ' . esc_html( $name ) . '.</p><p>La richiesta per <strong>' . esc_html( $title ) . '</strong> è stata inserita in lista d’attesa.</p>' . ( $summary ? '<p><strong>Partecipazione:</strong> ' . esc_html( $summary ) . '</p>' : '' ) . '<p>Il posto non è ancora confermato. ' . esc_html( $next_step ) . '</p><p>Se si libereranno posti compatibili con la richiesta, sarà inviata un’altra email con il termine entro cui accettare o rinunciare.</p>';
+		$snapshot['testo'] = "Buongiorno {$name}.\n\nLa richiesta per {$title} è stata inserita in lista d’attesa.\n\nIl posto non è ancora confermato. {$next_step}\n\nSe si libereranno posti compatibili con la richiesta, sarà inviata un’altra email con il termine entro cui accettare o rinunciare.";
 		$snapshot['identificativo'] = array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' );
 		$snapshot['gestione_partecipanti'] = array();
 		$snapshot['status_url'] = '';
@@ -367,15 +445,15 @@ final class MI_Modello_Email {
 		$title = sanitize_text_field( (string) ( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) ) );
 		$expires_label = sanitize_text_field( (string) $expires_label );
 		$snapshot['oggetto'] = 'Si è liberato un posto — ' . $title;
-		$payment_note = ! empty( $values['_payment_expected'] ) ? 'Non effettuare pagamenti prima di aver accettato.' : '';
-		$snapshot['preheader'] = 'Accetta o rinuncia entro ' . $expires_label . '.';
-		$snapshot['html'] = '<p>Ciao ' . esc_html( $name ) . ',</p><p>si sono liberati i posti richiesti per <strong>' . esc_html( $title ) . '</strong>.</p><p>Li abbiamo riservati per te fino a <strong>' . esc_html( $expires_label ) . '</strong>.</p><p>Apri il collegamento e scegli <strong>Accetta il posto</strong> oppure <strong>Rinuncia</strong>. Se non rispondi entro il termine, la proposta scadrà e i posti passeranno alla richiesta successiva.</p>' . ( $payment_note ? '<p>' . esc_html( $payment_note ) . '</p>' : '' );
-		$snapshot['testo'] = "Ciao {$name},\n\nsi sono liberati i posti richiesti per {$title}. Li abbiamo riservati per te fino a {$expires_label}.\n\nApri il collegamento e scegli Accetta il posto oppure Rinuncia. Se non rispondi entro il termine, la proposta scadrà e i posti passeranno alla richiesta successiva." . ( $payment_note ? "\n\n" . $payment_note : '' );
+		$payment_note = ! empty( $values['_payment_expected'] ) ? 'Il pagamento potrà essere effettuato soltanto dopo l’accettazione.' : '';
+		$snapshot['preheader'] = 'Accettazione o rinuncia entro ' . $expires_label . '.';
+		$snapshot['html'] = '<p>Buongiorno ' . esc_html( $name ) . '.</p><p>Si sono liberati i posti richiesti per <strong>' . esc_html( $title ) . '</strong>.</p><p>Li abbiamo riservati fino alla seguente data: <strong>' . esc_html( $expires_label ) . '</strong>.</p><p>Basta aprire il collegamento e scegliere <strong>Accetta il posto</strong> oppure <strong>Rinuncia</strong>. Se non si risponde entro il termine, la proposta scadrà e i posti passeranno alla richiesta successiva.</p>' . ( $payment_note ? '<p>' . esc_html( $payment_note ) . '</p>' : '' );
+		$snapshot['testo'] = "Buongiorno {$name}.\n\nSi sono liberati i posti richiesti per {$title}. Li abbiamo riservati fino alla seguente data: {$expires_label}.\n\nBasta aprire il collegamento e scegliere Accetta il posto oppure Rinuncia. Se non si risponde entro il termine, la proposta scadrà e i posti passeranno alla richiesta successiva." . ( $payment_note ? "\n\n" . $payment_note : '' );
 		$snapshot['identificativo'] = array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' );
 		$snapshot['gestione_partecipanti'] = array();
 		$snapshot['status_url'] = '';
 		$snapshot['action_url'] = esc_url_raw( (string) $offer_url );
-		$snapshot['action_label'] = 'Rispondi alla proposta';
+		$snapshot['action_label'] = 'Risposta alla proposta';
 		return $snapshot;
 	}
 
@@ -385,15 +463,15 @@ final class MI_Modello_Email {
 		$title = sanitize_text_field( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) );
 		$name = sanitize_text_field( $values['{{sottoscrittore.nome_completo}}'] ?? '' );
 		$mail['oggetto'] = 'Si è liberato 1 dei 2 posti richiesti per ' . $title;
-		$mail['preheader'] = 'Scegli chi partecipa oppure attendi due posti insieme entro ' . $expires_label . '.';
+		$mail['preheader'] = 'Scelta del partecipante o attesa di due posti insieme entro ' . $expires_label . '.';
 		$paragraphs = array(
-			"Ciao {$name},",
-			"per {$title} si è liberato 1 dei 2 posti che hai richiesto. È riservato alla tua prenotazione fino a {$expires_label}.",
-			'Se vuoi accettare il posto, scegli chi parteciperà. L’altra persona resterà in lista d’attesa con la priorità originaria.',
-			'Se preferite partecipare insieme, scegli di attendere due posti. Entrambi resterete in lista con la priorità originaria e il posto disponibile verrà offerto alla richiesta successiva.',
-			"Rispondi entro {$expires_label}. Se entro la scadenza non scegli nessuna delle due opzioni, la proposta scadrà ed entrambi perderete la posizione in lista d’attesa.",
+			"Buongiorno {$name}.",
+			"Per {$title} si è liberato 1 dei 2 posti richiesti. È riservato alla prenotazione fino a {$expires_label}.",
+			'Per accettare il posto è necessario scegliere chi parteciperà. L’altra persona resterà in lista d’attesa con la priorità originaria.',
+			'Per partecipare insieme è possibile scegliere di attendere due posti. Entrambe le persone resteranno in lista con la priorità originaria e il posto disponibile verrà offerto alla richiesta successiva.',
+			"La risposta deve pervenire entro {$expires_label}. Se entro la scadenza non viene scelta nessuna delle due opzioni, la proposta scadrà ed entrambe le persone perderanno la posizione in lista d’attesa.",
 		);
-		$buttons = array( 2 => array( 'choose', 'Accetta 1 posto e scegli chi partecipa' ), 3 => array( 'together', 'Attendi 2 posti insieme' ) );
+		$buttons = array( 2 => array( 'choose', 'Accettazione di 1 posto e scelta del partecipante' ), 3 => array( 'together', 'Attesa di 2 posti insieme' ) );
 		$html = ''; $text = array();
 		foreach ( $paragraphs as $index => $paragraph ) {
 			$html .= '<p>' . esc_html( $paragraph ) . '</p>';
@@ -444,10 +522,10 @@ final class MI_Modello_Email {
 
 	public static function default_communication_message( $template_type ) {
 		$defaults = array(
-			'PRE_DEPARTURE_REMINDER' => 'Ti ricordiamo che l’evento si avvicina. Leggi con attenzione le indicazioni aggiornate qui sotto e contatta l’organizzazione se hai domande.',
-			'PARTICIPATION_CANCELLATION_REMINDER' => "i posti disponibili per l’iniziativa stanno per esaurirsi.\n\nSe qualcuno non potrà partecipare, chiediamo cortesemente di **annullare la relativa iscrizione** tramite il **collegamento personale riportato qui sotto**. Potremo così offrire il posto a chi è in lista d’attesa.\n\nGrazie per la collaborazione.",
-			'BALANCE_REMINDER' => 'Ti ricordiamo che per la tua iscrizione a {{evento.titolo}} resta da versare il saldo di {{pagamento.saldo}}. Ti chiediamo di effettuare il pagamento entro {{pagamento.scadenza}}, indicando questa causale: {{pagamento.causale}}. Per consultare il riepilogo e le modalità di pagamento, usa il collegamento personale qui sotto. Grazie per la collaborazione.',
-			'DEPOSIT_REMINDER' => 'Ti ricordiamo che per la tua iscrizione a {{evento.titolo}} resta da versare una caparra di {{pagamento.importo_dovuto}}. Ti chiediamo di effettuare il pagamento entro {{pagamento.scadenza}}, indicando questa causale: {{pagamento.causale}}. Grazie per la collaborazione.',
+			'PRE_DEPARTURE_REMINDER' => 'L’evento si avvicina. Si raccomanda di leggere con attenzione le indicazioni aggiornate riportate di seguito. Per chiarimenti è possibile contattare l’organizzazione.',
+			'PARTICIPATION_CANCELLATION_REMINDER' => "I posti disponibili per l’iniziativa stanno per esaurirsi.\n\nSe qualcuno non potrà partecipare, si chiede cortesemente di **annullare la relativa iscrizione** tramite il **collegamento personale riportato qui sotto**. Sarà così possibile offrire il posto a chi è in lista d’attesa.\n\nGrazie per la collaborazione.",
+			'BALANCE_REMINDER' => 'Per l’iscrizione a {{evento.titolo}} resta da versare il saldo di {{pagamento.saldo}}. Il pagamento deve essere effettuato entro {{pagamento.scadenza}}, indicando questa causale: {{pagamento.causale}}. Per consultare il riepilogo e le modalità di pagamento, è possibile utilizzare il collegamento personale riportato di seguito. Grazie per la collaborazione.',
+			'DEPOSIT_REMINDER' => 'Per l’iscrizione a {{evento.titolo}} resta da versare una caparra di {{pagamento.importo_dovuto}}. Il pagamento deve essere effettuato entro {{pagamento.scadenza}}, indicando questa causale: {{pagamento.causale}}. Grazie per la collaborazione.',
 		);
 		return (string) ( $defaults[ strtoupper( (string) $template_type ) ] ?? '' );
 	}
@@ -479,9 +557,9 @@ final class MI_Modello_Email {
 				$snapshot['cancellation_demo'] = true;
 			}
 			$snapshot['oggetto'] = 'Un gentile promemoria per l’evento — ' . $event_title;
-			$snapshot['titolo'] = 'Un promemoria per la tua partecipazione';
-			$snapshot['preheader'] = 'Se i tuoi programmi sono cambiati, puoi aggiornare la tua partecipazione.';
-			$clean_message = trim( sanitize_textarea_field( (string) $message ) ) ?: self::default_communication_message( $template_type );
+			$snapshot['titolo'] = 'Un promemoria per la partecipazione';
+			$snapshot['preheader'] = 'In caso di variazioni è possibile aggiornare la partecipazione.';
+			$clean_message = trim( self::uniforma_testo_comunicazione( sanitize_textarea_field( (string) $message ) ) ) ?: self::default_communication_message( $template_type );
 			if ( ! $live_participant_links && ! $demo ) $clean_message = preg_replace( '/tramite il (?:\*\*)?collegamento personale(?: riportato)? qui sotto(?:\*\*)?/u', 'contattando l’organizzazione', $clean_message );
 			$clean_message = self::renderizza( $clean_message, $values );
 			$recipient_name = $buyer_name;
@@ -489,7 +567,7 @@ final class MI_Modello_Email {
 				$names = array_values( array_filter( array_map( static function ( $item ) { return sanitize_text_field( (string) ( $item['name'] ?? '' ) ); }, (array) $participant_management ) ) );
 				if ( $names ) $recipient_name = count( $names ) > 1 ? implode( ', ', array_slice( $names, 0, -1 ) ) . ' e ' . end( $names ) : $names[0];
 			}
-			$greeting = 'Buongiorno' . ( $recipient_name ? ' ' . $recipient_name : '' ) . ',';
+			$greeting = 'Buongiorno' . ( $recipient_name ? ' ' . $recipient_name : '' ) . '.';
 			$text_style = 'font-family:Arial,Helvetica,sans-serif;font-size:17px;line-height:1.68;';
 			$body = '<p style="' . $text_style . 'margin:0 0 16px;">' . esc_html( $greeting ) . '</p><div style="' . $text_style . '">' . self::formatta_comunicazione( $clean_message ) . '</div>';
 			$snapshot['html'] = $body;
@@ -501,14 +579,15 @@ final class MI_Modello_Email {
 			}, (array) $participant_management ) ) );
 			$snapshot['status_url'] = '';
 		} elseif ( 'EVENT_CANCELLATION' === $template_type ) {
-			$clean_message = self::renderizza( sanitize_textarea_field( (string) $message ), $values );
+			$clean_message = self::renderizza( self::uniforma_testo_comunicazione( sanitize_textarea_field( (string) $message ) ), $values );
 			$snapshot['oggetto'] = 'Evento annullato — ' . $event_title;
-			$snapshot['preheader'] = 'Comunicazione importante relativa alla tua iscrizione.';
-			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ti informiamo che <strong>' . esc_html( $event_title ) . '</strong> è stato annullato.</p>' . ( $clean_message ? '<p><strong>Motivo comunicato:</strong><br>' . nl2br( esc_html( $clean_message ) ) . '</p>' : '' ) . '<p>La segreteria ti contatterà separatamente se sono necessari rimborsi o altri adempimenti.</p>';
-			$snapshot['testo'] = "Gentile {$buyer_name},\n\nl’evento {$event_title} è stato annullato." . ( $clean_message ? "\n\nMotivo comunicato:\n{$clean_message}" : '' ) . "\n\nLa segreteria ti contatterà separatamente se sono necessari rimborsi o altri adempimenti.";
+			$snapshot['preheader'] = 'Comunicazione importante relativa all’iscrizione.';
+			$follow_up = ! empty( $values['_payment_expected'] ) ? 'Se saranno necessari rimborsi o altri adempimenti, seguirà una comunicazione separata della segreteria.' : 'Per eventuali ulteriori adempimenti seguirà una comunicazione separata della segreteria.';
+			$snapshot['html'] = '<p>Buongiorno ' . esc_html( $buyer_name ) . '.</p><p>Si comunica che <strong>' . esc_html( $event_title ) . '</strong> è stato annullato.</p>' . ( $clean_message ? '<p><strong>Motivo comunicato:</strong><br>' . nl2br( esc_html( $clean_message ) ) . '</p>' : '' ) . '<p>' . esc_html( $follow_up ) . '</p>';
+			$snapshot['testo'] = "Buongiorno {$buyer_name}.\n\nL’evento {$event_title} è stato annullato." . ( $clean_message ? "\n\nMotivo comunicato:\n{$clean_message}" : '' ) . "\n\n" . $follow_up;
 			$contact = MI_Spedizione_Email::destinatario_evento( $event_id );
-			$snapshot['html'] .= '<p>Per maggiori ragguagli, scrivi a <a href="mailto:' . esc_attr( $contact ) . '">' . esc_html( $contact ) . '</a>.</p>';
-			$snapshot['testo'] .= "\n\nPer maggiori ragguagli, scrivi a: {$contact}.";
+			$snapshot['html'] .= '<p>Per maggiori informazioni, scrivere a <a href="mailto:' . esc_attr( $contact ) . '">' . esc_html( $contact ) . '</a>.</p>';
+			$snapshot['testo'] .= "\n\nPer maggiori informazioni, scrivere a: {$contact}.";
 			$snapshot['identita_email']['indirizzo_risposte'] = $contact;
 			$snapshot['titolo'] = 'Evento annullato';
 			$snapshot['status_url'] = '';
@@ -519,20 +598,20 @@ final class MI_Modello_Email {
 			$label = $is_deposit ? ( $full_payment ? 'pagamento' : 'caparra' ) : 'saldo';
 			$snapshot['oggetto'] = 'Promemoria ' . $label . ' — ' . $event_title;
 			$snapshot['titolo'] = 'Promemoria ' . $label;
-			$snapshot['preheader'] = 'Controlla l’importo e la scadenza.';
-			$clean_message = trim( sanitize_textarea_field( (string) $message ) ) ?: self::default_communication_message( $template_type );
+			$snapshot['preheader'] = 'Importo e scadenza del pagamento.';
+			$clean_message = trim( self::uniforma_testo_comunicazione( sanitize_textarea_field( (string) $message ) ) ) ?: self::default_communication_message( $template_type );
 			if ( $is_deposit && $full_payment && '' === trim( (string) $message ) ) $clean_message = str_replace( 'una caparra di', 'un pagamento di', $clean_message );
 			$rendered_message = self::renderizza( $clean_message, $values );
-			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><div>' . self::formatta_comunicazione( $rendered_message ) . '</div>';
-			$snapshot['testo'] = "Gentile {$buyer_name},\n\n{$rendered_message}";
+			$snapshot['html'] = '<p>Buongiorno ' . esc_html( $buyer_name ) . '.</p><div>' . self::formatta_comunicazione( $rendered_message ) . '</div>';
+			$snapshot['testo'] = "Buongiorno {$buyer_name}.\n\n{$rendered_message}";
 		} elseif ( 'REGISTRATION_CANCELLATION' === $template_type ) {
 			$snapshot['oggetto'] = 'Iscrizione cancellata — ' . $event_title; $snapshot['titolo'] = 'Iscrizione cancellata';
 			$snapshot['preheader'] = 'La cancellazione è stata registrata.';
-			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>la cancellazione dell’iscrizione a <strong>' . esc_html( $event_title ) . '</strong> è stata registrata.</p>';
-			$snapshot['testo'] = "Gentile {$buyer_name},\n\nla cancellazione dell’iscrizione a {$event_title} è stata registrata.";
+			$snapshot['html'] = '<p>Buongiorno ' . esc_html( $buyer_name ) . '.</p><p>La cancellazione dell’iscrizione a <strong>' . esc_html( $event_title ) . '</strong> è stata registrata.</p>';
+			$snapshot['testo'] = "Buongiorno {$buyer_name}.\n\nLa cancellazione dell’iscrizione a {$event_title} è stata registrata.";
 			$snapshot['status_url'] = '';
 		} else {
-			$clean_message = self::renderizza( sanitize_textarea_field( (string) $message ), $values );
+			$clean_message = self::renderizza( self::uniforma_testo_comunicazione( sanitize_textarea_field( (string) $message ) ), $values );
 			$snapshot['oggetto'] = ( 'MATERIAL_DELIVERY' === $template_type ? 'Materiale' : 'Informazioni utili' ) . ' — ' . $event_title;
 			$snapshot['titolo'] = 'MATERIAL_DELIVERY' === $template_type ? 'Materiale per l’evento' : 'Comunicazione';
 			$custom_types = get_option( 'mi_custom_communication_types', array() );
@@ -542,8 +621,8 @@ final class MI_Modello_Email {
 				$snapshot['titolo'] = $label;
 			}
 			$snapshot['preheader'] = 'Indicazioni operative prima dell’evento.';
-			$snapshot['html'] = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ecco le informazioni aggiornate per <strong>' . esc_html( $event_title ) . '</strong>.</p>' . self::formatta_comunicazione( $clean_message );
-			$snapshot['testo'] = "Gentile {$buyer_name},\n\necco le informazioni aggiornate per {$event_title}.\n\n{$clean_message}";
+			$snapshot['html'] = '<p>Buongiorno ' . esc_html( $buyer_name ) . '.</p><p>Ecco le informazioni aggiornate per <strong>' . esc_html( $event_title ) . '</strong>.</p>' . self::formatta_comunicazione( $clean_message );
+			$snapshot['testo'] = "Buongiorno {$buyer_name}.\n\nEcco le informazioni aggiornate per {$event_title}.\n\n{$clean_message}";
 		}
 		return $snapshot;
 	}
@@ -560,8 +639,8 @@ final class MI_Modello_Email {
 		$text = "È stata registrata una nuova prenotazione per {$event_title}.\n\nPrenotazione a nome di: {$buyer_name}\nStato: {$status}\nPartecipanti: {$quantity}";
 		$actions = array();
 		if ( absint( $registration_id ) && class_exists( 'MI_Portal_Management' ) ) {
-			$actions[] = array( 'label' => 'Apri prenotazione', 'url' => MI_Portal_Management::url( $event_id, $order_code ) );
-			$actions[] = array( 'label' => 'Apri elenco iscritti', 'url' => MI_Portal_Management::url( $event_id ) );
+			$actions[] = array( 'label' => 'Dettagli della prenotazione', 'url' => MI_Portal_Management::url( $event_id, $order_code ) );
+			$actions[] = array( 'label' => 'Elenco iscritti', 'url' => MI_Portal_Management::url( $event_id ) );
 		}
 		return self::crea_istantanea_istituzionale( $event_id, $subject, 'Una nuova prenotazione è stata registrata.', $body, $text, $actions );
 	}
@@ -574,9 +653,9 @@ final class MI_Modello_Email {
 		$contact = sanitize_email( (string) ( self::stile_risolto( $event_id )['contact_email'] ?? self::EMAIL_SEGRETERIA ) );
 		if ( ! is_email( $contact ) ) $contact = self::EMAIL_SEGRETERIA;
 		$subject = 'Iscrizione annullata — ' . $event_title;
-		$body = '<p>Gentile ' . esc_html( $buyer_name ) . ',</p><p>ti informiamo che la tua iscrizione a <strong>' . esc_html( $event_title ) . '</strong> è stata annullata dalla segreteria.</p><p>Se desideri chiarimenti, puoi contattare la segreteria scrivendo a <a href="mailto:' . esc_attr( $contact ) . '">' . esc_html( $contact ) . '</a>.</p>';
-		$text = "Gentile {$buyer_name},\n\nti informiamo che la tua iscrizione a {$event_title} è stata annullata dalla segreteria.\n\nSe desideri chiarimenti, puoi contattare la segreteria scrivendo a {$contact}.";
-		$snapshot = self::crea_istantanea_istituzionale( $event_id, $subject, 'La segreteria ha annullato la tua iscrizione.', $body, $text );
+		$body = '<p>Buongiorno ' . esc_html( $buyer_name ) . '.</p><p>Si comunica che l’iscrizione a <strong>' . esc_html( $event_title ) . '</strong> è stata annullata dalla segreteria.</p><p>Per chiarimenti è possibile contattare la segreteria scrivendo a <a href="mailto:' . esc_attr( $contact ) . '">' . esc_html( $contact ) . '</a>.</p>';
+		$text = "Buongiorno {$buyer_name}.\n\nSi comunica che l’iscrizione a {$event_title} è stata annullata dalla segreteria.\n\nPer chiarimenti è possibile contattare la segreteria scrivendo a {$contact}.";
+		$snapshot = self::crea_istantanea_istituzionale( $event_id, $subject, 'La segreteria ha annullato l’iscrizione.', $body, $text );
 		$snapshot['identita_email']['indirizzo_risposte'] = $contact;
 		$style = self::stile_risolto( $event_id );
 		$snapshot['identita_email']['nome_mittente'] = $style['identity_name'];
@@ -585,16 +664,26 @@ final class MI_Modello_Email {
 	}
 
 	/** Conferma al sottoscrittore la cancellazione della singola persona. */
-	public static function crea_istantanea_annullamento_partecipazione_iscritto( $event_id, $participant_name, $actor = '' ) {
+	public static function crea_istantanea_annullamento_partecipazione_iscritto( $event_id, $participant_name, $actor = '', $other_participants = 0, $buyer_name = '', $payment_expected = true ) {
 		$event_title = sanitize_text_field( get_the_title( absint( $event_id ) ) );
 		$participant_name = sanitize_text_field( (string) $participant_name );
-		$body = '<p>Ti confermiamo che la partecipazione di <strong>' . esc_html( $participant_name ) . '</strong> a <strong>' . esc_html( $event_title ) . '</strong> è stata annullata.</p><p>Questa conferma riguarda soltanto la persona indicata. Le eventuali altre partecipazioni della prenotazione restano invariate.</p>';
-		$text = "Ti confermiamo che la partecipazione di {$participant_name} a {$event_title} è stata annullata.\n\nQuesta conferma riguarda soltanto la persona indicata. Le eventuali altre partecipazioni della prenotazione restano invariate.";
+		$body = '<p>Si conferma che la partecipazione di <strong>' . esc_html( $participant_name ) . '</strong> a <strong>' . esc_html( $event_title ) . '</strong> è stata annullata.</p>';
+		$text = "Si conferma che la partecipazione di {$participant_name} a {$event_title} è stata annullata.";
+		if ( '' !== trim( (string) $buyer_name ) ) {
+			$greeting = 'Buongiorno ' . sanitize_text_field( $buyer_name ) . '.';
+			$body = '<p>' . esc_html( $greeting ) . '</p>' . $body;
+			$text = $greeting . "\n\n" . $text;
+		}
+		if ( (int) $other_participants > 0 ) {
+			$note = 'Questa conferma riguarda soltanto la persona indicata. Le altre partecipazioni della prenotazione restano invariate.';
+			$body .= '<p>' . esc_html( $note ) . '</p>';
+			$text .= "\n\n" . $note;
+		}
 		if ( 'TRAVEL_DEADLINE' === $actor ) {
-			$reason_html = '<p>L’annullamento è avvenuto automaticamente perché entro il termine non è stato assegnato il passaggio richiesto. Le quote già versate non vengono rimborsate automaticamente: per verificare un eventuale rimborso, contatta la segreteria.</p>';
-			$reason_text = "\n\nLa partecipazione è stata annullata automaticamente perché entro il termine non è stato assegnato il passaggio richiesto. Le quote già versate non vengono rimborsate automaticamente: per verificare un eventuale rimborso, contatta la segreteria.";
-			$body .= $reason_html;
-			$text .= $reason_text;
+			$reason = 'L’annullamento è avvenuto automaticamente perché entro il termine non è stato assegnato il passaggio richiesto.';
+			if ( $payment_expected ) $reason .= ' Le quote già versate non vengono rimborsate automaticamente: per verificare un eventuale rimborso, è possibile contattare la segreteria.';
+			$body .= '<p>' . esc_html( $reason ) . '</p>';
+			$text .= "\n\n" . $reason;
 		}
 		$snapshot = self::crea_istantanea_istituzionale( $event_id, 'Partecipazione annullata — ' . $event_title, 'Conferma della cancellazione della partecipazione.', $body, $text );
 		$style = self::stile_risolto( $event_id );
@@ -620,11 +709,11 @@ final class MI_Modello_Email {
 
 	/** La pubblicazione usa la veste istituzionale con logo e banner risolti dell'evento. */
 	public static function crea_istantanea_pubblicazione_evento( $event_id ) {
-		$subject = 'Congratulazioni! Il tuo evento è stato pubblicato.';
+		$subject = 'L’evento è stato pubblicato.';
 		$date = self::formatta_data_locale( get_post_meta( $event_id, '_mi_event_starts_at', true ) ) ?: 'Da definire';
 		$place = sanitize_text_field( get_post_meta( $event_id, '_mi_event_location', true ) ) ?: 'Da definire';
 		$body = '<p><strong>Data di inizio:</strong> ' . esc_html( $date ) . '<br><strong>Luogo:</strong> ' . esc_html( $place ) . '</p>';
-		$snapshot = self::crea_istantanea_istituzionale( $event_id, $subject, $subject, $body, "Data di inizio: {$date}\nLuogo: {$place}", array( array( 'label' => 'Apri l’evento', 'url' => MI_Shortcode::url_iscrizione( $event_id ) ), array( 'label' => 'Gestisci iscrizioni', 'url' => MI_Portal_Management::url( $event_id ) ) ) );
+		$snapshot = self::crea_istantanea_istituzionale( $event_id, $subject, $subject, $body, "Data di inizio: {$date}\nLuogo: {$place}", array( array( 'label' => 'Pagina dell’evento', 'url' => MI_Shortcode::url_iscrizione( $event_id ) ), array( 'label' => 'Gestione iscrizioni', 'url' => MI_Portal_Management::url( $event_id ) ) ) );
 		$style = self::stile_risolto( $event_id );
 		$snapshot['publication_assets'] = array( 'logo' => $style['logo_url'] ?? '', 'banner' => $style['banner_url'] ?? '', 'alt' => $style['identity_name'] ?? '' );
 		return $snapshot;
@@ -672,9 +761,9 @@ final class MI_Modello_Email {
 		$method_codes = array_values( array_intersect( array( 'BANK_TRANSFER', 'CARD', 'CASH' ), (array) ( $economic_summary['payment_methods'] ?? array() ) ) );
 		$method_labels = array( 'BANK_TRANSFER' => 'Bonifico', 'CARD' => 'Carta', 'CASH' => 'Contanti' );
 		$instruction_labels = array(
-			'BANK_TRANSFER' => 'Bonifico: usa il codice iscrizione come causale e le coordinate comunicate dall’organizzazione.',
-			'CARD'          => 'Carta: segui le indicazioni comunicate dall’organizzazione.',
-			'CASH'          => 'Contanti: concorda la consegna con l’organizzazione.',
+			'BANK_TRANSFER' => 'Bonifico: utilizzare il codice iscrizione come causale e le coordinate comunicate dall’organizzazione.',
+			'CARD'          => 'Carta: seguire le indicazioni comunicate dall’organizzazione.',
+			'CASH'          => 'Contanti: la consegna deve essere concordata con l’organizzazione.',
 		);
 		$methods = array_map( static function ( $code ) use ( $method_labels ) { return $method_labels[ $code ]; }, $method_codes );
 		$instructions = array_map( static function ( $code ) use ( $instruction_labels ) { return $instruction_labels[ $code ]; }, $method_codes );
@@ -686,7 +775,7 @@ final class MI_Modello_Email {
 		$event_date = self::formatta_data_locale( $event['event_starts_at'] ?? '' );
 		$deadline = $payment_required ? self::formatta_data_locale( $event['payment_deadline_at'] ?? '' ) : 'Non applicabile';
 		if ( $payment_required && ! $deadline ) {
-			$deadline = 'Contatta l’organizzazione';
+			$deadline = 'Da verificare con l’organizzazione';
 		}
 		$total_label = self::formatta_importo( $total );
 		$due_label = self::formatta_importo( $due );
@@ -783,9 +872,9 @@ final class MI_Modello_Email {
 		}
 		$event_banner = ! empty( $event['cover_url'] ) ? '<tr><td background="' . esc_url( $event['cover_url'] ) . '" style="height:210px;background-color:#e4e8ef;background-image:url(\'' . esc_url( $event['cover_url'] ) . '\');background-position:center;background-size:cover;background-repeat:no-repeat;"></td></tr>' : '';
 		$event_url = ! empty( $event['url'] ) ? esc_url( $event['url'] ) : '';
-		$cta = $event_url ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;margin-bottom:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . $event_url . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">Consulta la pagina dell’evento</a></td></tr></table>' : '';
+		$cta = $event_url ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;margin-bottom:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . $event_url . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">Pagina dell’evento</a></td></tr></table>' : '';
 		$reply_to = ! empty( $email_identity['indirizzo_risposte'] ) && is_email( $email_identity['indirizzo_risposte'] ) ? sanitize_email( $email_identity['indirizzo_risposte'] ) : '';
-		$assistance = $reply_to ? '<span style="white-space:nowrap;">Scrivere a:</span> <a href="mailto:' . esc_attr( $reply_to ) . '" style="color:' . esc_attr( $primary ) . ';text-decoration:none;font-weight:700;">' . esc_html( $reply_to ) . '</a>.' : 'Per domande o variazioni, rispondi direttamente a questa email.';
+		$assistance = $reply_to ? '<span style="white-space:nowrap;">Scrivere a:</span> <a href="mailto:' . esc_attr( $reply_to ) . '" style="color:' . esc_attr( $primary ) . ';text-decoration:none;font-weight:700;">' . esc_html( $reply_to ) . '</a>.' : 'È possibile rispondere direttamente a questa email.';
 		$activity_name = sanitize_text_field( (string) ( $identity['nome_attivita'] ?? '' ) );
 		$body = self::uniforma_tipografia_corpo( self::evidenzia_titolo_evento( self::sanitizza_html_email( $istantanea['html'] ?? '' ), $title ) );
 		$management_html = '';
@@ -793,15 +882,15 @@ final class MI_Modello_Email {
 			$single_management = 1 === count( $istantanea['gestione_partecipanti'] );
 			$management_html = '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:18px;"><tr><td>';
 			foreach ( $istantanea['gestione_partecipanti'] as $item ) {
-				$management_label = $single_management ? 'Annulla la tua iscrizione' : 'Annulla l’iscrizione di ' . sanitize_text_field( $item['nome'] ?? '' );
+				$management_label = $single_management ? 'Annullamento dell’iscrizione' : 'Annullamento dell’iscrizione di ' . sanitize_text_field( $item['nome'] ?? '' );
 				$management_html .= '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:7px 0;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:8px;"><a href="' . esc_url( $item['url'] ?? '' ) . '" style="display:inline-block;padding:9px 14px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.3;color:' . esc_attr( $secondary_text ) . ';font-weight:700;text-decoration:none;border-radius:8px;">' . esc_html( $management_label ) . '</a></td></tr></table>';
 			}
 			$management_html .= '</td></tr></table>';
-			if ( ! empty( $istantanea['cancellation_demo'] ) ) $management_html .= '<p style="font-size:14px;line-height:1.5;">Collegamento dimostrativo: puoi provare la conferma di cancellazione. Nessuna iscrizione reale verrà modificata.</p>';
+			if ( ! empty( $istantanea['cancellation_demo'] ) ) $management_html .= '<p style="font-size:14px;line-height:1.5;">Collegamento dimostrativo: è possibile provare la conferma di cancellazione. Nessuna iscrizione reale verrà modificata.</p>';
 		}
-		$status_html = ! empty( $istantanea['status_url'] ) ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . esc_url( $istantanea['status_url'] ) . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">Controlla stato e saldo</a></td></tr></table>' : '';
+		$status_html = ! empty( $istantanea['status_url'] ) ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . esc_url( $istantanea['status_url'] ) . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">Stato e saldo</a></td></tr></table>' : '';
 		$action_url = ! empty( $istantanea['action_url'] ) ? esc_url( $istantanea['action_url'] ) : '';
-		$action_label = sanitize_text_field( (string) ( $istantanea['action_label'] ?? 'Apri' ) );
+		$action_label = sanitize_text_field( (string) ( $istantanea['action_label'] ?? 'Collegamento' ) );
 		$action_html = $action_url ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . $action_url . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">' . esc_html( $action_label ) . '</a></td></tr></table>' : '';
 		$buttons_html = ! empty( $istantanea['cancellation_before_event'] ) ? $action_html . $status_html . $management_html . $cta : $action_html . $cta . $status_html . $management_html;
 		$footer = nl2br( self::testo_identita_html( self::chiusura_email( $istantanea ), $identity ) );
@@ -819,9 +908,9 @@ final class MI_Modello_Email {
 			. '</td></tr></table></td></tr><tr><td style="padding:26px 22px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#111827;font-size:17px;line-height:1.68;">'
 			. $body . $code . $buttons_html
 			. '<div style="font-family:Arial,Helvetica,sans-serif;color:' . esc_attr( $secondary ) . ';font-size:14px;font-style:italic;font-weight:700;margin-top:18px;text-align:right;">' . $footer . '</div>'
-			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#eef2ff" style="width:100%;margin-top:20px;background:#eef2ff;border-radius:14px;"><tr><td style="padding:16px 20px;font-family:Arial,Helvetica,sans-serif;color:#333333;"><div style="font-size:15px;font-weight:700;margin-bottom:8px;">Assistenza</div><div style="font-size:15px;line-height:1.7;">' . $assistance . '</div></td></tr></table>'
+			. '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#eef2ff" style="width:100%;margin-top:20px;background:#eef2ff;border-radius:14px;"><tr><td style="padding:16px 20px;font-family:Arial,Helvetica,sans-serif;color:#333333;"><div style="font-size:15px;font-weight:700;margin-bottom:8px;">Per assistenza</div><div style="font-size:15px;line-height:1.7;">' . $assistance . '</div></td></tr></table>'
 			. '</td></tr></table>'
-			. ( $event_url ? '<div style="font-family:Arial,Helvetica,sans-serif;color:#666666;font-size:12px;line-height:1.4;margin-top:12px;text-align:center;">Se il pulsante non funziona, apri: <a href="' . $event_url . '" style="color:' . esc_attr( $secondary ) . ';">' . esc_html( $event_url ) . '</a></div>' : '' )
+			. ( $event_url ? '<div style="font-family:Arial,Helvetica,sans-serif;color:#666666;font-size:12px;line-height:1.4;margin-top:12px;text-align:center;">Se il pulsante non funziona, è possibile utilizzare questo collegamento: <a href="' . $event_url . '" style="color:' . esc_attr( $secondary ) . ';">' . esc_html( $event_url ) . '</a></div>' : '' )
 			. '<div style="font-family:Arial,Helvetica,sans-serif;color:#6B7280;font-size:12px;line-height:1.6;margin-top:16px;text-align:center;">' . self::testo_identita_html( $identity['nome'] ?? '', $identity ) . ( ! empty( $identity['dettaglio'] ) ? '<br>' . esc_html( $identity['dettaglio'] ) : '' ) . ( ! empty( $identity['contatto'] ) ? '<br><a href="mailto:' . esc_attr( $identity['contatto'] ) . '" style="color:' . esc_attr( $primary ) . ';">' . esc_html( $identity['contatto'] ) . '</a>' : '' ) . '</div>'
 			. '</td></tr></table></body></html>';
 	}
@@ -861,7 +950,7 @@ final class MI_Modello_Email {
 		$management_lines = array();
 		$management_items = (array) ( $istantanea['gestione_partecipanti'] ?? array() );
 		$single_management = 1 === count( $management_items );
-		foreach ( $management_items as $item ) if ( ! empty( $item['nome'] ) && ! empty( $item['url'] ) ) $management_lines[] = ( $single_management ? 'Annulla la tua iscrizione' : 'Annulla l’iscrizione di ' . sanitize_text_field( $item['nome'] ) ) . ': ' . esc_url_raw( $item['url'] );
+		foreach ( $management_items as $item ) if ( ! empty( $item['nome'] ) && ! empty( $item['url'] ) ) $management_lines[] = ( $single_management ? 'Annullamento dell’iscrizione' : 'Annullamento dell’iscrizione di ' . sanitize_text_field( $item['nome'] ) ) . ': ' . esc_url_raw( $item['url'] );
 		$parts = array_filter( array(
 			sanitize_text_field( (string) ( $event['titolo'] ?? '' ) ),
 			sanitize_text_field( (string) ( $identity['nome_attivita'] ?? '' ) ),
@@ -870,10 +959,10 @@ final class MI_Modello_Email {
 			$management_lines ? implode( "\n", $management_lines ) : '',
 			$management_lines && ! empty( $istantanea['cancellation_demo'] ) ? 'Collegamento dimostrativo: nessuna iscrizione reale verrà modificata.' : '',
 			! empty( $istantanea['cancellation_before_event'] ) && ! empty( $event['url'] ) ? 'Pagina evento: ' . esc_url_raw( $event['url'] ) : '',
-			! empty( $istantanea['status_url'] ) ? 'Controlla stato e saldo: ' . esc_url_raw( $istantanea['status_url'] ) : '',
-			! empty( $istantanea['action_url'] ) ? sanitize_text_field( (string) ( $istantanea['action_label'] ?? 'Apri' ) ) . ': ' . esc_url_raw( $istantanea['action_url'] ) : '',
+			! empty( $istantanea['status_url'] ) ? 'Stato e saldo: ' . esc_url_raw( $istantanea['status_url'] ) : '',
+			! empty( $istantanea['action_url'] ) ? sanitize_text_field( (string) ( $istantanea['action_label'] ?? 'Collegamento' ) ) . ': ' . esc_url_raw( $istantanea['action_url'] ) : '',
 			self::chiusura_email( $istantanea ),
-			! empty( $email_identity['indirizzo_risposte'] ) ? 'Assistenza: ' . sanitize_email( $email_identity['indirizzo_risposte'] ) : 'Assistenza: rispondi a questa email.',
+			! empty( $email_identity['indirizzo_risposte'] ) ? 'Per assistenza — Scrivere a: ' . sanitize_email( $email_identity['indirizzo_risposte'] ) : 'Per assistenza è possibile rispondere direttamente a questa email.',
 		) );
 		return html_entity_decode( implode( "\n\n", $parts ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 	}
@@ -1095,7 +1184,7 @@ final class MI_Modello_Email {
 
 	/** Nei gratuiti i blocchi economici non devono raggiungere né l’email né la sua anteprima. */
 	public static function rimuovi_riferimenti_pagamento_gratuito( $template, $html = false ) {
-		$placeholders = array( '{{ordine.riepilogo_economico}}', '{{pagamento.istruzioni}}', '{{pagamento.scadenza}}', '{{pagamento.causale}}' );
+		$placeholders = array( '{{ordine.riepilogo_economico}}', '{{pagamento.istruzioni}}', '{{pagamento.scadenza}}', '{{pagamento.causale}}', '{{pagamento.saldo}}', '{{pagamento.importo_dovuto}}' );
 		$template = self::normalizza_interruzioni( $template );
 		if ( $html ) {
 			return (string) preg_replace_callback( '#<p\\b[^>]*>.*?</p>#is', static function ( $match ) use ( $placeholders ) {

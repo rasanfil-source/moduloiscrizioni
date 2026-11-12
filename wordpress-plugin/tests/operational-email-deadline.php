@@ -48,7 +48,7 @@ foreach (['BALANCE_REMINDER','DEPOSIT_REMINDER'] as $template) {
     $result = MI_Spedizione_Email::accoda_comunicazione_operativa(['event_id'=>42,'communication_id'=>'audit-deadline','template_type'=>$template,'recipients'=>$recipients]);
     expect(!is_wp_error($result) && $result['count']===5, 'preparazione promemoria non riuscita');
     expect(!str_contains($wpdb->last_select, "'TRAVEL_PENDING'"), "$template non deve includere chi è in attesa di passaggio");
-    foreach ([1=>'07/10/2026, 18:00',2=>'07/12/2026, 18:00',3=>'Contatta l’organizzazione',4=>'Contatta l’organizzazione',5=>'Contatta l’organizzazione'] as $id=>$expected) {
+    foreach ([1=>'07/10/2026, 18:00',2=>'07/12/2026, 18:00',3=>'Da verificare con l’organizzazione',4=>'Da verificare con l’organizzazione',5=>'Da verificare con l’organizzazione'] as $id=>$expected) {
         foreach (['testo','html'] as $format) {
             $body=$wpdb->payloads[$id]['email_preview'][$format];
             expect(str_contains($body, $expected), "$template $format: scadenza errata per $id");

@@ -4,6 +4,21 @@ require_once __DIR__ . '/class-mi-registration-timestamps.php';
 
 /** Crea dal registro MySQL la proiezione completa del foglio evento, ricostruibile in ogni momento. */
 final class MI_Event_Projection {
+	/** Recupero firmato dopo restore: avanza WordPress oltre il contatore Google, mai abbassare Google. */
+	public static function advance_generation( array $payload ) {
+		$id = absint( $payload['event_id'] ?? 0 );
+		$floor = filter_var( $payload['generation'] ?? '', FILTER_VALIDATE_INT );
+		if ( ! $id || false === $floor || $floor < 1 || $floor >= 9007199254740991 ) return new WP_Error( 'mi_generation_invalid', 'Generazione non valida.' );
+		$lease = MI_Event_Deletion::enter( $id );
+		if ( is_wp_error( $lease ) ) return $lease;
+		try {
+			$current = self::snapshot( $id );
+			if ( ! hash_equals( $current['fingerprint'], (string) ( $payload['fingerprint'] ?? '' ) ) ) return new WP_Error( 'mi_projection_changed', 'Proiezione cambiata.' );
+			$next = max( $floor + 1, (int) $current['generation'] + 1 );
+			update_post_meta( $id, '_mi_projection_version', array( 'generation' => (string) $next, 'fingerprint' => $current['fingerprint'] ) );
+			return array( 'ok' => true, 'generation' => (string) $next );
+		} finally { MI_Event_Deletion::release( $id ); }
+	}
 	private static function check_database() {
 		global $wpdb;
 		if ( $wpdb->last_error ) throw new RuntimeException( 'Impossibile costruire la proiezione dell’evento.' );

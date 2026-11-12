@@ -14,10 +14,10 @@ parse_str( parse_url( $link['url'], PHP_URL_QUERY ), $query );
 expect( $query === array( 'mi_portal' => '1', 'mi_cancel_demo' => '1' ), 'Link di prova contiene token o riferimenti a iscrizioni reali' );
 expect( $link['nome'] === 'Persona di prova', 'Nome reale nella prova' );
 $html = MI_Modello_Email::componi_html( $snapshot ); $plain = MI_Modello_Email::componi_testo( $snapshot );
-expect( strpos( $html, 'Annulla la tua iscrizione' ) < strpos( $html, 'Consulta la pagina dell’evento' ), 'Pulsante pagina evento prima della cancellazione nella prova' );
-expect( strpos( $plain, 'Annulla la tua iscrizione' ) < strpos( $plain, 'Pagina evento:' ), 'Ordine link testo semplice diverso dalla prova HTML' );
+expect( strpos( $html, 'Annullamento dell’iscrizione' ) < strpos( $html, 'Pagina dell’evento' ), 'Pulsante pagina evento prima della cancellazione nella prova' );
+expect( strpos( $plain, 'Annullamento dell’iscrizione' ) < strpos( $plain, 'Pagina evento:' ), 'Ordine link testo semplice diverso dalla prova HTML' );
 foreach ( array( $html, $plain ) as $body ) {
-	expect( str_contains( $body, 'Annulla la tua iscrizione' ) && str_contains( $body, 'mi_cancel_demo' ), 'Pulsante o link assente dal contenuto inviato' );
+	expect( str_contains( $body, 'Annullamento dell’iscrizione' ) && str_contains( $body, 'mi_cancel_demo' ), 'Pulsante o link assente dal contenuto inviato' );
 	expect( str_contains( $body, 'Collegamento dimostrativo' ), 'Prova confondibile con cancellazione reale' );
 }
 expect( ! str_contains( json_encode( $stored ), 'mi_cancel_token' ) && ! str_contains( json_encode( $stored ), 'mi_cancel_participant' ), 'Creato link personale nella prova' );
@@ -26,11 +26,11 @@ $real = MI_Modello_Email::crea_istantanea_operativa( 42, array( '{{evento.titolo
 expect( empty( $real['cancellation_demo'] ) && count( $real['gestione_partecipanti'] ) === 2, 'Invio operativo trasformato in prova' );
 expect( $real['gestione_partecipanti'][0]['url'] === $real_links[0]['url'], 'Link operativo modificato' );
 expect( ! str_contains( MI_Modello_Email::componi_html( $real ), 'mi_cancel_demo' ), 'Demo finita nel messaggio operativo' );
-expect( strpos( MI_Modello_Email::componi_html( $real ), 'Annulla l’iscrizione di Persona Due' ) < strpos( MI_Modello_Email::componi_html( $real ), 'Consulta la pagina dell’evento' ), 'Pagina evento prima dei link delle persone nell invio operativo' );
+expect( strpos( MI_Modello_Email::componi_html( $real ), 'Annullamento dell’iscrizione di Persona Due' ) < strpos( MI_Modello_Email::componi_html( $real ), 'Pagina dell’evento' ), 'Pagina evento prima dei link delle persone nell invio operativo' );
 $other = MI_Modello_Email::crea_istantanea_operativa( 42, array(), 'PRE_DEPARTURE_REMINDER', 'Avviso', '', array(), false, true );
 expect( empty( $other['cancellation_demo'] ) && ! $other['gestione_partecipanti'], 'Pulsante aggiunto a un altro tipo di messaggio' );
 $other['gestione_partecipanti'] = $real['gestione_partecipanti'];
 $other_html = MI_Modello_Email::componi_html( $other );
-expect( strpos( $other_html, 'Consulta la pagina dell’evento' ) < strpos( $other_html, 'Annulla l’iscrizione di Persona Uno' ), 'Ordine modificato negli altri tipi di email' );
+expect( strpos( $other_html, 'Pagina dell’evento' ) < strpos( $other_html, 'Annullamento dell’iscrizione di Persona Uno' ), 'Ordine modificato negli altri tipi di email' );
 if ( in_array( '--render', $argv, true ) ) file_put_contents( dirname( __DIR__, 2 ) . '/output/cancellazione-prova-3.27.33/email.html', $html );
 echo "PASS: email di prova con link dimostrativo HTML/testo, campione anonimo, nessun token reale, invii operativi e altri tipi invariati.\n";

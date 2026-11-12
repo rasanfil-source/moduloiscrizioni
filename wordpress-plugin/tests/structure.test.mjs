@@ -517,8 +517,8 @@ test('le email includono collegamenti personali senza inviare in modalità antep
   assert.match(service, /participant_cancel_url/);
   assert.match(service, /_participant_management/);
   assert.match(model, /gestione_partecipanti/);
-  assert.match(model, /Annulla la tua iscrizione/);
-  assert.match(model, /Annulla l’iscrizione di/);
+  assert.match(model, /Annullamento dell’iscrizione/);
+  assert.match(model, /Annullamento dell’iscrizione di/);
   assert.doesNotMatch(model, />Gestisci le partecipazioni</);
   assert.doesNotMatch(model, /Ogni collegamento riguarda una sola persona/);
   assert.match(model, /padding:9px 14px/);
@@ -762,7 +762,7 @@ test('il guscio email usa il branding dello snapshot e componenti email-safe', a
   assert.match(sender, /AltBody/);
   assert.match(model, /max-width:600px/);
   assert.match(model, /opacity:0;color:transparent/);
-  assert.match(model, /Assistenza/);
+  assert.match(model, /Per assistenza/);
   assert.match(model, /border-radius:12px/);
   assert.match(model, /font-style:italic/);
   assert.match(model, /#151b38/);
@@ -1187,7 +1187,7 @@ test('la lista d’attesa propone il posto con accettazione, rinuncia e scadenza
   assert.match(portal, /Accetta il posto/);
   assert.match(portal, /value="DECLINE"/);
   assert.match(email, /Per ora non devi pagare né fare altro/);
-  assert.match(email, /Rispondi alla proposta/);
+  assert.match(email, /Risposta alla proposta/);
 });
 
 test('la replica conserva i dati originali in MySQL', async () => {
@@ -1757,7 +1757,7 @@ test('il referente consulta stato e saldo senza esporre dati personali', async (
   assert.match(service, /public_status_token/);
   assert.match(service, /hash_equals/);
   assert.doesNotMatch(service, /public_status[\s\S]{0,4000}buyer_phone/);
-  assert.match(email, /Controlla stato e saldo/);
+  assert.match(email, /Stato e saldo/);
 });
 
 test('i promemoria operativi passano dalla coda protetta e le bozze restano in anteprima', async () => {

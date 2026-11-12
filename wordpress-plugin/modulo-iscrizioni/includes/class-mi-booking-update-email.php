@@ -20,7 +20,8 @@ final class MI_Booking_Update_Email {
 		$people = $wpdb->get_results( $wpdb->prepare( "SELECT id,first_name,last_name,options_json,room_code,extra_json,status FROM {$wpdb->prefix}mi_participants WHERE registration_id=%d ORDER BY id", $id ), ARRAY_A );
 		if ( $wpdb->last_error ) throw new RuntimeException( 'Partecipanti non disponibili per la comunicazione.' );
 		$title = get_the_title( $r['event_id'] );
-		$lines = array( 'La segreteria ha aggiornato la tua prenotazione per ' . $title . '.', 'Di seguito la situazione attuale.' );
+		$buyer_name = trim( ( $r['buyer_first_name'] ?? '' ) . ' ' . ( $r['buyer_last_name'] ?? '' ) );
+		$lines = array( 'Buongiorno' . ( $buyer_name ? ' ' . $buyer_name : '' ) . '.', '', 'La segreteria ha aggiornato la prenotazione per ' . $title . '.', 'Di seguito la situazione attuale.' );
 		$individual = is_array( $position ) ? array_column( $position['people'], null, 'id' ) : array();
 		$managed = in_array( $r['economic_mode'], array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
 		$money = static function ( $cents ) { return number_format( $cents / 100, 2, ',', '.' ) . ' EUR'; };
@@ -50,7 +51,7 @@ final class MI_Booking_Update_Email {
 		} elseif ( $managed ) {
 			$lines[] = ''; $lines[] = 'La situazione economica è da verificare con la segreteria.';
 		}
-		$lines[] = ''; $lines[] = 'Per chiarimenti sui servizi o sui versamenti contatta la segreteria.';
+		$lines[] = ''; $lines[] = 'Per chiarimenti è possibile contattare la segreteria.';
 		$snapshot = MI_Modello_Email::crea_istantanea( (int) $r['event_id'], array() );
 		// Una notifica di modifica gestionale e distinta dalla conferma iniziale.
 		$snapshot['attivo'] = true;
