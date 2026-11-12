@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class MI_Activator {
-	const SCHEMA_REVISION = 7;
+	const SCHEMA_REVISION = 9;
 	public static function activate() {
 		self::create_tables();
 		self::add_roles_and_capabilities();
@@ -138,6 +138,8 @@ final class MI_Activator {
 			expires_at datetime NULL,
 			payment_deadline_at datetime NULL,
 			waitlist_offer_token_hash char(64) NULL,
+			waitlist_partial_type varchar(80) NULL,
+			waitlist_together tinyint unsigned NOT NULL DEFAULT 0,
 			waitlist_offered_at datetime NULL,
 			waitlist_offer_expires_at datetime NULL,
 			capacity_released_at datetime NULL,
@@ -266,6 +268,7 @@ final class MI_Activator {
 		dbDelta( "CREATE TABLE {$payments} (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
 			registration_id bigint(20) unsigned NOT NULL,
+			reverses_payment_id bigint(20) unsigned NULL,
 			transaction_kind varchar(24) NOT NULL DEFAULT 'PAYMENT',
 			movement_kind varchar(24) NOT NULL DEFAULT '',
 			request_hash char(64) NULL,

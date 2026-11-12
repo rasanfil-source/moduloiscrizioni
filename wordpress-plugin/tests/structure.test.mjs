@@ -452,7 +452,6 @@ test('i dati dimostrativi sono riservati a bozze, amministratori ed email in ant
 	assert.match(admin, /_mi_marketing_consent_id'[\s\S]*'marketing-' \. \$event_id/);
   assert.match(admin, /'ADMIN_DEMO'/);
   assert.match(registration, /\$allow_unpublished\s*=\s*false/);
-  assert.match(registration, /!\s*\$allow_unpublished\s*&&\s*'OPEN'\s*!==\s*self::registration_state/);
   assert.match(registration, /!\s*\$allow_unpublished\s*&&\s*'OPEN'\s*!==\s*self::registration_time_state/);
 	assert.match(registration, /mi_privacy_misconfigured/);
 	assert.match(registration, /Salva nuovamente l’evento oppure disattiva questa opzione/);
@@ -1009,7 +1008,8 @@ test('consenso futuro e approvazioni tecniche hanno il corretto livello di inter
 	const publicScript = await read('assets/public.js');
 	assert.match(eventType, /Vuoi essere avvisato delle future iniziative/);
 	assert.doesNotMatch(eventType, /name="mi_high_impact_approved"/);
-	assert.match(publicScript, /Vuoi essere avvisato delle future iniziative/);
+	assert.match(await read('includes/class-mi-shortcode.php'), /Vuoi essere avvisato delle future iniziative/);
+	assert.doesNotMatch(publicScript, /marketingText|Vuoi essere avvisato delle future iniziative/);
 });
 
 test('la configurazione economica viene normalizzata prima di ogni uso', async () => {
@@ -1034,7 +1034,7 @@ test('l’idempotenza viene risolta prima dello stato evento e dei limiti anti a
   const service = await read('includes/class-mi-registration-service.php');
   const create = service.slice(service.indexOf('public static function create'), service.indexOf('public static function riepilogo_economico'));
   assert.ok(create.indexOf('SELECT id, order_code, status') < create.indexOf('public_event( $event_id,'));
-  assert.ok(create.indexOf("'replayed' => true") < create.indexOf('registration_state( $event )'));
+  assert.ok(create.indexOf("'replayed' => true") < create.indexOf('registration_time_state( $event )'));
   assert.ok(create.indexOf("'replayed' => true") < create.indexOf('set_transient'));
 });
 

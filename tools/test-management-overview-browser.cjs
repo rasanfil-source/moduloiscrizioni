@@ -7,8 +7,9 @@ const model={people,items:[{code:'ORDER',name:'Referente',status:'CONFIRMED',par
 const php=input=>JSON.parse(execFileSync(path.resolve('.tmp/php-runtime/php.exe'),['-d','extension_dir='+path.resolve('.tmp/php-runtime/ext'),'-d','extension=mbstring','wordpress-plugin/tests/management-list.php','--json'],{input:JSON.stringify({...input,summary:model}),encoding:'utf8'}));
 const markup=`<!doctype html><html><link rel="stylesheet" href="/portal.css"><link rel="stylesheet" href="/portal-management.css"><main class="mi-portal"><section data-mi-management class="mi-management" data-event="42" data-endpoint="/ajax" data-nonce="test"><select data-event-select><option value="42">Evento</option></select><button data-refresh>Aggiorna</button><button data-print>Stampa</button><p data-management-status></p><div data-management-content></div></section></main><script src="/portal-management.js"></script></html>`;
 const calls=[];let failAttendance=true,heldRooms=null,releaseRooms=null;
+model.items.push({code:'WAIT',name:'Gruppo in attesa',status:'WAITLISTED',participants:3,active:true,balance:0,paid:0,missing:0,unassigned:0});
 const server=http.createServer(async(req,res)=>{try{
- if(new URL(req.url,'http://localhost').pathname==='/')return res.end(markup);
+ if(new URL(req.url,'http://localhost').pathname==='/'){res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(markup);}
  if(req.url==='/ajax'){
   let body='';for await(const chunk of req)body+=chunk;const params=Object.fromEntries(new URLSearchParams(body));calls.push(params);let data;
   if(params.operation==='summary'){data=php({operation:'overview'});assert.ok(!('people' in data)&&!('items' in data));data.attendance_availability={enabled:true,available:true};}
@@ -25,6 +26,7 @@ const server=http.createServer(async(req,res)=>{try{
 (async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({channel:'msedge',headless:true});try{
  const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:'+server.address().port);await page.locator('[data-more]').waitFor();
+ assert.match(await page.locator('[data-management-content]').innerText(),/In attesa: 3 · Con posto proposto: 1/);
  assert.equal(calls.filter(c=>c.operation==='summary_panel').length,0);
  assert.equal(await page.locator('[data-list] tbody tr').count(),30);
  assert.equal(await page.locator('[data-list] tbody .mi-participant-room-code').first().innerText(),'DS-');
@@ -43,6 +45,8 @@ const server=http.createServer(async(req,res)=>{try{
  await page.locator('[data-refresh]').click();await page.locator('[data-more]').waitFor();releaseRooms();heldRooms=null;
  await page.waitForResponse(async r=>{try{return (await r.json()).data?.rooms_version!==undefined;}catch{return false;}});
  assert.equal(await page.locator('[data-room-planner]').count(),0,'Stale panel must not change refreshed summary');
+ model.items=model.items.filter(item=>item.status!=='WAITLIST_OFFERED');await page.locator('[data-refresh]').click();
+ await page.getByText('In attesa: 3 · Con posto proposto: 0',{exact:true}).waitFor();
  model.people=[];model.items=[];model.features.rooms=false;await page.locator('[data-refresh]').click();await page.getByText('Nessun risultato. Modifica la ricerca o i filtri.',{exact:true}).waitFor();
  assert.equal(await page.locator('[data-attendance-panel]').count(),0);assert.equal(await page.locator('[data-offer-panel]').count(),0);
  assert.deepEqual(errors,[]);console.log('Overview: 30 initial rows, aggregate services, panels on demand, retry, no repeated loading, stale response ignored.');

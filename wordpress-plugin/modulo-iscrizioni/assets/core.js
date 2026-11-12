@@ -18,6 +18,24 @@
     return Object.values(selection || {}).reduce((sum, value) => sum + clampQuantity(value, 20), 0);
   }
 
+  function selectionCapacity(event, selection) {
+    const availability = event.availability;
+    if (!availability || availability.remaining == null || !Number.isFinite(Number(availability.remaining))) return null;
+    const remaining = Math.max(0, Number(availability.remaining));
+    const selected = Object.entries(selection).filter(([, quantity]) => quantity > 0);
+    const quantity = selected.reduce((sum, [, count]) => sum + count, 0);
+    const types = selected.map(([code, requested]) => {
+      const limit = availability.ticket_types?.[code]?.remaining;
+      return {code, requested, available:limit == null ? requested : Math.max(0, Number(limit) || 0)};
+    });
+    const available = Math.min(remaining, types.reduce((sum, type) => sum + Math.min(type.requested, type.available), 0));
+    const waitlistRemaining = availability.waitlist_remaining == null
+      ? Math.max(0, Number(event.waitlist_capacity ?? 20) - Number(availability.waitlisted || 0))
+      : Math.max(0, Number(availability.waitlist_remaining) || 0);
+    return {quantity, available, remaining, types, fits:quantity <= available, waitlistRemaining,
+      canWait:Boolean(event.waitlist_enabled) && quantity <= waitlistRemaining};
+  }
+
   function fixedDepositCents(personTotals, sharedTotal, fixedPerPerson) {
     const totals = (Array.isArray(personTotals) ? personTotals : []).map(value => Math.max(0, Math.round(Number(value) || 0)));
     if (!totals.length) return 0;
@@ -45,5 +63,5 @@
     return /^\+[1-9][0-9().\s-]{6,30}$/.test(normalizePhone(value));
   }
 
-  target.MIRegistrationCore = Object.freeze({ clampQuantity, normalizeSelection, sumQuantities, fixedDepositCents, normalizePhone, isValidPhone });
+  target.MIRegistrationCore = Object.freeze({ clampQuantity, normalizeSelection, sumQuantities, selectionCapacity, fixedDepositCents, normalizePhone, isValidPhone });
 }(globalThis));

@@ -23,6 +23,20 @@ function init(root) {
   form.addEventListener('input',publishDraft);form.addEventListener('change',publishDraft);
   window.addEventListener('beforeunload',e=>{if(root.isConnected&&(pending||busy||root.dataset.paymentDraft==='1')){e.preventDefault();e.returnValue='';}});
   const field = name => form.elements.namedItem(name);
+  const reversal = field('reverses_payment_id');
+  function showReversalSources(movements) {
+    if(!reversal)return;
+    reversal.replaceChildren(new Option('Nessun collegamento',''));
+    for(const m of movements){
+      const id=/^mysql_([1-9][0-9]*)$/.exec(m.id||'')?.[1];
+      if(!id||m.importo<=0)continue;
+      const returned=movements.filter(row=>String(row.reverses_payment_id)===id&&row.importo<0).reduce((sum,row)=>sum-row.importo,0);
+      const remaining=m.importo-returned;
+      const option=new Option('#'+id+' · '+(m.data_locale||'')+' · '+money(m.importo)+' · '+m.metodo+' · Restituibile '+money(Math.max(0,remaining)),id);
+      option.disabled=remaining<=0;reversal.add(option);
+    }
+    reversal.closest('label').hidden=field('tipo').value==='INCASSO';
+  }
   const unlock=()=>{delete root.dataset.paymentDraft;searchFields.disabled=false;root.closest('[data-mi-management]')?.querySelectorAll('[data-payment-locked]').forEach(control=>{control.disabled=false;delete control.dataset.paymentLocked;});};
   const discard=document.createElement('button');discard.type='button';discard.textContent='Svuota la bozza del movimento';form.querySelector('.mi-payment-actions').append(discard);
   discard.onclick=()=>{if(busy||pending){say('Verifica l’esito della registrazione prima di svuotare il modulo.',true);return;}form.reset();unlock();if(selected)choose(selected);};
@@ -38,7 +52,11 @@ function init(root) {
     if(!incoming){
       if(reset)field('importo').value='';
       const selected=[...peopleBox.querySelectorAll('input:checked')],person=individual.people.find(item=>item.id===Number(selected[0]?.value));
-      const amount=Math.round(Number(String(field('importo').value||'0').replace(',','.'))*100);
+      let amountText=String(field('importo').value||'0').trim();
+      if (/^\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/.test(amountText)) amountText=amountText.replace(/\./g,'').replace(',','.');
+      else if (/^\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?$/.test(amountText)) amountText=amountText.replace(/,/g,'');
+      else amountText=amountText.replace(',','.');
+      const amount=Math.round(Number(amountText)*100);
       const validSelection=!requiresRefundPerson||selected.length===1;
       const validAmount=!person||!Number.isFinite(amount)||amount<1||amount<=person.paid;
       field('importo').setCustomValidity(!validSelection?'Seleziona una sola persona.':!validAmount?'Il rimborso supera quanto versato dalla persona selezionata.':'');
@@ -166,6 +184,7 @@ function init(root) {
       showDeposit(r);
       form.reset(); fields.disabled = false; field('data').value = data.data; field('rata').value = 'FULL';
       showHistory(r.movimenti || []);
+      showReversalSources(r.movimenti || []);
       save.hidden = false; save.disabled = false; save.textContent = 'Registra pagamento'; next.hidden = true;
       showPeople(r.individual,p.matched_participant_ids||[]);
       pending = null; error.textContent = ''; form.hidden = false;
@@ -191,7 +210,7 @@ function init(root) {
     searchStatus.textContent = 'Digita almeno due caratteri.'; search.focus();
   });
   retryDetail.addEventListener('click', () => { if (selected) choose(selected); });
-  field('tipo').addEventListener('change', () => { field('importo').setCustomValidity('');save.disabled=false;showPeople(individual,matchedPeople); });
+  field('tipo').addEventListener('change', () => { if(reversal){reversal.closest('label').hidden=field('tipo').value==='INCASSO';reversal.value='';}field('importo').setCustomValidity('');save.disabled=false;showPeople(individual,matchedPeople); });
   field('importo').addEventListener('input',()=>{if(field('tipo').value!=='INCASSO')updatePeopleAmount();});
   form.addEventListener('submit', async e => {
     e.preventDefault();
@@ -208,6 +227,7 @@ function init(root) {
       }
       pending = {registration_id:selected.id, request_id:crypto.randomUUID()};
       for (const name of ['importo','data','tipo','rata','metodo','riferimento','nota']) pending[name] = field(name).value;
+      if(reversal&&field('tipo').value!=='INCASSO'&&reversal.value)pending.reverses_payment_id=reversal.value;
       if(individual&&(field('tipo').value==='INCASSO'||individual.requires_refund_allocation))pending.participant_ids=JSON.stringify([...peopleBox.querySelectorAll('input:checked')].map(input=>Number(input.value)));
     }
     busy = true; fields.disabled = true; searchFields.disabled = true; save.disabled = true;

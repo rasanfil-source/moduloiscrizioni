@@ -12,6 +12,11 @@ if ( in_array( '--json', $argv, true ) ) {
 	exit;
 }
 function check_list( $ok, $message ) { if ( ! $ok ) throw new RuntimeException( $message ); }
+foreach (['3201234567','+393201234567','320-1234567','(+39)3201234567','320 1234567'] as $phoneQuery) {
+ check_list(MI_Booking_Search::matches(['Persona Test','+39 320 1234567'],$phoneQuery),'Telephone formatting blocks list search: '.$phoneQuery);
+}
+check_list(!MI_Booking_Search::matches(['+39 320 1111111','+39 330 2222222'],'111111139330'),'Telephone search crosses separate contacts');
+check_list(MI_Booking_Search::matches(['1234-5678'],'1234-5678'),'Telephone normalization broke numeric booking codes');
 $summary = array( 'people'=>array(), 'items'=>array() );
 for ( $i=1; $i<=65; $i++ ) $summary['people'][] = array( 'id'=>$i, 'number'=>$i, 'code'=>'TEST', 'name'=>'Persona '.$i, 'buyer'=>'Referente', 'email'=>'family@example.invalid', 'phone'=>'123', 'status'=>'CONFIRMED', 'room'=>'A', 'options'=>array(), 'fields'=>array( 'diet'=>'Test' ), 'missing'=>array(), 'collectible'=>true, 'unassigned'=>false, 'requests'=>'', 'requests_reviewed'=>false );
 $summary['items'][] = array( 'code'=>'TEST', 'name'=>'Referente', 'status'=>'CONFIRMED', 'active'=>true, 'balance'=>100, 'collectible'=>true, 'missing'=>0, 'unassigned'=>0 );

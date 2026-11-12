@@ -128,7 +128,7 @@ final class MI_Event_Projection {
 					'tipo_movimento' => $movement_label,
 					'importo_centesimi' => (int) $payment['amount_cents'],
 					'fonte_pagamento' => array( 'BANK_TRANSFER' => 'BONIFICO', 'CARD' => 'CARTA', 'CASH' => 'CONTANTE' )[ strtoupper( (string) $payment['payment_source'] ) ] ?? strtoupper( (string) $payment['payment_source'] ),
-					'riferimento_esterno' => (string) $payment['external_reference'], 'etichetta_operatore' => (string) $payment['operator_label'], 'nota_amministrativa' => (string) $payment['administrative_note'],
+					'riferimento_esterno' => (string) $payment['external_reference'], 'etichetta_operatore' => (string) $payment['operator_label'], 'nota_amministrativa' => (string) $payment['administrative_note'] . ( empty( $payment['reverses_payment_id'] ) ? '' : ( $payment['administrative_note'] ? ' · ' : '' ) . 'Incasso di riferimento #' . (int) $payment['reverses_payment_id'] ),
 				);
 			}
 		}

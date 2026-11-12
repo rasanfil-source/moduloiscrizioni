@@ -117,6 +117,11 @@ final class MI_Management_List {
 		foreach ( $summary['items'] as $item ) {
 			$status = $item['status'];
 			$metrics['states'][$status] = ( $metrics['states'][$status] ?? 0 ) + (int) ( $item['participants'] ?? 0 );
+			if ( 'WAITLIST_OFFERED' === $status && ! empty( $item['partial_offer'] ) ) {
+				$waiting = max( 0, (int) $item['participants'] - 1 );
+				$metrics['states'][$status] -= $waiting;
+				$metrics['states']['WAITLISTED'] = ( $metrics['states']['WAITLISTED'] ?? 0 ) + $waiting;
+			}
 			if ( ! empty( $item['active'] ) ) foreach ( array( 'missing', 'unassigned' ) as $key ) $metrics[$key] += (int) ( $item[$key] ?? 0 );
 			if ( $item['collectible'] ?? in_array( $status, array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ) $metrics['receivable'] += (int) ( $item['balance'] ?? 0 );
 			$metrics['paid'] += (int) ( $item['paid'] ?? 0 );

@@ -37,7 +37,7 @@ $payments_url = add_query_arg( array( 'mi_portal_view' => 'payments', 'mi_portal
 			<td><?php echo esc_html( $row['installment_kind'] ); ?></td>
 			<td><?php echo esc_html( self::formatta_importo( $row['amount_cents'] ) ); ?></td>
 			<td><?php echo esc_html( $labels[$row['payment_source']] ?? $row['payment_source'] ); ?></td>
-			<td><?php echo esc_html( $row['external_reference'] ?: '—' ); ?></td>
+			<td><?php echo esc_html( $row['external_reference'] ?: '—' ); ?><?php if ( ! empty( $row['reverses_payment_id'] ) ) : ?><br><small>Incasso di riferimento #<?php echo esc_html( (int) $row['reverses_payment_id'] ); ?></small><?php endif; ?></td>
 			<td><?php echo esc_html( $row['operator_label'] ?: '—' ); ?></td>
 		</tr><?php endforeach; ?>
 		</tbody></table>

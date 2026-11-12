@@ -4,6 +4,23 @@ import test from 'node:test';
 await import('../modulo-iscrizioni/assets/core.js');
 const core = globalThis.MIRegistrationCore;
 
+test('la scelta di capienza considera il gruppo intero, le tipologie e i posti in attesa', () => {
+  const event = {waitlist_enabled:true,waitlist_capacity:5,availability:{remaining:1,waitlisted:2,ticket_types:{a:{remaining:null}}}};
+  assert.equal(core.selectionCapacity(event,{a:1}).fits,true);
+  const group = core.selectionCapacity(event,{a:2});
+  assert.equal(group.fits,false);assert.equal(group.available,1);assert.equal(group.canWait,true);
+  assert.equal(core.selectionCapacity(event,{a:4}).canWait,false);
+  assert.equal(core.selectionCapacity({...event,waitlist_enabled:false},{a:2}).canWait,false);
+  event.availability.remaining=10;event.availability.ticket_types.a.remaining=1;
+  const mixed=core.selectionCapacity(event,{a:2,b:1});
+  assert.equal(mixed.fits,false);assert.equal(mixed.available,2);
+  event.availability.waitlist_remaining=0;
+  assert.equal(core.selectionCapacity(event,{a:2}).canWait,false);
+  event.availability.remaining=0;
+  assert.equal(core.selectionCapacity(event,{a:1}).available,0);
+  assert.equal(core.selectionCapacity({}, {a:2}),null);
+});
+
 test('le quantità sono intere e rispettano i limiti', () => {
   assert.equal(core.clampQuantity('3', 5), 3);
   assert.equal(core.clampQuantity('-2', 5), 0);

@@ -10,6 +10,10 @@ function mi_workspace_capabilities(array $response): array {
 		'central_workbook'  => false,
 	);
 	$errors = array();
+	$version = $response['schema_version'] ?? '';
+	if (!is_string($version) || !preg_match('/^1\.[0-9]+\.[0-9]+$/D', $version) || version_compare($version, '1.14.0', '<')) {
+		$errors[] = 'MODULI AUTONOMO richiede uno schema della serie 1 dalla versione 1.14.0. Aggiorna codice e distribuzione della web app.';
+	}
 	if (($response['ok'] ?? false) !== true) {
 		$errors[] = 'La Web App non ha restituito ok=true.';
 	}

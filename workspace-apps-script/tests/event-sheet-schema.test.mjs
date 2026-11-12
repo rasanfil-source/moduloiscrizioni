@@ -10,6 +10,20 @@ function fixture(schema) {
  return {c,rows,event};
 }
 const free={fields:[{key:'birth_date',label:'Data di nascita'},{key:'custom_food',label:'Cosa porti?'}],options:[],room:false,pricing:'ZERO'};
+
+test('long historical custom keys retain columns, labels, answers and editability',()=>{
+ const key='custom_'+ 'a'.repeat(90);
+ const {c,rows,event}=fixture({...free,fields:[{key,label:'Domanda conservata'}]});
+ event.domande_json=JSON.stringify([{key,label:'Domanda conservata'}]);
+ rows.orders.push({id_evento:'42',codice_ordine:'A',stato:'CONFIRMED'});
+ rows.people.push({codice_ordine:'A',numero_partecipante:1,dati_aggiuntivi_json:JSON.stringify({[key]:'Risposta conservata'})});
+ for(const selection of [undefined,[key]]){
+  const view=c.generaVistaOperativaEvento_('42',selection);
+  assert.equal(view.colonne.find(column=>column.key===key)?.label,'Domanda conservata');
+  assert.equal(view.righe[0].valori[key],'Risposta conservata');
+ }
+ assert.equal(c.campoModificabileFoglio_(key),true);
+});
 test('free event with birth date does not inherit travel columns without explicit choices',()=>{
  const {c}=fixture(free);
  for(const view of [c.generaVistaOperativaIniziale_('42','12 ceste','VIAGGIO_COMPLESSO'),c.generaVistaOperativaEvento_('42')]) {

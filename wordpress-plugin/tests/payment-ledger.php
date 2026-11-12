@@ -14,12 +14,19 @@ function rejected($base,$patch) {
  throw new RuntimeException('Input accettato indebitamente: '.json_encode($patch));
 }
 $p=MI_Payment_Ledger::normalize($base);
+check($p===MI_Payment_Ledger::normalize($base+['reverses_payment_id'=>'']),'Campo vuoto altera hash storico');
+rejected($base,['reverses_payment_id'=>1]);
+foreach([0,-1,[],true,1.5,'1e2','01','99999999999999999999999']as $original)rejected($base,['tipo'=>'STORNO','reverses_payment_id'=>$original]);
+check(MI_Payment_Ledger::normalize(array_replace($base,['tipo'=>'STORNO','reverses_payment_id'=>'3']))['reverses_payment_id']===3,'Riferimento strutturato perso');
 check($p['amount_cents']===1234,'Centesimi esatti');
 check($p['effective_at']==='2026-09-08 22:00:00','Data locale convertita in UTC');
 check($p['transaction_kind']==='PAYMENT','Incasso');
 $p=MI_Payment_Ledger::normalize(array_replace($base,['tipo'=>'STORNO']));
 check($p['transaction_kind']==='REFUND' && $p['movement_kind']==='STORNO','Storno distinto e sottrattivo');
-foreach (['0','-1','1.001','1e3','1.000,00','42949673','NaN'] as $amount) rejected($base,['importo'=>$amount]);
+foreach (['0','-1','1e3','1.00,00','42949673','NaN',[], '42.949.672,96'] as $amount) rejected($base,['importo'=>$amount]);
+foreach (['1.001'=>100100,'1.500,00'=>150000,'1,500.00'=>150000,'5,000'=>500000,'42.949.672,95'=>4294967295] as $amount=>$expected) {
+ check(MI_Payment_Ledger::normalize(array_replace($base,['importo'=>$amount]))['amount_cents']===$expected,'Formato monetario incoerente: '.$amount);
+}
 foreach (['2026-02-30','2026-13-01','09/09/2026'] as $date) rejected($base,['data'=>$date]);
 rejected($base,['request_id'=>'wp_7_------------------------------------']);
 rejected($base,['metodo'=>'ALTRO']);
@@ -104,3 +111,11 @@ $wpdb->failUpdate=false;
 $refund=MI_Payment_Ledger::save(1,array_replace($second,['tipo'=>'STORNO','importo'=>'20']));
 check($refund['saved']===true && $wpdb->registration['status']==='PENDING_PAYMENT','Storno ricalcola stato');
 echo "Retry, saldo, rollback e coda verificati con database simulato.\n";
+$wpdb=new LedgerDatabase();
+$first=MI_Payment_Ledger::save(1,$input);
+$refundInput=array_replace($second,['tipo'=>'STORNO','importo'=>'20','reverses_payment_id'=>$first['payment_id']]);
+$refund=MI_Payment_Ledger::save(1,$refundInput);
+check($refund['saved']&&MI_Payment_Ledger::save(1,$refundInput)['replayed'],'Storno collegato e retry');
+check(MI_Payment_Ledger::save(1,array_replace($refundInput,['reverses_payment_id'=>99]))['saved']===false,'Retry con incasso diverso');
+check((int)$wpdb->payments[1]['reverses_payment_id']===$first['payment_id'],'Collegamento non persistito');
+echo "PASS: hash storici e storni collegati idempotenti.\n";

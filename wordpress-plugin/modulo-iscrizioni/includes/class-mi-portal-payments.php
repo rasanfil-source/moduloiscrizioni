@@ -76,7 +76,7 @@ final class MI_Portal_Payments {
 			$payload['request_id'] = 'wp_' . get_current_user_id() . '_' . $request_id;
 			$payload['operator_label'] = mb_substr( 'WP#' . get_current_user_id() . ' · ' . wp_get_current_user()->display_name, 0, 100 );
 			if ( isset( $_POST['participant_ids'] ) ) $payload['participant_ids'] = wp_unslash( $_POST['participant_ids'] );
-			foreach ( array( 'data', 'tipo', 'rata', 'importo', 'metodo', 'riferimento', 'nota' ) as $field ) {
+			foreach ( array( 'data', 'tipo', 'rata', 'importo', 'metodo', 'riferimento', 'nota', 'reverses_payment_id' ) as $field ) {
 				$payload[ $field ] = mb_substr( sanitize_textarea_field( wp_unslash( $_POST[ $field ] ?? '' ) ), 0, 'nota' === $field ? 500 : 120 );
 			}
 		}
@@ -105,10 +105,11 @@ final class MI_Portal_Payments {
 		<form data-payment-form novalidate hidden>
 		<section class="mi-payment-summary" aria-label="Riepilogo prenotazione"><h3 data-person></h3><p data-event></p><p data-order class="mi-portal-muted"></p><div class="mi-payment-totals"><p>Totale<strong data-total></strong></p><p>Già versato<strong data-paid></strong></p><p>Da versare<strong data-balance></strong></p></div></section>
 		<section data-payment-history aria-label="Storico movimenti"></section><fieldset data-payment-fields><div class="mi-payment-grid">
-		<label>Importo in euro<input name="importo" inputmode="decimal" required pattern="[0-9]+([,.][0-9]{1,2})?" placeholder="0,00" aria-describedby="mi-payment-error"></label>
+		<label>Importo in euro<input name="importo" inputmode="decimal" required pattern="[0-9]+([,.][0-9]{1,2})?|[0-9]{1,3}(\.[0-9]{3})+(,[0-9]{1,2})?|[0-9]{1,3}(,[0-9]{3})+(\.[0-9]{1,2})?" placeholder="0,00" aria-describedby="mi-payment-error"></label>
 		<label>Metodo<select name="metodo"><option value="BONIFICO">Bonifico</option><option value="CARTA">Carta</option><option value="CONTANTE">Contanti</option></select></label>
 		<label>Data effettiva<input name="data" type="date" required aria-describedby="mi-payment-error"></label>
 		<label>Movimento<select name="tipo"><option value="INCASSO">Incasso</option><option value="RIMBORSO">Rimborso</option><option value="STORNO">Storno</option></select></label>
+		<label data-reversal-label hidden>Incasso di riferimento (facoltativo)<select name="reverses_payment_id"><option value="">Nessun collegamento</option></select></label>
 		<label data-installment-label hidden>Versamento<select name="rata"><option value="DEPOSIT">Caparra</option><option value="BALANCE">Saldo</option><option value="FULL">Totale</option></select></label>
 		<label>Riferimento<input name="riferimento" maxlength="120" placeholder="Bonifico o ricevuta"></label>
 		<details class="mi-payment-wide"><summary>Nota amministrativa</summary><textarea name="nota" aria-label="Nota amministrativa" rows="3" maxlength="500"></textarea></details>

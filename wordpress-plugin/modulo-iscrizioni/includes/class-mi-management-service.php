@@ -70,7 +70,7 @@ final class MI_Management_Service {
 		foreach ( $current as $field ) if ( ! isset( $known[$field['key']] ) ) { $field['required'] = false; $historical[] = $field; }
 		foreach ( $historical as $field ) {
 			$key = $field['key'] ?? '';
-			if ( ! preg_match( '/^[a-z][a-z0-9_-]{0,79}$/', $key ) || in_array( $key, array( 'constructor','prototype','room','camera','alloggio','first_name','last_name' ), true ) ) continue;
+			if ( ! preg_match( '/^[a-z][a-z0-9_-]*$/', $key ) || in_array( $key, array( 'constructor','prototype','room','camera','alloggio','first_name','last_name' ), true ) ) continue;
 			$fields[$key] = array( 'key' => $key, 'label' => $field['label'] ?? $key, 'type' => $field['type'] ?? 'text', 'required' => ! empty( $field['required'] ), 'options' => (array) ( $field['options'] ?? array() ) );
 			if ( isset( $field['date_rule'] ) ) $fields[$key]['date_rule'] = $field['date_rule'];
 		}
@@ -374,7 +374,7 @@ final class MI_Management_Service {
 					$participant_status = in_array( $person['status'], array( 'CANCELLED', 'EXPIRED' ), true ) ? $person['status'] : $order['status'];
 					$individuals[] = $person_deposit + array( 'created_at' => $order['created_at'] ?? '', 'registration_id' => (int) $order['id'], 'economics_known' => ! empty( $individual_position['quotes_known'] ) && ! empty( $individual_position['payments_known'] ), 'future_events' => self::future_events_response( $order ), 'is_buyer' => (int) $person['id'] === $buyer_participant_id, 'id' => (int) $person['id'], 'number' => $number + 1, 'attendance' => $attendance[$person['id']]['state'] ?? 'UNRECORDED', 'code' => $order['order_code'], 'name' => trim( ( $person['last_name'] ?? '' ) . ' ' . ( $person['first_name'] ?? '' ) ), 'buyer' => trim( $order['buyer_last_name'] . ' ' . $order['buyer_first_name'] ), 'email' => self::participant_contact( $fields, $definitions, 'email', $order['buyer_email'] ?? '' ), 'phone' => self::participant_contact( $fields, $definitions, 'phone', $order['buyer_phone'] ?? '' ), 'status' => $participant_status, 'room' => $person['room_code'], 'fields' => $fields, 'missing' => $missing_fields, 'unassigned' => $needs_room( $person ) && ! $person['room_code'], 'collectible' => $collectible && (int) $economic['balance'] > 0, 'requests' => self::visible_special_requests( $order['special_requests'] ?? '' ), 'requests_reviewed' => $request_review['reviewed'], 'offer_expires_at' => $order['waitlist_offer_expires_at'] ?? '', 'options' => self::decode( $person['options_json'] ?? '' ) );
 				}
-				$items[] = $deposit + array( 'created_at' => $order['created_at'] ?? '', 'registration_id' => (int) $order['id'], 'code' => $order['order_code'], 'name' => trim( $order['buyer_last_name'] . ' ' . $order['buyer_first_name'] ), 'status' => $order['status'], 'active' => ! in_array( $order['status'], array( 'CANCELLED','EXPIRED' ), true ), 'participants' => count( $participants ), 'total' => $individual_summary['totals_known'] ? $individual_summary['total'] : (int) $order['total_cents'], 'paid' => $individual_summary['totals_known'] ? $individual_summary['paid'] : $sum, 'balance' => $individual_summary['totals_known'] ? $individual_summary['balance'] : $position['balance'], 'collectible' => $collectible, 'missing' => $missing, 'unassigned' => $unassigned, 'requests' => self::visible_special_requests( $order['special_requests'] ?? '' ), 'requests_reviewed' => $request_review['reviewed'], 'offer_expires_at' => $order['waitlist_offer_expires_at'] ?? '', 'order_options' => self::decode( $order['order_options_json'] ?? '' ) );
+				$items[] = $deposit + array( 'partial_offer' => ! empty( $order['waitlist_partial_type'] ), 'created_at' => $order['created_at'] ?? '', 'registration_id' => (int) $order['id'], 'code' => $order['order_code'], 'name' => trim( $order['buyer_last_name'] . ' ' . $order['buyer_first_name'] ), 'status' => $order['status'], 'active' => ! in_array( $order['status'], array( 'CANCELLED','EXPIRED' ), true ), 'participants' => count( $participants ), 'total' => $individual_summary['totals_known'] ? $individual_summary['total'] : (int) $order['total_cents'], 'paid' => $individual_summary['totals_known'] ? $individual_summary['paid'] : $sum, 'balance' => $individual_summary['totals_known'] ? $individual_summary['balance'] : $position['balance'], 'collectible' => $collectible, 'missing' => $missing, 'unassigned' => $unassigned, 'requests' => self::visible_special_requests( $order['special_requests'] ?? '' ), 'requests_reviewed' => $request_review['reviewed'], 'offer_expires_at' => $order['waitlist_offer_expires_at'] ?? '', 'order_options' => self::decode( $order['order_options_json'] ?? '' ) );
 			}
 			$options = function_exists( 'get_post_meta' ) ? (array) get_post_meta( $event_id, '_mi_options', true ) : array();
 			$mode = function_exists( 'get_post_meta' ) ? get_post_meta( $event_id, '_mi_economic_mode', true ) : '';
@@ -956,11 +956,11 @@ final class MI_Management_Service {
 	public static function save_sheet( $event_id, $changes, $request_id, $source = 'SHEET_SYNC' ) {
 		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( $event_id ); if ( is_wp_error( $lease ) ) return $lease; }
 		global $wpdb;
-		if ( ! MI_Portal_Management::allowed() || ! MI_Access::can_access_event( $event_id ) || ! preg_match( '/^wp_' . get_current_user_id() . '_[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', $request_id ) || ! is_array( $changes ) || count( $changes ) > 500 ) return new WP_Error( 'mi_sheet_request', 'Richiesta non valida (massimo 500 celle per sincronizzazione).' );
+		if ( ! MI_Portal_Management::allowed() || ! MI_Access::can_access_event( $event_id ) || ! preg_match( '/^wp_' . get_current_user_id() . '_[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', $request_id ) || ! is_array( $changes ) ) return new WP_Error( 'mi_sheet_request', 'Richiesta di sincronizzazione non valida.' );
 		if ( ! $changes ) return array( 'ok' => true, 'saved' => true, 'message' => 'Nessuna modifica da sincronizzare.' );
 		$grouped = array();
 		foreach ( $changes as $change ) {
-			if ( ! is_array( $change ) || ! is_string( $change['order_code'] ?? null ) || ! is_int( $change['number'] ?? null ) || $change['number'] < 1 || ! is_string( $change['key'] ?? null ) || ! preg_match( '/^[a-z][a-z0-9_-]{0,79}$/', $change['key'] ) || ! is_string( $change['before'] ?? null ) || ! is_string( $change['after'] ?? null ) || mb_strlen( $change['after'] ) > 1000 ) return new WP_Error( 'mi_sheet_data', 'Una delle celle contiene dati non validi.' );
+			if ( ! is_array( $change ) || ! is_string( $change['order_code'] ?? null ) || ! is_int( $change['number'] ?? null ) || $change['number'] < 1 || ! is_string( $change['key'] ?? null ) || ! preg_match( '/^[a-z][a-z0-9_-]*$/', $change['key'] ) || ! is_string( $change['before'] ?? null ) || ! is_string( $change['after'] ?? null ) || mb_strlen( $change['after'] ) > 1000 ) return new WP_Error( 'mi_sheet_data', 'Una delle celle contiene dati non validi.' );
 			$grouped[$change['order_code']][] = $change;
 		}
 		ksort( $grouped );
@@ -1133,6 +1133,7 @@ final class MI_Management_Service {
 		$room = $data['room'] ?? $person['room'];
 		if ( ! is_string( $room ) ) throw new InvalidArgumentException( 'Camera non valida.' );
 		if ( '' !== $room ) {
+			if ( $room !== $person['room'] && ! in_array( $booking['status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ) throw new InvalidArgumentException( 'La persona non è ancora ammessa all’evento.' );
 			$rooms = array_column( $booking['accommodations'], null, 'code' );
 			if ( ! isset( $rooms[$room] ) || ( ! $defer_capacity && $rooms[$room]['available'] < 1 && $person['room'] !== $room ) ) throw new InvalidArgumentException( 'Camera non disponibile o al completo.' );
 			if ( $room !== $person['room'] ) self::validate_room_entitlement( $person, $rooms[$room] );

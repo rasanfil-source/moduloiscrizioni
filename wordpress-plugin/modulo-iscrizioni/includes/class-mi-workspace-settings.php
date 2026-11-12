@@ -41,7 +41,7 @@ final class MI_Workspace_Settings {
 			<?php if ( 'ping_ok' === $notice ) : ?><div class="notice notice-success"><p>Collegamento firmato verificato.</p></div><?php endif; ?>
 			<?php if ( 'ping_errore' === $notice ) : ?><div class="notice notice-error"><p>Collegamento non riuscito. Codice diagnostico: <code><?php echo esc_html( $error_code ?: 'non_disponibile' ); ?></code>.</p></div><?php endif; ?>
 			<?php if ( 'schema_ok' === $notice ) : ?><div class="notice notice-success"><p>Progetto Apps Script autonomo verificato: proiezione diretta disponibile.</p></div><?php endif; ?>
-			<?php if ( 'schema_errore' === $notice ) : ?><div class="notice notice-error"><p>La distribuzione non conferma il progetto Apps Script autonomo e il prelievo firmato delle proiezioni. Verifica l’URL e lo stato della configurazione.</p></div><?php endif; ?>
+			<?php if ( 'schema_errore' === $notice ) : ?><div class="notice notice-error"><p>Verifica la distribuzione di MODULI AUTONOMO. Occorrono la proiezione diretta, il prelievo firmato e uno schema della serie 1 dalla versione 1.14.0. Dopo aver aggiornato il codice, aggiorna anche la distribuzione della web app.</p></div><?php endif; ?>
 			<p>Il segreto salvato non viene mai mostrato. Inseriscilo nuovamente soltanto per sostituirlo.</p>
 			<p><strong>URL per la procedura guidata Sheets:</strong><br><code><?php echo esc_html( rest_url( MI_REST_Controller::NAMESPACE . '/workspace/commands' ) ); ?></code></p>
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
@@ -109,7 +109,12 @@ final class MI_Workspace_Settings {
 	}
 
 	private static function supports_direct_projection( $result ) {
-		return ! is_wp_error( $result ) && is_array( $result ) && ! empty( $result['direct_projection'] ) && ! empty( $result['standalone'] ) && ! empty( $result['projection_pull'] ) && isset( $result['central_workbook'] ) && false === $result['central_workbook'];
+		if ( is_wp_error( $result ) || ! is_array( $result ) ) return false;
+		$version = $result['schema_version'] ?? '';
+		return is_string( $version ) && preg_match( '/^1\.[0-9]+\.[0-9]+$/D', $version ) && version_compare( $version, '1.14.0', '>=' )
+			&& true === ( $result['ok'] ?? false ) && true === ( $result['direct_projection'] ?? false )
+			&& true === ( $result['standalone'] ?? false ) && true === ( $result['projection_pull'] ?? false )
+			&& false === ( $result['central_workbook'] ?? null );
 	}
 
 	private static function authorize( $action ) {

@@ -1,6 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/class-mi-payment-people.php';
+require_once __DIR__ . '/class-mi-amount.php';
 
 /** Registro autorevole MySQL. Nessuna richiesta Google nel percorso di lettura o salvataggio. */
 final class MI_Payment_Ledger {
@@ -54,9 +55,8 @@ final class MI_Payment_Ledger {
 		return $result;
 	}
 	public static function normalize( array $input ) {
-		$amount = trim( (string) ( $input['importo'] ?? '' ) );
-		if ( ! preg_match( '/^([0-9]{1,8})(?:[.,]([0-9]{1,2}))?$/D', $amount, $matches ) ) throw new InvalidArgumentException( 'Importo non valido.' );
-		$cents = (int) $matches[1] * 100 + (int) str_pad( $matches[2] ?? '', 2, '0' );
+		$cents = MI_Amount::cents( $input['importo'] ?? '', 4294967295 );
+		if ( null === $cents ) throw new InvalidArgumentException( 'Importo non valido.' );
 		if ( $cents < 1 || $cents > 4294967295 ) throw new InvalidArgumentException( 'Importo fuori dai limiti consentiti.' );
 		$kind = (string) ( $input['tipo'] ?? '' );
 		$source = array( 'BONIFICO' => 'BANK_TRANSFER', 'CARTA' => 'CARD', 'CONTANTE' => 'CASH' )[ $input['metodo'] ?? '' ] ?? '';
@@ -70,7 +70,44 @@ final class MI_Payment_Ledger {
 		$reference = mb_substr( sanitize_text_field( $input['riferimento'] ?? '' ), 0, 120 );
 		$note = mb_substr( sanitize_textarea_field( $input['nota'] ?? '' ), 0, 500 );
 		if ( self::contains_card( $reference ) || self::contains_card( $note ) ) throw new InvalidArgumentException( 'Non inserire numeri completi di carta.' );
-		return array( 'transaction_kind' => 'INCASSO' === $kind ? 'PAYMENT' : 'REFUND', 'movement_kind' => $kind, 'installment_kind' => 'OTHER', 'effective_at' => $date->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' ), 'amount_cents' => $cents, 'payment_source' => $source, 'external_reference' => $reference, 'administrative_note' => $note, 'origin_channel' => 'WORDPRESS', 'origin_id' => strtolower( $id ) );
+		$payment = array( 'transaction_kind' => 'INCASSO' === $kind ? 'PAYMENT' : 'REFUND', 'movement_kind' => $kind, 'installment_kind' => 'OTHER', 'effective_at' => $date->setTimezone( new DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' ), 'amount_cents' => $cents, 'payment_source' => $source, 'external_reference' => $reference, 'administrative_note' => $note, 'origin_channel' => 'WORDPRESS', 'origin_id' => strtolower( $id ) );
+		$original = $input['reverses_payment_id'] ?? '';
+		// Non aggiungere campi vuoti: preserva l'hash delle richieste precedenti.
+		if ( '' !== $original && null !== $original ) {
+			if ( 'INCASSO' === $kind || ( ! is_string( $original ) && ! is_int( $original ) ) || ! preg_match( '/^[1-9][0-9]*$/D', (string) $original ) || false === filter_var( $original, FILTER_VALIDATE_INT, array( 'options' => array( 'min_range' => 1 ) ) ) ) throw new InvalidArgumentException( 'Incasso di riferimento non valido.' );
+			$payment['reverses_payment_id'] = (int) $original;
+		}
+		return $payment;
+	}
+	/** Chiamato sotto il lock della prenotazione, dopo l'attribuzione alle persone. */
+	private static function validate_reversal( array $payment, array $history ) {
+		$id = $payment['reverses_payment_id'] ?? 0;
+		if ( ! $id ) return;
+		$source = null; $returned = 0; $returned_people = array();
+		foreach ( $history as $row ) {
+			if ( (int) ( $row['id'] ?? 0 ) === $id && 'PAYMENT' === $row['transaction_kind'] ) $source = $row;
+			if ( 'REFUND' !== $row['transaction_kind'] || (int) ( $row['reverses_payment_id'] ?? 0 ) !== $id ) continue;
+			$returned += (int) $row['amount_cents'];
+			foreach ( json_decode( $row['participant_allocations_json'] ?? '[]', true ) ?: array() as $part ) {
+				$person = (int) $part['participant_id'];
+				$returned_people[$person] = ( $returned_people[$person] ?? 0 ) + (int) $part['amount_cents'];
+			}
+		}
+		if ( ! $source ) throw new InvalidArgumentException( 'Seleziona un incasso della stessa prenotazione.' );
+		if ( $payment['amount_cents'] > (int) $source['amount_cents'] - $returned ) throw new InvalidArgumentException( 'Il movimento supera la parte non ancora restituita dell’incasso selezionato.' );
+		$source_people = json_decode( $source['participant_allocations_json'] ?? '[]', true ) ?: array();
+		if ( ! $source_people ) return; // Gli incassi storici possono non avere attribuzioni individuali.
+		$available = array();
+		foreach ( $source_people as $part ) {
+			$person = (int) $part['participant_id'];
+			$available[$person] = ( $available[$person] ?? 0 ) + (int) $part['amount_cents'];
+		}
+		$allocations = json_decode( $payment['participant_allocations_json'] ?? '[]', true ) ?: array();
+		if ( ! $allocations ) throw new InvalidArgumentException( 'Seleziona la persona inclusa nell’incasso di riferimento.' );
+		foreach ( $allocations as $part ) {
+			$person = (int) $part['participant_id'];
+			if ( (int) $part['amount_cents'] > ( $available[$person] ?? 0 ) - ( $returned_people[$person] ?? 0 ) ) throw new InvalidArgumentException( 'Il movimento supera la quota della persona nell’incasso selezionato.' );
+		}
 	}
 	private static function contains_card( $value ) {
 		// Solo numeri completi di 15–16 cifre; mai sottosequenze di CRO o IBAN.
@@ -101,6 +138,8 @@ final class MI_Payment_Ledger {
 		}
 		$position = self::position( $r, $paid );
 		foreach ( $rows as $index => $movement ) {
+			$movements[$index]['reverses_payment_id'] = (int) ( $movement['reverses_payment_id'] ?? 0 );
+			if ( $movements[$index]['reverses_payment_id'] ) $movements[$index]['nota'] .= ( $movements[$index]['nota'] ? ' · ' : '' ) . 'Incasso di riferimento #' . $movements[$index]['reverses_payment_id'];
 			$movements[$index]['data_locale'] = ( new DateTimeImmutable( $movement['effective_at'], new DateTimeZone( 'UTC' ) ) )->setTimezone( wp_timezone() )->format( 'd/m/Y' );
 			$allocations = json_decode( $movement['participant_allocations_json'] ?? '[]', true ) ?: array();
 			$movements[$index]['persone'] = implode( ', ', array_column( $allocations, 'name' ) );
@@ -153,6 +192,7 @@ final class MI_Payment_Ledger {
 				$payment['participant_allocations_json'] = wp_json_encode( MI_Payment_People::refund_plan( $individual, $participant_ids, $amount ) );
 			}
 			if ( $incoming && ! in_array( $r['status'], array( 'PENDING_PAYMENT', 'CONFIRMED' ), true ) ) throw new InvalidArgumentException( 'Questa prenotazione non può ricevere incassi.' );
+			self::validate_reversal( $payment, $history );
 			if ( $incoming && (int) $r['total_cents'] < 1 ) throw new InvalidArgumentException( 'L’evento non prevede pagamenti.' );
 			// plan() ha già verificato l'importo sulle sole persone selezionate.
 			if ( ! $incoming && $amount > max( 0, $paid ) ) throw new InvalidArgumentException( 'Il rimborso o storno supera quanto versato.' );

@@ -20,6 +20,8 @@ function get_post($id){return (object)['post_type'=>'event','post_status'=>'publ
 function wp_list_pluck($rows,$key){return array_column($rows,$key);}
 function get_post_meta($id,$key,...$args){return $key==='_mi_event_cancellation_job'&&!empty($GLOBALS['cancellation_pending'])?['recipients'=>[]]:'';}
 function wp_next_scheduled(...$args){return false;}
+function get_transient($key){return 0;}
+function set_transient(...$args){return true;}
 function wp_schedule_single_event(...$args){if($GLOBALS['fail_schedule'])throw new RuntimeException('cron unavailable');}
 class MI_Event_Post_Type {const EVENT_TYPE='event';}
 class MI_Field_Schema {
@@ -31,6 +33,7 @@ class MI_Portal {static function participant_cancel_url(...$args){return 'https:
 class MI_Modello_Email {
  static function valori_ordine(...$args){return [];}
  static function crea_istantanea(...$args){return [];}
+ static function crea_istantanea_lista_attesa(...$args){return [];}
  static function crea_istantanea_nuova_iscrizione_segreteria(...$args){return [];}
  static function crea_istantanea_annullamento_partecipazione_segreteria(...$args){return [];}
  static function crea_istantanea_annullamento_partecipazione_iscritto(...$args){return ['attivo'=>true,'testo'=>'Conferma singola partecipazione'];}
@@ -48,6 +51,7 @@ require __DIR__.'/../modulo-iscrizioni/includes/class-mi-registration-service.ph
 
 class FaultDatabase {
  public $prefix='wp_', $last_error='', $insert_id=0, $failure='', $commits=0, $writes=0, $registration=null, $snapshot=null;
+ public $eventConfirmed=0, $typeConfirmed=0, $waitlisted=2;
  function prepare($sql,...$args){foreach($args as $v)$sql=preg_replace('/%[ds]/',is_int($v)?(string)$v:"'".$v."'",$sql,1);return $sql;}
  function query($sql){
   $this->last_error='';
@@ -72,7 +76,7 @@ class FaultDatabase {
   }
   if($this->failure==='event_lock'&&str_contains($sql,'mi_event_counters')&&str_contains($sql,'FOR UPDATE')){$this->last_error='injected';return null;}
   if(str_contains($sql,'mi_ticket_counters')&&str_contains($sql,'FOR UPDATE')&&$this->failure==='ticket_lock'){$this->last_error='injected';return null;}
-  if(str_contains($sql,'mi_event_counters')||str_contains($sql,'mi_ticket_counters'))return ['event_id'=>42,'confirmed_count'=>0,'waitlisted_count'=>2];
+  if(str_contains($sql,'mi_event_counters')||str_contains($sql,'mi_ticket_counters'))return ['event_id'=>42,'confirmed_count'=>str_contains($sql,'mi_event_counters')?$this->eventConfirmed:$this->typeConfirmed,'waitlisted_count'=>$this->waitlisted];
   if(str_contains($sql,'mi_participants'))return ['id'=>1,'registration_id'=>1,'ticket_type_code'=>'a','first_name'=>'Persona','last_name'=>'Test','status'=>'ACTIVE'];
   if(str_contains($sql,'mi_registrations'))return $this->registration;
   throw new RuntimeException('Unexpected row query: '.$sql);
@@ -90,6 +94,7 @@ class FaultDatabase {
  }
  function get_var($sql){
   $this->last_error='';
+  if(str_contains($sql,'GET_LOCK')||str_contains($sql,'RELEASE_LOCK'))return 1;
   if(str_contains($sql,'COUNT(*)')){if($this->failure==='people_count'){$this->last_error='injected';return null;}return 1;}
   return 42;
  }
@@ -190,4 +195,38 @@ foreach([0,1] as $remaining){
 $wpdb=new ParticipantCancellationDatabase();$wpdb->registration=$stored;$wpdb->failConfirmation=true;
 $result=MI_Registration_Service::cancel_participant(1,'PARTICIPANT_LINK');
 check_case(is_wp_error($result)&&!$wpdb->cancelled&&$wpdb->emails===[]&&$wpdb->registration===$stored,'buyer outbox failure rolls back cancellation and organizer email');
+// La decisione pubblica usa i contatori bloccati: mai inserire automaticamente il gruppo in attesa.
+$GLOBALS['fail_schedule']=false;$event['waitlist_enabled']=true;$event['waitlist_capacity']=5;
+$group=$payload;$group['started_at']=time()-5;$group['tickets']['a']=2;
+$group['participants'][]=array_replace($group['participants'][0],['ticket_index'=>2,'first_name'=>'Seconda']);
+foreach([null,false,'true',true] as $consent){
+ $wpdb=new FaultDatabase();$wpdb->eventConfirmed=9;$request=$group;
+ if($consent!==null)$request['waitlist_accepted']=$consent;
+ $result=MI_Registration_Service::create(42,$request,'public-waitlist-choice-01');
+ if($consent===true){
+  check_case(!is_wp_error($result)&&$result['status']==='WAITLISTED'&&$wpdb->commits===1,'explicit public acceptance creates whole group in waitlist');
+  check_case(json_decode($wpdb->registration['snapshot_json'],true)['waitlist_accepted']===true,'waitlist acceptance recorded in snapshot');
+  $writes=$wpdb->writes;$retry=$request;unset($retry['waitlist_accepted']);
+  $replay=MI_Registration_Service::create(42,$retry,'public-waitlist-choice-01');
+  check_case(!is_wp_error($replay)&&$replay['replayed']&&$wpdb->writes===$writes,'lost response replay preserves existing booking without duplicate');
+ }else check_case(is_wp_error($result)&&$result->code==='mi_waitlist_confirmation_required'&&$result->data['availability']['remaining']===1&&$wpdb->writes===0&&$wpdb->commits===0,'missing or nonboolean choice creates nothing: '.json_encode($consent));
+}
+$wpdb=new FaultDatabase();$wpdb->eventConfirmed=9;$single=$payload;$single['started_at']=time()-5;
+$result=MI_Registration_Service::create(42,$single,'public-reduced-choice-01');
+check_case(!is_wp_error($result)&&$result['status']==='CONFIRMED','reduced group occupies available seat');
+$wpdb=new FaultDatabase();$wpdb->typeConfirmed=9;
+$result=MI_Registration_Service::create(42,$group,'public-type-choice-0001');
+check_case(is_wp_error($result)&&$result->code==='mi_waitlist_confirmation_required'&&$result->data['availability']['ticket_types']['a']['remaining']===1&&$wpdb->writes===0,'type cap requires choice even with global availability');
+$wpdb=new FaultDatabase();$wpdb->eventConfirmed=9;$wpdb->waitlisted=4;$group['waitlist_accepted']=true;
+$result=MI_Registration_Service::create(42,$group,'public-queue-full-00001');
+check_case(is_wp_error($result)&&$result->code==='mi_waitlist_full'&&$result->data['availability']['waitlist_remaining']===1&&$wpdb->writes===0,'full queue cannot accept group despite consent');
+$wpdb=new FaultDatabase();$wpdb->eventConfirmed=9;$event['waitlist_enabled']=false;
+$result=MI_Registration_Service::create(42,$group,'public-no-queue-000001');
+check_case(is_wp_error($result)&&$result->code==='mi_sold_out'&&$result->data['availability']['remaining']===1&&$wpdb->writes===0,'disabled queue returns availability without booking');
+$wpdb=new FaultDatabase();$wpdb->eventConfirmed=10;
+$result=MI_Registration_Service::create(42,$group,'public-sold-out-000001');
+check_case(is_wp_error($result)&&$result->code==='mi_sold_out'&&$result->data['availability']['remaining']===0&&$wpdb->writes===0,'last seat taken returns updated capacity under lock');
+$wpdb=new FaultDatabase();$wpdb->eventConfirmed=9;$event['waitlist_enabled']=true;unset($group['waitlist_accepted']);
+$result=MI_Registration_Service::create(42,$group,'operator-waitlist-0001',false,'TEST',true);
+check_case(!is_wp_error($result)&&$result['status']==='WAITLISTED','authorized operator flow remains available');
 exit($failures?1:0);

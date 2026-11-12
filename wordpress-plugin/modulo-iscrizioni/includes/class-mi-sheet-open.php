@@ -84,7 +84,7 @@ final class MI_Sheet_Open {
 				$identities[] = '(id=' . absint( $version['id'] ) . ' AND workspace_revision=' . absint( $version['revision'] ) . ')';
 			}
 			if ( ! $identities ) continue;
-			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}mi_registrations SET workspace_status='SYNCED',workspace_attempts=workspace_attempts+1,workspace_next_attempt_at=NULL,workspace_last_error=NULL,workspace_synced_at=%s WHERE event_id=%d AND workspace_status<>'SYNCED' AND (" . implode( ' OR ', $identities ) . ')', $now, $event_id ) );
+			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}mi_registrations SET workspace_status='SYNCED',workspace_attempts=workspace_attempts+1,workspace_next_attempt_at=NULL,workspace_last_error=IF(workspace_last_error IN ('payment_expiry_review_required','payment_deadline_review_required'),workspace_last_error,NULL),workspace_synced_at=%s WHERE event_id=%d AND workspace_status<>'SYNCED' AND (" . implode( ' OR ', $identities ) . ')', $now, $event_id ) );
 			if ( $wpdb->last_error ) throw new RuntimeException( 'Ricevuta della proiezione non registrata.' );
 		}
 	}

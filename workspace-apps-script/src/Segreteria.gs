@@ -321,7 +321,7 @@ function generaVistaOperativaEvento_(idEvento, campiForzati) {
   const espliciti=Array.isArray(campiForzati)&&campiForzati.length?campiForzati:vistaSalvata;
   if(espliciti.length){
     const disponibili=Object.assign({},catalogo);colonne.forEach(c=>disponibili[c.key]=c);
-    const scelte=[...new Set(espliciti)].filter(key=>typeof key==='string'&&/^[a-z][a-z0-9_-]{0,79}$/.test(key));
+    const scelte=[...new Set(espliciti)].filter(key=>typeof key==='string'&&/^[a-z][a-z0-9_-]*$/.test(key));
     colonne.splice(0,colonne.length,...scelte.map(key=>Object.assign({key:key,label:key,gruppo:gruppoCampoVistaOperativa_(key),comprimibile:false},disponibili[key]||{})));
   }else applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, pagamenti);
   aggiungiColonneCronologiaEvento_(colonne,evento);

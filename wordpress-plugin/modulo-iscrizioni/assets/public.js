@@ -31,9 +31,60 @@
 	const nextButton = root.querySelector('[data-mi-next]');
 	const backButton = root.querySelector('[data-mi-back]');
 	const stickySummary = root.querySelector('[data-mi-sticky-summary]');
-	const marketingInput = form.elements.namedItem('marketingAccepted');
-	const marketingText = marketingInput?.closest('label')?.querySelector('span');
-	if (marketingText) marketingText.textContent = 'Vuoi essere avvisato delle future iniziative? Il consenso è facoltativo e può essere revocato.';
+	const capacityNotice = document.createElement('section');
+	capacityNotice.className = 'mi-registration__capacity-choice';
+	capacityNotice.dataset.miCapacityChoice = '';capacityNotice.hidden = true;capacityNotice.tabIndex = -1;
+	const capacityMessage = document.createElement('p');capacityMessage.setAttribute('role','status');
+	const capacityDetails = document.createElement('p');
+	const reduceSelection = document.createElement('button');reduceSelection.type = 'button';reduceSelection.dataset.miReduceSelection = '';
+	const waitlistLabel = document.createElement('label');waitlistLabel.className = 'mi-registration__consent';
+	const waitlistChoice = document.createElement('input');waitlistChoice.type = 'checkbox';waitlistChoice.dataset.miWaitlistChoice = '';
+	const waitlistText = document.createElement('span');
+	waitlistLabel.append(waitlistChoice,waitlistText);
+	const capacityHelp = document.createElement('small');capacityHelp.textContent = 'La disponibilità viene verificata di nuovo all’invio. Nessun posto è riservato durante la compilazione.';
+	capacityNotice.append(capacityMessage,capacityDetails,reduceSelection,waitlistLabel,capacityHelp);steps[0].append(capacityNotice);
+	let capacitySelectionKey = '';
+	const selectionCapacity = () => core.selectionCapacity(config.event,ticketSelection());
+	const isWaitlistSelection = () => { const capacity = selectionCapacity();return Boolean(capacity && !capacity.fits); };
+	function updateCapacityChoice() {
+	  const key = JSON.stringify(ticketSelection());
+	  if (key !== capacitySelectionKey) waitlistChoice.checked = false;
+	  capacitySelectionKey = key;
+	  const capacity = selectionCapacity();
+	  const needsChoice = Boolean(capacity?.quantity && !capacity.fits);
+	  capacityNotice.hidden = !needsChoice;
+	  waitlistChoice.disabled = !needsChoice || !capacity.canWait;
+	  waitlistChoice.required = !waitlistChoice.disabled;
+	  if (waitlistChoice.disabled) waitlistChoice.checked = false;
+	  if (needsChoice) {
+	    capacityMessage.textContent = `Hai richiesto ${capacity.quantity} ${capacity.quantity === 1 ? 'posto' : 'posti'}. Per questa selezione ${capacity.available === 1 ? 'è disponibile solo 1 posto' : 'sono disponibili '+capacity.available+' posti'}.`;
+	    capacityDetails.textContent = capacity.canWait ? 'Puoi ridurre il numero degli iscritti oppure inserire tutta la prenotazione in lista d’attesa. Riceverai per email le proposte di posto. Per confermare la partecipazione dovrai accettare la proposta entro la scadenza indicata.' : config.event.waitlist_enabled ? `La lista d’attesa non può accogliere tutta la richiesta: restano ${capacity.waitlistRemaining} posti in attesa. Riduci il numero degli iscritti.` : 'La lista d’attesa non è attiva. Riduci il numero degli iscritti ai posti disponibili.';
+	    for (const type of capacity.types.filter(type => type.available < type.requested)) {
+	      const name = (config.event.ticket_types || []).find(ticket => ticket.code === type.code)?.name || type.code;
+	      capacityDetails.textContent += ` ${name}: ${type.available} posti disponibili.`;
+	    }
+	    reduceSelection.hidden = capacity.available < 1;
+	    reduceSelection.textContent = capacity.types.length === 1 ? `Riduci a ${capacity.available} ${capacity.available === 1 ? 'iscritto' : 'iscritti'}` : 'Modifica il numero degli iscritti';
+	    waitlistLabel.hidden = !capacity.canWait;
+	    waitlistText.textContent = capacity.quantity === 1 ? 'Accetto di inserire la richiesta in lista d’attesa.' : `Accetto di inserire tutti e ${capacity.quantity} gli iscritti in lista d’attesa.`;
+	  }
+	  updateContactEmailRequirement();
+	}
+	reduceSelection.addEventListener('click', () => {
+	  const capacity = selectionCapacity();if (!capacity?.available) return;
+	  const inputs = [...root.querySelectorAll('[data-mi-ticket]')];
+	  if (capacity.types.length === 1) {
+	    const input = inputs.find(input => input.dataset.miTicket === capacity.types[0].code);
+	    input.value = String(capacity.available);renderParticipants();input.focus();
+	  } else inputs.find(input => Number(input.value) > 0)?.focus();
+	});
+	waitlistChoice.addEventListener('change', () => { if (waitlistChoice.dataset.miErrorShown === '1') updateFieldError(waitlistChoice); });
+	function updateContactEmailRequirement() {
+	  if (!buyerEmail) return;
+	  buyerEmail.required = isWaitlistSelection() && Boolean(config.event.waitlist_enabled) || Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).some(row => {
+	    const travel = travelForRow(row);return travel?.mode === 'NEED' || (travel?.mode === 'DRIVER' && Number(travel.seats) > 0);
+	  });
+	}
 	if (config.event.special_requests_enabled) {
 	  const specialRequestsLabel = document.createElement('label');
 	  specialRequestsLabel.className = 'mi-registration__special-requests';
@@ -57,7 +108,7 @@
         const rows = Array.from(participantsRoot.querySelectorAll('.mi-registration__participant'));
         let seatIndex = rows.indexOf(row);
         for (const offer of choice.assignments) {
-          if (seatIndex < Number(offer.seats || 0)) { const {assignments,...bookingChoice}=choice; return {...bookingChoice, driver_id:Number(offer.driver_id)||0, price_cents:Number(offer.price_cents)||0}; }
+          if (seatIndex < Number(offer.seats || 0)) { const {assignments,...bookingChoice}=choice; return {...bookingChoice, route_key:offer.route_key, driver_id:Number(offer.driver_id)||0, price_cents:Number(offer.price_cents)||0}; }
           seatIndex -= Number(offer.seats || 0);
         }
         const {assignments,...bookingChoice}=choice; return {...bookingChoice, driver_id:0, price_cents:0};
@@ -66,23 +117,46 @@
       const first = participantsRoot.querySelector('.mi-registration__participant');
       return row === first ? choice : {mode:'OWN'};
     }
+	const contactFields = [
+	  {key:'firstName', selector:'[data-mi-first-name]', source:buyerFirstName},
+	  {key:'lastName', selector:'[data-mi-last-name]', source:buyerLastName},
+	  {key:'email', selector:'[data-mi-participant-field="email"]', source:buyerEmail},
+	  {key:'phone', selector:'[data-mi-participant-field="phone"]', source:buyerPhone}
+	];
+	const contactCopies = new Map();
+	const participantKey = row => `${row.dataset.miTicketType}:${row.dataset.miTicketIndex}`;
+	const comparableContact = (key, value) => key === 'phone' ? core.normalizePhone(value) : String(value || '').trim();
+	function contactCopyState(row, key, input) {
+	  const rowKey = participantKey(row);
+	  if (!contactCopies.has(rowKey)) contactCopies.set(rowKey, new Map());
+	  const state = contactCopies.get(rowKey);
+	  if (!state.has(key)) state.set(key, {manual:Boolean(input.value), value:input.value});
+	  return state.get(key);
+	}
 	function prefillFirstBookingFromContact() {
 	  const firstParticipant = participantsRoot.querySelector('.mi-registration__participant');
 	  if (!firstParticipant) return;
-	  const firstName = firstParticipant.querySelector('[data-mi-first-name]');
-	  const lastName = firstParticipant.querySelector('[data-mi-last-name]');
-	  if (firstName && buyerFirstName) firstName.value = buyerFirstName.value.trim();
-	  if (lastName && buyerLastName) lastName.value = buyerLastName.value.trim();
-	  const email = firstParticipant.querySelector('[data-mi-participant-field="email"]');
-	  const phone = firstParticipant.querySelector('[data-mi-participant-field="phone"]');
-	  if (email && buyerEmail && !email.value) email.value = buyerEmail.value.trim();
-	  if (phone && buyerPhone && !phone.value) phone.value = buyerPhone.value.trim();
+	  for (const {key, selector, source} of contactFields) {
+	    const input = firstParticipant.querySelector(selector);
+	    if (!input || !source) continue;
+	    const state = contactCopyState(firstParticipant, key, input);
+	    // Conserva anche valori inseriti dall'autocompletamento senza eventi input/change.
+	    if (comparableContact(key, input.value) !== comparableContact(key, state.value)) state.manual = true;
+	    if (state.manual) continue;
+	    input.value = source.value.trim();
+	    state.value = input.value;
+	    if (input.type === 'tel') validatePhoneField(input);
+	    else if (input.dataset.miErrorShown === '1') updateFieldError(input);
+	  }
 	}
-	buyerFirstName?.addEventListener('input', prefillFirstBookingFromContact);
-	buyerLastName?.addEventListener('input', prefillFirstBookingFromContact);
-	buyerEmail?.addEventListener('input', prefillFirstBookingFromContact);
-	buyerPhone?.addEventListener('input', prefillFirstBookingFromContact);
+	for (const type of ['input', 'change']) participantsRoot.addEventListener(type, (event) => {
+	  const field = contactFields.find(item => event.target.matches(item.selector));
+	  const row = event.target.closest('.mi-registration__participant');
+	  if (field && row) contactCopyState(row, field.key, event.target).manual = true;
+	});
+	participantsRoot.addEventListener('focusin', prefillFirstBookingFromContact);
 	preparePhoneField(buyerPhone);
+	for (const {source} of contactFields) for (const type of ['input', 'change', 'blur']) source?.addEventListener(type, prefillFirstBookingFromContact);
 
 	function validatePhoneField(input, reveal = false, normalize = false) {
 	  if (!input) return true;
@@ -237,7 +311,10 @@
       balanceRow.hidden = mode !== 'DEPOSIT_BALANCE';
       paymentMethodsRow.hidden = !['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(mode) || paymentMethods.length === 0;
       economicSummary.querySelector('[data-mi-payment-methods]').textContent = paymentMethods.join(', ');
-      if (travelPending()) {
+      if (isWaitlistSelection()) {
+        initialRow.hidden = balanceRow.hidden = paymentMethodsRow.hidden = true;
+        economicSummary.querySelector('[data-mi-economic-note]').textContent = total > 0 ? 'Quota indicativa per la richiesta in lista d’attesa. Nessun pagamento prima della proposta e della sua accettazione.' : 'Richiesta in lista d’attesa: la partecipazione non è ancora confermata.';
+      } else if (travelPending()) {
         initialRow.hidden = balanceRow.hidden = paymentMethodsRow.hidden = true;
         economicSummary.querySelector('[data-mi-economic-note]').textContent = 'Quota prevista dell’evento. Nessun pagamento è richiesto finché non sono assegnati tutti i passaggi necessari.';
       } else if (mode === 'FULL_PAYMENT') {
@@ -268,6 +345,7 @@
 	}
 
 	function showStep(step, focusHeading = true) {
+	  prefillFirstBookingFromContact();
 	  currentStep = Math.min(3, Math.max(1, step));
 	  if (currentStep === 3) renderConfirmationSummary();
 	  steps.forEach((section) => { section.hidden = Number(section.dataset.miStep) !== currentStep; });
@@ -280,9 +358,10 @@
 	  backButton.hidden = currentStep === 1;
 	  nextButton.hidden = currentStep === 3;
 	  submitButton.hidden = currentStep !== 3;
-      paymentInstructionsNote.hidden = currentStep !== 3 || travelPending() || totalCents() <= 0 || !['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(config.event.economic_mode);
+      paymentInstructionsNote.hidden = currentStep !== 3 || isWaitlistSelection() || travelPending() || totalCents() <= 0 || !['FULL_PAYMENT', 'DEPOSIT_BALANCE'].includes(config.event.economic_mode);
       paymentInstructionsNote.textContent = `Nell’email di conferma ${totalQuantity() > 1 ? 'delle prenotazioni' : 'della prenotazione'} riceverai le istruzioni per il pagamento.`;
 	  nextButton.textContent = currentStep === 2 ? 'Vai alla conferma' : 'Continua';
+	  submitButton.textContent = isWaitlistSelection() ? 'Invia richiesta di lista d’attesa' : 'Invia iscrizione';
 	  updateStickySummary();
 	  if (focusHeading) steps[currentStep - 1]?.querySelector('h2')?.focus();
 	}
@@ -297,6 +376,9 @@
         steps[2].querySelector('h2').after(summary);
       }
       summary.replaceChildren();
+      if (isWaitlistSelection()) {
+        const notice = document.createElement('p');notice.className = 'mi-registration__waitlist-summary';notice.textContent = 'Stai inviando una richiesta di lista d’attesa per tutti gli iscritti. Nessun posto è ancora confermato.';summary.append(notice);
+      }
       const line = (parent, title, value, emphasizeValue = false) => {
         const row = document.createElement('p');
         const label = document.createElement('strong');
@@ -474,7 +556,11 @@
     }
 
 	function currentStepIsValid() {
+	  prefillFirstBookingFromContact();
+	  updateCapacityChoice();
 	  errorBox.hidden = true;
+	  const capacity = selectionCapacity();
+	  if (currentStep === 1 && capacity?.quantity && !capacity.fits && !capacity.canWait) { showError(capacityDetails.textContent);capacityNotice.focus();return false; }
 	  if (currentStep === 1 && totalQuantity() < 1) {
 		showError('Seleziona almeno una iscrizione per continuare.');
 		return false;
@@ -527,8 +613,30 @@
 	  field.focus({ preventScroll: true });
 	  field.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
 	}
+	const singleLineField = field => field instanceof HTMLInputElement && ['text','email','tel','number','date','url','search'].includes(field.type);
+	function prepareFieldNavigation() {
+	  form.querySelectorAll('input').forEach(field => { if (singleLineField(field)) field.enterKeyHint = 'next'; });
+	}
+	form.addEventListener('focusin', (event) => { if (singleLineField(event.target)) event.target.enterKeyHint = 'next'; });
+	form.addEventListener('keydown', (event) => {
+	  const field = event.target;
+	  if (event.key !== 'Enter' || event.isComposing || event.keyCode === 229 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || !singleLineField(field)) return;
+	  event.preventDefault();
+	  if (event.repeat) return;
+	  prefillFirstBookingFromContact();
+	  if (field.type === 'tel') validatePhoneField(field, true, true);
+	  if (field.willValidate && !field.validity.valid) { revealInvalidField(field); return; }
+	  const section = field.closest('[data-mi-step]');
+	  if (!section || section.hidden) return;
+	  const fields = [...section.querySelectorAll('input,select,textarea')].filter(input => !input.matches(':disabled') && !input.readOnly && input.type !== 'hidden' && input.tabIndex >= 0 && input.getClientRects().length && getComputedStyle(input).visibility === 'visible');
+	  const index = fields.indexOf(field);
+	  if (index < 0) return;
+	  const next = fields[index + 1] || (currentStep < 3 ? nextButton : submitButton);
+	  if (!next.disabled && !next.hidden) next.focus();
+	});
 
     function captureParticipants() {
+      prefillFirstBookingFromContact();
       bookingTravel = globalThis.MITravel?.capture(participantsRoot) || bookingTravel;
 	  const previousValues = participantValues;
       participantValues = Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).map((row) => {
@@ -548,6 +656,7 @@
 
     function renderParticipants() {
       captureParticipants();
+      updateCapacityChoice();
       const quantity = totalQuantity();
 	  const participantsHeading = form.querySelector('[data-mi-participants-heading]');
 	  if (participantsHeading) participantsHeading.textContent = config.event.travel?.enabled ? 'Partecipanti' : quantity > 1 ? 'Prenotazioni' : 'Prenotazione';
@@ -555,6 +664,7 @@
 	  updateStickySummary();
       participantsRoot.replaceChildren();
       if (!quantity) {
+        contactCopies.clear();
         const hint = document.createElement('p');
         hint.className = 'mi-registration__hint';
         hint.textContent = 'Seleziona almeno una iscrizione.';
@@ -566,6 +676,8 @@
         const selected = ticketSelection()[ticket.code] || 0;
         for (let position = 1; position <= selected; position += 1) tickets.push({ ...ticket, position });
       });
+      const activeKeys = new Set(tickets.map(ticket => `${ticket.code}:${ticket.position}`));
+      for (const key of contactCopies.keys()) if (!activeKeys.has(key)) contactCopies.delete(key);
       tickets.forEach((ticket, index) => {
         const key = `${ticket.code}:${ticket.position}`;
         const previous = participantValues.find((value) => value.key === key) || {};
@@ -608,6 +720,7 @@
         participantsRoot.append(globalThis.MITravel.render(config, bookingTravel, 'booking', party));
       }
 	  prefillFirstBookingFromContact();
+      prepareFieldNavigation();
       renderEconomicSummary();
       updateStickySummary();
     }
@@ -902,10 +1015,7 @@
     });
     participantsRoot.addEventListener('change', () => {
       renderEconomicSummary();
-      if (buyerEmail) buyerEmail.required = Boolean(config.event.availability?.full && config.event.waitlist_enabled) || Array.from(participantsRoot.querySelectorAll('.mi-registration__participant')).some(row => {
-        const travel = travelForRow(row);
-        return travel?.mode === 'NEED' || (travel?.mode === 'DRIVER' && Number(travel.seats) > 0);
-      });
+      updateContactEmailRequirement();
     });
 	nextButton.addEventListener('click', () => {
 	  if (!currentStepIsValid()) return;
@@ -917,6 +1027,7 @@
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
+      prefillFirstBookingFromContact();
       errorBox.hidden = true;
 	  if (config.preview) {
 		showError('Questa è un’anteprima riservata: nessuna iscrizione è stata inviata.');
@@ -925,6 +1036,11 @@
       if (totalQuantity() < 1) {
         showError('Seleziona almeno una iscrizione.');
         return;
+      }
+      updateCapacityChoice();
+      const capacity = selectionCapacity();
+      if (capacity && !capacity.fits && (!capacity.canWait || !waitlistChoice.checked)) {
+        showStep(1,false);capacityNotice.focus();showError('Scegli come procedere con i posti disponibili prima di inviare la richiesta.');return;
       }
       validatePhoneField(buyerPhone, true, true);
       const fields = Array.from(form.querySelectorAll('input, select, textarea'));
@@ -944,6 +1060,7 @@
         started_at: startedAt,
         website: formData.get('website') || '',
         privacy_accepted: formData.get('privacyAccepted') === 'on',
+		waitlist_accepted: waitlistChoice.checked && !waitlistChoice.disabled,
 		marketing_accepted: formData.get('marketingAccepted') === 'on',
         tickets: ticketSelection(),
 		order_options: orderOptionSelection(),
@@ -969,7 +1086,14 @@
           body: JSON.stringify(payload)
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.message || 'Invio non riuscito.');
+        if (!response.ok) {
+          if (['mi_waitlist_confirmation_required','mi_waitlist_full','mi_sold_out'].includes(result.code) && result.data?.availability) {
+            config.event.availability = result.data.availability;
+            config.event.waitlist_enabled = Boolean(result.data.waitlist_enabled);
+            waitlistChoice.checked = false;updateCapacityChoice();showStep(1,false);capacityNotice.focus();
+          }
+          throw new Error(result.message || 'Invio non riuscito.');
+        }
         form.hidden = true;
         successBox.hidden = false;
 		const confirmationEmail = String(formData.get('buyerEmail') || '').trim();
@@ -1054,7 +1178,7 @@
       } catch (error) {
         showError(error.message || 'Invio non riuscito. Riprova.');
         submitButton.disabled = false;
-        submitButton.textContent = 'Invia iscrizione';
+        submitButton.textContent = isWaitlistSelection() ? 'Invia richiesta di lista d’attesa' : 'Invia iscrizione';
       }
     });
 

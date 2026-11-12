@@ -14,4 +14,9 @@ $triple=MI_Admin::demo_services_payload($event,$base,3);verify_demo(count($tripl
 verify_demo(MI_Admin::demo_services_payload($event,$base,1)['participants'][0]['fields']===$double['participants'][0]['fields']);
 $event['ticket_types'][0]['max_per_order']=1;verify_demo(count(MI_Admin::demo_services_payload($event,$base,1)['participants'])===1);
 $event['options']=[];verify_demo(MI_Admin::demo_services_payload($event,$base,0)['participants'][0]['options']===[]);
+$event['travel']=['enabled'=>true];
+$event['participant_fields'][]=['key'=>'custom_zero','type'=>'select','options'=>['0','1'],'required'=>true];
+$withTravel=MI_Admin::demo_services_payload($event,$base,0);
+verify_demo($withTravel['travel_booking']===['mode'=>'OWN']);
+verify_demo($withTravel['participants'][0]['fields']['custom_zero']==='0');
 echo "Scenari demo: singola, matrimoniale, separati, tripla, cellulari stabili e limiti verificati.\n";

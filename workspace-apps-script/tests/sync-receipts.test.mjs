@@ -24,6 +24,44 @@ test('normalization back to baseline leaves no receipt and old no-op receipts ar
  assert.equal(e.value,'Nuova modifica');assert.equal(e.base.first_name,'Anna');
 });
 const receipt={order_code:'DEMO',number:1,key:'first_name',before:'Anna',after:'Anna Maria ',accepted:'Anna Maria'};
+test('more than 500 distinct receipts are confirmed and replay preserves subsequent edits',()=>{
+ const count=501,values=Array.from({length:count},()=> 'Anna Maria '),stored=Array.from({length:count},()=>({}));
+ const baseRows=values.map((value,index)=>['BOOK'+index,1,JSON.stringify({first_name:'Anna'}),'{}']);
+ const baseSheet={
+  getLastRow:()=>count+1,
+  getRange:(row,col)=>({
+   getValues:()=>baseRows.map((value,index)=>[...value.slice(0,3),JSON.stringify(stored[index])]),
+   setValue:value=>{stored[row-2]=JSON.parse(value);}
+  })
+ };
+ const sheet={
+  getParent:()=>({getSheetByName:()=>baseSheet}),getProtections:()=>[],
+  getLastRow:()=>count+1,getLastColumn:()=>3,
+  getRange:(row,col)=>({
+   getDisplayValues:()=>values.map((value,index)=>['BOOK'+index,'1',value]),
+   getDisplayValue:()=>values[row-2],
+   setNumberFormat(){return this;},
+   setValue:value=>{values[row-2]=value;}
+  })
+ };
+ let locks=0;
+ const c=vm.createContext({
+  SpreadsheetApp:{flush(){},ProtectionType:{SHEET:'sheet'}},
+  LockService:{getScriptLock:()=>({waitLock(){locks++;},releaseLock(){locks--;}})},
+  apriFoglioEventoFirmato_:()=>({sheet}),
+  mappaColonneEvento_:()=>({_ordine:1,_numero:2,first_name:3}),proteggiProiezione_(){}
+ });
+ vm.runInContext(source,c);
+ const confirmations=values.map((value,index)=>({...receipt,order_code:'BOOK'+index,workspace_revision:'8'}));
+ const payload={event_id:'42',direct_projection:true,confirmations};
+ assert.equal(c.confermaModificheFoglio_(payload).updated,count);
+ assert.ok(values.every(value=>value==='Anna Maria'));
+ assert.ok(stored.every(value=>value.first_name.revision===8));
+ values[count-1]='Modifica successiva';
+ assert.equal(c.confermaModificheFoglio_(payload).updated,count-1);
+ assert.equal(values[count-1],'Modifica successiva');
+ assert.equal(locks,0);
+});
 test('ricevuta normalizzata sblocca la proiezione solo dopo la replica canonica',()=>{
  const e=environment();const vista={righe:[{codice_ordine:'DEMO',numero_partecipante:1,valori:{first_name:'Anna Maria'}}]};
  e.c.allineaBaseConVista_(e.sheet,vista);assert.equal(e.base.first_name,'Anna');

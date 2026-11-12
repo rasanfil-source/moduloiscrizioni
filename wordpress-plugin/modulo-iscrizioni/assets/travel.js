@@ -6,7 +6,7 @@
     if (!host) return undefined;
     const value = key => host.querySelector(`[data-travel="${key}"]`)?.value || '';
     const select = host.querySelector('[data-travel="driver_id"]');
-    const assignments = Array.from(host.querySelectorAll('[data-travel="ride_offer"]:checked')).map(input => ({ driver_id: Number(input.dataset.driverId), seats: Number(input.dataset.seats), price_cents: Number(input.dataset.priceCents) }));
+    const assignments = Array.from(host.querySelectorAll('[data-travel="ride_offer"]:checked')).map(input => ({ route_key: input.dataset.routeKey, driver_id: Number(input.dataset.driverId), seats: Number(input.dataset.seats), price_cents: Number(input.dataset.priceCents) }));
     return { mode: value('mode'), seats: value('seats'), origin: value('mode') === 'NEED' ? '' : value('origin'), departure: value('departure'), price: value('price'), fallback: value('fallback'), driver_id: Number(value('driver_id')) || 0, price_cents: Number(select?.selectedOptions[0]?.dataset.priceCents) || 0, assignments, waitlist: Boolean(host.querySelector('[data-travel="waitlist"]')?.checked) };
   }
   function render(config, previous = {}, index, party = []) {
@@ -66,8 +66,8 @@
     async function load() {
       if (loading) return;
       loading = true; reload.disabled = true; reload.hidden = true;
-      const selected = new Set(Array.from(rides.querySelectorAll('[data-travel="ride_offer"]:checked')).map(input => input.dataset.driverId));
-      if (!loadedOnce) for (const item of previous.assignments || []) selected.add(String(item.driver_id));
+      const selected = new Set(Array.from(rides.querySelectorAll('[data-travel="ride_offer"]:checked')).map(input => input.dataset.driverId + ':' + input.dataset.routeKey));
+      if (!loadedOnce) for (const item of previous.assignments || []) selected.add(String(item.driver_id) + ':' + (item.route_key || ''));
       status.textContent = 'Caricamento dei passaggi…';
       try {
         const endpoint = config.endpoint.replace(/\/registrations\/?$/, '/travel');
@@ -81,13 +81,13 @@
         cutoffNotice.textContent = acceptingNewRequests ? '' : 'Il termine per i nuovi passaggi è arrivato: non puoi inviare richieste o attivare nuovi posti. Puoi ancora partecipare organizzandoti autonomamente.';
         cutoffNotice.hidden = acceptingNewRequests;
         Array.from(seats.options).forEach(item => { if (Number(item.value) > 0) item.disabled = !acceptingNewRequests; });
-        if (!acceptingNewRequests && mode.value === 'DRIVER' && Number(seats.value) > 0) seats.value = '0';
+        if (!acceptingNewRequests) seats.value = '0';
         closedDriverNote.hidden = acceptingNewRequests;
         rides.replaceChildren();
         const available = acceptingNewRequests ? (data.rides || []).filter(ride => Number(ride.seats) > 0) : [];
         for (const ride of available) {
           const label = document.createElement('label'); label.className = 'mi-registration__travel-checkbox mi-registration__travel-offer';
-          const input = document.createElement('input'); input.type = 'checkbox'; input.dataset.travel = 'ride_offer'; input.dataset.driverId = String(ride.id); input.dataset.seats = String(ride.seats); input.dataset.priceCents = String(ride.price_cents); input.checked = selected.has(String(ride.id));
+          const input = document.createElement('input'); input.type = 'checkbox'; input.dataset.travel = 'ride_offer'; input.dataset.driverId = String(ride.id); input.dataset.seats = String(ride.seats); input.dataset.priceCents = String(ride.price_cents); input.dataset.routeKey = ride.route_key || ''; input.checked = selected.has(String(ride.id) + ':' + input.dataset.routeKey);
           label.append(input, document.createTextNode(`${ride.origin} · ${ride.departure} · ${ride.seats} ${Number(ride.seats) === 1 ? 'posto' : 'posti'} · ${money(ride.price_cents)} A/R per persona`)); rides.append(label);
         }
         status.textContent = !acceptingNewRequests

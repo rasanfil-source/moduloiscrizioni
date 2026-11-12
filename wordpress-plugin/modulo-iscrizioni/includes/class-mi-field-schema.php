@@ -227,7 +227,9 @@ final class MI_Field_Schema {
 				$field['options'] = array( 'Sì', 'No' );
 				$field['help'] = 'Scegli la risposta appropriata.';
 			} elseif ( 'select' === $type ) {
-				$options = array_values( array_unique( array_filter( array_map( 'sanitize_text_field', preg_split( '/[\r\n|]+/', (string) ( $raw['options'] ?? '' ) ) ) ) ) );
+				$options = $raw['options'] ?? array();
+				if ( ! is_array( $options ) ) $options = preg_split( '/[\r\n|]+/', (string) $options );
+				$options = array_values( array_unique( array_filter( array_map( 'sanitize_text_field', $options ), static function ( $option ) { return '' !== $option; } ) ) );
 				if ( count( $options ) < 2 ) continue;
 				$field['options'] = array_slice( $options, 0, 30 );
 			}

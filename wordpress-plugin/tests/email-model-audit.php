@@ -32,4 +32,19 @@ expect( $GLOBALS['email_meta'][42]['_mi_email_style']['signature'] === 'C:\carte
 $normalize = new ReflectionMethod( 'MI_Modello_Email', 'uniforma_grafica_corpo' );
 $first = $normalize->invoke( null, '<p>Testo</p>' );
 expect( $first === $normalize->invoke( null, $first ), 'Normalizzazione style non idempotente' );
+
+foreach ([['REGISTRATION_ONLY',0,false],['FULL_PAYMENT',0,false],['DEPOSIT_BALANCE',0,false],['FULL_PAYMENT',2000,true],['DEPOSIT_BALANCE',2000,true],['PRICE_ONLY',2000,false]] as [$mode,$total,$expected]) {
+    $event=['title'=>'Evento in attesa','economic_mode'=>$mode,'deposit_percentage'=>30,'payment_methods'=>['CASH']];
+    $economic=MI_Registration_Service::riepilogo_economico($event,$total,'WAITLISTED');
+    $values=MI_Modello_Email::valori_ordine($event,'TEST','Lista d’attesa',1,'Ada Esempio',$economic);
+    $wait=MI_Modello_Email::crea_istantanea_lista_attesa(42,$values);
+    $offer=MI_Modello_Email::crea_istantanea_offerta_lista_attesa(42,$values,'https://example.invalid/offer?token=test','domani');
+    foreach (['html','testo'] as $format) {
+        expect(str_contains($wait[$format],$expected?'Per ora non devi pagare né fare altro.':'Per ora non devi fare altro.'),'Istruzione attesa incoerente: '.$mode.'/'.$total.'/'.$format);
+        expect(str_contains($offer[$format],'Non effettuare pagamenti')===$expected,'Istruzione offerta incoerente: '.$mode.'/'.$total.'/'.$format);
+        expect(str_contains($offer[$format],'Accetta il posto')&&str_contains($offer[$format],'Rinuncia'),'Scelte offerta perse');
+    }
+    expect($offer['action_url']==='https://example.invalid/offer?token=test','Link risposta alterato');
+}
+echo "PASS: attesa e offerta distinguono gratuiti, quota zero e pagamenti dopo l’ammissione, anche con caparra.\n";
 echo "PASS: segnaposto, tipi personalizzati, codici liberi, Markdown, saldo positivo, salvataggio atomico e backslash.\n";

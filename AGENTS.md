@@ -19,6 +19,12 @@ Usare sempre PowerShell 7 (`pwsh.exe`), mai `powershell.exe`. Eseguire i comandi
 - La consultazione per cognome e l'invio al recapito scelto sono requisiti intenzionali accettati, non difetti da correggere d'ufficio. La decisione non impedisce le correzioni delle altre segnalazioni valide degli audit, successivamente autorizzate dall'utente.
 - Decisione e ambito: `docs/decisione-saldo-pubblico-2026-11-09.md`.
 
+## Collegamenti inviati — scelta dell'11 novembre 2026
+
+- I collegamenti di consultazione inviati devono aprire i contenuti senza richiedere autenticazione al destinatario.
+- Per i fogli evento mantenere la lettura mediante "chiunque abbia il link può visualizzare". Questa modalità soddisfa il requisito funzionale dell'utente.
+- Le operazioni di modifica continuano a seguire i permessi applicativi e Drive previsti.
+
 ## Registro tecnico email — scelta del 10 novembre 2026
 
 - Le ricevute degli invii accettati possono essere eliminate 90 giorni dopo la conclusione dell'evento; se la conclusione non è indicata, vale la data di inizio.

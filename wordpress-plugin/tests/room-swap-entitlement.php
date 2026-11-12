@@ -53,3 +53,14 @@ class SameTypeDB extends RoomAuditDB {
 $wpdb=new SameTypeDB();$wpdb->people[2]['room_code']='S2';$wpdb->people[2]['options_json']=$wpdb->people[1]['options_json'];
 $r=swap_rooms();assert_room(!empty($r['saved'])&&$wpdb->people[1]['room_code']==='S2'&&$wpdb->people[2]['room_code']==='S1','Compatible full-room swap rejected');
 echo "PASS: incompatible swap/import, atomic rollback, legacy rooms and compatible full-room swaps.\n";
+foreach (['TRAVEL_PENDING','WAITLISTED','WAITLIST_OFFERED'] as $status) {
+ $wpdb=new RoomAuditDB();
+ $wpdb->regs[1]['status']=$status;
+ foreach($wpdb->people as &$person)$person['options_json']='[]';
+ unset($person);
+ $before=$wpdb->people;
+ $result=swap_rooms('SHEET_SYNC');
+ assert_room(!empty($result['rejected']) && str_contains($result['message'],'ammessa'),'Pending person received a room through sheet sync');
+ assert_room($wpdb->people===$before && !$wpdb->committed,'Rejected room assignment changed participants');
+}
+echo "PASS: sheet imports reject room assignments to travel and event waitlists atomically.\n";

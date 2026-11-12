@@ -9,7 +9,10 @@ $source=file_get_contents(__DIR__.'/../modulo-iscrizioni/includes/class-mi-porta
 $source=preg_replace('/^<\?php/', '', $source);
 $source=str_replace(array("require_once __DIR__ . '/class-mi-booking-search.php';",'final class MI_Portal_Payments'),array('','final class SearchPaymentsTest'),$source);
 eval($source);
-$wpdb=new DatabaseAdapter();$wpdb->db->select_db('mi_ledger_test');
+class BookingSearchDatabase extends DatabaseAdapter { public $posts='wp_posts'; }
+$wpdb=new BookingSearchDatabase();$wpdb->db->select_db('mi_ledger_test');
+$wpdb->query('CREATE TEMPORARY TABLE wp_posts (ID BIGINT, post_title TEXT)');
+$wpdb->insert('wp_posts',['ID'=>42,'post_title'=>get_the_title(42)]);
 $wpdb->query('CREATE TEMPORARY TABLE wp_postmeta (post_id BIGINT, meta_key VARCHAR(255), meta_value LONGTEXT)');
 function verify_search($ok,$message){if(!$ok)throw new RuntimeException($message);}
 $wpdb->query('START TRANSACTION');
@@ -29,6 +32,12 @@ try{
  verify_search($personResult['nome']==='Persona Seconda 65','Search foregrounds the matched participant instead of the buyer');
  verify_search(count($personResult['matched_participant_ids'])===1,'Matched participant identity is retained for payment selection');
  verify_search(count(SearchPaymentsTest::search('12345678',1,42)['prenotazioni'])===30,'Buyer telephone');
+ $wpdb->query("UPDATE wp_mi_registrations SET buyer_phone='+39 320 1234567' WHERE order_code='SEARCH-65'");
+ foreach (['3201234567','+393201234567','320-1234567','320 1234567'] as $query) {
+  verify_search(count(SearchPaymentsTest::search($query,1,42)['prenotazioni'])===1,'Compact buyer phone search failed: '.$query);
+ }
+ $wpdb->query("UPDATE wp_mi_participants SET extra_json='{\"participant_phone\":\"+39 (333) 765-4321\"}' WHERE registration_id=".$id);
+ verify_search(count(SearchPaymentsTest::search('3337654321',1,42)['prenotazioni'])===1,'Compact participant phone search failed');
  verify_search(count(SearchPaymentsTest::search('ricerca@example.invalid',1,43)['prenotazioni'])===0,'Event scope');
  verify_search(!empty($first['prenotazioni'][0]['partecipanti']),'Result identifies participants');
  verify_search($first['prenotazioni'][0]['evento']==='L’uomo nel progetto di Dio – Chi Sono?','Event title is plain text, not HTML entities');

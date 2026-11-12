@@ -7,6 +7,15 @@ function wp_timezone() { return new DateTimeZone('Europe/Rome'); }
 require __DIR__ . '/../modulo-iscrizioni/includes/class-mi-field-schema.php';
 function check_date_field($ok, $message) { if (!$ok) throw new RuntimeException($message); }
 $fields = MI_Field_Schema::sanitize_custom_fields([['key' => 'arrivo', 'label' => 'Data di arrivo', 'type' => 'date', 'required' => true]]);
+$choice = MI_Field_Schema::sanitize_custom_fields([['key'=>'turno','label'=>'Turno','type'=>'select','required'=>true,'options'=>"Mattina\nSera"]]);
+$reloaded = MI_Field_Schema::sanitize_custom_fields($choice);
+check_date_field($reloaded === $choice, 'Saved choice question disappeared on reload');
+check_date_field(MI_Field_Schema::validate_answers([], $reloaded) instanceof WP_Error, 'Required choice bypassed after reload');
+check_date_field(MI_Field_Schema::validate_answers(['custom_turno'=>'Mattina'], $reloaded) === ['custom_turno'=>'Mattina'], 'Saved choice cannot be answered');
+check_date_field(MI_Field_Schema::validate_answers(['custom_turno'=>'Altro'], $reloaded) instanceof WP_Error, 'Unknown choice accepted');
+$numeric = MI_Field_Schema::sanitize_custom_fields([['key'=>'numero','label'=>'Numero','type'=>'select','options'=>"0|1"]]);
+check_date_field($numeric[0]['options'] === ['0','1'], 'Zero choice discarded');
+check_date_field(MI_Field_Schema::sanitize_custom_fields($numeric) === $numeric, 'Numeric options changed on reload');
 $legacy = $fields;
 unset($legacy[0]['date_rule']);
 $today = new DateTimeImmutable('today', wp_timezone());

@@ -29,6 +29,8 @@ function get_post_meta($id,$key,...$args){return $GLOBALS['meta'][$id][$key]??''
 function update_post_meta($id,$key,$value){$GLOBALS['meta'][$id][$key]=$value;return true;}
 function get_option($key,$default=null){return $default;}
 function update_option(...$args){return true;}
+function set_transient(...$args){return true;}
+function get_transient(...$args){return 0;}
 function wp_next_scheduled(...$args){return false;}
 function wp_schedule_single_event(...$args){return true;}
 function wp_list_pluck($rows,$key){return array_column($rows,$key);}
@@ -50,6 +52,7 @@ class MI_Modello_Email {
  static function crea_istantanea_annullamento_partecipazione_segreteria(...$args){return ['attivo'=>true];}
  static function crea_istantanea_annullamento_iscrizione_iscritto(...$args){return ['attivo'=>true];}
  static function crea_istantanea_offerta_lista_attesa(...$args){return ['attivo'=>true];}
+ static function crea_offerta_un_posto_per_due(...$args){return ['attivo'=>true];}
 }
 class MI_Spedizione_Email {static function stato_nuova_email($snapshot){return $snapshot['attivo']?'PENDING':'PREVIEW';}static function pianifica_spedizione(){}static function tenta_spedizione_immediata(){}static function email_da_spedire($v){return $v==='PENDING';}static function destinatario_evento($id){return 'segreteria@example.invalid';}}
 require __DIR__.'/../modulo-iscrizioni/includes/class-mi-amount.php';
@@ -69,6 +72,7 @@ check_travel(!is_wp_error(validated_travel(['mode'=>'DRIVER','seats'=>0])),'Zero
 check_travel(is_wp_error(validated_travel(['mode'=>'DRIVER','seats'=>9])),'Nine seats accepted');
 $driverChoice=['mode'=>'DRIVER','seats'=>1,'origin'=>'Roma, Piazza Esempio','departure'=>wp_date('d/m/Y H:i',time()+4*86400+7200),'price'=>'99'];
 $driver=validated_travel($driverChoice);check_travel(!is_wp_error($driver)&&$driver[0]['travel']['price_cents']===1200,'Fixed contribution is not authoritative');
+check_travel(is_wp_error(validated_travel(array_replace($driverChoice,['departure'=>'31/02/2027 09:00']))),'Invalid departure silently replaced');
 $driverAtEventTime=validated_travel(array_replace($driverChoice,['departure'=>'']));check_travel(!is_wp_error($driverAtEventTime)&&$driverAtEventTime[0]['travel']['departure_at']===gmdate('Y-m-d H:i:s',MI_Travel::local_timestamp($start)),'Blank departure should use event start');
 $event['travel']['price_mode']='DRIVER';$driver=validated_travel(array_replace($driverChoice,['price'=>'8,50']));check_travel($driver[0]['travel']['price_cents']===850,'Driver contribution not parsed exactly');
 check_travel(is_wp_error(validated_travel(array_replace($driverChoice,['price'=>'-1']))),'Negative contribution accepted');
@@ -123,12 +127,13 @@ class TravelDatabase {
  function get_col($sql){return array_map(fn($r)=>array_values($r)[0],$this->get_results($sql));}
  function insert($table,$data,$formats=null){$keys=implode(',',array_keys($data));$values=implode(',',array_map(fn($v)=>$v===null?'NULL':"'".$this->db->real_escape_string((string)$v)."'",array_values($data)));return $this->query("INSERT INTO $table ($keys) VALUES ($values)");}
  function update($table,$data,$where,...$args){$set=implode(',',array_map(fn($key)=>$key.'='.($data[$key]===null?'NULL':"'".$this->db->real_escape_string((string)$data[$key])."'"),array_keys($data)));$filter=implode(' AND ',array_map(fn($key)=>$key."='".$this->db->real_escape_string((string)$where[$key])."'",array_keys($where)));return $this->query("UPDATE $table SET $set WHERE $filter");}
+ function delete($table,$where,...$args){$filter=implode(' AND ',array_map(fn($key)=>$key."='".$this->db->real_escape_string((string)$where[$key])."'",array_keys($where)));return $this->query("DELETE FROM $table WHERE $filter");}
 }
 $wpdb=new TravelDatabase();
 if(($argv[1]??'')==='worker'){
  $event=json_decode($wpdb->get_var('SELECT config_json FROM wp_mi_event_revisions WHERE event_id=42 LIMIT 1'),true);
  $GLOBALS['meta'][42]=['_mi_published_revision_id'=>1,'_mi_travel'=>$event['travel']];
- $payload=['buyer'=>['first_name'=>'Test','last_name'=>'Esempio','email'=>'test@example.invalid','phone'=>'+390000000000'],'tickets'=>['standard'=>1],'participants'=>[array_merge($person,['travel'=>['mode'=>'NEED','fallback'=>'ANYWAY','driver_id'=>(int)$argv[2],'price_cents'=>1200]])],'privacy_accepted'=>true];
+ $payload=['buyer'=>['first_name'=>'Test','last_name'=>'Esempio','email'=>'test@example.invalid','phone'=>'+390000000000'],'tickets'=>['standard'=>1],'participants'=>[array_merge($person,['travel'=>['mode'=>'NEED','fallback'=>'ANYWAY','route_key'=>ride_key(42,(int)$argv[2]),'driver_id'=>(int)$argv[2],'price_cents'=>1200]])],'privacy_accepted'=>true];
  $result=MI_Registration_Service::create(42,$payload,bin2hex(random_bytes(16)),false,'CONCURRENT_TEST',true);
  echo json_encode(['worker_success'=>!is_wp_error($result),'message'=>is_wp_error($result)?$result->message:''])."\n";exit;
 }
@@ -143,6 +148,7 @@ $event+=['capacity'=>50,'waitlist_enabled'=>true,'options'=>[],'participant_fiel
 $wpdb->insert('wp_mi_event_revisions',['event_id'=>42,'revision_number'=>1,'config_hash'=>str_repeat('a',64),'config_json'=>json_encode($event),'created_at'=>gmdate('Y-m-d H:i:s')]);
 $GLOBALS['meta'][42]=['_mi_published_revision_id'=>$wpdb->insert_id,'_mi_travel'=>$event['travel'],'_mi_capacity'=>50,'_mi_waitlist_enabled'=>'1','_mi_event_starts_at'=>$start];
 function create_travel_booking($choice,$index=1,$event_id=42){global $person;$payload=['buyer'=>['first_name'=>'Ada','last_name'=>'Esempio','email'=>'ada@example.invalid','phone'=>'+390000000000'],'tickets'=>['standard'=>1],'participants'=>[array_merge($person,['first_name'=>'Persona'.$index,'travel'=>$choice])],'privacy_accepted'=>true];$result=MI_Registration_Service::create($event_id,$payload,bin2hex(random_bytes(16)),false,'TEST',true);check_travel(!is_wp_error($result),'Create failed: '.(is_wp_error($result)?$result->message:''));return $result;}
+function ride_key($eventId,$id){$availability=MI_Travel::availability(['id'=>$eventId]);return array_column($availability->data['rides'],'route_key','id')[$id]??'';}
 function travel_row($order){global $wpdb;return $wpdb->get_row($wpdb->prepare('SELECT t.* FROM wp_mi_travel t JOIN wp_mi_registrations r ON r.id=t.registration_id WHERE r.order_code=%s',$order['order_code']));}
 $driverBooking=create_travel_booking($driverChoice);$driverRow=travel_row($driverBooking);
 check_travel($driverBooking['economic_summary']['total_cents']===2000,'Driver contribution entered event total');
@@ -195,7 +201,7 @@ $event['id']=43;$event['capacity']=1;
 $wpdb->insert('wp_mi_event_revisions',['event_id'=>43,'revision_number'=>1,'config_hash'=>str_repeat('b',64),'config_json'=>json_encode($event),'created_at'=>gmdate('Y-m-d H:i:s')]);
 $GLOBALS['meta'][43]=['_mi_published_revision_id'=>$wpdb->insert_id,'_mi_travel'=>$event['travel'],'_mi_capacity'=>1,'_mi_waitlist_enabled'=>'1','_mi_event_starts_at'=>$start];
 $eventDriver=create_travel_booking($driverChoice,7,43);$eventDriverRow=travel_row($eventDriver);
-$eventWaiter=create_travel_booking(array_replace($needChoice,['driver_id'=>(int)$eventDriverRow['participant_id'],'price_cents'=>1200]),8,43);$eventWaiterRow=travel_row($eventWaiter);
+$eventWaiter=create_travel_booking(array_replace($needChoice,['route_key'=>ride_key(43,$eventDriverRow['participant_id']),'driver_id'=>(int)$eventDriverRow['participant_id'],'price_cents'=>1200]),8,43);$eventWaiterRow=travel_row($eventWaiter);
 check_travel($eventWaiter['status']==='WAITLISTED'&&$eventWaiterRow['state']==='WAITING'&&!$eventWaiterRow['driver_id'],'Event waitlist consumed car seat');
 $eventAvailability=MI_Travel::availability(['id'=>43]);check_travel(count($eventAvailability->data['rides'])===1&&$eventAvailability->data['accepting_new_requests'],'Event waiter hid free car seat: '.json_encode($eventAvailability->data));
 check_travel((int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM wp_mi_email_outbox WHERE registration_id=%d AND template_type='TRAVEL_UPDATE' AND payload_json LIKE %s",$eventDriverRow['registration_id'],'%ha scelto un posto sulla tua auto%'))===0,'Event waitlist falsely notified a private driver before admission');
@@ -219,7 +225,14 @@ $validDetails=['origin'=>'Roma, Piazza Esempio','departure'=>wp_date('d/m/Y H:i'
 check_travel(true===MI_Travel::decide($zeroDriverRow['participant_id'],$zeroToken,'update_seats',0,'',1,$validDetails),'Zero-seat offer could not be activated with valid details');
 $zeroDriverRow=travel_row($zeroDriver);check_travel((int)$zeroDriverRow['seats']===1&&$zeroDriverRow['origin']==='Roma, Piazza Esempio'&&!empty($zeroDriverRow['departure_at']),'Valid route details were not stored on offer activation');
 $resizableToken=hash_hmac('sha256','mi-travel|'.$resizableRow['participant_id'],wp_salt('auth'));
-$rideChoice=array_replace($needChoice,['fallback'=>'ANYWAY','driver_id'=>(int)$resizableRow['participant_id'],'price_cents'=>1200]);
+$rideChoice=array_replace($needChoice,['fallback'=>'ANYWAY','route_key'=>ride_key(44,$resizableRow['participant_id']),'driver_id'=>(int)$resizableRow['participant_id'],'price_cents'=>1200]);
+$changedRoute=['origin'=>'Piazza Nuova'];
+check_travel(true===MI_Travel::decide($resizableRow['participant_id'],$resizableToken,'update_seats',0,'',2,$changedRoute),'Empty car could not change departure point');
+$stalePayload=['buyer'=>['first_name'=>'Ada','last_name'=>'Esempio','email'=>'ada@example.invalid','phone'=>'+390000000000'],'tickets'=>['standard'=>1],'participants'=>[array_merge($person,['travel'=>$rideChoice])],'privacy_accepted'=>true];
+$beforeCount=$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_registrations');
+$staleResult=MI_Registration_Service::create(44,$stalePayload,bin2hex(random_bytes(16)),false,'TEST',true);
+check_travel(is_wp_error($staleResult)&&$beforeCount===$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_registrations'),'Changed route booked without a fresh selection');
+$rideChoice['route_key']=ride_key(44,$resizableRow['participant_id']);
 $rideOne=create_travel_booking($rideChoice,10,44);$rideOneRow=travel_row($rideOne);
 check_travel($rideOneRow['state']==='ASSIGNED','Direct test passenger was not assigned');
 check_travel(true===MI_Travel::decide($resizableRow['participant_id'],$resizableToken,'update_seats',0,'',1),'Driver could not reduce unoccupied offer');
@@ -246,7 +259,7 @@ $event['id']=45;$event['capacity']=50;$event['travel']['deadline']=$deadline;
 $wpdb->insert('wp_mi_event_revisions',['event_id'=>45,'revision_number'=>1,'config_hash'=>str_repeat('e',64),'config_json'=>json_encode($event),'created_at'=>gmdate('Y-m-d H:i:s')]);
 $GLOBALS['meta'][45]=['_mi_published_revision_id'=>$wpdb->insert_id,'_mi_travel'=>$event['travel'],'_mi_capacity'=>50,'_mi_waitlist_enabled'=>'1','_mi_event_starts_at'=>$start];
 $lateDriver=create_travel_booking(array_replace($driverChoice,['seats'=>2]),30,45);$lateDriverRow=travel_row($lateDriver);
-$lateChoice=array_replace($needChoice,['fallback'=>'REQUIRED','driver_id'=>(int)$lateDriverRow['participant_id'],'price_cents'=>1200]);
+$lateChoice=array_replace($needChoice,['fallback'=>'REQUIRED','route_key'=>ride_key(45,$lateDriverRow['participant_id']),'driver_id'=>(int)$lateDriverRow['participant_id'],'price_cents'=>1200]);
 $lateOwn=create_travel_booking($lateChoice,31,45);$lateOwnRow=travel_row($lateOwn);
 $lateCancel=create_travel_booking($lateChoice,32,45);$lateCancelRow=travel_row($lateCancel);
 check_travel($lateOwnRow['state']==='ASSIGNED'&&$lateCancelRow['state']==='ASSIGNED','Late-loss passengers were not initially assigned');
@@ -265,6 +278,7 @@ check_travel((int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM wp_mi_emai
 $GLOBALS['meta'][45]['_mi_travel']['deadline']=wp_date('Y-m-d\\TH:i',time()-60);
 $lateOwnToken=hash_hmac('sha256','mi-travel|'.$lateOwnRow['participant_id'],wp_salt('auth'));
 check_travel(true===MI_Travel::decide($lateOwnRow['participant_id'],$lateOwnToken,'own'),'Passenger could not choose independent travel after assignment deadline');
+check_travel(MI_Registration_Service::cancel_participant($lateOwnRow['participant_id'],'TRAVEL_DEADLINE')==='SKIPPED','Stale deadline cancelled autonomous passenger');
 $lateOwnBooking=$wpdb->get_row($wpdb->prepare('SELECT status FROM wp_mi_registrations WHERE id=%d',$lateOwnRow['registration_id']));
 check_travel($lateOwnBooking['status']==='PENDING_PAYMENT','Independent-travel choice did not restore the event booking');
 $wpdb->update('wp_mi_travel',['decision_deadline_at'=>gmdate('Y-m-d H:i:s',time()-1)],['participant_id'=>$lateCancelRow['participant_id']]);
@@ -276,7 +290,7 @@ $event['id']=47;$event['capacity']=50;$event['travel']['deadline']=$deadline;
 $wpdb->insert('wp_mi_event_revisions',['event_id'=>47,'revision_number'=>1,'config_hash'=>str_repeat('f',64),'config_json'=>json_encode($event),'created_at'=>gmdate('Y-m-d H:i:s')]);
 $GLOBALS['meta'][47]=['_mi_published_revision_id'=>$wpdb->insert_id,'_mi_travel'=>$event['travel'],'_mi_capacity'=>50,'_mi_waitlist_enabled'=>'1','_mi_event_starts_at'=>$start];
 $groupDriver=create_travel_booking(array_replace($driverChoice,['seats'=>2]),47,47);$groupDriverRow=travel_row($groupDriver);
-$groupPayload=['buyer'=>['first_name'=>'Ada','last_name'=>'Esempio','email'=>'ada@example.invalid','phone'=>'+390000000000'],'tickets'=>['standard'=>2],'participants'=>[array_replace($person,['first_name'=>'Persona A','last_name'=>'Esempio','ticket_index'=>1]),array_replace($person,['first_name'=>'Persona B','last_name'=>'Esempio','ticket_index'=>2])],'travel_booking'=>['mode'=>'NEED','fallback'=>'ANYWAY','assignments'=>[['driver_id'=>(int)$groupDriverRow['participant_id'],'seats'=>2,'price_cents'=>1200]]],'privacy_accepted'=>true];
+$groupPayload=['buyer'=>['first_name'=>'Ada','last_name'=>'Esempio','email'=>'ada@example.invalid','phone'=>'+390000000000'],'tickets'=>['standard'=>2],'participants'=>[array_replace($person,['first_name'=>'Persona A','last_name'=>'Esempio','ticket_index'=>1]),array_replace($person,['first_name'=>'Persona B','last_name'=>'Esempio','ticket_index'=>2])],'travel_booking'=>['mode'=>'NEED','fallback'=>'ANYWAY','assignments'=>[['route_key'=>ride_key(47,$groupDriverRow['participant_id']),'driver_id'=>(int)$groupDriverRow['participant_id'],'seats'=>2,'price_cents'=>1200]]],'privacy_accepted'=>true];
 $groupBooking=MI_Registration_Service::create(47,$groupPayload,bin2hex(random_bytes(16)),false,'TEST',true);check_travel(!is_wp_error($groupBooking),'Group travel registration failed');
 $groupBookingRow=travel_row($groupBooking);$groupPassengerNotices=$wpdb->get_results($wpdb->prepare("SELECT payload_json FROM wp_mi_email_outbox WHERE registration_id=%d AND template_type='TRAVEL_UPDATE'",$groupBookingRow['registration_id']));
 check_travel(count($groupPassengerNotices)===1&&substr_count(json_decode($groupPassengerNotices[0]['payload_json'],true)['email_preview']['html']??'','mi_travel=')===2,'Group passengers received duplicate notices or lack individual links');
@@ -286,3 +300,108 @@ echo "PASS travel offer edit, committed-seat guard, audit trail, and driver noti
 echo "PASS MariaDB travel integration: production schema and registration, last seat, full 24h, invalid token, acceptance/payment, driver withdrawal, expiry/FIFO, availability and transaction rollback.\n";
 echo "PASS concurrent last-seat requests, decline/rejoin and final conditional-participation cancellation.\n";
 echo "PASS independent event/car waitlists, driver cancellation, event offer token and conditional state on event acceptance.\n";
+
+$waiterToken=hash_hmac('sha256','mi-travel|'.$eventWaiterRow['participant_id'],wp_salt('auth'));
+check_travel(MI_Travel::decide($eventWaiterRow['participant_id'],$waiterToken,'own')===true,'Waitlisted passenger cannot choose own travel');
+$admittedBooking=$wpdb->get_row($wpdb->prepare('SELECT * FROM wp_mi_registrations WHERE id=%d',$eventWaiterRow['registration_id']));
+$admittedDeadline=strtotime($admittedBooking['expires_at'].' UTC');
+check_travel($admittedBooking['status']==='PENDING_PAYMENT' && $admittedBooking['expires_at']===$admittedBooking['payment_deadline_at'],'Waitlist payment deadline missing after travel wait');
+check_travel(abs($admittedDeadline-time()-48*3600)<10,'Waitlist payment window differs from the ordinary accepted offer');
+
+$groupToken=hash_hmac('sha256','mi-travel|'.$groupDriverRow['participant_id'],wp_salt('auth'));
+check_travel(MI_Travel::decide($groupDriverRow['participant_id'],$groupToken,'withdraw')===true,'Optional driver withdrawal failed');
+$groupBookingId=$groupBookingRow['registration_id'];
+$notice=json_decode($wpdb->get_var($wpdb->prepare("SELECT payload_json FROM wp_mi_email_outbox WHERE registration_id=%d AND template_type='TRAVEL_UPDATE' ORDER BY id DESC LIMIT 1",$groupBookingId)),true);
+check_travel(!str_contains($notice['email_preview']['testo'],'resta confermata') && str_contains($notice['email_preview']['testo'],'condizioni di pagamento'),'Unpaid optional passenger received a confirmation');
+$groupPassengerToken=hash_hmac('sha256','mi-travel|'.$groupBookingRow['participant_id'],wp_salt('auth'));
+check_travel(MI_Travel::decide($groupBookingRow['participant_id'],$groupPassengerToken,'own')===true,'Autonomous decision failed');
+$projection=MI_Travel::projection_fields($groupBookingRow['participant_id'],47);
+check_travel($projection['travel_mode']==='Autonomo' && $projection['travel_origin']==='' && $projection['travel_departure']==='','Own travel retains old ride details');
+
+$record=$wpdb->get_row($wpdb->prepare('SELECT * FROM wp_mi_registrations WHERE id=%d',$groupBookingId));
+$snapshot=json_decode($record['snapshot_json'],true);
+$snapshot['event']['reservation_minutes']=60;
+$past=gmdate('Y-m-d H:i:s',time()-3600);
+$wpdb->update('wp_mi_registrations',['snapshot_json'=>json_encode($snapshot),'expires_at'=>$past,'payment_deadline_at'=>$past],['id'=>$groupBookingId]);
+$wpdb->insert('wp_mi_payments',['registration_id'=>$groupBookingId,'effective_at'=>$past,'amount_cents'=>1000,'payment_source'=>'CASH','created_at'=>$past]);
+MI_Registration_Service::expire_due_registrations();
+check_travel($wpdb->get_var($wpdb->prepare('SELECT workspace_last_error FROM wp_mi_registrations WHERE id=%d',$groupBookingId))==='payment_expiry_review_required','Unallocated legacy payment was not flagged');
+require __DIR__.'/../modulo-iscrizioni/includes/class-mi-sheet-open.php';
+$confirm=new ReflectionMethod(MI_Sheet_Open::class,'confirm_projection');
+foreach (['payment_expiry_review_required','payment_deadline_review_required','remote_temporarily_unavailable'] as $error) {
+ $wpdb->update('wp_mi_registrations',['workspace_last_error'=>$error,'workspace_status'=>'PENDING'],['id'=>$groupBookingId]);
+ $revision=$wpdb->get_var($wpdb->prepare('SELECT workspace_revision FROM wp_mi_registrations WHERE id=%d',$groupBookingId));
+ $confirm->invoke(null,47,[['id'=>$groupBookingId,'revision'=>$revision]]);
+ $stored=$wpdb->get_row($wpdb->prepare('SELECT workspace_last_error,workspace_status FROM wp_mi_registrations WHERE id=%d',$groupBookingId));
+ check_travel($stored['workspace_status']==='SYNCED' && $stored['workspace_last_error']===($error==='remote_temporarily_unavailable'?null:$error),'Projection receipt lost a payment warning or retained a transient error');
+}
+echo "PASS audit regressions: waitlist payment term after travel, optional ride notice, historical autonomous projection, persistent payment review after sheet confirmation.\n";
+
+// Public capacity choice must roll back every write until the group explicitly accepts.
+$choiceEvent=array_replace($event,['id'=>154,'capacity'=>1,'travel'=>['enabled'=>false],'waitlist_capacity'=>5,'pricing_mode'=>'ZERO','economic_mode'=>'REGISTRATION_ONLY']);
+$wpdb->insert('wp_mi_event_revisions',['event_id'=>154,'revision_number'=>1,'config_hash'=>str_repeat('c',64),'config_json'=>json_encode($choiceEvent),'created_at'=>gmdate('Y-m-d H:i:s')]);
+$GLOBALS['meta'][154]=['_mi_published_revision_id'=>$wpdb->insert_id,'_mi_capacity'=>1,'_mi_waitlist_enabled'=>'1'];
+$choicePayload=['buyer'=>['first_name'=>'Ada','last_name'=>'Test','email'=>'ada@example.invalid','phone'=>'+390000000000'],'tickets'=>['standard'=>2],'participants'=>[$person,array_replace($person,['ticket_index'=>2,'first_name'=>'Luca'])],'privacy_accepted'=>true,'started_at'=>time()-5];
+$choiceKey=bin2hex(random_bytes(16));
+$beforeMail=(int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_email_outbox');
+$choiceResult=MI_Registration_Service::create(154,$choicePayload,$choiceKey);
+check_travel(is_wp_error($choiceResult)&&$choiceResult->code==='mi_waitlist_confirmation_required'&&$choiceResult->data['availability']['remaining']===1,'Public oversized group was silently waitlisted');
+check_travel((int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_registrations WHERE event_id=154')===0&&(int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_email_outbox')===$beforeMail,'Rejected choice wrote registration or email');
+check_travel((int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_event_counters WHERE event_id=154')===0,'Rejected choice did not roll back counters');
+$choicePayload['waitlist_accepted']=true;
+$choiceResult=MI_Registration_Service::create(154,$choicePayload,$choiceKey);
+check_travel(!is_wp_error($choiceResult)&&$choiceResult['status']==='WAITLISTED','Accepted group did not enter waitlist');
+$counts=$wpdb->get_row('SELECT confirmed_count,waitlisted_count FROM wp_mi_event_counters WHERE event_id=154');
+check_travel((int)$counts['confirmed_count']===0&&(int)$counts['waitlisted_count']===2,'Group was split or consumed available seat');
+$replay=MI_Registration_Service::create(154,$choicePayload,$choiceKey);
+check_travel(!is_wp_error($replay)&&$replay['replayed']&&(int)$wpdb->get_var('SELECT COUNT(*) FROM wp_mi_registrations WHERE event_id=154')===1,'Accepted choice retry duplicated registration');
+$singlePayload=$choicePayload;$singlePayload['tickets']['standard']=1;array_pop($singlePayload['participants']);unset($singlePayload['waitlist_accepted']);
+$singleResult=MI_Registration_Service::create(154,$singlePayload,bin2hex(random_bytes(16)));
+check_travel(!is_wp_error($singleResult)&&$singleResult['status']==='CONFIRMED','Single person cannot use remaining seat');
+$lateResult=MI_Registration_Service::create(154,$singlePayload,bin2hex(random_bytes(16)));
+check_travel(is_wp_error($lateResult)&&$lateResult->code==='mi_waitlist_confirmation_required'&&$lateResult->data['availability']['remaining']===0,'Taken last seat did not request fresh choice');
+echo "PASS public waitlist choice on InnoDB: rollback, no mail, explicit whole group, counters, replay, remaining seat and changed capacity.\n";
+
+$soloId=(int)$wpdb->get_var("SELECT id FROM wp_mi_registrations WHERE event_id=154 AND status='CONFIRMED'");
+check_travel(MI_Registration_Service::cancel_registration($soloId,'TEST',true,false)==='CANCELLED','Cannot free test seat');
+$original=$wpdb->get_row("SELECT * FROM wp_mi_registrations WHERE event_id=154 AND status='WAITLIST_OFFERED'");
+check_travel($original&&$original['waitlist_partial_type']==='standard','Pair did not receive partial offer');
+$token=bin2hex(random_bytes(32));$wpdb->update('wp_mi_registrations',['waitlist_offer_token_hash'=>hash('sha256',$token)],['id'=>$original['id']]);
+$offer=MI_Registration_Service::waitlist_offer_from_token($original['id'],$token);
+check_travel(!is_wp_error($offer)&&count($offer['eligible_people'])===2,'Missing public choice of participant');
+$chosen=(int)$offer['eligible_people'][1]['id'];
+$accepted=MI_Registration_Service::respond_waitlist_offer($original['id'],$token,'ACCEPT',false,$chosen);
+check_travel($accepted==='ACCEPTED','Partial acceptance failed');
+$waiting=$wpdb->get_row($wpdb->prepare('SELECT * FROM wp_mi_registrations WHERE id=%d',$original['id']));
+check_travel($waiting['status']==='WAITLISTED'&&$waiting['created_at']===$original['created_at']&&(int)$waiting['total_qty']===1,'Remaining person lost original priority');
+$acceptedPerson=$wpdb->get_row($wpdb->prepare('SELECT r.status,r.total_qty FROM wp_mi_registrations r JOIN wp_mi_participants p ON p.registration_id=r.id WHERE p.id=%d',$chosen));
+check_travel($acceptedPerson['status']==='CONFIRMED'&&(int)$acceptedPerson['total_qty']===1,'Wrong person accepted');
+$counts=$wpdb->get_row('SELECT confirmed_count,waitlisted_count FROM wp_mi_event_counters WHERE event_id=154');
+check_travel((int)$counts['confirmed_count']===1&&(int)$counts['waitlisted_count']===1,'Partial acceptance counted twice');
+echo "PASS partial offer chooses second participant and preserves the first participant’s queue priority.\n";
+
+foreach (['TOGETHER'=>155,'EXPIRE'=>156] as $decision=>$eventId) {
+ $eventCopy=array_replace($choiceEvent,['id'=>$eventId]);
+ $wpdb->insert('wp_mi_event_revisions',['event_id'=>$eventId,'revision_number'=>1,'config_hash'=>str_repeat('d',64),'config_json'=>json_encode($eventCopy),'created_at'=>gmdate('Y-m-d H:i:s')]);
+ $GLOBALS['meta'][$eventId]=['_mi_published_revision_id'=>$wpdb->insert_id,'_mi_capacity'=>1,'_mi_waitlist_enabled'=>'1'];
+ $seat=MI_Registration_Service::create($eventId,$singlePayload,bin2hex(random_bytes(16)));
+ $pair=MI_Registration_Service::create($eventId,$choicePayload,bin2hex(random_bytes(16)));
+ $next=MI_Registration_Service::create($eventId,array_replace($singlePayload,['waitlist_accepted'=>true]),bin2hex(random_bytes(16)));
+ check_travel($seat['status']==='CONFIRMED'&&$pair['status']==='WAITLISTED'&&$next['status']==='WAITLISTED','Invalid queue fixture');
+ $seatId=$wpdb->get_var($wpdb->prepare('SELECT id FROM wp_mi_registrations WHERE order_code=%s',$seat['order_code']));
+ MI_Registration_Service::cancel_registration($seatId,'TEST',true,false);
+ $offer=$wpdb->get_row($wpdb->prepare('SELECT * FROM wp_mi_registrations WHERE order_code=%s',$pair['order_code']));
+ check_travel($offer['waitlist_partial_type']==='standard','First pair bypassed');
+ $token=bin2hex(random_bytes(32));
+ $fields=['waitlist_offer_token_hash'=>hash('sha256',$token)];
+ if($decision==='EXPIRE')$fields['waitlist_offer_expires_at']=gmdate('Y-m-d H:i:s',time()-60);
+ $wpdb->update('wp_mi_registrations',$fields,['id'=>$offer['id']]);
+ $result=MI_Registration_Service::respond_waitlist_offer($offer['id'],$token,$decision);
+ check_travel($result===($decision==='EXPIRE'?'EXPIRED':'TOGETHER'),'Failed partial decision '.$decision);
+ $after=$wpdb->get_row($wpdb->prepare('SELECT * FROM wp_mi_registrations WHERE id=%d',$offer['id']));
+ check_travel($after['status']===($decision==='EXPIRE'?'EXPIRED':'WAITLISTED')&&$after['created_at']===$offer['created_at'],'Wrong state after partial decision');
+ check_travel($wpdb->get_var($wpdb->prepare('SELECT status FROM wp_mi_registrations WHERE order_code=%s',$next['order_code']))==='WAITLIST_OFFERED','Freed seat did not pass to next person');
+ $counts=$wpdb->get_row($wpdb->prepare('SELECT * FROM wp_mi_event_counters WHERE event_id=%d',$eventId));
+ check_travel((int)$counts['confirmed_count']===1&&(int)$counts['waitlisted_count']===($decision==='EXPIRE'?0:2),'Wrong queue counters after '.$decision);
+}
+echo "PASS partial offer deferral and expiry release one seat and promote next person.\n";

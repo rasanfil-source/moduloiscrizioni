@@ -349,9 +349,10 @@ final class MI_Modello_Email {
 		$title = sanitize_text_field( (string) ( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) ) );
 		$summary = sanitize_text_field( (string) ( $values['{{ordine.riepilogo}}'] ?? '' ) );
 		$snapshot['oggetto'] = 'Richiesta in lista d’attesa — ' . $title;
+		$next_step = ! empty( $values['_payment_expected'] ) ? 'Per ora non devi pagare né fare altro.' : 'Per ora non devi fare altro.';
 		$snapshot['preheader'] = 'La richiesta è stata registrata. Per ora non devi fare nulla.';
-		$snapshot['html'] = '<p>Ciao ' . esc_html( $name ) . ',</p><p>la tua richiesta per <strong>' . esc_html( $title ) . '</strong> è stata inserita in lista d’attesa.</p>' . ( $summary ? '<p><strong>Partecipazione:</strong> ' . esc_html( $summary ) . '</p>' : '' ) . '<p>Il posto non è ancora confermato. Per ora non devi pagare né fare altro.</p><p>Se si libereranno posti compatibili con la tua richiesta, riceverai un’altra email con il termine entro cui accettare o rinunciare.</p>';
-		$snapshot['testo'] = "Ciao {$name},\n\nla tua richiesta per {$title} è stata inserita in lista d’attesa.\n\nIl posto non è ancora confermato. Per ora non devi pagare né fare altro.\n\nSe si libereranno posti compatibili con la tua richiesta, riceverai un’altra email con il termine entro cui accettare o rinunciare.";
+		$snapshot['html'] = '<p>Ciao ' . esc_html( $name ) . ',</p><p>la tua richiesta per <strong>' . esc_html( $title ) . '</strong> è stata inserita in lista d’attesa.</p>' . ( $summary ? '<p><strong>Partecipazione:</strong> ' . esc_html( $summary ) . '</p>' : '' ) . '<p>Il posto non è ancora confermato. ' . esc_html( $next_step ) . '</p><p>Se si libereranno posti compatibili con la tua richiesta, riceverai un’altra email con il termine entro cui accettare o rinunciare.</p>';
+		$snapshot['testo'] = "Ciao {$name},\n\nla tua richiesta per {$title} è stata inserita in lista d’attesa.\n\nIl posto non è ancora confermato. {$next_step}\n\nSe si libereranno posti compatibili con la tua richiesta, riceverai un’altra email con il termine entro cui accettare o rinunciare.";
 		$snapshot['identificativo'] = array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' );
 		$snapshot['gestione_partecipanti'] = array();
 		$snapshot['status_url'] = '';
@@ -366,15 +367,48 @@ final class MI_Modello_Email {
 		$title = sanitize_text_field( (string) ( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) ) );
 		$expires_label = sanitize_text_field( (string) $expires_label );
 		$snapshot['oggetto'] = 'Si è liberato un posto — ' . $title;
+		$payment_note = ! empty( $values['_payment_expected'] ) ? 'Non effettuare pagamenti prima di aver accettato.' : '';
 		$snapshot['preheader'] = 'Accetta o rinuncia entro ' . $expires_label . '.';
-		$snapshot['html'] = '<p>Ciao ' . esc_html( $name ) . ',</p><p>si sono liberati i posti richiesti per <strong>' . esc_html( $title ) . '</strong>.</p><p>Li abbiamo riservati per te fino a <strong>' . esc_html( $expires_label ) . '</strong>.</p><p>Apri il collegamento e scegli <strong>Accetta il posto</strong> oppure <strong>Rinuncia</strong>. Se non rispondi entro il termine, la proposta scadrà e i posti passeranno alla richiesta successiva.</p><p>Non effettuare pagamenti prima di aver accettato.</p>';
-		$snapshot['testo'] = "Ciao {$name},\n\nsi sono liberati i posti richiesti per {$title}. Li abbiamo riservati per te fino a {$expires_label}.\n\nApri il collegamento e scegli Accetta il posto oppure Rinuncia. Se non rispondi entro il termine, la proposta scadrà e i posti passeranno alla richiesta successiva.\n\nNon effettuare pagamenti prima di aver accettato.";
+		$snapshot['html'] = '<p>Ciao ' . esc_html( $name ) . ',</p><p>si sono liberati i posti richiesti per <strong>' . esc_html( $title ) . '</strong>.</p><p>Li abbiamo riservati per te fino a <strong>' . esc_html( $expires_label ) . '</strong>.</p><p>Apri il collegamento e scegli <strong>Accetta il posto</strong> oppure <strong>Rinuncia</strong>. Se non rispondi entro il termine, la proposta scadrà e i posti passeranno alla richiesta successiva.</p>' . ( $payment_note ? '<p>' . esc_html( $payment_note ) . '</p>' : '' );
+		$snapshot['testo'] = "Ciao {$name},\n\nsi sono liberati i posti richiesti per {$title}. Li abbiamo riservati per te fino a {$expires_label}.\n\nApri il collegamento e scegli Accetta il posto oppure Rinuncia. Se non rispondi entro il termine, la proposta scadrà e i posti passeranno alla richiesta successiva." . ( $payment_note ? "\n\n" . $payment_note : '' );
 		$snapshot['identificativo'] = array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' );
 		$snapshot['gestione_partecipanti'] = array();
 		$snapshot['status_url'] = '';
 		$snapshot['action_url'] = esc_url_raw( (string) $offer_url );
 		$snapshot['action_label'] = 'Rispondi alla proposta';
 		return $snapshot;
+	}
+
+	/** Proposta parziale per una coppia. I collegamenti aprono la conferma pubblica. */
+	public static function crea_offerta_un_posto_per_due( $event_id, $values, $offer_url, $expires_label ) {
+		$mail = self::crea_istantanea_offerta_lista_attesa( $event_id, $values, $offer_url, $expires_label );
+		$title = sanitize_text_field( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) );
+		$name = sanitize_text_field( $values['{{sottoscrittore.nome_completo}}'] ?? '' );
+		$mail['oggetto'] = 'Si è liberato 1 dei 2 posti richiesti per ' . $title;
+		$mail['preheader'] = 'Scegli chi partecipa oppure attendi due posti insieme entro ' . $expires_label . '.';
+		$paragraphs = array(
+			"Ciao {$name},",
+			"per {$title} si è liberato 1 dei 2 posti che hai richiesto. È riservato alla tua prenotazione fino a {$expires_label}.",
+			'Se vuoi accettare il posto, scegli chi parteciperà. L’altra persona resterà in lista d’attesa con la priorità originaria.',
+			'Se preferite partecipare insieme, scegli di attendere due posti. Entrambi resterete in lista con la priorità originaria e il posto disponibile verrà offerto alla richiesta successiva.',
+			"Rispondi entro {$expires_label}. Se entro la scadenza non scegli nessuna delle due opzioni, la proposta scadrà ed entrambi perderete la posizione in lista d’attesa.",
+		);
+		$buttons = array( 2 => array( 'choose', 'Accetta 1 posto e scegli chi partecipa' ), 3 => array( 'together', 'Attendi 2 posti insieme' ) );
+		$html = ''; $text = array();
+		foreach ( $paragraphs as $index => $paragraph ) {
+			$html .= '<p>' . esc_html( $paragraph ) . '</p>';
+			$text[] = $paragraph;
+			if ( isset( $buttons[$index] ) ) {
+				list( $action, $label ) = $buttons[$index];
+				$url = add_query_arg( 'mi_offer_choice', $action, $offer_url );
+				$html .= '<p><a style="display:inline-block;padding:12px 16px;background:#151b38;color:#fff;border-radius:8px" href="' . esc_url( $url ) . '">' . esc_html( $label ) . '</a></p>';
+				$text[] = $label . ': ' . $url;
+			}
+		}
+		$mail['html'] = $html;
+		$mail['testo'] = implode( "\n\n", $text );
+		unset( $mail['action_url'], $mail['action_label'] );
+		return $mail;
 	}
 
 	/** Accetta una selezione limitata di formattazione sicura e rifiuta l'HTML non elaborato. */
@@ -660,6 +694,8 @@ final class MI_Modello_Email {
 
 		return array(
 			'_economic_mode'               => $economic_mode,
+			// La lista d'attesa sospende il dovuto corrente, ma può prevedere una quota all'ammissione.
+			'_payment_expected'            => $total > 0 && in_array( $economic_mode, array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ),
 			'_payment_required'            => $payment_required,
 			'{{evento.titolo}}'              => sanitize_text_field( (string) ( $event['title'] ?? '' ) ),
 			'{{evento.data}}'                => $event_date ?: 'Da definire',
@@ -749,7 +785,7 @@ final class MI_Modello_Email {
 		$event_url = ! empty( $event['url'] ) ? esc_url( $event['url'] ) : '';
 		$cta = $event_url ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;margin-bottom:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . $event_url . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">Consulta la pagina dell’evento</a></td></tr></table>' : '';
 		$reply_to = ! empty( $email_identity['indirizzo_risposte'] ) && is_email( $email_identity['indirizzo_risposte'] ) ? sanitize_email( $email_identity['indirizzo_risposte'] ) : '';
-		$assistance = $reply_to ? 'Per domande o variazioni scrivi a <a href="mailto:' . esc_attr( $reply_to ) . '" style="color:' . esc_attr( $primary ) . ';text-decoration:none;font-weight:700;">' . esc_html( $reply_to ) . '</a>.' : 'Per domande o variazioni, rispondi direttamente a questa email.';
+		$assistance = $reply_to ? '<span style="white-space:nowrap;">Scrivere a:</span> <a href="mailto:' . esc_attr( $reply_to ) . '" style="color:' . esc_attr( $primary ) . ';text-decoration:none;font-weight:700;">' . esc_html( $reply_to ) . '</a>.' : 'Per domande o variazioni, rispondi direttamente a questa email.';
 		$activity_name = sanitize_text_field( (string) ( $identity['nome_attivita'] ?? '' ) );
 		$body = self::uniforma_tipografia_corpo( self::evidenzia_titolo_evento( self::sanitizza_html_email( $istantanea['html'] ?? '' ), $title ) );
 		$management_html = '';

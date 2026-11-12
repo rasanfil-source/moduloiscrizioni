@@ -12,7 +12,7 @@ const groups=fs.readFileSync(new URL('../src/Gruppi.gs',import.meta.url),'utf8')
 test('schema capability is advertised only by the autonomous project',()=>{
  for(const standalone of [false,true]){
   const context=vm.createContext({});
-  vm.runInContext(`${standalone?'const MI_STANDALONE_MODE=true;':''}\nconst MI_SCHEMA_VERSION='1.13.0';\n${webApp}`,context);
+  vm.runInContext(`${standalone?'const MI_STANDALONE_MODE=true;':''}\n${config}\n${webApp}`,context);
   context.verificaBusta_=()=>({ok:true});
   context.creaRispostaJson_=value=>value;
   const send=action=>context.doPost({postData:{contents:JSON.stringify({action,payload:{}})}});

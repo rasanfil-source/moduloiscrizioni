@@ -13,6 +13,7 @@ final class MI_Admin {
 		add_action( 'admin_post_mi_export_payments', array( __CLASS__, 'export_payments' ) );
 		add_action( 'admin_post_mi_cancel_registration', array( __CLASS__, 'cancel_registration' ) );
 		add_action( 'admin_post_mi_seed_demo_registrations', array( __CLASS__, 'seed_demo_registrations' ) );
+		add_action( 'admin_post_mi_cancel_demo_registrations', array( __CLASS__, 'cancel_demo_registrations' ) );
 		add_action( 'admin_post_mi_save_payment_settings', array( __CLASS__, 'save_payment_settings' ) );
 		add_filter( 'post_row_actions', array( __CLASS__, 'event_row_actions' ), 10, 2 );
 		add_filter( 'wp_insert_post_data', array( __CLASS__, 'guard_publication' ), 20, 2 );
@@ -102,15 +103,47 @@ final class MI_Admin {
 		if ( ! current_user_can( 'manage_options' ) ) wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) );
 		$events = get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'draft', 'private' ), 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) );
 		$created = absint( $_GET['mi_demo_created'] ?? 0 );
+		$cancelled = absint( $_GET['mi_demo_cancelled'] ?? 0 );
 		$error = sanitize_text_field( wp_unslash( $_GET['mi_demo_error'] ?? '' ) );
 		?><div class="wrap"><h1>Dati dimostrativi</h1>
 		<p>Crea iscrizioni inventate per collaudare elenchi e schede senza pubblicare l’evento. Lo strumento funziona soltanto su eventi in bozza e con le email in modalità Anteprima.</p>
+		<p>Le iscrizioni dimostrative occupano posti come le altre iscrizioni. Prima di pubblicare l’evento, annullale con il comando qui sotto. L’annullamento libera i posti; conserva lo storico e gli eventuali movimenti di prova.</p>
 		<?php if ( $created ) : ?><div class="notice notice-success"><p><?php echo esc_html( $created ); ?> iscrizioni dimostrative create.</p></div><?php endif; ?>
+		<?php if ( isset( $_GET['mi_demo_cancelled'] ) ) : ?><div class="notice notice-success"><p><?php echo esc_html( $cancelled ); ?> iscrizioni dimostrative annullate. Lo storico è conservato.</p></div><?php endif; ?>
 		<?php if ( $error ) : ?><div class="notice notice-error"><p><?php echo esc_html( $error ); ?></p></div><?php endif; ?>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="mi_seed_demo_registrations"><?php wp_nonce_field( 'mi_seed_demo_registrations' ); ?>
 		<table class="form-table"><tr><th><label for="mi_demo_event_id">Evento in bozza</label></th><td><select id="mi_demo_event_id" name="event_id" required><option value="">— Seleziona —</option><?php foreach ( $events as $event ) : ?><option value="<?php echo esc_attr( $event->ID ); ?>"><?php echo esc_html( $event->post_title . ' (ID ' . $event->ID . ')' ); ?></option><?php endforeach; ?></select></td></tr>
 		<tr><th><label for="mi_demo_count">Numero di iscrizioni</label></th><td><input id="mi_demo_count" name="count" type="number" min="1" max="6" value="3"></td></tr></table>
-		<?php submit_button( 'Crea iscrizioni dimostrative' ); ?></form></div><?php
+		<?php submit_button( 'Crea iscrizioni dimostrative' ); ?></form>
+		<h2>Annulla le iscrizioni dimostrative</h2><p>Agisce solo sulle iscrizioni create da questo strumento, nell’evento selezionato. Non invia email di annullamento e non ammette automaticamente persone dalla lista di attesa.</p>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"><input type="hidden" name="action" value="mi_cancel_demo_registrations"><?php wp_nonce_field( 'mi_cancel_demo_registrations' ); ?>
+		<label for="mi_demo_cancel_event">Evento in bozza</label> <select id="mi_demo_cancel_event" name="event_id" required><option value="">— Seleziona —</option><?php foreach ( $events as $event ) : ?><option value="<?php echo esc_attr( $event->ID ); ?>"><?php echo esc_html( $event->post_title . ' (ID ' . $event->ID . ')' ); ?></option><?php endforeach; ?></select>
+		<?php submit_button( 'Annulla le iscrizioni dimostrative', 'secondary' ); ?></form></div><?php
+	}
+	public static function cancel_demo_registrations() {
+		if ( ! current_user_can( 'manage_options' ) ) wp_die( esc_html__( 'Accesso non consentito.', 'modulo-iscrizioni' ) );
+		check_admin_referer( 'mi_cancel_demo_registrations' );
+		$result = self::cancel_demo_event( absint( $_POST['event_id'] ?? 0 ) );
+		if ( is_wp_error( $result ) ) wp_die( esc_html( $result->get_error_message() ) );
+		$url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-demo-data', 'mi_demo_cancelled' => $result['cancelled'] ), admin_url( 'edit.php' ) );
+		if ( $result['errors'] ) $url = add_query_arg( 'mi_demo_error', implode( ' ', array_unique( $result['errors'] ) ), $url );
+		wp_safe_redirect( $url ); exit;
+	}
+	public static function cancel_demo_event( $event_id ) {
+		if ( ! current_user_can( 'manage_options' ) ) return new WP_Error( 'mi_demo_forbidden', 'Accesso non consentito.' );
+		if ( 'ANTEPRIMA' !== MI_Spedizione_Email::modalita() ) return new WP_Error( 'mi_demo_mode', 'Riporta prima le email in modalità Anteprima.' );
+		$event = get_post( $event_id );
+		if ( ! $event || MI_Event_Post_Type::EVENT_TYPE !== $event->post_type || ! in_array( $event->post_status, array( 'draft', 'private' ), true ) ) return new WP_Error( 'mi_demo_event', 'Seleziona un evento in bozza.' );
+		global $wpdb;
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT r.id,r.order_code FROM {$wpdb->prefix}mi_registrations r WHERE r.event_id=%d AND r.status IN ('PENDING_PAYMENT','CONFIRMED','TRAVEL_PENDING','WAITLISTED','WAITLIST_OFFERED') AND EXISTS (SELECT 1 FROM {$wpdb->prefix}mi_registration_events a WHERE a.registration_id=r.id AND a.event_type='CREATED' AND a.actor_label='admin_demo') ORDER BY r.id", $event_id ), ARRAY_A );
+		if ( $wpdb->last_error ) return new WP_Error( 'mi_demo_read', 'Elenco delle iscrizioni dimostrative non disponibile. Riprova.' );
+		$result = array( 'cancelled' => 0, 'errors' => array() );
+		foreach ( $rows as $row ) {
+			$cancelled = MI_Registration_Service::cancel_registration( (int) $row['id'], 'ADMIN_DEMO_CLEANUP', false, false );
+			if ( is_wp_error( $cancelled ) ) $result['errors'][] = $row['order_code'] . ': ' . $cancelled->get_error_message();
+			else ++$result['cancelled'];
+		}
+		return $result;
 	}
 
 	public static function seed_demo_registrations() {
@@ -183,6 +216,7 @@ final class MI_Admin {
 			$payload['order_options'][$service['code']] = 1; if ( $group ) $groups[$group] = true;
 		}
 		$payload['buyer']['phone'] = '+39 320 000 ' . str_pad( (string) ( $index * 10 ), 4, '0', STR_PAD_LEFT );
+		if ( ! empty( $event['travel']['enabled'] ) ) $payload['travel_booking'] = array( 'mode' => 'OWN' );
 		return $payload;
 	}
 	private static function demo_participant_fields( $definitions, $index, $email, $phone ) {
@@ -192,7 +226,7 @@ final class MI_Admin {
 			if ( 'email' === $type ) $value = $email;
 			elseif ( 'tel' === $type ) $value = $phone;
 			elseif ( 'date' === $type ) $value = 'future' === ( $field['date_rule'] ?? '' ) ? '2030-12-31' : '198' . ( $index + 1 ) . '-0' . ( ( $index % 6 ) + 1 ) . '-15';
-			elseif ( 'select' === $type ) $value = (string) ( reset( $field['options'] ) ?: '' );
+			elseif ( 'select' === $type ) $value = (string) ( $field['options'][0] ?? '' );
 			elseif ( 'nationality' === $key ) $value = 'Italiana';
 			elseif ( 'document_number' === $key ) $value = 'DEMO-' . ( $index + 1 );
 			elseif ( 'document_country' === $key ) $value = 'Italia';
@@ -286,7 +320,7 @@ final class MI_Admin {
 		$labels = array( 'BANK_TRANSFER' => 'Bonifico', 'CARD' => 'Carta', 'CASH' => 'Contante' );
 		self::download_csv( 'pagamenti', static function ( $output ) use ( $payment_where, $payment_parameters, $labels ) {
 			global $wpdb;
-			self::export_csv_line( $output, array( 'Data UTC', 'Codice iscrizione', 'Evento', 'Tipo transazione', 'Rata', 'Importo centesimi', 'Fonte pagamento', 'Riferimento esterno', 'Operatore', 'Nota amministrativa' ), ';' );
+			self::export_csv_line( $output, array( 'Data UTC', 'Codice iscrizione', 'Evento', 'Tipo transazione', 'Rata', 'Importo centesimi', 'Fonte pagamento', 'Riferimento esterno', 'Operatore', 'Nota amministrativa', 'ID incasso di riferimento' ), ';' );
 			$cursor = null;
 			do {
 				$where = $payment_where;
@@ -297,7 +331,7 @@ final class MI_Admin {
 				}
 				$query = "SELECT p.*, r.order_code, r.event_id, event_post.post_title AS event_title FROM {$wpdb->prefix}mi_payments p INNER JOIN {$wpdb->prefix}mi_registrations r ON r.id = p.registration_id LEFT JOIN {$wpdb->posts} event_post ON event_post.ID=r.event_id {$where} ORDER BY p.effective_at, p.id LIMIT 500";
 				$rows = self::export_rows( $args ? $wpdb->prepare( $query, $args ) : $query );
-				foreach ( $rows as $row ) { $line = array( $row['effective_at'], $row['order_code'], $row['event_title'], $row['transaction_kind'], $row['installment_kind'], $row['amount_cents'], $labels[ $row['payment_source'] ] ?? $row['payment_source'], $row['external_reference'], $row['operator_label'], $row['administrative_note'] ); self::export_csv_line( $output, array_map( array( __CLASS__, 'safe_csv_value' ), $line ), ';' ); }
+				foreach ( $rows as $row ) { $line = array( $row['effective_at'], $row['order_code'], $row['event_title'], $row['transaction_kind'], $row['installment_kind'], $row['amount_cents'], $labels[ $row['payment_source'] ] ?? $row['payment_source'], $row['external_reference'], $row['operator_label'], $row['administrative_note'], $row['reverses_payment_id'] ?? '' ); self::export_csv_line( $output, array_map( array( __CLASS__, 'safe_csv_value' ), $line ), ';' ); }
 				if ( $rows ) $cursor = end( $rows );
 			} while ( count( $rows ) === 500 );
 		} );

@@ -3,7 +3,7 @@ function aggiungiColonneDomande_(colonne, evento, iscrizioni, partecipanti, cach
   const decode=cache?cache.object:decodificaOggetto_;
   const definitions = new Map();
   const add = field => {
-    if (!field || !/^custom_[A-Za-z0-9_-]{1,73}$/.test(String(field.key || ''))) return;
+    if (!field || !/^custom_[A-Za-z0-9_-]+$/.test(String(field.key || ''))) return;
     definitions.set(field.key, String(field.label || field.key));
   };
   iscrizioni.forEach(r => {
@@ -33,7 +33,7 @@ function applicaSchemaColonneEvento_(colonne, evento, iscrizioni, partecipanti, 
   const catalogo = campiElencoOperativo_(false);
   const result = [];
   const add = (key, label) => {
-    if (!/^[a-z][a-z0-9_-]{0,79}$/.test(String(key)) || result.some(c=>c.key===key)) return;
+    if (!/^[a-z][a-z0-9_-]*$/.test(String(key)) || result.some(c=>c.key===key)) return;
     const known = catalogo.find(c=>c.key===key);
     result.push({key:key,label:String(label || (known && known.label) || key),gruppo:gruppoCampoVistaOperativa_(key),comprimibile:['paid_cash','paid_transfer','paid_card'].includes(key)});
   };

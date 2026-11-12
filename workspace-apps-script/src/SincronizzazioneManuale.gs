@@ -1,6 +1,6 @@
 /** I campi modificabili contengono dati operativi, mai importi o identificativi della prenotazione. */
 function campoModificabileFoglio_(key) {
-  return /^[a-z][a-z0-9_-]{0,79}$/.test(key) && !String(key).startsWith('option_') && !String(key).startsWith('travel_') && !['_ordine','_numero','event','order_code','participant_number','registration_time','cancellation_time','status','options','total','paid','paid_cash','paid_transfer','paid_card','balance','special_requests','attendance','constructor','prototype'].includes(key);
+  return /^[a-z][a-z0-9_-]*$/.test(key) && !String(key).startsWith('option_') && !String(key).startsWith('travel_') && !['_ordine','_numero','event','order_code','participant_number','registration_time','cancellation_time','status','options','total','paid','paid_cash','paid_transfer','paid_card','balance','special_requests','attendance','constructor','prototype'].includes(key);
 }
 /** Valori di presentazione modificabili nel foglio, ma non inviati a WordPress. */
 function campoLocaleFoglio_(key) {
@@ -224,7 +224,7 @@ function leggiModificheEventoMysql_(payload) {
 function confermaModificheFoglio_(payload) {
   const eventId=String(payload.event_id||''), receipts=payload.confirmations;
   if (payload.direct_projection!==true) throw new Error('USE_DIRECT_PROJECTION');
-  if (!/^[1-9][0-9]*$/.test(eventId) || !Array.isArray(receipts) || receipts.length>500) throw new Error('INVALID_SHEET_RECEIPT');
+  if (!/^[1-9][0-9]*$/.test(eventId) || !Array.isArray(receipts)) throw new Error('INVALID_SHEET_RECEIPT');
 	const lock=LockService.getScriptLock(); lock.waitLock(30000);
 	try {
 		const sheet=apriFoglioEventoFirmato_(payload,false).sheet;

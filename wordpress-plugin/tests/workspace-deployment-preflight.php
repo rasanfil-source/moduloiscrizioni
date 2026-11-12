@@ -8,12 +8,16 @@ $valid = array(
 	'standalone'        => true,
 	'projection_pull'   => true,
 	'central_workbook'  => false,
+	'schema_version'    => '1.14.0',
 );
 if (array() !== mi_workspace_capabilities($valid)) throw new RuntimeException('Valid deployment rejected.');
 foreach (array_keys($valid) as $key) {
 	$invalid = $valid;
 	$invalid[$key] = !$invalid[$key];
 	if (array() === mi_workspace_capabilities($invalid)) throw new RuntimeException('Invalid capability accepted: ' . $key);
+}
+foreach (['','1.13.0','2.0.0','1.14.0-beta',[],null] as $version) {
+ if ([] === mi_workspace_capabilities(array_replace($valid,['schema_version'=>$version]))) throw new RuntimeException('Unsupported preflight version accepted');
 }
 $body = json_decode(mi_workspace_request_body(str_repeat('s', 32)), true, 32, JSON_THROW_ON_ERROR);
 if (2 !== $body['protocollo'] || 'STATO_SCHEMA' !== $body['action']) throw new RuntimeException('Invalid preflight envelope.');

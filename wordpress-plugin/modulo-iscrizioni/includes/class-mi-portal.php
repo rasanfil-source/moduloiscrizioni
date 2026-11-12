@@ -190,7 +190,7 @@ final class MI_Portal {
 		if ( 'waitlist_offer_decision' === $action ) {
 			$registration_id = absint( $_POST['registration_id'] ?? 0 );
 			check_admin_referer( 'mi_waitlist_offer_' . $registration_id, 'mi_portal_nonce' );
-			$result = MI_Registration_Service::respond_waitlist_offer( $registration_id, sanitize_text_field( wp_unslash( $_POST['offer_token'] ?? '' ) ), sanitize_key( wp_unslash( $_POST['decision'] ?? '' ) ) );
+			$result = MI_Registration_Service::respond_waitlist_offer( $registration_id, sanitize_text_field( wp_unslash( $_POST['offer_token'] ?? '' ) ), sanitize_key( wp_unslash( $_POST['decision'] ?? '' ) ), false, absint( $_POST['participant_id'] ?? 0 ) );
 			$code = is_wp_error( $result ) ? 'error' : strtolower( (string) $result );
 			wp_safe_redirect( add_query_arg( array( 'mi_waitlist_offer' => $registration_id, 'mi_waitlist_result' => $code ), home_url( '/' ) ) );
 			exit;
@@ -389,7 +389,7 @@ final class MI_Portal {
 			$label = sanitize_text_field( $label );
 			if ( ! $label ) continue;
 			$question_key = sanitize_key( $question_keys[ $index ] ?? '' );
-			if ( ! preg_match( '/^custom_[a-z0-9_-]{6,80}$/', $question_key ) ) {
+			if ( ! preg_match( '/^custom_[a-z0-9_-]+$/', $question_key ) ) {
 				$question_key = 'custom_domanda_' . substr( str_replace( '-', '', wp_generate_uuid4() ), 0, 16 );
 			}
 			$existing_question = $existing_questions_by_key[ $question_key ] ?? array();
@@ -1342,6 +1342,7 @@ final class MI_Portal {
 		if ( $result_code ) {
 			$messages = array(
 				'accepted' => array( 'Posto accettato', 'La prenotazione è stata aggiornata. Riceverai un’email con la conferma e, se previsti, i dati per il pagamento.' ),
+				'together' => array( 'Attesa di due posti confermata', 'Entrambi restate in lista con la priorità originaria. Riceverete una nuova proposta quando saranno disponibili due posti compatibili.' ),
 				'declined' => array( 'Rinuncia registrata', 'I posti sono stati liberati e proposti alla richiesta successiva.' ),
 				'expired'  => array( 'Proposta scaduta', 'Il termine era trascorso e i posti sono stati proposti alla richiesta successiva.' ),
 				'error'    => array( 'Scelta non registrata', 'Il collegamento non è valido, è scaduto oppure è già stato utilizzato.' ),
@@ -1351,6 +1352,30 @@ final class MI_Portal {
 		}
 		$token = sanitize_text_field( wp_unslash( $_GET['mi_waitlist_token'] ?? '' ) );
 		$offer = MI_Registration_Service::waitlist_offer_from_token( $registration_id, $token );
+		if ( ! is_wp_error( $offer ) && isset( $offer['eligible_people'] ) ) {
+			$together = 'together' === sanitize_key( wp_unslash( $_GET['mi_offer_choice'] ?? '' ) );
+			ob_start(); ?>
+			<main class="mi-portal mi-public-status"><section class="mi-portal-login">
+			<h1><?php echo $together ? 'Attendi 2 posti insieme' : 'Scegli chi partecipa'; ?></h1>
+			<p><?php echo esc_html( $offer['event_title'] . ' · Rispondi entro ' . $offer['expires_label'] ); ?></p>
+			<form method="post">
+			<input type="hidden" name="mi_portal_action" value="waitlist_offer_decision">
+			<input type="hidden" name="registration_id" value="<?php echo esc_attr( $registration_id ); ?>">
+			<input type="hidden" name="offer_token" value="<?php echo esc_attr( $token ); ?>">
+			<?php wp_nonce_field( 'mi_waitlist_offer_' . $registration_id, 'mi_portal_nonce' ); ?>
+			<?php if ( $together ) : ?>
+			<p>Il posto disponibile passerà alla richiesta successiva. Entrambi conserverete la priorità originaria.</p>
+			<button class="mi-primary" name="decision" value="TOGETHER">Conferma l’attesa di 2 posti</button>
+			<?php else : ?>
+			<fieldset><legend>A chi assegnare il posto disponibile?</legend>
+			<?php foreach ( $offer['eligible_people'] as $person ) : ?>
+			<label><input type="radio" name="participant_id" value="<?php echo esc_attr( $person['id'] ); ?>" required> <?php echo esc_html( $person['first_name'] . ' ' . $person['last_name'] ); ?></label>
+			<?php endforeach; ?></fieldset>
+			<p>L’altra persona conserverà la priorità in lista d’attesa.</p>
+			<button class="mi-primary" name="decision" value="ACCEPT">Conferma il posto per la persona scelta</button>
+			<?php endif; ?></form></section></main>
+			<?php return ob_get_clean();
+		}
 		if ( is_wp_error( $offer ) ) return '<main class="mi-portal mi-public-status"><section class="mi-portal-login"><span class="mi-portal-eyebrow">Lista d’attesa</span><h1>Proposta non disponibile</h1><p>' . esc_html( $offer->get_error_message() ) . '</p></section></main>';
 		ob_start(); ?>
 		<main class="mi-portal mi-public-status"><section class="mi-portal-login"><span class="mi-portal-eyebrow">Posto disponibile</span><h1>Vuoi accettare il posto?</h1><p><strong><?php echo esc_html( $offer['buyer_first_name'] . ' ' . $offer['buyer_last_name'] ); ?></strong>, i posti richiesti per <strong><?php echo esc_html( $offer['event_title'] ); ?></strong> sono riservati fino a <strong><?php echo esc_html( $offer['expires_label'] ); ?></strong>.</p><p>Scegli ora. Se l’evento prevede un pagamento, riceverai istruzioni e scadenza soltanto dopo l’accettazione.</p><form method="post"><input type="hidden" name="mi_portal_action" value="waitlist_offer_decision"><input type="hidden" name="registration_id" value="<?php echo esc_attr( $registration_id ); ?>"><input type="hidden" name="offer_token" value="<?php echo esc_attr( $token ); ?>"><?php wp_nonce_field( 'mi_waitlist_offer_' . $registration_id, 'mi_portal_nonce' ); ?><div class="mi-booking-detail__actions"><button class="mi-primary" type="submit" name="decision" value="ACCEPT">Accetta il posto</button><button class="mi-danger" type="submit" name="decision" value="DECLINE">Rinuncia</button></div></form></section></main>
@@ -2139,7 +2164,8 @@ final class MI_Portal {
 			$fixed_price = max( 0, absint( get_post_meta( $event_id, '_mi_fixed_price_cents', true ) ) );
 			update_post_meta( $event_id, '_mi_ticket_types', array( array( 'code' => 'standard', 'name' => 'ZERO' === $pricing_mode ? 'Iscrizione' : 'Quota di partecipazione', 'price_cents' => 'FIXED' === $pricing_mode ? $fixed_price : 0, 'max_per_order' => 20, 'capacity' => 0 ) ) );
 		}
-		$sheet_url = get_post_meta( $event_id, '_mi_operational_sheet_url', true ) ? esc_url( MI_Sheet_Open::url( $event_id ) ) : '';
+		$shared_sheet_url = esc_url( (string) get_post_meta( $event_id, '_mi_operational_sheet_url', true ) );
+		$sheet_url = $shared_sheet_url ? esc_url( MI_Sheet_Open::url( $event_id ) ) : '';
 		$sheet_missing = '1' === get_post_meta( $event_id, '_mi_sheet_missing', true );
 		$sheet_unavailable = '1' === get_post_meta( $event_id, '_mi_sheet_unavailable', true );
 		$registration_url = esc_url( (string) get_post_meta( $event_id, '_mi_registration_url', true ) );
@@ -2163,7 +2189,7 @@ final class MI_Portal {
 			echo '<div class="mi-event-outputs__success"><span aria-hidden="true">✓</span><div><strong>L’evento è pubblicato</strong><p>Il modulo di iscrizione è pronto. Puoi condividerlo con le persone interessate.</p></div></div>';
 			if ( class_exists( 'MI_Event_QR' ) ) MI_Event_QR::render( $event_id );
 			echo '<div class="mi-event-outputs__grid"><article class="mi-output-card mi-output-card--public"><span class="mi-output-card__audience">Per i partecipanti</span><h3>Condividi il modulo di iscrizione</h3><label>Link per le iscrizioni<div class="mi-output-copy"><input type="url" readonly value="' . esc_attr( $registration_url ) . '"><button type="button" class="mi-primary" data-mi-copy="' . esc_attr( $registration_url ) . '">Copia link</button></div></label><a class="mi-secondary mi-output-link" href="' . $registration_url . '" target="_blank" rel="noopener noreferrer">Apri il modulo <span aria-hidden="true">↗</span></a></article>';
-			echo '<article class="mi-output-card mi-output-card--internal"><span class="mi-output-card__audience">Per gli operatori</span><h3>Gestisci le iscrizioni</h3><p>Consulta e aggiorna i dati nel foglio Google dell’evento.</p><div class="mi-output-document"><span aria-hidden="true">▦</span><div><strong>Foglio iscrizioni</strong><small>' . esc_html( $event_title ) . '</small></div></div>' . ( $sheet_unavailable ? '<p class="mi-portal-notice" role="status">Verifica del foglio temporaneamente non disponibile. Riprova più tardi; il collegamento conservato non è stato sostituito.</p>' : '' ) . ( $sheet_missing && ! $sheet_unavailable ? '<p class="mi-portal-notice mi-portal-error"><strong>Foglio non disponibile.</strong> Usa il comando qui sotto per ricrearlo dai dati conservati.</p>' : ( $sheet_url ? '<a class="mi-secondary mi-output-link" href="' . $sheet_url . '" target="_blank" rel="noopener noreferrer">Apri <span aria-hidden="true">↗</span></a><div class="mi-output-copy-action"><button type="button" class="mi-secondary mi-output-link" data-mi-copy="' . esc_attr( $sheet_url ) . '" data-mi-copy-success-label="Copiato">Copia il collegamento al foglio</button></div>' : '<p class="mi-portal-muted">Collegamento al foglio non ancora disponibile.</p>' ) );
+			echo '<article class="mi-output-card mi-output-card--internal"><span class="mi-output-card__audience">Per gli operatori</span><h3>Gestisci le iscrizioni</h3><p>Consulta e aggiorna i dati nel foglio Google dell’evento.</p><div class="mi-output-document"><span aria-hidden="true">▦</span><div><strong>Foglio iscrizioni</strong><small>' . esc_html( $event_title ) . '</small></div></div>' . ( $sheet_unavailable ? '<p class="mi-portal-notice" role="status">Verifica del foglio temporaneamente non disponibile. Riprova più tardi; il collegamento conservato non è stato sostituito.</p>' : '' ) . ( $sheet_missing && ! $sheet_unavailable ? '<p class="mi-portal-notice mi-portal-error"><strong>Foglio non disponibile.</strong> Usa il comando qui sotto per ricrearlo dai dati conservati.</p>' : ( $sheet_url ? '<a class="mi-secondary mi-output-link" href="' . $sheet_url . '" target="_blank" rel="noopener noreferrer">Apri <span aria-hidden="true">↗</span></a><div class="mi-output-copy-action"><button type="button" class="mi-secondary mi-output-link" data-mi-copy="' . esc_attr( $shared_sheet_url ) . '" data-mi-copy-success-label="Copiato">Copia il collegamento al foglio</button></div>' : '<p class="mi-portal-muted">Collegamento al foglio non ancora disponibile.</p>' ) );
 			echo '<form method="post" class="mi-output-sheet-check"><input type="hidden" name="mi_portal_action" value="repair_event_sheet"><input type="hidden" name="event_id" value="' . esc_attr( $event_id ) . '">';
 			wp_nonce_field( 'mi_portal_repair_event_sheet_' . $event_id, 'mi_portal_nonce' );
 			echo '<button type="submit" class="mi-secondary mi-output-link">Verifica o ricrea il foglio Google</button></form></article></div>';

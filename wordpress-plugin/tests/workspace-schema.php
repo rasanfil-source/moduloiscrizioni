@@ -4,7 +4,7 @@ class WP_Error {}
 function is_wp_error( $value ) { return $value instanceof WP_Error; }
 require __DIR__ . '/../modulo-iscrizioni/includes/class-mi-workspace-settings.php';
 $check = new ReflectionMethod( MI_Workspace_Settings::class, 'supports_direct_projection' );
-$valid = array( 'direct_projection' => true, 'standalone' => true, 'projection_pull' => true, 'central_workbook' => false );
+$valid = array( 'ok' => true, 'schema_version' => '1.14.0', 'direct_projection' => true, 'standalone' => true, 'projection_pull' => true, 'central_workbook' => false );
 if ( true !== $check->invoke( null, $valid ) ) throw new RuntimeException( 'Autonomous deployment rejected.' );
 foreach ( array( 'direct_projection', 'standalone', 'projection_pull', 'central_workbook' ) as $key ) {
 	$invalid = $valid;
@@ -12,4 +12,11 @@ foreach ( array( 'direct_projection', 'standalone', 'projection_pull', 'central_
 	if ( false !== $check->invoke( null, $invalid ) ) throw new RuntimeException( 'Unsafe capability accepted: ' . $key );
 }
 if ( false !== $check->invoke( null, new WP_Error() ) ) throw new RuntimeException( 'Remote error accepted as capability.' );
+foreach (['','1.13.0','2.0.0','1.14.0-beta',[],null] as $version) {
+ if ($check->invoke(null,array_replace($valid,['schema_version'=>$version]))) throw new RuntimeException('Unsupported schema accepted');
+}
+if (!$check->invoke(null,array_replace($valid,['schema_version'=>'1.15.0']))) throw new RuntimeException('Compatible minor update rejected');
+foreach (['ok','direct_projection','standalone','projection_pull','central_workbook'] as $key) {
+ if ($check->invoke(null,array_replace($valid,[$key=>'false']))) throw new RuntimeException('String accepted as a capability');
+}
 echo "PASS: verifica firmata del progetto autonomo e rifiuto del workbook centrale.\n";
