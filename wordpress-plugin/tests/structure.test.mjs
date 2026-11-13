@@ -2256,7 +2256,7 @@ test('il wizard distingue salvataggio, anteprima e pubblicazione', async () => {
 	assert.match(portal, /Apri l’anteprima del modulo di iscrizione/);
 	assert.match(portal, /class="mi-preview-action">[\s\S]*<\/a><\/span>/);
 	assert.match(css, /\.mi-preview-action\{display:flex/);
-	assert.match(portal, /Vuoi personalizzare l’email di conferma dell’iscrizione\?/);
+	assert.match(portal, /Vuoi personalizzare il testo dell’email di conferma iscrizione\?/);
 	assert.match(portal, /name="confirmation_email_subject"/);
 	assert.match(portal, /name="confirmation_email_text"/);
 	assert.match(portal, /MI_Modello_Email::salva_testo_portale/);

@@ -61,7 +61,8 @@
     const fallbackHelp = note(party.length > 1
       ? 'La scelta vale anche se un conducente ritira un posto già assegnato: puoi mantenere solo le persone con un passaggio oppure confermare che tutte parteciperanno organizzandosi diversamente.'
       : 'La scelta vale anche se il conducente ritira un posto già assegnato: puoi mantenere la partecipazione solo con un passaggio oppure confermare che parteciperai organizzandoti diversamente.', need);
-    note('Ogni proposta riserva il posto per 24 ore. Le proposte automatiche ti arrivano via email: partenza e contributo sono indicati nell’email e nella pagina personale del passaggio, prima di accettare. L’attesa auto è distinta dalla lista d’attesa dell’evento.', need);
+    const hasFixedContribution = config.event.travel.price_mode === 'FIXED' && Number(config.event.travel.price_cents) > 0;
+    note('Ogni proposta riserva il posto per 24 ore. Le proposte automatiche arrivano via email: ' + (hasFixedContribution ? 'partenza e contributo sono indicati' : 'la partenza è indicata') + ' nell’email e nella pagina personale del passaggio, prima di accettare. L’attesa auto è distinta dalla lista d’attesa dell’evento.', need);
     let loading = false; let loadedOnce = false; let acceptingNewRequests = true;
     async function load() {
       if (loading) return;
@@ -96,7 +97,7 @@
         loadedOnce = true;
       } catch (error) {
         rides.replaceChildren();
-        status.textContent = `${error.message} Puoi riprovare oppure chiedere di entrare in lista d’attesa auto.`;
+        status.textContent = 'Non è stato possibile verificare i passaggi disponibili. È possibile riprovare oppure chiedere di entrare in lista d’attesa auto.';
         reload.hidden = false;
       } finally { loading = false; reload.disabled = false; update(); }
     }

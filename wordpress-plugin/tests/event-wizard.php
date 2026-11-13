@@ -40,7 +40,7 @@ check_wizard(str_contains($html,'name="participation_price"')&&str_contains($htm
 check_wizard(str_contains($html,'name="travel_enabled"')&&str_contains($html,'name="travel_price_mode"')&&str_contains($html,'name="travel_deadline"'),'Travel configuration is missing from event wizard');
 preg_match_all('/<span class="mi-portal-eyebrow">(\d+) di 9<\/span>/', $html, $numbers);
 check_wizard($numbers[1]===['1','2','3','4','5','6','7','8','9'],'Wizard numbering is inconsistent');
-check_wizard(strpos($html,'data-mi-transport-step')<strpos($html,'name="capacity"')&&strpos($html,'name="bus_route_code[]"')<strpos($html,'name="capacity"'),'Transport configuration must precede event capacity');
+check_wizard(strpos($html,'data-mi-transport-step')>strpos($html,'name="capacity"')&&strpos($html,'name="bus_route_code[]"')>strpos($html,'8 di 9')&&strpos($html,'name="bus_route_code[]"')<strpos($html,'9 di 9'),'Event dates must precede shared rides; organized transfers belong in services and pricing');
 check_wizard(strpos($html,'name="group_link"')>strpos($html,'9 di 9')&&strpos($html,'name="group_link"')<strpos($html,'name="public_slug"'),'Group link must be beside the individual event link');
 check_wizard(substr_count($html,'name="travel_enabled"')===1&&substr_count($html,'data-mi-bus-routes>')===1,'Transport controls duplicated');
 check_wizard(str_contains($html,'value="Oggetto copiato"'),'Email not copied');

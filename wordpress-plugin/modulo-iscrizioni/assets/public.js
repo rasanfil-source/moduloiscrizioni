@@ -547,11 +547,13 @@
           summary.append(details);
         }
       } else {
-        line(summary, 'Iscrizione a nome di', buyerName);
+        const personName = participantCosts.length === 1 ? `${participantCosts[0].participant.firstName} ${participantCosts[0].participant.lastName}`.trim() : '';
+        const samePerson = personName && personName.replace(/\s+/g, ' ').toLocaleLowerCase('it') === buyerName.trim().replace(/\s+/g, ' ').toLocaleLowerCase('it');
+        if (!samePerson || singleQuotaOnly) line(summary, 'Iscrizione a nome di', buyerName);
         if (!singleQuotaOnly) {
           participantCosts.forEach((cost) => renderParticipantDetail(summary, cost));
           renderTotals(summary, true);
-        } else participantCosts.forEach(({ participant }) => line(summary, 'Partecipante', `${participant.firstName} ${participant.lastName}`));
+        } else if (!samePerson) participantCosts.forEach(({ participant }) => line(summary, 'Partecipante', `${participant.firstName} ${participant.lastName}`));
       }
     }
 
@@ -575,6 +577,10 @@
 
 	function updateFieldError(field) {
 	  if (!field.willValidate) return;
+	  if (field.matches('[data-mi-ticket]')) {
+	    const maximum = Number(field.max);
+	    field.setCustomValidity(Number.isFinite(maximum) && Number(field.value) > maximum ? (maximum === 1 ? 'Per questo evento è ammessa 1 sola iscrizione per volta.' : `Per questo evento sono ammesse solo ${maximum} iscrizioni per volta.`) : '');
+	  }
 	  const invalid = !field.validity.valid;
 	  let error = field._miFieldError;
 	  if (invalid && !error) {

@@ -38,6 +38,8 @@ jobs:
           php wordpress-plugin/tests/email-queue-fairness.php
           php wordpress-plugin/tests/public-balance.php
           php wordpress-plugin/tests/public-balance-model.php
+          php wordpress-plugin/tests/balance-phone.php
+          php wordpress-plugin/tests/balance-phone-setting.php
           php wordpress-plugin/tests/email-body-typography.php
           php wordpress-plugin/tests/email-model-audit.php
           php wordpress-plugin/tests/email-access-audit.php

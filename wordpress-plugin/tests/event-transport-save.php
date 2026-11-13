@@ -17,10 +17,10 @@ function current_user_can($cap){return true;}
 function is_user_logged_in(){return true;}
 function check_admin_referer(...$args){}
 function wp_die($message,...$args){throw new RuntimeException($message);}
-function get_post($id){return (object)['ID'=>$id,'post_type'=>'mi_event','post_status'=>'draft','post_title'=>'Prova'];}
+function get_post($id){return (object)['ID'=>$id,'post_type'=>'mi_event','post_status'=>$GLOBALS['transport_post_status']??'draft','post_title'=>'Prova'];}
 function get_post_type($id){return 'mi_activity';}
 function get_post_meta($id,$key,$single=true){return $GLOBALS['transport_meta'][$key]??'';}
-function update_post_meta($id,$key,$value){$GLOBALS['transport_meta'][$key]=$value;if($key==='_mi_options')throw new TransportSaved();}
+function update_post_meta($id,$key,$value){$GLOBALS['transport_meta'][$key]=$value;if($key===($GLOBALS['transport_stop_meta']??'_mi_options'))throw new TransportSaved();}
 function delete_post_meta($id,$key){unset($GLOBALS['transport_meta'][$key]);}
 function wp_update_post($data,...$args){$GLOBALS['transport_writes']++;return $data['ID'];}
 function get_post_field(...$args){return 0;}
@@ -85,7 +85,7 @@ transport_save('ZERO',true,['closes_at'=>'','starts_at'=>$midnight->modify('+1 d
 transport_check($GLOBALS['transport_meta']['_mi_registration_closes_at']===$midnight->modify('+1 day -30 minutes')->format('Y-m-d\TH:i'),'Chiusura non segue la nuova data');
 transport_save('ZERO');transport_check($GLOBALS['transport_meta']['_mi_registration_closes_auto']==='0','Scadenza esplicita trattata come automatica');
 $resume=new ReflectionMethod(MI_Portal::class,'draft_initial_step');
-$GLOBALS['transport_meta']=['_mi_capacity'=>30];transport_check($resume->invoke(null,42)===4,'Bozza incompleta non ripresa da Date e posti');
+$GLOBALS['transport_meta']=['_mi_capacity'=>30];transport_check($resume->invoke(null,42)===3,'Bozza incompleta non ripresa da Date e posti');
 $GLOBALS['transport_meta']+=['_mi_event_starts_at'=>'2027-11-02T12:00','_mi_registration_closes_at'=>'2027-11-01T12:00'];
 transport_check($resume->invoke(null,42)===8,'Bozza completa non ripresa dal controllo finale');
 echo "PASS transport save: free/fixed/calculated bus pricing, explicit removal, preserved advanced options, anonymous free route, validation before writes and draft resume.\n";

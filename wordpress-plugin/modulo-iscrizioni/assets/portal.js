@@ -240,12 +240,12 @@ document.addEventListener('DOMContentLoaded', () => {
 		const bookingLimit = multipleBooking ? value('max_per_order') : '1';
         const review = form.querySelector('[data-mi-review]');
 		if (review) {
-		  const transports = [form.querySelector('[data-mi-bus-enabled]')?.checked ? 'Pullman' : '', form.querySelector('[name="travel_enabled"]')?.checked ? 'Passaggi condivisi in auto' : ''].filter(Boolean);
+		  const transports = [form.querySelector('[name="travel_enabled"]')?.checked ? 'Passaggi condivisi in auto' : ''].filter(Boolean);
 		  const category = form.querySelector('[data-mi-event-group-link]');
-		  const lines = [value('title'), `Inizio: ${value('starts_at')}`, `Chiusura iscrizioni: ${effectiveClosingText()}`, `Posti all’evento: ${value('capacity')}`, `Massimo per prenotazione: ${bookingLimit}`, `Spostamenti: ${transports.join(' e ') || 'Organizzazione autonoma'}`, `Lista d’attesa per partecipare all’evento: ${form.querySelector('[data-mi-waitlist]')?.checked ? 'attiva' : 'non attiva'}`];
+		  const lines = [value('title'), `Inizio: ${value('starts_at')}`, `Chiusura iscrizioni: ${effectiveClosingText()}`, `Posti all’evento: ${value('capacity')}`, `Massimo per prenotazione: ${bookingLimit}`, `Come ci si organizza per arrivare: ${transports.join(' e ') || 'Ognuno si organizza per conto proprio'}`, `Lista d’attesa per partecipare all’evento: ${form.querySelector('[data-mi-waitlist]')?.checked ? 'attiva' : 'non attiva'}`];
 		  const pricingChoice = form.querySelector('[data-mi-pricing]');
 		  if (pricingChoice) lines.push(`Quote: ${pricingChoice.selectedOptions[0].textContent.trim()}`);
-		  if (form.querySelector('[data-mi-bus-enabled]')?.checked) lines.push(pricingChoice?.value === 'CALCULATED' ? 'Pullman: si applicano i supplementi delle tratte scelte.' : pricingChoice?.value === 'FIXED' ? 'Pullman compreso nella quota uguale per tutti, senza supplementi.' : 'Il modulo non calcola quote per il pullman.');
+		  if (pricingChoice?.value === 'CALCULATED' && form.querySelector('[data-mi-bus-enabled]')?.checked) lines.push('Pullman: si applicano i supplementi delle tratte scelte.');
 		  if (category?.value && !category.disabled) lines.push(`Link del gruppo: ${category.selectedOptions[0].textContent.trim()}`, category.selectedOptions[0].dataset.address || '');
 		  review.replaceChildren(...lines.map((text, lineIndex) => { const node = document.createElement(lineIndex ? 'span' : 'strong'); node.textContent = text; return node; }));
 		}
@@ -253,6 +253,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
 	form.querySelectorAll('[name="confirmation_email_subject"], [name="confirmation_email_text"]').forEach((field) => field.addEventListener('input', renderConfirmationPreview));
+	const scrollToWizardStart = () => window.requestAnimationFrame(() => {
+	  const heading = steps[index].querySelector('h2');
+	  if (heading) { heading.tabIndex = -1; heading.focus({preventScroll:true}); }
+	  form.scrollIntoView({block:'start',behavior:'instant'});
+	});
     const advance = () => {
 	  validateWizardRelations();
 	  const fields = [...steps[index].querySelectorAll('input, select, textarea')].filter((field) => !field.disabled);
@@ -260,6 +265,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	  if (coverImage && steps[index].contains(coverImage) && !validateCoverImage()) return;
       index = Math.min(steps.length - 1, index + 1);
       show();
+	  scrollToWizardStart();
     };
     next.addEventListener('click', advance);
     back.addEventListener('click', () => {
@@ -269,6 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	  }
       index = Math.max(0, index - 1);
       show();
+	  scrollToWizardStart();
     });
 	form.addEventListener('submit', (event) => {
 	  validateWizardRelations();
@@ -304,13 +311,23 @@ document.addEventListener('DOMContentLoaded', () => {
     form.querySelector('[name="activity_id"]')?.addEventListener('change', updateLinkChoice);
     updateLinkChoice();
     const pricing = form.querySelector('[data-mi-pricing]');
+	const updateLogoGroupLabel = () => {
+	  const group = form.querySelector('[name="activity_id"]');
+	  const label = form.querySelector('[data-mi-email-logo-label]');
+	  if (label) label.textContent = 'Logo nelle email (' + (group?.value ? 'Gruppo ' + group.selectedOptions[0].textContent.trim() : 'Parrocchia') + ')';
+	};
+	form.querySelector('[name="activity_id"]')?.addEventListener('change', updateLogoGroupLabel);
+	updateLogoGroupLabel();
 	const waitlist = form.querySelector('[data-mi-waitlist]');
 	const waitlistOffer = form.querySelector('[data-mi-waitlist-offer]');
+	const waitlistCapacity = form.querySelector('[data-mi-waitlist-capacity]');
 	const updateWaitlist = () => {
-	  if (!waitlistOffer) return;
-	  waitlistOffer.hidden = !waitlist?.checked;
-	  const input = waitlistOffer.querySelector('input');
-	  if (input) input.disabled = !waitlist?.checked;
+	  for (const panel of [waitlistOffer, waitlistCapacity]) {
+	    if (!panel) continue;
+	    panel.hidden = !waitlist?.checked;
+	    const input = panel.querySelector('input');
+	    if (input) input.disabled = !waitlist?.checked;
+	  }
 	};
 	waitlist?.addEventListener('change', updateWaitlist);
 	updateWaitlist();
@@ -389,7 +406,10 @@ document.addEventListener('DOMContentLoaded', () => {
 	  const active = pricing?.value === 'CALCULATED';
 	  const extra = form.querySelector('[data-mi-extra-services]');
 	  if(extra){extra.hidden=!active;extra.querySelectorAll('input,select').forEach(input=>{input.disabled=!active;});}
-	  const enabled = Boolean(busEnabled?.checked);
+	  const panel = form.querySelector('[data-mi-bus-services]');
+	  if (panel) panel.hidden = !active;
+	  if (busEnabled) busEnabled.disabled = !active;
+	  const enabled = active && Boolean(busEnabled?.checked);
 	  if (busRoutes) busRoutes.hidden = !enabled;
 	  busRoutes?.querySelectorAll('input').forEach((input) => {
 	    const isPrice = input.name === 'bus_route_price[]';
@@ -398,7 +418,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	  });
 	  form.querySelectorAll('[data-mi-bus-price-help]').forEach(note => {
 	    note.hidden = !enabled;
-	    note.textContent = active ? 'La quota di ogni tratta si aggiunge ai servizi scelti. Puoi indicare zero.' : pricing?.value === 'FIXED' ? 'Il pullman è compreso nella quota uguale per tutti, senza supplementi per tratta.' : 'Le tratte restano selezionabili; il modulo non calcola quote per il pullman.';
+	    note.textContent = 'La quota di ogni tratta si aggiunge ai servizi scelti.';
 	  });
 	};
 	const addBusRoute = () => {
@@ -422,13 +442,13 @@ document.addEventListener('DOMContentLoaded', () => {
 	    if (deadline) deadline.required = enabled;
 	  }
 	  form.querySelectorAll('[data-mi-travel-waitlist-notice]').forEach(note => { note.hidden = !enabled; });
-	  if (transportNone && (busEnabled?.checked || enabled)) transportNone.checked = false;
-	  if (transportNone) transportNone.required = !busEnabled?.checked && !enabled;
+	  if (transportNone && enabled) transportNone.checked = false;
+	  if (transportNone) transportNone.required = !enabled;
 	  if (busEnabled?.checked && !busRoutesList?.children.length) addBusRoute();
 	  updateBusRoutes();
 	};
 	transportNone?.addEventListener('change', () => {
-	  if (transportNone.checked) { if (busEnabled) busEnabled.checked = false; if (travelEnabled) travelEnabled.checked = false; }
+	  if (transportNone.checked) { if (travelEnabled) travelEnabled.checked = false; }
 	  updateTransport();
 	});
 	busEnabled?.addEventListener('change', updateTransport);
@@ -467,7 +487,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pricingLabel && overnight?.closest('label')) {
 	  pricingLabel.firstChild.textContent = 'Come sono determinate le quote?';
 	  const step = overnight.closest('.mi-wizard-step');
-	  step?.insertBefore(pricingLabel, overnight.closest('label'));
+	  step?.insertBefore(pricingLabel, form.querySelector('[data-mi-bus-services]') || overnight.closest('label'));
 	  const pricingHelp = form.querySelector('#mi-pricing-help');
 	  if (pricingHelp) pricingLabel.after(pricingHelp);
 	  if (fixedFee && pricingHelp) pricingHelp.after(fixedFee);
@@ -491,7 +511,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	  deposit.dataset.miDepositPercentage = '';
 	  deposit.parentNode.insertBefore(container, deposit);
 	  container.append(modeLabel, deposit, fixedLabel);
-	  modeLabel.querySelector('select').value = form.dataset.miDepositMode === 'FIXED' ? 'FIXED' : 'PERCENTAGE';
+	  modeLabel.querySelector('select').value = form.dataset.miDepositMode === 'PERCENTAGE' ? 'PERCENTAGE' : 'FIXED';
 	  fixedLabel.querySelector('input').value = form.dataset.miDepositFixed || '';
 	  deposit = container;
 	}
@@ -500,13 +520,24 @@ document.addEventListener('DOMContentLoaded', () => {
 	const depositFixed = form.querySelector('[data-mi-deposit-fixed]');
 	const updateDeposit = () => {
 	  const fixed = depositMode?.value === 'FIXED';
+	  const plan = pricing?.value !== 'ZERO' && economic?.value === 'DEPOSIT_BALANCE';
 	  if (depositPercentage) depositPercentage.hidden = fixed;
 	  if (depositFixed) depositFixed.hidden = !fixed;
 	  const percentageInput = depositPercentage?.querySelector('input');
 	  const fixedInput = depositFixed?.querySelector('input');
-	  if (percentageInput) percentageInput.disabled = fixed;
-	  if (fixedInput) { fixedInput.disabled = !fixed; fixedInput.required = fixed && economic?.value === 'DEPOSIT_BALANCE'; }
+	  if (percentageInput) percentageInput.disabled = !plan || fixed;
+	  if (fixedInput) {
+	    fixedInput.disabled = !plan || !fixed; fixedInput.required = plan && fixed;
+	    let value = fixedInput.value.trim().replace(/\s/g,'');
+	    if (/^\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/.test(value)) value=value.replace(/\./g,'').replace(',','.');
+	    else if (/^\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?$/.test(value)) value=value.replace(/,/g,'');
+	    else if (/^\d+(?:[.,]\d{1,2})?$/.test(value)) value=value.replace(',','.');
+	    else value='';
+	    const valid = value!=='' && Number(value)>=0.01 && Number(value)<=1000000;
+	    fixedInput.setCustomValidity(plan && fixed && !valid ? 'Indica un importo della caparra maggiore di zero.' : '');
+	  }
 	};
+	depositFixed?.querySelector('input')?.addEventListener('input', updateDeposit);
 	const economicLabel = economic?.closest('label');
     const updateEconomic = () => {
 	  const paidEvent = pricing?.value !== 'ZERO';
@@ -1223,7 +1254,6 @@ document.addEventListener('click', event => {
 // Configurazione strutturata: il wizard salva soltanto gli override scelti.
 if(window.miEmailAppearance){const form=document.querySelector('.mi-event-wizard'),before=form&&form.querySelector('.mi-confirmation-email');if(before){const data=window.miEmailAppearance,style=data.style||{},resolved=data.resolved||{},hasIdentity=['identity_name','identity_detail','contact_email','signature'].some(key=>style[key]),hasColors=['primary_color','secondary_color'].some(key=>style[key]);const esc=value=>String(value||'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));const panel=document.createElement('details');panel.className='mi-email-appearance';panel.innerHTML='<summary>Aspetto email</summary><input type="hidden" name="event_email_style_present" value="1"><p><strong>Usa lo stile ereditato</strong> · '+esc(data.groupName?'Gruppo: '+data.groupName:'Default parrocchia')+'</p><p class="mi-portal-muted">'+(data.eventImage?'Banner email: immagine dell’evento.':'Banner email: gruppo/default.')+' Attiva solo le proprietà da sovrascrivere.</p><label class="mi-check"><input type="checkbox" name="event_email_identity_enabled" value="1" '+(hasIdentity?'checked':'')+'> Personalizza identità e firma</label><div class="mi-wizard-grid"><label>Nome visualizzato<input name="event_email_identity_name" maxlength="120" value="'+esc(style.identity_name)+'"></label><label>Dettaglio<input name="event_email_identity_detail" maxlength="180" value="'+esc(style.identity_detail)+'"></label><label>Email di contatto<input type="email" name="event_email_contact" value="'+esc(style.contact_email)+'"></label><label>Firma<input name="event_email_signature" maxlength="240" value="'+esc(style.signature)+'"></label></div><label class="mi-check"><input type="checkbox" name="event_email_colors_enabled" value="1" '+(hasColors?'checked':'')+'> Personalizza colori</label><div class="mi-wizard-grid"><label>Colore principale<input type="color" name="event_email_primary_color" value="'+esc(style.primary_color||resolved.primary_color||'#151b38')+'"></label><label>Colore CTA<input type="color" name="event_email_secondary_color" value="'+esc(style.secondary_color||resolved.secondary_color||'#337ab7')+'"></label></div><label class="mi-check"><input type="checkbox" name="event_email_banner_enabled" value="1" '+(style.banner_url?'checked':'')+'> Sostituisci solo il banner</label><label>URL HTTPS del banner<input type="url" name="event_email_banner_url" value="'+esc(style.banner_url)+'" placeholder="https://…"></label>';before.before(panel);}}
 
-{const form=document.querySelector('.mi-event-wizard'),group=form&&form.querySelector('[name="activity_id"]'),panel=form&&form.querySelector('.mi-email-appearance');if(group&&panel){const source=panel.querySelector('p'),strong=source.querySelector('strong');const refresh=()=>{const option=group.options[group.selectedIndex],name=option&&option.value?option.textContent.trim():'';source.replaceChildren(strong,document.createTextNode(' · '+(name?'Gruppo: '+name:'Default parrocchia')));};group.addEventListener('change',refresh);refresh();}}
 (function () {
   function setupCommunicationFormatting() {
     document.querySelectorAll('.mi-portal-communications textarea[name="message"]').forEach(function (field) {
