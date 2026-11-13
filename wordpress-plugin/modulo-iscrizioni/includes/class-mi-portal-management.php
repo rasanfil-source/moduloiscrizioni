@@ -12,7 +12,7 @@ final class MI_Portal_Management {
 		$operation = sanitize_key( wp_unslash( $_POST['operation'] ?? '' ) );
 		if ( 'all_people' === $operation ) {
 			$period = 'past' === ( $_POST['period'] ?? '' ) ? 'past' : 'current'; $ids = array();
-			foreach ( get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'private', 'draft' ), 'numberposts' => -1 ) ) as $candidate ) {
+			foreach ( get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish', 'private' ), 'numberposts' => -1 ) ) as $candidate ) {
 				if ( ! MI_Access::can_access_event( (int) $candidate->ID ) ) continue;
 				$past = get_post_meta( $candidate->ID, '_mi_event_archived_at', true ) || MI_Portal::event_dates_past( $candidate->ID );
 				if ( $past === ( 'past' === $period ) ) $ids[] = (int) $candidate->ID;
@@ -120,7 +120,7 @@ final class MI_Portal_Management {
 		if ( ! $event_id && $order ) { global $wpdb; $event_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$wpdb->prefix}mi_registrations WHERE order_code=%s", $order ) ); }
 		if ( $event_id && ! MI_Access::can_access_event( $event_id ) ) { echo '<p>Evento non accessibile.</p>'; return; }
 		$scope = MI_Access::event_ids();
-		$query = array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish','private','draft' ), 'numberposts' => -1, 'orderby' => array( 'date' => 'DESC', 'ID' => 'DESC' ) );
+		$query = array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => array( 'publish','private' ), 'numberposts' => -1, 'orderby' => array( 'date' => 'DESC', 'ID' => 'DESC' ) );
 		if ( 'ALL' !== $scope ) $query['post__in'] = $scope ?: array( 0 );
 		$events = get_posts( $query );
 		$periods = array();
