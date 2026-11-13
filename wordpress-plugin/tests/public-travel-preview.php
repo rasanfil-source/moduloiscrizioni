@@ -18,7 +18,7 @@ class MI_Registration_Service{
  'event_starts_at'=>'2027-11-02T10:00','event_location'=>'Assisi','opens_at'=>'','closes_at'=>'2027-11-02T09:30',
  'availability'=>['remaining'=>30,'capacity'=>30,'full'=>false,'ticket_types'=>[]],'waitlist_enabled'=>true,
  'pricing_mode'=>'FIXED','fixed_price_cents'=>2000,'economic_mode'=>'FULL_PAYMENT','payment_methods'=>['CASH'],
- 'ticket_types'=>[['code'=>'standard','name'=>'Partecipazione','max_per_order'=>4,'price_cents'=>2000]],'options'=>[],
+ 'ticket_types'=>[['code'=>'standard','name'=>'Partecipazione','max_per_order'=>in_array('--single',$GLOBALS['argv']??[],true)?1:4,'price_cents'=>2000]],'options'=>[],
  'participant_fields'=>[],'participant_required_fields'=>[],'participant_extra_scope'=>'ALL','custom_participant_fields'=>[],
  'privacy_url'=>'','privacy_policy_version'=>'dimostrativa','marketing_enabled'=>false,
  'travel'=>['enabled'=>true,'price_mode'=>'DRIVER','price_cents'=>0,'instructions'=>'Partenza da Roma.','deadline'=>'2027-11-01T18:00']

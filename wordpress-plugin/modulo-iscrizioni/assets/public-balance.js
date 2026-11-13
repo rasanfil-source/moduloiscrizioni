@@ -497,6 +497,11 @@ async function lookupPersona(card, index) {
         if (latestLookupToken[index] !== token) return;
       }
     }
+    if (data.error === 'phone_required') {
+      data = await window.MIBalancePhone(data,cognome,nome,ctrl.signal);
+      if (latestLookupToken[index] !== token) return;
+      if (!data) { setCardStatus(card,'',''); return; }
+    }
     p.candidate = null;
     if (!data.success) {
       if (data.error === 'duplicate') {

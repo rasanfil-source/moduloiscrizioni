@@ -18,6 +18,7 @@ Usare sempre PowerShell 7 (`pwsh.exe`), mai `powershell.exe`. Eseguire i comandi
 - Per il momento mantenere entrambi i comportamenti. Non introdurre login, OTP, collegamenti personali obbligatori o vincoli al solo recapito registrato come correzione automatica degli audit. Una modifica di questa scelta richiede una successiva indicazione dell'utente.
 - La consultazione per cognome e l'invio al recapito scelto sono requisiti intenzionali accettati, non difetti da correggere d'ufficio. La decisione non impedisce le correzioni delle altre segnalazioni valide degli audit, successivamente autorizzate dall'utente.
 - Decisione e ambito: `docs/decisione-saldo-pubblico-2026-11-09.md`.
+- Successiva scelta esplicita: l'organizzatore può attivare per l'intero evento la verifica delle ultime quattro cifre del telefono prima di accedere al saldo. È facoltativa e inizialmente disattivata; mostra il numero tranne le quattro cifre finali. Dopo cinque errori impone una pausa di cinque minuti, senza contatori o annunci dei tentativi disponibili. Caricare il relativo codice solo nella pagina saldo degli eventi che la attivano. Non modifica la libertà del recapito email scelto. Riferimento: `docs/decisione-verifica-telefono-saldo-2026-11-13.md`.
 
 ## Collegamenti inviati — scelta dell'11 novembre 2026
 

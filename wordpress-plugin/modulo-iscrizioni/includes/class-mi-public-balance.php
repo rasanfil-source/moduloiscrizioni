@@ -5,6 +5,11 @@ require_once __DIR__ . '/class-mi-payment-people.php';
 
 /** Flusso pubblico per consultare e aggiornare le scelte dei partecipanti. */
 final class MI_Public_Balance {
+	private static function phone_enabled( $event ) {
+		if ( '1' !== get_post_meta( $event, '_mi_balance_phone_check', true ) ) return false;
+		require_once __DIR__ . '/class-mi-balance-phone.php';
+		return true;
+	}
 	private static function decode( $json ) { return (array) json_decode( (string) $json, true ); }
 	private static function check() { global $wpdb; if ( $wpdb->last_error ) throw new RuntimeException( 'Servizio momentaneamente non disponibile. Riprova.' ); }
 	public static function normalize( $text ) {
@@ -13,7 +18,14 @@ final class MI_Public_Balance {
 		$text = str_replace( array( '-', '–', '—', "\xc2\xa0" ), ' ', $text );
 		return trim( preg_replace( '/\s+/u', ' ', $text ) );
 	}
-	private static function token( $event, $id ) { return hash_hmac( 'sha256', 'balance-person|' . $event . '|' . $id, wp_salt( 'auth' ) ); }
+	private static function token( $event, $id ) {
+		if ( self::phone_enabled( $event ) ) return MI_Balance_Phone::grant( $event, $id, MI_Balance_Phone::phone( self::bundle( $event, $id ), $id ) );
+		return hash_hmac( 'sha256', 'balance-person|' . $event . '|' . $id, wp_salt( 'auth' ) );
+	}
+	private static function token_valid( $event, $id, $token ) {
+		if ( self::phone_enabled( $event ) ) return MI_Balance_Phone::allowed( $event, $id, MI_Balance_Phone::phone( self::bundle( $event, $id ), $id ), $token );
+		return hash_equals( self::token( $event, $id ), (string) $token );
+	}
 	private static function event( $event ) {
 		if ( ! $event || 'publish' !== get_post_status( $event ) || MI_Event_Post_Type::EVENT_TYPE !== get_post_type( $event ) || get_post_meta( $event, '_mi_event_cancelled_at', true ) ) throw new InvalidArgumentException( 'Evento non disponibile.' );
 		$pricing_mode = strtoupper( (string) get_post_meta( $event, '_mi_pricing_mode', true ) );
@@ -57,7 +69,7 @@ final class MI_Public_Balance {
 			set_transient( $key, $count + 1, 5 * MINUTE_IN_SECONDS );
 			$action = $data['action'] ?? '';
 			if ( '__ping__' === $action ) $result = array( 'success' => true );
-			elseif ( in_array( $action, array( 'lookupByCognome', 'lookupPersona' ), true ) ) $result = self::lookup( $event, $data );
+			elseif ( in_array( $action, array( 'lookupByCognome', 'lookupPersona', 'verifyPhone' ), true ) ) $result = self::lookup( $event, $data );
 			elseif ( in_array( $action, array( 'preview', 'salvaTransfer' ), true ) ) $result = self::save( $event, $data, 'preview' === $action );
 			else throw new InvalidArgumentException( 'Operazione non disponibile.' );
 			wp_send_json( $result );
@@ -71,13 +83,19 @@ final class MI_Public_Balance {
 		if ( ! $surname ) throw new InvalidArgumentException( 'Inserisci il cognome.' );
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT p.id,p.first_name,p.last_name,p.room_code FROM {$wpdb->prefix}mi_participants p JOIN {$wpdb->prefix}mi_registrations r ON r.id=p.registration_id WHERE r.event_id=%d AND p.status='ACTIVE' AND r.status IN ('CONFIRMED','PENDING_PAYMENT') ORDER BY p.last_name,p.first_name,p.id", $event ), ARRAY_A ); self::check();
 		$matches = array_values( array_filter( $rows, static function ( $row ) use ( $surname ) { return self::normalize( $row['last_name'] ) === $surname; } ) );
-		if ( 'lookupPersona' === ( $data['action'] ?? '' ) ) $matches = array_values( array_filter( $matches, static function ( $row ) use ( $name, $data ) { return self::normalize( $row['first_name'] ) === $name && ( empty( $data['candidate'] ) || (int) $row['id'] === (int) $data['candidate'] ); } ) );
+		if ( in_array( $data['action'] ?? '', array( 'lookupPersona', 'verifyPhone' ), true ) ) $matches = array_values( array_filter( $matches, static function ( $row ) use ( $name, $data ) { return self::normalize( $row['first_name'] ) === $name && ( empty( $data['candidate'] ) || (int) $row['id'] === (int) $data['candidate'] ); } ) );
 		if ( ! $matches ) return array( 'success' => false, 'error' => 'not_found' );
-		if ( count( $matches ) > 1 ) return array( 'success' => false, 'error' => 'duplicate', 'candidates' => array_map( static function ( $row ) { return array( 'nome' => $row['first_name'], 'cognome' => $row['last_name'], 'row' => (int) $row['id'], 'room' => $row['room_code'] ); }, $matches ) );
+		if ( count( $matches ) > 1 ) return array( 'success' => false, 'error' => 'duplicate', 'candidates' => array_map( static function ( $row ) use ( $event ) { return array( 'nome' => $row['first_name'], 'cognome' => $row['last_name'], 'row' => (int) $row['id'], 'room' => self::phone_enabled( $event ) ? '' : $row['room_code'] ); }, $matches ) );
+		if ( self::phone_enabled( $event ) ) {
+			$id = (int) $matches[0]['id']; $phone = MI_Balance_Phone::phone( self::bundle( $event, $id ), $id );
+			if ( 'verifyPhone' !== ( $data['action'] ?? '' ) ) return array_merge( MI_Balance_Phone::challenge( $event, $id, $phone ), array( 'nome' => $matches[0]['first_name'] ) );
+			$verification = MI_Balance_Phone::verify( $event, $id, $phone, $data );
+			if ( ! $verification['success'] ) return $verification;
+		}
 		$result = self::person( $event, (int) $matches[0]['id'] );
 		// Solo una camera matrimoniale dichiarata condivisa comporta una scelta comune.
 		$result['partner'] = null;
-		if ( preg_match( '/^DM[1-9][0-9]*$/', (string) $matches[0]['room_code'] ) ) foreach ( $rows as $row ) {
+		if ( ! self::phone_enabled( $event ) && preg_match( '/^DM[1-9][0-9]*$/', (string) $matches[0]['room_code'] ) ) foreach ( $rows as $row ) {
 			if ( $row['id'] !== $matches[0]['id'] && $row['room_code'] === $matches[0]['room_code'] ) { $result['partner'] = self::person( $event, (int) $row['id'] ); break; }
 		}
 		return $result;
@@ -212,7 +230,7 @@ final class MI_Public_Balance {
 		$key = hash( 'sha256', 'public-balance|' . $event . '|' . $request );
 		$seen = array(); foreach ( $people as $p ) {
 			$id = absint( $p['row'] ?? 0 );
-			if ( ! $id || isset( $seen[$id] ) || ! hash_equals( self::token( $event, $id ), (string) ( $p['token'] ?? '' ) ) ) throw new InvalidArgumentException( 'Persona duplicata o riferimento non valido. Ricarica la prenotazione.' );
+			if ( ! $id || isset( $seen[$id] ) || ! self::token_valid( $event, $id, $p['token'] ?? '' ) ) throw new InvalidArgumentException( 'Persona duplicata o riferimento non valido. Ricarica la prenotazione.' );
 			$seen[$id] = true;
 		}
 		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( $event ); if ( is_wp_error( $lease ) ) throw new RuntimeException( $lease->get_error_message() ); }
@@ -226,6 +244,7 @@ final class MI_Public_Balance {
 			$bundles = array(); $changes = array(); $deltas = array(); $person_deltas = array(); $receipt = array( 'success' => true, 'people' => array(), 'total' => 0, 'paid' => 0, 'email' => $email, 'deposit' => 0, 'depositPaid' => 0, 'depositDue' => 0, 'saldoDue' => 0, 'balance' => 0 );
 			foreach ( $people as $person ) {
 				$id = (int) $person['row']; $b = self::bundle( $event, $id, true ); $r = $b['registration']; $rid = (int) $r['id'];
+				if ( self::phone_enabled( $event ) && ! MI_Balance_Phone::allowed( $event, $id, MI_Balance_Phone::phone( $b, $id ), $person['token'] ?? '' ) ) throw new InvalidArgumentException( 'Verifica nuovamente il telefono prima di proseguire.' );
 				if ( ! hash_equals( $b['version'], (string) ( $person['version'] ?? '' ) ) ) throw new InvalidArgumentException( 'Iscrizione o pagamenti aggiornati dalla segreteria. Premi Cambia e carica nuovamente le persone.' );
 				$bundles[$rid] = $b; $view = self::person( $event, $id, $b )['persona'];
 				$input = $person['services'] ?? array(); if ( ! is_array( $input ) ) throw new InvalidArgumentException( 'Servizi non validi.' );
@@ -330,6 +349,7 @@ final class MI_Public_Balance {
 		header( 'Content-Type: text/html; charset=UTF-8' );
 		echo '<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><title>Servizi e saldo — ' . esc_html( get_the_title( $event ) ) . '</title><link rel="stylesheet" href="' . esc_url( MI_Assets::filter_url( $asset . 'public-balance.css?ver=' . MI_VERSION ) ) . '"></head><body>';
 		include MI_PLUGIN_DIR . 'templates/public-balance.php';
+		if ( self::phone_enabled( $event ) ) echo '<link rel="stylesheet" href="' . esc_url( MI_Assets::filter_url( $asset . 'balance-phone.css?ver=' . MI_VERSION ) ) . '"><script src="' . esc_url( MI_Assets::filter_url( $asset . 'balance-phone.js?ver=' . MI_VERSION ) ) . '"></script>';
 		echo '<script>window.MIBalance=' . wp_json_encode( $config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT ) . ';</script><script src="' . esc_url( MI_Assets::filter_url( $asset . 'public-balance.js?ver=' . MI_VERSION ) ) . '"></script></body></html>';
 	}
 }
