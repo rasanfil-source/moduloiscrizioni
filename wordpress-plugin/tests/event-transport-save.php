@@ -17,7 +17,7 @@ function current_user_can($cap){return true;}
 function is_user_logged_in(){return true;}
 function check_admin_referer(...$args){}
 function wp_die($message,...$args){throw new RuntimeException($message);}
-function get_post($id){return (object)['ID'=>$id,'post_type'=>'mi_event','post_status'=>'draft','post_title'=>'Prova'];}
+function get_post($id){return (object)['ID'=>$id,'post_type'=>'mi_event','post_status'=>$GLOBALS['transport_post_status']??'draft','post_title'=>'Prova'];}
 function get_post_type($id){return 'mi_activity';}
 function get_post_meta($id,$key,$single=true){return $GLOBALS['transport_meta'][$key]??'';}
 function update_post_meta($id,$key,$value){$GLOBALS['transport_meta'][$key]=$value;if($key==='_mi_options')throw new TransportSaved();}

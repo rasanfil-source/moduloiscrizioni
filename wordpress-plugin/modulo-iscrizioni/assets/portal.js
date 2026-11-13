@@ -240,9 +240,9 @@ document.addEventListener('DOMContentLoaded', () => {
 		const bookingLimit = multipleBooking ? value('max_per_order') : '1';
         const review = form.querySelector('[data-mi-review]');
 		if (review) {
-		  const transports = [form.querySelector('[data-mi-bus-enabled]')?.checked ? 'Pullman' : '', form.querySelector('[name="travel_enabled"]')?.checked ? 'Passaggi condivisi in auto' : ''].filter(Boolean);
+		  const transports = [form.querySelector('[name="travel_enabled"]')?.checked ? 'Passaggi condivisi in auto' : ''].filter(Boolean);
 		  const category = form.querySelector('[data-mi-event-group-link]');
-		  const lines = [value('title'), `Inizio: ${value('starts_at')}`, `Chiusura iscrizioni: ${effectiveClosingText()}`, `Posti all’evento: ${value('capacity')}`, `Massimo per prenotazione: ${bookingLimit}`, `Spostamenti: ${transports.join(' e ') || 'Organizzazione autonoma'}`, `Lista d’attesa per partecipare all’evento: ${form.querySelector('[data-mi-waitlist]')?.checked ? 'attiva' : 'non attiva'}`];
+		  const lines = [value('title'), `Inizio: ${value('starts_at')}`, `Chiusura iscrizioni: ${effectiveClosingText()}`, `Posti all’evento: ${value('capacity')}`, `Massimo per prenotazione: ${bookingLimit}`, `Come ci si organizza per arrivare: ${transports.join(' e ') || 'Ognuno si organizza per conto proprio'}`, `Lista d’attesa per partecipare all’evento: ${form.querySelector('[data-mi-waitlist]')?.checked ? 'attiva' : 'non attiva'}`];
 		  const pricingChoice = form.querySelector('[data-mi-pricing]');
 		  if (pricingChoice) lines.push(`Quote: ${pricingChoice.selectedOptions[0].textContent.trim()}`);
 		  if (form.querySelector('[data-mi-bus-enabled]')?.checked) lines.push(pricingChoice?.value === 'CALCULATED' ? 'Pullman: si applicano i supplementi delle tratte scelte.' : pricingChoice?.value === 'FIXED' ? 'Pullman compreso nella quota uguale per tutti, senza supplementi.' : 'Il modulo non calcola quote per il pullman.');
@@ -422,13 +422,13 @@ document.addEventListener('DOMContentLoaded', () => {
 	    if (deadline) deadline.required = enabled;
 	  }
 	  form.querySelectorAll('[data-mi-travel-waitlist-notice]').forEach(note => { note.hidden = !enabled; });
-	  if (transportNone && (busEnabled?.checked || enabled)) transportNone.checked = false;
-	  if (transportNone) transportNone.required = !busEnabled?.checked && !enabled;
+	  if (transportNone && enabled) transportNone.checked = false;
+	  if (transportNone) transportNone.required = !enabled;
 	  if (busEnabled?.checked && !busRoutesList?.children.length) addBusRoute();
 	  updateBusRoutes();
 	};
 	transportNone?.addEventListener('change', () => {
-	  if (transportNone.checked) { if (busEnabled) busEnabled.checked = false; if (travelEnabled) travelEnabled.checked = false; }
+	  if (transportNone.checked) { if (travelEnabled) travelEnabled.checked = false; }
 	  updateTransport();
 	});
 	busEnabled?.addEventListener('change', updateTransport);

@@ -15,7 +15,7 @@ const server=http.createServer((req,res)=>{
  assert.equal(await page.locator('[name=title]').inputValue(),'Nuovo ciclo');assert.equal(await page.locator('[name=capacity]').inputValue(),'77');assert.equal(await page.locator('[name=max_per_order]').inputValue(),'8');
  assert.equal(await page.locator('[name="custom_question_label[]"]').first().inputValue(),'Allergie');assert.equal(await page.locator('[name=closes_at]').inputValue(),'');
  for(let i=0;i<3;i++)await page.locator('[data-mi-next]').click();
- assert.match(await page.locator('.mi-wizard-step.is-active h2').innerText(),/Spostamenti/);
+ assert.match(await page.locator('.mi-wizard-step.is-active h2').innerText(),/Come ci si organizza per arrivare/);
  assert.equal(await page.locator('[name=travel_deadline]').isDisabled(),true);
  await page.locator('[data-mi-transport-none]').check();await page.locator('[data-mi-next]').click();
  await page.locator('[name=booking_limit_mode][value=ONE]').check();
@@ -35,12 +35,10 @@ const server=http.createServer((req,res)=>{
   assert.equal(await field('group_link').inputValue(),'');assert.equal(await field('group_link').evaluate(el=>el.required),false);
   for(let n=0;n<3;n++)await next();
   assert.equal(await demo.locator('[data-mi-transport-none]').isChecked(),false);
-  await demo.locator('[data-mi-bus-enabled]').check();assert.equal(await demo.locator('.mi-bus-route').count(),1);
-  await field('bus_route_code[]').fill('Roma — Assisi');await field('bus_route_price[]').fill('15,00');
+  assert.equal(await demo.locator('[data-mi-bus-enabled]').isVisible(),false);
   await field('travel_enabled').check();assert.equal(await demo.locator('[data-mi-transport-none]').isChecked(),false);
-  assert.equal(await demo.locator('[data-mi-bus-enabled]').isChecked(),true);
   await field('travel_price_mode').selectOption('DRIVER');assert.equal(await field('travel_price').isDisabled(),true);
-  await next();assert.match(await demo.locator('.mi-wizard-step.is-active h2').innerText(),/Spostamenti/,'Missing travel deadline should block');
+  await next();assert.match(await demo.locator('.mi-wizard-step.is-active h2').innerText(),/Come ci si organizza per arrivare/,'Missing travel deadline should block');
   await field('travel_deadline').fill('011120271000');
   assert.equal(await field('travel_deadline').inputValue(),'01/11/2027 10:00');
   await demo.screenshot({path:`output/revisione-evento-3.26.281/spostamenti-${width}${process.env.MI_TEST_MIN?'-min':''}.png`,fullPage:true});
@@ -52,6 +50,8 @@ const server=http.createServer((req,res)=>{
   await demo.screenshot({path:`output/revisione-evento-3.26.281/date-posti-${width}${process.env.MI_TEST_MIN?'-min':''}.png`,fullPage:true});
   for(let n=0;n<3;n++)await next();
   assert.match(await demo.locator('.mi-wizard-step.is-active h2').innerText(),/Servizi e quote/);
+  await demo.locator('[data-mi-bus-enabled]').check();assert.equal(await demo.locator('.mi-bus-route').count(),1);
+  await field('bus_route_code[]').fill('Roma — Assisi');await field('bus_route_price[]').fill('15,00');
   await demo.locator('[data-mi-pricing]').selectOption('CALCULATED');
   await demo.locator('[data-mi-accessory-enabled]').check();
   assert.equal(await demo.locator('[data-mi-accessory-details]').isVisible(),true);
@@ -66,13 +66,13 @@ const server=http.createServer((req,res)=>{
   await next();await demo.locator('[name=event_link_mode][value=PERMANENT]').check();assert.equal(await field('group_link').isVisible(),true);assert.equal(await field('group_link').inputValue(),'');
   assert.match(await demo.locator('[data-mi-review]').innerText(),/02\/11\/2027 11:30 \(automatica\)/);
   await field('group_link').selectOption('gite');assert.match(await demo.locator('[data-mi-event-group-link-address]').innerText(),/\/gite$/);
-  assert.equal(await demo.locator('[data-mi-review] img').count(),0);assert.match(await demo.locator('[data-mi-review]').innerText(),/Pullman e Passaggi condivisi/);
+  assert.equal(await demo.locator('[data-mi-review] img').count(),0);assert.match(await demo.locator('[data-mi-review]').innerText(),/Passaggi condivisi/);
   assert.equal(await demo.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Wizard overflows viewport');
   await demo.screenshot({path:`output/revisione-evento-3.26.281/controllo-${width}${process.env.MI_TEST_MIN?'-min':''}.png`,fullPage:true});
   // Le quote non devono cancellare le scelte di trasporto. Torna da 9 a 4.
   for(let n=0;n<5;n++)await demo.locator('[data-mi-back]').click();
   assert.equal(await field('bus_route_code[]').inputValue(),'Roma — Assisi');assert.equal(await field('bus_route_price[]').inputValue(),'15,00');
-  await demo.locator('[data-mi-transport-none]').check();assert.equal(await field('travel_deadline').isDisabled(),true);
+  await demo.locator('[data-mi-transport-none]').check();assert.equal(await field('travel_deadline').isDisabled(),true);assert.equal(await demo.locator('[data-mi-bus-enabled]').isChecked(),true,'Autonomous arrival must not disable the organized bus');
   await next();assert.equal(await demo.locator('[data-mi-travel-waitlist-notice]').isHidden(),true);assert.equal(await field('waitlist_enabled').isChecked(),true);
   await demo.locator('[data-mi-back]').click();await field('travel_enabled').check();assert.equal(await field('travel_deadline').inputValue(),'01/11/2027 10:00');
   for(let n=0;n<3;n++)await demo.locator('[data-mi-back]').click();
