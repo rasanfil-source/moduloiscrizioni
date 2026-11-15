@@ -91,7 +91,11 @@ $model = MI_Management_Service::summary(42);
 $future = array_column($model['people'], 'future_events', 'id');
 if ($future[1] !== 'Sì' || $future[2] !== 'No' || $future[3] !== 'Non richiesto') throw new RuntimeException('Preferenze future assenti nel riepilogo.');
 check_page(!is_wp_error($model), 'Fixture summary failed');
+foreach ($model['people'] as $person) check_page($person['first_name'] === 'Persona' && $person['last_name'] === $wpdb->people[$person['id']-1]['last_name'], 'Separate participant names lost in summary');
 $token = MI_Event_Read_Cache::state(42)['token'];
+$GLOBALS['transients']['mi_read_226_42'] = ['value'=>['token'=>$token,'data'=>base64_encode(gzcompress('{"people":[]}'))], 'expires'=>$GLOBALS['cache_clock']+300];
+unset($GLOBALS['transients']['mi_read_267_42']);
+check_page(MI_Event_Read_Cache::get(42, $token) === null, 'Pre-compact cache must not return rows without separate names');
 // Confronti testuali, direzioni e viste coincidono tra pagine e blocchi SQL o cache.
 foreach (['people','orders'] as $view) foreach (['created_at','name','buyer','code','room'] as $sort) foreach (['asc','desc'] as $direction) {
     $context = ['view'=>$view, 'sort'=>$sort, 'direction'=>$direction, 'includeClosed'=>true];

@@ -4,7 +4,7 @@ Plugin WordPress per creare e pubblicare moduli di iscrizione e gestire le attiv
 
 ## Funzioni
 
-La versione 3.27.66 completa le correzioni dell'audit su coda email, compatibilità dei moduli e link revocabili dei passaggi. I dettagli operativi e la procedura di ripristino sono nelle note del rilascio.
+La versione 3.27.67 aggiunge Elenco compatto ai rapporti partecipanti: stampa ed Excel su cinque colonne, con cognomi e nomi solo in caso di cognome duplicato, titolo evento e celle alternate bianche e grigio chiaro.
 
 - Gruppi ed eventi con identità visiva, date, capienza e condizioni di iscrizione.
 - Moduli configurabili con tipologie, servizi e domande per partecipante.
