@@ -4,11 +4,14 @@ defined( 'ABSPATH' ) || exit;
 /** Richieste durevoli, preparazione limitata e risveglio indipendente dalle visite. */
 final class MI_Email_Jobs {
 	private const PROGRESS_RETENTION_SECONDS = 1800;
+	private const JOB_RETENTION_SECONDS = 604800;
 	public static function boot() {
 		add_action( 'wp_ajax_mi_email_worker', array( __CLASS__, 'worker' ) );
 		add_action( 'wp_ajax_nopriv_mi_email_worker', array( __CLASS__, 'worker' ) );
 		add_action( 'wp_ajax_mi_email_progress', array( __CLASS__, 'progress' ) );
 		add_action( 'mi_prepara_comunicazioni', array( 'MI_Spedizione_Email', 'spedisci_coda' ) );
+		add_action( 'mi_pulisci_bozze_cestinate', array( __CLASS__, 'cleanup' ), 30 );
+		add_action( 'mi_pulisci_email_jobs', array( __CLASS__, 'cleanup' ) );
 	}
 	public static function mode_ready( $mode ) {
 		return 'ANTEPRIMA' === $mode || ( 'OPERATIVO' === $mode ? 'PENDING' : 'TEST_PENDING' ) === MI_Spedizione_Email::stato_nuova_email( array( 'attivo' => true ) );
@@ -107,14 +110,9 @@ final class MI_Email_Jobs {
 		if ( ! preg_match( '/^[a-f0-9]{64}$/D', (string) $id ) ) return false;
 		$job = get_option( 'mi_email_job_' . $id );
 		if ( ! is_array( $job ) || ! MI_Access::can_access_event( $job['event_id'] ) || ( $job['owner'] !== get_current_user_id() && ! current_user_can( 'manage_options' ) ) ) return false;
-		global $wpdb;
-		$counts = array(); $errors = array();
-		if ( $job['origin_keys'] ) {
-			$placeholders = implode( ',', array_fill( 0, count( $job['origin_keys'] ), '%s' ) );
-			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT status,COUNT(*) AS total,MAX(last_error) AS last_error FROM {$wpdb->prefix}mi_email_outbox WHERE origin_key IN ({$placeholders}) GROUP BY status", $job['origin_keys'] ), ARRAY_A );
-			if ( $wpdb->last_error ) return false;
-			foreach ( $rows as $row ) { $counts[$row['status']] = (int) $row['total']; if ( $row['last_error'] ) $errors[] = sanitize_text_field( $row['last_error'] ); }
-		}
+		$delivery = self::delivery_state( $job );
+		if ( false === $delivery ) return false;
+		list( $counts, $errors ) = $delivery;
 		$sent = ( $counts['SENT'] ?? 0 ) + ( $counts['TEST_SENT'] ?? 0 ); $failed = ( $counts['FAILED'] ?? 0 ) + ( $counts['TEST_FAILED'] ?? 0 );
 		$pending = ( $counts['PENDING'] ?? 0 ) + ( $counts['TEST_PENDING'] ?? 0 ) + ( $counts['SENDING'] ?? 0 ) + ( $counts['TEST_SENDING'] ?? 0 );
 		$paused = empty( $job['test_only'] ) && 'ANTEPRIMA' !== $job['mode'] && ( $job['mode'] !== MI_Spedizione_Email::modalita() || ! self::mode_ready( $job['mode'] ) );
@@ -131,6 +129,60 @@ final class MI_Email_Jobs {
 			$completed_at = 0;
 		}
 		return array( 'dismiss_after' => $done ? max( 0, $completed_at + self::PROGRESS_RETENTION_SECONDS - time() ) : null, 'total' => $job['total'], 'prepared' => $job['offset'], 'queued' => count( $job['origin_keys'] ), 'excluded' => (int) ( $job['excluded'] ?? 0 ), 'test_sent' => (int) ( $counts['TEST_SENT'] ?? 0 ), 'sent' => $sent, 'failed' => $failed, 'pending' => $pending, 'preview' => $counts['PREVIEW'] ?? 0, 'done' => $done, 'paused' => $paused, 'quota_remaining' => null === get_option( 'mi_email_quota_remaining', null ) ? null : (int) get_option( 'mi_email_quota_remaining' ), 'retry_after' => max( 0, (int) get_option( 'mi_email_retry_after', 0 ) - time() ), 'error' => $job['error'] ?: implode( ' ', array_unique( $errors ) ) );
+	}
+	private static function delivery_state( array $job ) {
+		global $wpdb;
+		$counts = array(); $errors = array();
+		if ( $job['origin_keys'] ) {
+			$placeholders = implode( ',', array_fill( 0, count( $job['origin_keys'] ), '%s' ) );
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT status,COUNT(*) AS total,MAX(last_error) AS last_error FROM {$wpdb->prefix}mi_email_outbox WHERE origin_key IN ({$placeholders}) GROUP BY status", $job['origin_keys'] ), ARRAY_A );
+			if ( $wpdb->last_error || ! is_array( $rows ) ) return false;
+			foreach ( $rows as $row ) { $counts[$row['status']] = (int) $row['total']; if ( $row['last_error'] ) $errors[] = sanitize_text_field( $row['last_error'] ); }
+		}
+		return array( $counts, $errors );
+	}
+	/** Elimina solo riepiloghi conclusi; la coda e le ricevute WordPress restano intatte. */
+	public static function cleanup() {
+		global $wpdb;
+		$lock = 'mi_mail_worker_' . md5( $wpdb->prefix );
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $lock ) ) ) return;
+		try {
+			$cursor = absint( get_option( 'mi_email_cleanup_cursor', 0 ) );
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT option_id,option_name FROM {$wpdb->options} WHERE option_name LIKE %s AND option_id>%d ORDER BY option_id LIMIT 100", $wpdb->esc_like( 'mi_email_job_' ) . '%', $cursor ), ARRAY_A );
+			if ( $wpdb->last_error || ! is_array( $rows ) ) return;
+			foreach ( $rows as $row ) {
+				$cursor = (int) $row['option_id'];
+				if ( preg_match( '/^mi_email_job_completed_([a-f0-9]{64})$/D', $row['option_name'], $orphan ) ) {
+					$stamp = (int) get_option( $row['option_name'], 0 );
+					if ( $stamp > 0 && $stamp <= time() - self::JOB_RETENTION_SECONDS && ! get_option( 'mi_email_job_' . $orphan[1] ) ) delete_option( $row['option_name'] );
+					continue;
+				}
+				if ( ! preg_match( '/^mi_email_job_([a-f0-9]{64})$/D', $row['option_name'], $match ) ) continue;
+				$id = $match[1]; $job = get_option( $row['option_name'] );
+				if ( ! is_array( $job ) || ! in_array( $job['state'] ?? '', array( 'prepared', 'failed' ), true ) ) continue;
+				$delivery = self::delivery_state( $job );
+				if ( false === $delivery ) continue;
+				$counts = $delivery[0];
+				$completion = 'mi_email_job_completed_' . $id;
+				// Stati sconosciuti, righe mancanti e invii riaperti non provano una conclusione.
+				if ( array_diff( array_keys( $counts ), array( 'SENT', 'TEST_SENT', 'FAILED', 'TEST_FAILED', 'PREVIEW', 'SUPERSEDED' ) ) || array_sum( $counts ) < count( $job['origin_keys'] ) ) {
+					delete_option( $completion );
+					continue;
+				}
+				$completed_at = (int) get_option( $completion, 0 );
+				if ( ! $completed_at ) { add_option( $completion, time(), '', false ); continue; }
+				if ( $completed_at > time() - self::JOB_RETENTION_SECONDS ) continue;
+				delete_option( $row['option_name'] );
+				delete_option( $completion );
+				self::remove_pending( $id );
+				foreach ( array( 'mi_email_last_job_', 'mi_email_last_test_job_' ) as $prefix ) {
+					$key = $prefix . absint( $job['owner'] );
+					if ( get_option( $key ) === $id ) delete_option( $key );
+				}
+			}
+			update_option( 'mi_email_cleanup_cursor', count( $rows ) === 100 ? $cursor : 0, false );
+			if ( count( $rows ) === 100 && ! wp_next_scheduled( 'mi_pulisci_email_jobs' ) ) wp_schedule_single_event( time() + 30, 'mi_pulisci_email_jobs' );
+		} finally { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); }
 	}
 	public static function progress() {
 		if ( ! is_user_logged_in() || MI_Access::is_suspended() || ( ! current_user_can( 'mi_manage_communications' ) && ! current_user_can( 'manage_options' ) ) ) wp_send_json_error( array( 'message' => 'Accesso non consentito.' ), 403 );

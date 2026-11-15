@@ -30,7 +30,7 @@
     refresh();
     panels().forEach((panel) => {
       const groupChoice = panel.querySelector('select[name="mi_pwa_group"]');
-      if (groupChoice) groupChoice.addEventListener('change', () => groupChoice.form.requestSubmit());
+      if (groupChoice) groupChoice.addEventListener('change', () => window.MIFormSubmit(groupChoice.form));
       const button = panel.querySelector('[data-mi-pwa-prompt]');
       const status = panel.querySelector('[data-mi-pwa-status]');
       if (!button) return;

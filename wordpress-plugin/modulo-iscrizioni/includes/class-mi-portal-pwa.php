@@ -129,6 +129,7 @@ final class MI_Portal_PWA {
 		echo '<link rel="manifest" href="' . esc_url( add_query_arg( array( 'mi_pwa' => 'manifest', 'group' => $group_id, 'ver' => MI_VERSION ), home_url( '/' ) ) ) . '" data-mi-pwa-group="' . esc_attr( $group_id ) . '">';
 		echo '<meta name="theme-color" content="#1B2B52"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="' . esc_attr( $manifest['short_name'] ) . '">';
 		// Anche la pagina autonoma, che non esegue wp_head/wp_footer, usa questo punto d'ingresso.
+		echo '<script defer src="' . esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/form-submit.js?ver=' . rawurlencode( MI_VERSION ) ) ) . '"></script>';
 		echo '<script defer src="' . esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-pwa.js?ver=' . rawurlencode( MI_VERSION ) ) ) . '"></script>';
 	}
 

@@ -29,6 +29,11 @@
     "source": "d4728436a03c365b5c568001c61485945535736b8c33609eeed93684f654669f",
     "hash": "db836880f5026fe242dcae0bfb75c672cae73b84801d66d599992837ade59ee9"
   },
+  "form-submit.js": {
+    "file": "min/form-submit.js",
+    "source": "3f10ee61755a7df9d13dd5e4f9338670d6412e1306a073e5e73a36a69bf1be6f",
+    "hash": "429c207cd8c097019cc8212859eb49e0edc9cdc56e3f5833fa420d21ab49e887"
+  },
   "portal-communications.js": {
     "file": "min/portal-communications.js",
     "source": "ed5d3c4e47eed1a57714d9b3fb56cec6b3f2675577a0dce5087374f35485cadc",
@@ -41,8 +46,8 @@
   },
   "portal-management.js": {
     "file": "min/portal-management.js",
-    "source": "dae0c8b8396a83948b2ce12e15330c5fb25ca5828ffbf018add8bba9ac6068d4",
-    "hash": "73627c41391f1ef60d3c0cd0fe90707484701088e902643c04881b42ae91b80a"
+    "source": "abf3fc8af62aa2ad86d5bcaac73f42fc777b6f2498a3325d464ef89e6053a542",
+    "hash": "6710c38fbd79fe8bccaa208828b3ae3430fa68dc90c3f21b2e34023b7c9941f8"
   },
   "portal-payments.css": {
     "file": "min/portal-payments.css",
@@ -66,8 +71,8 @@
   },
   "portal-pwa.js": {
     "file": "min/portal-pwa.js",
-    "source": "7cbbb3613ef72a449616b0cf214dbdaf5dba7b9a029f9d4ca2fa062d5e3d2993",
-    "hash": "816109ce2659b37badfeb173c921966114de86e6c0506a25d961408ec392cb88"
+    "source": "c24fb8f651f8739560ebbff1473c8e7c4cd5da29fb4d08399a0e4125fabdfbda",
+    "hash": "ef0693b8e394a1343d29f3f17d6bd05a631b4907b0c0bafa84b954fe2e05b53c"
   },
   "portal.css": {
     "file": "min/portal.css",
@@ -76,8 +81,8 @@
   },
   "portal.js": {
     "file": "min/portal.js",
-    "source": "4f251b7a611d31f8935d7a1f374d1cbfe5d450e1f06b59488d989f1544f26f8c",
-    "hash": "9e48d937f49ce566b91e452eeaabf0c83c390c07ccdf03b8fb237d8e56b85402"
+    "source": "e9b0d32e564020e4c0d45dc80c1f27decd3f7bfd0bebe48bcbd99d68b343659c",
+    "hash": "c81b9624d3953100c51ce662743b1a2fcc9bfa7cd254be8e1d4cfef38fa0f0d0"
   },
   "public-balance.css": {
     "file": "min/public-balance.css",

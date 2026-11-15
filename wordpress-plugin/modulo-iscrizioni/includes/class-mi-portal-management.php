@@ -80,6 +80,16 @@ final class MI_Portal_Management {
 				$result = MI_Management_Service::options_preview( (int) $row['id'], json_decode( wp_unslash( $_POST['data'] ?? '{}' ), true ), sanitize_text_field( wp_unslash( $_POST['version'] ?? '' ) ) );
 			} elseif ( 'detail' === $operation ) {
 				$result = MI_Management_Service::detail( (int) $row['id'] );
+				if ( ! is_wp_error( $result ) && class_exists( 'MI_Travel' ) && MI_Travel::config( $event_id )['enabled'] ) {
+					$result['travel_participant_ids'] = array_map( 'intval', $wpdb->get_col( $wpdb->prepare( "SELECT participant_id FROM {$wpdb->prefix}mi_travel WHERE registration_id=%d", $row['id'] ) ) );
+					if ( $wpdb->last_error ) wp_send_json_error( array( 'message' => 'Viaggi non disponibili. Riprova.' ), 503 );
+				}
+			} elseif ( 'travel_link_replace' === $operation ) {
+				$participant_id = absint( $_POST['participant_id'] ?? 0 );
+				$belongs = $wpdb->get_var( $wpdb->prepare( "SELECT participant_id FROM {$wpdb->prefix}mi_travel WHERE participant_id=%d AND registration_id=%d AND event_id=%d", $participant_id, $row['id'], $event_id ) );
+				if ( $wpdb->last_error || ! $belongs ) wp_send_json_error( array( 'message' => 'Partecipante non accessibile.' ), 403 );
+				$result = MI_Travel::replace_link( $participant_id );
+				if ( ! is_wp_error( $result ) ) $result = array( 'ok' => true, 'message' => 'Collegamento precedente revocato. Il nuovo invio al referente è stato accodato.' );
 			} elseif ( 'cancel_registration' === $operation ) {
 				$result = MI_Registration_Service::cancel_registration( (int) $row['id'], 'WP#' . get_current_user_id() . ' · ' . wp_get_current_user()->display_name );
 				if ( ! is_wp_error( $result ) ) $result = array( 'ok' => true, 'saved' => true, 'message' => 'Prenotazione annullata. L’allineamento dei fogli può richiedere qualche istante.' );

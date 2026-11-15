@@ -20,6 +20,24 @@ final class MI_Event_Deletion {
 		'mi_travel'               => 'participant_id',
 	);
 
+	// Campi sostanziali del riepilogo: esclude sincronizzazione, trasporto e segreti dei link.
+	private const FINGERPRINT_COLUMNS = array(
+		'mi_registrations' => 'id,order_code,event_id,status,buyer_first_name,buyer_last_name,buyer_email,buyer_phone,special_requests,total_qty,economic_mode,total_cents,initial_due_cents,balance_cents,payment_methods_json,order_options_json,quote_adjustments_json,common_allocations_json,idempotency_key,event_revision_id,event_revision_hash,snapshot_json,privacy_consent_id,privacy_policy_version,privacy_accepted_at,marketing_consent_id,marketing_accepted_at,expires_at,payment_deadline_at,waitlist_offer_token_hash,waitlist_partial_type,waitlist_together,waitlist_offered_at,waitlist_offer_expires_at,capacity_released_at,created_at',
+		'mi_registration_items' => 'id,registration_id,ticket_type_code,ticket_type_name,quantity,unit_price_cents,options_json',
+		'mi_participants' => 'id,registration_id,ticket_type_code,ticket_index,first_name,last_name,extra_json,deposit_due_cents,room_code,options_json,status,cancellation_token_hash,cancelled_at,cancellation_actor',
+		'mi_event_counters' => 'event_id,confirmed_count,waitlisted_count',
+		'mi_email_outbox' => 'id,registration_id,recipient,template_type,origin_key,payload_json,created_at',
+		'mi_payments' => 'id,registration_id,reverses_payment_id,transaction_kind,movement_kind,request_hash,installment_kind,participant_allocations_json,effective_at,amount_cents,payment_source,external_reference,operator_label,administrative_note,origin_channel,origin_id,created_at',
+		'mi_ticket_counters' => 'event_id,ticket_type_code,confirmed_count,waitlisted_count',
+		'mi_event_revisions' => 'id,event_id,revision_number,config_hash,config_json,created_at',
+		'mi_registration_events' => 'id,registration_id,event_type,from_status,to_status,actor_label,detail_json,created_at',
+		'mi_rooms' => 'event_id,code,name,capacity',
+		'mi_management_state' => 'event_id,revision',
+		'mi_management_requests' => 'request_id,event_id,registration_id,request_hash,actor_id,created_at',
+		'mi_booking_codes' => 'event_id,prefix,sequence',
+		'mi_travel' => 'participant_id,registration_id,event_id,mode,seats,price_cents,origin,departure_at,required_ride,state,driver_id,offer_expires_at,decision_deadline_at,created_at',
+	);
+
 	public static function boot() {
 		add_filter( 'pre_delete_post', array( __CLASS__, 'guard_delete' ), 10, 3 );
 		add_filter( 'pre_trash_post', array( __CLASS__, 'guard_trash' ), 10, 3 );
@@ -109,14 +127,6 @@ final class MI_Event_Deletion {
 		wp_cache_delete( $key, 'options' );
 		if ( get_option( $key ) !== $job ) throw new RuntimeException( 'Avanzamento non salvato. Riprova.' );
 	}
-	private static function fingerprint_rows( $table, array $rows ) {
-		foreach ( $rows as &$row ) {
-			if ( 'mi_registrations' === $table ) foreach ( array_keys( $row ) as $key ) if ( 0 === strpos( $key, 'workspace_' ) ) unset( $row[$key] );
-			if ( 'mi_email_outbox' === $table ) foreach ( array( 'status', 'attempts', 'sent_at', 'last_error', 'processing_started_at' ) as $key ) unset( $row[$key] );
-		}
-		unset( $row );
-		return $rows;
-	}
 	public static function preview( $id ) {
 		global $wpdb;
 		$post = get_post( $id );
@@ -140,16 +150,18 @@ final class MI_Event_Deletion {
 		hash_update( $hash, wp_json_encode( array( $data, $event_meta, $post->post_modified_gmt ) ) );
 		foreach ( array_merge( array( 'mi_registrations' ), self::DIRECT ) as $table ) {
 			$order_by = self::FINGERPRINT_ORDER[ $table ];
-			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}{$table} WHERE event_id=%d ORDER BY {$order_by}", $id ), ARRAY_A );
+			$columns = self::FINGERPRINT_COLUMNS[ $table ];
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT {$columns} FROM {$wpdb->prefix}{$table} WHERE event_id=%d ORDER BY {$order_by}", $id ), ARRAY_A );
 			if ( $wpdb->last_error ) throw new RuntimeException( 'Riepilogo non disponibile.' );
-			hash_update( $hash, wp_json_encode( self::fingerprint_rows( $table, $rows ) ) );
+			hash_update( $hash, wp_json_encode( $rows ) );
 		}
 		foreach ( self::CHILDREN as $table ) {
-			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT c.* FROM {$wpdb->prefix}{$table} c JOIN {$wpdb->prefix}mi_registrations r ON r.id=c.registration_id WHERE r.event_id=%d ORDER BY c.id", $id ), ARRAY_A );
+			$columns = 'c.' . str_replace( ',', ',c.', self::FINGERPRINT_COLUMNS[ $table ] );
+			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT {$columns} FROM {$wpdb->prefix}{$table} c JOIN {$wpdb->prefix}mi_registrations r ON r.id=c.registration_id WHERE r.event_id=%d ORDER BY c.id", $id ), ARRAY_A );
 			if ( $wpdb->last_error ) throw new RuntimeException( 'Riepilogo non disponibile.' );
-			hash_update( $hash, wp_json_encode( self::fingerprint_rows( $table, $rows ) ) );
+			hash_update( $hash, wp_json_encode( $rows ) );
 		}
-		hash_update( $hash, wp_json_encode( self::fingerprint_rows( 'mi_email_outbox', $event_emails ) ) );
+		hash_update( $hash, wp_json_encode( $event_emails ) );
 		$data['fingerprint'] = hash_final( $hash );
 		return $data;
 	}
