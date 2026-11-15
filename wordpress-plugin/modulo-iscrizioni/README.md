@@ -4,7 +4,7 @@ Plugin WordPress per creare e pubblicare moduli di iscrizione e gestire le attiv
 
 ## Funzioni
 
-La versione 3.27.69 allinea la campanella a sinistra nell’intestazione del portale, accanto al titolo; Esci resta a destra. Icona e stati grafici sono invariati. Include l’Elenco compatto adattivo della 3.27.68.
+La versione 3.27.70 mantiene il titolo Segreteria eventi a sinistra e dispone la campanella subito alla sua destra, nello stesso gruppo. Esci resta sul lato destro dell’intestazione. Icona e stati grafici sono invariati.
 
 - Gruppi ed eventi con identità visiva, date, capienza e condizioni di iscrizione.
 - Moduli configurabili con tipologie, servizi e domande per partecipante.
