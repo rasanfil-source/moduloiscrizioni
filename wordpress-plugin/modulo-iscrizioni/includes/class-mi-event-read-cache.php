@@ -25,7 +25,7 @@ final class MI_Event_Read_Cache {
 		return array( 'token' => $token, 'pending' => $pending );
 	}
 	public static function get( $event_id, $token ) {
-		$cached = get_transient( 'mi_read_226_' . absint( $event_id ) );
+		$cached = get_transient( 'mi_read_267_' . absint( $event_id ) );
 		if ( ! is_array( $cached ) || ( $cached['token'] ?? '' ) !== $token || ! isset( $cached['data'] ) || ! is_string( $cached['data'] ) ) return null;
 		$compressed = base64_decode( $cached['data'], true );
 		if ( false === $compressed ) return null;
@@ -43,6 +43,6 @@ final class MI_Event_Read_Cache {
 		$packet = (int) $wpdb->get_var( 'SELECT @@max_allowed_packet' );
 		// Include base64, serializzazione e margine per escaping SQL e nome opzione.
 		$limit = min( 524288, max( 0, (int) ( ( $packet - 8192 ) / 2 ) ) );
-		if ( strlen( serialize( $cached ) ) <= $limit ) set_transient( 'mi_read_226_' . absint( $event_id ), $cached, 300 );
+		if ( strlen( serialize( $cached ) ) <= $limit ) set_transient( 'mi_read_267_' . absint( $event_id ), $cached, 300 );
 	}
 }
