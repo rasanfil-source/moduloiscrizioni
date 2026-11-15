@@ -4,7 +4,7 @@ Plugin WordPress per creare e pubblicare moduli di iscrizione e gestire le attiv
 
 ## Funzioni
 
-La versione 3.27.68 adatta automaticamente colonne e carattere dell’Elenco compatto per stampare fino a 200 persone in una pagina A4 orizzontale, anche da Excel. La campanella mantiene tutti i suoi stati grafici e non mostra più le didascalie Attiva/Disattiva notifiche.
+La versione 3.27.69 allinea la campanella a sinistra nell’intestazione del portale, accanto al titolo; Esci resta a destra. Icona e stati grafici sono invariati. Include l’Elenco compatto adattivo della 3.27.68.
 
 - Gruppi ed eventi con identità visiva, date, capienza e condizioni di iscrizione.
 - Moduli configurabili con tipologie, servizi e domande per partecipante.
