@@ -32,6 +32,8 @@ jobs:
       - name: Verify public balance workflow and actual payments
         run: |
           php wordpress-plugin/tests/travel.php
+          php wordpress-plugin/tests/email-error-length.php
+          php wordpress-plugin/tests/email-job-cleanup.php
           php wordpress-plugin/tests/option-key-duplicates.php
           php wordpress-plugin/tests/public-balance-deadline-receipt.php
           php wordpress-plugin/tests/management-deposit-totals.php
@@ -118,6 +120,7 @@ jobs:
           php wordpress-plugin/tests/audit-275-innodb.php
           php wordpress-plugin/tests/audit-schema-index-innodb.php
           php wordpress-plugin/tests/event-deletion-innodb.php
+          php wordpress-plugin/tests/travel-token-innodb.php
 
   sanitization:
     runs-on: ubuntu-latest

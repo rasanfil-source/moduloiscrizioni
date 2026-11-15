@@ -109,7 +109,7 @@ test('MODULI AUTONOMO non espone creazione manuale tramite il segreto Workspace'
   const service = await read('includes/class-mi-registration-service.php');
   assert.doesNotMatch(rest, /GET_MANUAL_REGISTRATION_SCHEMA/);
   assert.doesNotMatch(rest, /CREATE_MANUAL_REGISTRATION/);
-  assert.match(rest, /MI_Registration_Service::create\( \$event_id, \$registration, \$key, false, 'WORKSPACE_UI', true \)/);
+  assert.doesNotMatch(rest, /function (?:manual_registration_schema|create_manual_registration|create_group_from_workspace|create_event_draft_from_workspace)\(/);
   assert.match(service, /\$trusted_operator = false/);
   assert.match(service, /! \$allow_unpublished && ! \$trusted_operator/);
   assert.match(service, /FOR UPDATE[\s\S]+\$counter_field/);
@@ -268,9 +268,7 @@ test('anti replay e limiti pubblici sono atomici anche fra richieste concorrenti
   assert.match(service, /'email\|'/);
   assert.match(rest, /mi_workspace_nonces/);
   assert.match(await read('includes/class-mi-activator.php'), /PRIMARY KEY  \(nonce_hash\)/);
-  assert.match(rest, /mi_ws_draft_/);
-  assert.match(rest, /SELECT GET_LOCK/);
-  assert.match(rest, /finally/);
+  assert.match(rest, /INSERT IGNORE INTO/);
 });
 
 test('gli asset pubblici sono caricati soltanto in presenza dello shortcode', async () => {
@@ -1287,7 +1285,7 @@ test('la caparra può essere percentuale o di importo fisso', async () => {
   assert.match(eventType, /name="mi_deposit_mode"/);
   assert.match(eventType, /_mi_deposit_fixed_cents/);
   assert.match(adminScript, /modalitaCaparra/);
-  assert.match(rest, /deposit_fixed_cents/);
+  assert.match(service, /deposit_fixed_cents/);
 });
 
 test('le prenotazioni a pagamento attendono il versamento prima della conferma', async () => {
@@ -1740,9 +1738,7 @@ test('la conferma replica richiede la revisione corrente e non una ricevuta prec
 test('il comando storico di creazione gruppi Workspace non è esposto', async () => {
   const rest = await read('includes/class-mi-rest-controller.php');
   assert.doesNotMatch(rest, /CREATE_GROUP/);
-  assert.match(rest, /create_group_from_workspace/);
-  assert.match(rest, /get_page_by_path/);
-  assert.match(rest, /group_slug/);
+  assert.doesNotMatch(rest, /create_group_from_workspace|save_group_asset_urls|sanitize_https_asset_url/);
 });
 
 test('il referente consulta stato e saldo senza esporre dati personali', async () => {

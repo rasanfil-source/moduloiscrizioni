@@ -940,7 +940,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!toolbar) return;
 	  if (toolbar.dataset.miSubmitting === '1') return;
 	  toolbar.dataset.miSubmitting = '1';
-      toolbar.requestSubmit();
+      window.MIFormSubmit(toolbar);
     });
   });
 

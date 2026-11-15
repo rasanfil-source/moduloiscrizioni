@@ -703,6 +703,7 @@ final class MI_Spedizione_Email {
 		$data = is_wp_error( $result ) ? $result->get_error_data() : array();
 		$code = is_array( $data ) ? ( $data['remote_code'] ?? '' ) : '';
 		$message = is_wp_error( $result ) ? sanitize_text_field( $result->get_error_message() ) : 'Contenuto email non valido o inattivo.';
+		$message = mb_substr( $message, 0, 190, 'UTF-8' );
 		$deferred = in_array( $code, array( 'EMAIL_BUSY', 'WORKSPACE_BUSY', 'EVENT_BUSY', 'EMAIL_DEFERRED', 'EMAIL_QUOTA_EXCEEDED', 'EMAIL_STORAGE_UNAVAILABLE', 'ACTION_NOT_ALLOWED' ), true ) || ( is_wp_error( $result ) && 'mi_workspace_busy' === $result->get_error_code() );
 		if ( $deferred ) {
 			$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET status=%s, attempts=GREATEST(0,attempts-1), processing_started_at=NULL, last_error=%s WHERE id=%d AND status=%s", $row['status'], $message, $id, $sending ) );

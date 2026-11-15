@@ -42,7 +42,7 @@ foreach(['registrations'=>'registrations','cancellation_tokens'=>'cancellation_t
  $wpdb->query('DROP TABLE IF EXISTS wp_mi_'.$name);check(false!==$wpdb->query('CREATE TABLE wp_mi_'.$name.' ('.$m[1].') ENGINE=InnoDB'),$wpdb->last_error);
 }
 $wpdb->query('DROP TABLE IF EXISTS wp_mi_booking_codes');$wpdb->query('CREATE TABLE wp_mi_booking_codes(event_id BIGINT PRIMARY KEY,prefix VARCHAR(16),sequence BIGINT) ENGINE=InnoDB');
-$wpdb->query('DROP TABLE IF EXISTS wp_mi_travel');$wpdb->query("CREATE TABLE wp_mi_travel (participant_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,registration_id BIGINT UNSIGNED NOT NULL,event_id BIGINT UNSIGNED NOT NULL,mode VARCHAR(16) NOT NULL,seats SMALLINT UNSIGNED NOT NULL DEFAULT 0,price_cents INT UNSIGNED NOT NULL DEFAULT 0,origin VARCHAR(180) NOT NULL DEFAULT '',departure_at DATETIME NULL,required_ride TINYINT(1) NOT NULL DEFAULT 0,state VARCHAR(24) NOT NULL DEFAULT 'NONE',driver_id BIGINT UNSIGNED NULL,offer_expires_at DATETIME NULL,decision_deadline_at DATETIME NULL,created_at DATETIME NOT NULL,KEY registration_id (registration_id),KEY event_queue (event_id,state,created_at),KEY driver_seats (driver_id,state,offer_expires_at)) ENGINE=InnoDB");
+$wpdb->query('DROP TABLE IF EXISTS wp_mi_travel');$wpdb->query("CREATE TABLE wp_mi_travel (participant_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,registration_id BIGINT UNSIGNED NOT NULL,event_id BIGINT UNSIGNED NOT NULL,mode VARCHAR(16) NOT NULL,seats SMALLINT UNSIGNED NOT NULL DEFAULT 0,price_cents INT UNSIGNED NOT NULL DEFAULT 0,origin VARCHAR(180) NOT NULL DEFAULT '',departure_at DATETIME NULL,required_ride TINYINT(1) NOT NULL DEFAULT 0,state VARCHAR(24) NOT NULL DEFAULT 'NONE',driver_id BIGINT UNSIGNED NULL,offer_expires_at DATETIME NULL,decision_deadline_at DATETIME NULL,access_token CHAR(64) NULL,legacy_token_allowed TINYINT UNSIGNED NOT NULL DEFAULT 1,created_at DATETIME NOT NULL,KEY registration_id (registration_id),KEY event_queue (event_id,state,created_at),KEY driver_seats (driver_id,state,offer_expires_at)) ENGINE=InnoDB");
 foreach([42,43]as$id){
  $status=42===$id?'TRAVEL_PENDING':'CONFIRMED';
  check(false!==$wpdb->query("INSERT INTO wp_mi_registrations (id,order_code,event_id,status,buyer_first_name,buyer_last_name,buyer_email,buyer_phone,total_qty,total_cents,initial_due_cents,idempotency_key,created_at,snapshot_json) VALUES ($id,'TEST$id',$id,'$status','Test','Locale','person@example.invalid','',1,100,100,'key$id',NOW(),'{}')"),$wpdb->last_error);
@@ -54,8 +54,13 @@ foreach([42,43]as$id){
 }
 $wpdb->query("INSERT INTO wp_mi_cancellation_tokens (participant_id,token_hash,created_at) VALUES (42,REPEAT(CHAR(97),64),NOW()),(43,REPEAT(CHAR(98),64),NOW())");
 $request='12345678-1234-4234-8234-123456789abc';$preview=MI_Event_Deletion::preview(42);
+$wpdb->query('ALTER TABLE wp_mi_registrations ADD COLUMN background_tick INT NOT NULL DEFAULT 0');
+$wpdb->query('UPDATE wp_mi_registrations SET background_tick=1 WHERE event_id=42');
+check(MI_Event_Deletion::preview(42)['fingerprint']===$preview['fingerprint'],'Campo tecnico aggiunto invalida conferma');
 $wpdb->query("UPDATE wp_mi_registrations SET workspace_status='SYNCED',workspace_attempts=3,workspace_synced_at=UTC_TIMESTAMP() WHERE event_id=42");
 check(MI_Event_Deletion::preview(42)['fingerprint']===$preview['fingerprint'],'Cron invalida conferma eliminazione');
+$wpdb->query("UPDATE wp_mi_registrations SET buyer_email='changed@example.invalid' WHERE event_id=42");
+check(MI_Event_Deletion::preview(42)['fingerprint']!==$preview['fingerprint'],'Modifica contatto ignorata');
 $wpdb->query("UPDATE wp_mi_registrations SET buyer_email='person@example.invalid' WHERE event_id=42");$preview=MI_Event_Deletion::preview(42);
 $allowed=false;check(is_wp_error(MI_Event_Deletion::begin(42,$preview['fingerprint'],$request,'trash','Evento 42',true)),'Permissions bypassed');$allowed=true;
 $wpdb->query('UPDATE wp_mi_payments SET amount_cents=200 WHERE id=42');

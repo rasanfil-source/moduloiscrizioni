@@ -1,0 +1,1 @@
+(()=>{window.MIFormSubmit=(form,submitter)=>{if(!form)return;if(typeof form.requestSubmit==="function"){form.requestSubmit(submitter||void 0);return}if(submitter){submitter.click();return}const button=document.createElement("button");button.type="submit";button.hidden=true;form.append(button);try{button.click()}finally{button.remove()}}})();

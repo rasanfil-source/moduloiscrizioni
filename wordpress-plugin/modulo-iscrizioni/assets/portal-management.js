@@ -102,7 +102,7 @@
     try {
       if (await ask(form.dataset.miConfirm, submitter?.textContent.trim() || 'Conferma')) {
         approvedForms.add(form);
-        try { form.requestSubmit(submitter || undefined); }
+        try { window.MIFormSubmit(form, submitter); }
         finally { approvedForms.delete(form); }
       }
     } finally { confirmingForms.delete(form); }
@@ -259,10 +259,10 @@
       const target=e.target.closest('a,[data-mi-portal-booking-close],[data-mi-portal-booking-next],[data-mi-portal-booking-previous],[data-open],[data-edit-inventory]');
       if(!target)return;e.preventDefault();e.stopImmediatePropagation();
       if(busy||pending||paymentDraft()){say('Completa o verifica il salvataggio prima di uscire.');return;}
-      const choice=await resolveDraft();if(choice==='save'){dirtyForm?.requestSubmit();return;}if(choice==='discard'){dirty=false;dirtyForm=null;target.click();}
+      const choice=await resolveDraft();if(choice==='save'){window.MIFormSubmit(dirtyForm);return;}if(choice==='discard'){dirty=false;dirtyForm=null;target.click();}
     },true);
     document.addEventListener('keydown',e=>{if(root.isConnected&&(dirty||pending||busy||paymentDraft())&&(e.key==='Escape'||(['ArrowLeft','ArrowRight'].includes(e.key)&&!e.target.matches('input,textarea,select')))&&!document.querySelector('dialog[open]')){e.preventDefault();e.stopImmediatePropagation();say('Salva le modifiche oppure usa il comando di chiusura.');}},true);
-    async function canLeave(){if(paymentDraft()){say('Completa il movimento in corso prima di uscire dalla scheda.');return false;}if(pending||busy){say('Completa o verifica il salvataggio prima di cambiare pagina.');return false;}if(dirty){const choice=await resolveDraft();if(choice==='save'){dirtyForm?.requestSubmit();return false;}if(choice!=='discard')return false;}dirty=false;dirtyForm=null;return true;}
+    async function canLeave(){if(paymentDraft()){say('Completa il movimento in corso prima di uscire dalla scheda.');return false;}if(pending||busy){say('Completa o verifica il salvataggio prima di cambiare pagina.');return false;}if(dirty){const choice=await resolveDraft();if(choice==='save'){window.MIFormSubmit(dirtyForm);return false;}if(choice!=='discard')return false;}dirty=false;dirtyForm=null;return true;}
     async function allPeople(){
       const ticket=generation;currentPerson=null;returnEvent='';
       if(printButton)printButton.hidden=true;
@@ -779,6 +779,18 @@
         const personalBalances=position?.people?.reduce((sum,p)=>sum+p.balance,0)||0,personalCredits=position?.people?.reduce((sum,p)=>sum+(p.credit||0),0)||0;
         const bookingOverview='<details class="mi-booking-overview" data-booking-overview><summary>Vedi tutta la prenotazione</summary><h4>'+esc(b.event_title)+'</h4>'+b.participants.map(p=>'<section><h4><button type="button" data-open="'+esc(b.order_code)+'" data-person-focus="'+p.number+'">'+esc(personName(p))+'</button>'+(p.status==='CANCELLED'?' · Annullata':p.status==='EXPIRED'?' · Scaduta per mancato pagamento':'')+'</h4>'+participantOptionsGroups(p.options,b.option_definitions)+(b.features?.rooms?'<p>Camera assegnata: '+esc(p.room||'Da assegnare')+'</p>':'')+(!b.is_free_event?economics(position?.people?.find(row=>row.id===p.id)):'')+'</section>').join('')+((b.order_options||[]).length?'<h4>Servizi della prenotazione</h4>'+participantOptionsGroups(b.order_options,b.option_definitions):'')+(!b.is_free_event?'<section class="mi-booking-totals"><h4>Totali della prenotazione</h4><p>Quota '+money(b.total_cents)+' · Versato '+money(b.paid_cents)+' · '+(position?.quotes_known&&position?.payments_known?'Residui individuali '+money(personalBalances)+(personalCredits?' · Crediti da restituire '+money(personalCredits):''):'Residuo netto '+money(b.balance_cents))+'</p></section>':'')+'</details>';
         content.querySelector('[data-person-intro-end]').insertAdjacentHTML('beforebegin',bookingOverview);
+        if(selectedPerson&&(b.travel_participant_ids||[]).includes(selectedPerson.id)){
+          const tools=document.createElement('details');tools.innerHTML='<summary>Collegamento degli spostamenti</summary><p>Puoi revocare il collegamento precedente e inviarne uno nuovo al referente della prenotazione.</p><button type="button">Sostituisci e invia il collegamento</button>';
+          content.querySelector('[data-person-intro-end]').before(tools);
+          tools.querySelector('button').addEventListener('click',async e=>{
+            const button=e.currentTarget;
+            if(busy||pending||dirty)return say('Salva le modifiche prima di sostituire il collegamento.');
+            if(!await ask('Il collegamento precedente smetterà di funzionare. Inviare quello nuovo al referente?','Sostituisci e invia'))return;
+            button.disabled=true;
+            try{const result=await request('travel_link_replace',{event_id:b.event_id,order_code:b.order_code,participant_id:selectedPerson.id});say(result.message);}
+            catch(error){say(error.message);}finally{button.disabled=false;}
+          });
+        }
         if(selectedPerson){
           const contact=content.querySelector('[data-person-contact]');
           const personal=b.fields.filter(f=>['participant_email','email','participant_phone','phone','mobile'].includes(f.key));

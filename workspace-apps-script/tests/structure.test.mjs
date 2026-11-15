@@ -97,7 +97,6 @@ test('la migrazione aggiunge riepilogo economico e sistemazioni operative', () =
   assert.match(sources['Config.gs'], /primo_versamento_centesimi/);
   assert.match(sources['Config.gs'], /saldo_centesimi/);
   assert.match(sources['Setup.gs'], /MI_INTESTAZIONI_PRECEDENTI/);
-  assert.match(sources['WebApp.gs'], /payment_methods/);
 	assert.match(sources['Config.gs'], /ACCOMMODATIONS: 'Sistemazioni'/);
 });
 
@@ -203,8 +202,7 @@ test('Workspace non espone una seconda pagina Segreteria eventi', () => {
 test('lo stato individuale dei partecipanti arriva nelle schede e negli elenchi', () => {
 	assert.match(sources['Config.gs'], /stato_partecipante/);
 	assert.match(sources['Config.gs'], /data_annullamento/);
-	assert.match(sources['WebApp.gs'], /participant\.status/);
-	assert.match(sources['WebApp.gs'], /participant\.cancelled_at/);
+	assert.match(sources['ProiezioneDiretta.gs'], /row\.stato_partecipante/);
 	assert.match(sources['Segreteria.gs'], /row\.stato_partecipante/);
 });
 
@@ -237,27 +235,9 @@ test('la modalità email GAS è fail-closed e sostituisce sempre il destinatario
   assert.doesNotMatch(sources['Email.gs'], /to:\s*row\.destinatario/);
 });
 
-test('la replica è riconciliante e viene confermata solo quando completa', () => {
-  assert.match(sources['WebApp.gs'], /IDEMPOTENCY_CONFLICT/);
-  assert.match(sources['WebApp.gs'], /eliminaRigheContigue_\(participantSheet/);
-  assert.match(sources['WebApp.gs'], /participantsComplete = savedParticipantCodes\.length === participants\.length/);
-  assert.match(sources['WebApp.gs'], /getRange\(registrationRow, 1, 1, registrationValues\.length\)\.getValues/);
-  assert.match(sources['WebApp.gs'], /complete:\s*complete/);
-  assert.match(sources['WebApp.gs'], /existing && existing\.data_creazione/);
-});
+
 
 test('revisioni, consensi, tipologie e opzioni hanno colonne esplicite', () => {
   for (const token of ['id_revisione_evento', 'snapshot_json', 'id_consenso_privacy', 'id_consenso_marketing', 'opzioni_ordine_json', 'codice_tipologia', 'indice_tipologia', 'opzioni_json']) assert.match(sources['Config.gs'], new RegExp(token));
   assert.match(sources['Setup.gs'], /usesItalianPrevious \|\| usesPreviousHeaders/);
-  assert.match(sources['WebApp.gs'], /marketing_accepted_at/);
-});
-
-test('APPEND_REGISTRATION replica i movimenti pagamento senza duplicarli', () => {
-  assert.match(sources['WebApp.gs'], /sincronizzaPagamenti_\(orderCode, payload\.payments\)/);
-  assert.match(sources['WebApp.gs'], /id_inserimento_origine/);
-  assert.match(sources['WebApp.gs'], /WP\|/);
-  assert.match(sources['WebApp.gs'], /kind \+ '\\|' \+ installment \+ '\\|'/);
-  assert.match(sources['WebApp.gs'], /effectiveDate/);
-  assert.match(sources['WebApp.gs'], /isNaN\(effectiveDate\.getTime\(\)\)/);
-  assert.match(sources['WebApp.gs'], /INVALID_EFFECTIVE_AT/);
 });

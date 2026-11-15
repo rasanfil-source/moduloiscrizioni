@@ -147,9 +147,10 @@ final class MI_Portal {
 		$post = get_post();
 		if ( empty( $_GET['mi_portal'] ) && empty( $_GET['mi_status'] ) && empty( $_GET['mi_waitlist_offer'] ) && ( ! $post || ! has_shortcode( $post->post_content, self::SHORTCODE ) ) ) return;
 		wp_enqueue_style( 'mi-portal', MI_PLUGIN_URL . 'assets/portal.css', array(), MI_VERSION );
-		if ( self::needs_portal_script() ) wp_enqueue_script( 'mi-portal', MI_PLUGIN_URL . 'assets/portal.js', array(), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
+		if ( self::needs_portal_script() || self::needs_management_script() ) wp_enqueue_script( 'mi-form-submit', MI_PLUGIN_URL . 'assets/form-submit.js', array(), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
+		if ( self::needs_portal_script() ) wp_enqueue_script( 'mi-portal', MI_PLUGIN_URL . 'assets/portal.js', array( 'mi-form-submit' ), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
 		if ( self::needs_portal_script() && 'communications' === self::current_view() ) wp_enqueue_script( 'mi-portal-communications', MI_PLUGIN_URL . 'assets/portal-communications.js', array( 'mi-portal' ), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
-		if ( self::needs_management_script() ) wp_enqueue_script( 'mi-portal-management', MI_PLUGIN_URL . 'assets/portal-management.js', array(), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
+		if ( self::needs_management_script() ) wp_enqueue_script( 'mi-portal-management', MI_PLUGIN_URL . 'assets/portal-management.js', array( 'mi-form-submit' ), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
 		if ( self::needs_management_styles() ) wp_enqueue_style( 'mi-portal-management', MI_PLUGIN_URL . 'assets/portal-management.css', array( 'mi-portal' ), MI_VERSION );
 		if ( self::needs_payment_assets() ) {
 			wp_enqueue_style( 'mi-portal-payments', MI_PLUGIN_URL . 'assets/portal-payments.css', array( 'mi-portal' ), MI_VERSION );
@@ -1058,6 +1059,7 @@ final class MI_Portal {
 		</head>
 		<body class="mi-portal-standalone">
 			<?php echo self::render(); ?>
+			<?php if ( self::needs_portal_script() || self::needs_management_script() ) : ?><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/form-submit.js?ver=' . $asset_version ) ); ?>"></script><?php endif; ?>
 			<?php if ( self::needs_portal_script() ) : ?><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal.js?ver=' . $asset_version ) ); ?>"></script><?php endif; ?>
 				<?php if ( self::needs_portal_script() && 'communications' === self::current_view() ) : ?><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-communications.js?ver=' . $asset_version ) ); ?>"></script><?php endif; ?>
 			<?php if ( self::needs_payment_assets() ) : ?><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-payments.js?ver=' . $asset_version ) ); ?>"></script><?php endif; ?>

@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class MI_Activator {
-	const SCHEMA_REVISION = 9;
+	const SCHEMA_REVISION = 10;
 	public static function activate() {
 		self::upgrade_schema( true );
 		self::ensure_schedule();
@@ -14,6 +14,7 @@ final class MI_Activator {
 		wp_unschedule_hook( 'mi_sync_workspace_registration' );
 		wp_unschedule_hook( 'mi_spedisci_email_in_coda' );
 		wp_unschedule_hook( 'mi_prepara_comunicazioni' );
+		wp_unschedule_hook( 'mi_pulisci_email_jobs' );
 		wp_unschedule_hook( 'mi_web_push_registration' );
 		wp_unschedule_hook( 'mi_riprova_notifica_pubblicazione' );
 		wp_unschedule_hook( 'mi_expire_registrations' );
@@ -116,7 +117,7 @@ final class MI_Activator {
 		global $wpdb;
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
-		if ( class_exists( 'MI_Travel' ) ) MI_Travel::create_table();
+		if ( class_exists( 'MI_Travel' ) && ! MI_Travel::create_table() ) return false;
 		$charset = $wpdb->get_charset_collate();
 		$registrations = $wpdb->prefix . 'mi_registrations';
 		$items = $wpdb->prefix . 'mi_registration_items';

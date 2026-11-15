@@ -28,12 +28,19 @@ final class MI_Travel {
 			driver_id bigint(20) unsigned NULL,
 			offer_expires_at datetime NULL,
 			decision_deadline_at datetime NULL,
+			access_token char(64) NULL,
+			legacy_token_allowed tinyint(1) unsigned NOT NULL DEFAULT 1,
 			created_at datetime NOT NULL,
 			PRIMARY KEY  (participant_id),
 			KEY registration_id (registration_id),
 			KEY event_queue (event_id,state,created_at),
 			KEY driver_seats (driver_id,state,offer_expires_at)
 		) ENGINE=InnoDB {$charset};" );
+		$columns = $wpdb->get_col( "SHOW COLUMNS FROM {$wpdb->prefix}mi_travel" );
+		if ( $wpdb->last_error || array_diff( array( 'access_token', 'legacy_token_allowed' ), (array) $columns ) ) return false;
+		// Un'unica finestra di transizione, mai prorogata dagli aggiornamenti successivi.
+		add_option( 'mi_travel_legacy_tokens_until', time() + 30 * DAY_IN_SECONDS, '', false );
+		return true;
 	}
 	public static function config( $event_id ) {
 		$config = (array) get_post_meta( $event_id, '_mi_travel', true );
@@ -210,7 +217,7 @@ final class MI_Travel {
 				if ( ! isset( $driver_notices[$driver['participant_id']] ) ) $driver_notices[$driver['participant_id']] = array( 'driver' => $driver, 'passengers' => array() );
 				$driver_notices[$driver['participant_id']]['passengers'][] = trim( $person['first_name'] . ' ' . $person['last_name'] );
 			}
-			self::check( $wpdb->insert( $wpdb->prefix . 'mi_travel', array_merge( $data, array( 'participant_id' => $id, 'registration_id' => $registration_id, 'event_id' => $event['id'], 'created_at' => current_time( 'mysql', true ) ) ) ) );
+			self::check( $wpdb->insert( $wpdb->prefix . 'mi_travel', array_merge( $data, array( 'participant_id' => $id, 'registration_id' => $registration_id, 'event_id' => $event['id'], 'access_token' => bin2hex( random_bytes( 32 ) ), 'legacy_token_allowed' => 0, 'created_at' => current_time( 'mysql', true ) ) ) ) );
 			$audit_row = array_merge( $data, array( 'participant_id' => (int) $id, 'registration_id' => (int) $registration_id, 'event_id' => (int) $event['id'], 'offer_expires_at' => null ) );
 			self::audit_locked( $audit_row, 'TRAVEL_REGISTERED', array(), 'PUBLIC_REGISTRATION' );
 			$management[] = array( 'participant_id' => (int) $id, 'name' => trim( $person['first_name'] . ' ' . $person['last_name'] ) );
@@ -227,7 +234,49 @@ final class MI_Travel {
 			$management
 		);
 	}
-	private static function token( $id ) { return hash_hmac( 'sha256', 'mi-travel|' . (int) $id, wp_salt( 'auth' ) ); }
+	private static function token( $id ) {
+		global $wpdb;
+		$table = $wpdb->prefix . 'mi_travel';
+		$token = $wpdb->get_var( $wpdb->prepare( "SELECT access_token FROM {$table} WHERE participant_id=%d", $id ) ); self::check();
+		if ( null === $token || '' === $token ) {
+			// La scrittura condizionale rende stabile il link anche con due richieste simultanee.
+			self::check( $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET access_token=%s WHERE participant_id=%d AND (access_token IS NULL OR access_token='')", bin2hex( random_bytes( 32 ) ), $id ) ) );
+			$token = $wpdb->get_var( $wpdb->prepare( "SELECT access_token FROM {$table} WHERE participant_id=%d", $id ) ); self::check();
+		}
+		if ( ! is_string( $token ) || ! preg_match( '/^[a-f0-9]{64}$/D', $token ) ) throw new RuntimeException( 'Collegamento del viaggio non disponibile.' );
+		return $token;
+	}
+	private static function valid_token( $id, $token ) {
+		if ( ! is_string( $token ) || ! preg_match( '/^[a-f0-9]{64}$/D', $token ) ) return false;
+		global $wpdb;
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT access_token,legacy_token_allowed FROM {$wpdb->prefix}mi_travel WHERE participant_id=%d", $id ), ARRAY_A ); self::check();
+		if ( ! $row ) return false;
+		if ( ! empty( $row['access_token'] ) && hash_equals( $row['access_token'], $token ) ) return true;
+		return ! empty( $row['legacy_token_allowed'] ) && (int) get_option( 'mi_travel_legacy_tokens_until', 0 ) > time() && hash_equals( hash_hmac( 'sha256', 'mi-travel|' . (int) $id, wp_salt( 'auth' ) ), $token );
+	}
+	/** Revoca individuale: gli altri partecipanti e le loro assegnazioni restano invariati. */
+	public static function replace_link( $id ) {
+		if ( ! MI_Portal_Management::allowed() ) return new WP_Error( 'mi_travel_access', 'Accesso non consentito.' );
+		global $wpdb;
+		$event_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$wpdb->prefix}mi_travel WHERE participant_id=%d", $id ) );
+		if ( $wpdb->last_error || ! $event_id || ! MI_Access::can_access_event( $event_id ) ) return new WP_Error( 'mi_travel_access', 'Viaggio non accessibile.' );
+		try {
+			$lease = MI_Event_Deletion::enter( $event_id );
+			if ( is_wp_error( $lease ) ) return $lease;
+			self::check( $wpdb->query( 'START TRANSACTION' ) );
+			MI_Management_Service::lock_room_event( $event_id );
+			$row = array_column( self::rows( $event_id, true ), null, 'participant_id' )[$id] ?? null;
+			if ( ! $row ) throw new RuntimeException( 'Viaggio non disponibile.' );
+			self::write( $id, array( 'access_token' => bin2hex( random_bytes( 32 ) ), 'legacy_token_allowed' => 0 ) );
+			self::audit_locked( $row, 'TRAVEL_LINK_REPLACED', array(), 'WP#' . get_current_user_id() );
+			self::notify_locked( $row, 'Nuovo collegamento per gli spostamenti', 'Il collegamento personale precedente è stato revocato. Usa il nuovo collegamento per consultare e gestire gli spostamenti.' );
+			$url = self::url( $id );
+			self::check( $wpdb->query( 'COMMIT' ) );
+		} catch ( Throwable $error ) { $wpdb->query( 'ROLLBACK' ); return new WP_Error( 'mi_travel_link', 'Sostituzione del collegamento non riuscita. Riprova.' ); }
+		finally { MI_Event_Deletion::release( $event_id ); }
+		try { MI_Spedizione_Email::pianifica_spedizione(); } catch ( Throwable $ignored ) {}
+		return $url;
+	}
 	public static function url( $id ) { return add_query_arg( array( 'mi_travel' => (int) $id, 'travel_token' => self::token( $id ) ), home_url( '/' ) ); }
 	public static function pending_email( $event_id, array $management ) {
 		$message = 'La partecipazione è subordinata all’assegnazione dei passaggi richiesti. Il posto all’evento è riservato fino al termine delle assegnazioni. Durante l’attesa non è richiesto alcun pagamento dell’evento. Ogni proposta di passaggio indica il termine entro cui accettare il posto auto riservato. Il contributo A/R viene versato direttamente al conducente. Dal collegamento personale è possibile gestire il passaggio, scegliere uno spostamento autonomo oppure annullare la partecipazione.';
@@ -466,12 +515,13 @@ final class MI_Travel {
 		try { MI_Spedizione_Email::pianifica_spedizione(); } catch ( Throwable $ignored ) { /* Il cron recupera la coda persistente. */ }
 	}
 	public static function decide( $id, $token, $action, $expected_driver = 0, $expected_expiry = '', $requested_seats = 0, array $requested_details = array() ) {
-		if ( ! is_string( $token ) || ! hash_equals( self::token( $id ), $token ) ) return new WP_Error( 'mi_travel_token', 'Collegamento non valido.' );
+		if ( ! self::valid_token( $id, $token ) ) return new WP_Error( 'mi_travel_token', 'Collegamento non valido.' );
 		global $wpdb;
 		$event_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$wpdb->prefix}mi_travel WHERE participant_id=%d", $id ) );
 		try {
 			if ( class_exists( 'MI_Event_Deletion' ) && is_wp_error( MI_Event_Deletion::enter( $event_id ) ) ) throw new RuntimeException( 'Evento non disponibile.' );
 			self::check( $wpdb->query( 'START TRANSACTION' ) ); MI_Management_Service::lock_room_event( $event_id );
+			if ( ! self::valid_token( $id, $token ) ) throw new InvalidArgumentException( 'Collegamento revocato. Chiedi un nuovo collegamento alla segreteria.' );
 			$config = self::config( $event_id );
 			$deadline = self::local_timestamp( $config['deadline'] );
 			$after_deadline = false === $deadline || $deadline <= time();
@@ -543,15 +593,23 @@ final class MI_Travel {
 		$id = absint( $_GET['mi_travel'] ?? 0 ); if ( ! $id ) return;
 		nocache_headers(); header( 'Referrer-Policy: no-referrer' ); header( 'X-Robots-Tag: noindex, nofollow, noarchive' );
 		$token = sanitize_text_field( wp_unslash( $_GET['travel_token'] ?? '' ) );
-		if ( ! hash_equals( self::token( $id ), $token ) ) wp_die( 'Collegamento non valido.', '', array( 'response' => 403 ) );
+		if ( ! self::valid_token( $id, $token ) ) wp_die( 'Collegamento non valido o revocato. Chiedi un nuovo collegamento alla segreteria.', '', array( 'response' => 403 ) );
 		global $wpdb;
 		$event_id = (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$wpdb->prefix}mi_travel WHERE participant_id=%d", $id ) );
 		if ( ! $event_id ) wp_die( 'Viaggio non disponibile.', '', array( 'response' => 404 ) );
 		$message = '';
 		if ( 'POST' === ( $_SERVER['REQUEST_METHOD'] ?? '' ) ) {
+			$lease = MI_Event_Deletion::enter( $event_id );
+			if ( is_wp_error( $lease ) ) wp_die( 'Evento temporaneamente non disponibile. Riprova.', '', array( 'response' => 409 ) );
+			try {
+			if ( ! self::valid_token( $id, $token ) ) wp_die( 'Collegamento revocato.', '', array( 'response' => 403 ) );
 			check_admin_referer( 'mi_travel_' . $id );
 			$action = sanitize_key( wp_unslash( $_POST['travel_action'] ?? '' ) );
-			if ( 'cancel_participation' === $action ) {
+			if ( 'replace_link' === $action ) {
+				$result = self::replace_link( $id );
+				if ( ! is_wp_error( $result ) ) { wp_safe_redirect( $result ); exit; }
+				$message = $result->get_error_message();
+			} elseif ( 'cancel_participation' === $action ) {
 				$result = MI_Registration_Service::cancel_participant( $id, 'TRAVEL_LINK' );
 				$message = is_wp_error( $result ) ? $result->get_error_message() : 'Partecipazione annullata. La segreteria ha ricevuto la comunicazione.';
 			} else {
@@ -559,6 +617,7 @@ final class MI_Travel {
 				$result = self::decide( $id, $token, $action, absint( $_POST['driver_id'] ?? 0 ), sanitize_text_field( wp_unslash( $_POST['offer_expires_at'] ?? '' ) ), absint( $_POST['seats'] ?? 0 ), $details );
 				$message = is_wp_error( $result ) ? $result->get_error_message() : 'Spostamento aggiornato.';
 			}
+			} finally { MI_Event_Deletion::release( $event_id ); }
 		}
 		$maintenance = get_transient( 'mi_travel_maintained_' . $event_id ) ? null : self::maintain( $event_id );
 		if ( is_wp_error( $maintenance ) ) $message = $maintenance->get_error_message();
@@ -609,6 +668,10 @@ final class MI_Travel {
 			}
 			echo '<hr><p>Se non partecipi più all’evento, usa questo pulsante: la segreteria sarà avvisata. Eventuali importi già versati richiedono una verifica separata.</p><button name="travel_action" value="cancel_participation" formnovalidate>Annulla la partecipazione all’evento</button>';
 			echo '</form>';
+		}
+		if ( MI_Portal_Management::allowed() && MI_Access::can_access_event( $event_id ) ) {
+			echo '<details><summary>Gestione del collegamento personale</summary><p>Sostituendo il collegamento, quello precedente smette di funzionare. Il nuovo viene inviato al referente della prenotazione.</p><form method="post">'; wp_nonce_field( 'mi_travel_' . $id );
+			echo '<button name="travel_action" value="replace_link">Sostituisci e invia il collegamento</button></form></details>';
 		}
 		if ( $closed ) echo '<p>Il termine per le nuove proposte è trascorso. Puoi ancora organizzarti autonomamente, ritirare i posti offerti o annullare la partecipazione.</p>';
 		if ( in_array( $row['booking_status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ) echo '<p><a href="' . esc_url( MI_Portal::status_url( $row['registration_id'], $row['order_code'], $row['buyer_email'] ) ) . '">Consulta la partecipazione e le eventuali quote dell’evento</a></p>';
