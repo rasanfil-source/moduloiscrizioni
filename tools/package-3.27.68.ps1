@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$releaseVersion = '3.27.63'
+$releaseVersion = '3.27.68'
 $releaseRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $releaseSource = Join-Path $releaseRoot 'wordpress-plugin/modulo-iscrizioni'
 $releaseDist = Join-Path $releaseRoot 'dist'

@@ -25,3 +25,17 @@ test('compact XLSX contains only merged event title and a five-column shaded gri
  assert.match(xml,/>=Rossi<\/t>/);assert.doesNotMatch(xml,/<f>|<autoFilter|Iscrizione|Cancellazione|Luca|Ada/);
  assert.equal((xml.match(/<row /g)||[]).length,3);
 });
+test('adaptive layout fits 200 records, adds columns, reduces type for long names and keeps every entry',async()=>{
+ const measure=(text,size)=>String(text).length*size*.55;
+ const short=Array.from({length:200},(_,i)=>({last_name:'Cognome '+String(i).padStart(3,'0'),first_name:'Ada'}));
+ const layout=context.compactReportLayout(short,'Evento',measure);
+ assert.ok(layout.columns>5&&layout.columns<=10);assert.ok(layout.titleHeight+layout.rowHeights.reduce((sum,h)=>sum+h,0)<=layout.pageHeight);
+ assert.equal(layout.rows.flat().filter(Boolean).length,200);assert.equal(layout.onePage,true);
+ const long=short.map(person=>({...person,last_name:'De Santis della Rovere '+person.last_name}));
+ const dense=context.compactReportLayout(long,'Evento con titolo lungo '.repeat(6),measure);
+ assert.ok(dense.fontSize<layout.fontSize);assert.ok(dense.titleHeight+dense.rowHeights.reduce((sum,h)=>sum+h,0)<=dense.pageHeight+.01);
+ assert.equal(context.compactReportLayout([...short,short[0]],'Evento',measure).onePage,false);
+ const rows=[['Evento',...Array(layout.columns-1).fill('')],...layout.rows],xml=await context.reportWorkbook(rows,{compact:true,layout}).text();
+ assert.match(xml,/fitToHeight="1"/);assert.match(xml,new RegExp('<sz val="'+layout.fontSize+'"'));assert.match(xml,/<name val="Arial"/);
+ const code=String.fromCharCode(64+layout.columns);assert.match(xml,new RegExp('mergeCell ref="A1:'+code+'1"'));
+});

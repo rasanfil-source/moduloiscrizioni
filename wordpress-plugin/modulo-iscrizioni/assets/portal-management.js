@@ -30,7 +30,7 @@
     return [...data,['registration_time','Iscrizione (data e ora)'],['cancellation_time','Cancellazione (data e ora)'],...tail];
   }
   // Il testo viene impostato esplicitamente: i numeri conservano gli zeri iniziali e il foglio non interpreta il valore come formula.
-  function compactReportRows(people) {
+  function compactReportRows(people,columns=5) {
     const clean=value=>String(value??'').normalize('NFC').trim().replace(/\s+/gu,' ');
     const entries=people.map(person=>({last:clean(person.last_name),first:clean(person.first_name),full:clean(person.name)}));
     const counts=new Map();
@@ -38,15 +38,51 @@
     entries.sort((a,b)=>a.last.localeCompare(b.last,'it',{sensitivity:'base'})||a.first.localeCompare(b.first,'it',{sensitivity:'base'}));
     const labels=entries.map(entry=>entry.last?(counts.get(entry.key)>1?[entry.last,entry.first].filter(Boolean).join(' '):entry.last):entry.full||entry.first);
     const rows=[];
-    for(let index=0;index<labels.length;index+=5)rows.push(Array.from({length:5},(_,column)=>labels[index+column]||''));
+    for(let index=0;index<labels.length;index+=columns)rows.push(Array.from({length:columns},(_,column)=>labels[index+column]||''));
     return rows;
   }
-  function reportWorkbook(rows,{compact=false}={}) {
+  function compactReportLayout(people,title,measure) {
+    // Dimensioni in punti: A4 orizzontale, margini 10 mm e un margine di sicurezza verticale.
+    const pageWidth=277*72/25.4,pageHeight=190*72/25.4-8;
+    const labels=compactReportRows(people).flat().slice(0,people.length);
+    const lines=(text,width,size,bold=false)=>{
+      let rest=String(text),count=1;
+      while(measure(rest,size,bold)>width&&rest.length>1){
+        let low=1,high=rest.length;
+        while(low<high){const mid=Math.ceil((low+high)/2);if(measure(rest.slice(0,mid),size,bold)<=width)low=mid;else high=mid-1;}
+        const space=rest.lastIndexOf(' ',low),cut=space>0?space:low;
+        rest=rest.slice(cut).trimStart();count++;
+      }
+      return count;
+    };
+    const titleHeight=lines(title,pageWidth-8,16,true)*19+8;
+    let best;
+    for(let fontSize=11;fontSize>=6; fontSize-=.5){
+      for(let columns=5;columns<=10;columns++){
+        const padding=fontSize*.15,columnWidth=pageWidth/columns;
+        const rows=[];for(let index=0;index<labels.length;index+=columns)rows.push(Array.from({length:columns},(_,c)=>labels[index+c]||''));
+        const rowHeights=rows.map(row=>Math.max(...row.map(text=>lines(text,columnWidth-8,fontSize)))*fontSize*1.18+padding*2+1);
+        // Oltre 200 persone continua su più fogli, senza ridurre il carattere per l'intero evento.
+        const height=titleHeight+rowHeights.slice(0,Math.ceil(Math.min(200,people.length)/columns)).reduce((sum,value)=>sum+value,0);
+        const layout={rows,columns,fontSize,padding,columnWidth,rowHeights,titleHeight,pageWidth,pageHeight,onePage:people.length<=200,digitWidth:measure('0',fontSize)};
+        if(!best||height<best.height)best={...layout,height};
+        if(height<=pageHeight)return layout;
+      }
+    }
+    // Nomi eccezionalmente lunghi: conserva tutto il testo, adattando ulteriormente la scala.
+    const scale=(pageHeight-titleHeight)/(best.height-titleHeight);
+    return {...best,fontSize:best.fontSize*scale,padding:best.padding*scale,rowHeights:best.rowHeights.map(height=>height*scale),digitWidth:measure('0',best.fontSize*scale)};
+  }
+  function createCompactReport(people,title) {
+    const canvas=document.createElement('canvas'),context=canvas.getContext('2d');
+    return compactReportLayout(people,title,(text,size,bold)=>{if(!context)return String(text).length*size*.6;context.font=(bold?'bold ':'')+size+'px Arial';return context.measureText(text).width;});
+  }
+  function reportWorkbook(rows,{compact=false,layout=null}={}) {
     if(!rows.length||rows.length>1048576||rows.reduce((n,r)=>Math.max(n,r.length),0)>16384)throw new Error('Il rapporto supera i limiti Excel.');
     const xml=v=>String(v??'').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g,'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
     const column=n=>{let s='';for(n++;n;n=Math.floor((n-1)/26))s=String.fromCharCode(65+(n-1)%26)+s;return s;};
     const width=rows[0].length,end=column(width-1)+rows.length;
-    const sheet='<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+(compact?'<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>':'')+'<dimension ref="A1:'+end+'"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'+(compact?'<sheetFormatPr defaultRowHeight="32"/>':'')+'<cols>'+rows[0].map((_,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="24" customWidth="1"/>').join('')+'</cols><sheetData>'+rows.map((row,r)=>'<row r="'+(r+1)+'"'+(compact&&r===0?' ht="45" customHeight="1"':'')+'>'+row.map((v,c)=>{const ref=column(c)+(r+1),style=compact?(r===0?1:((r-1)*width+c)%2===0?2:3):r===0?1:0;if(typeof v==='number'&&Number.isFinite(v))return '<c r="'+ref+'" s="'+style+'"><v>'+v+'</v></c>';if(String(v??'').length>32767)throw new Error('Un dato supera i 32767 caratteri consentiti da Excel.');return '<c r="'+ref+'" s="'+style+'" t="inlineStr"><is><t xml:space="preserve">'+xml(v)+'</t></is></c>';}).join('')+'</row>').join('')+'</sheetData>'+(compact?'<mergeCells count="1"><mergeCell ref="A1:'+column(width-1)+'1"/></mergeCells><printOptions horizontalCentered="1"/><pageMargins left="0.3" right="0.3" top="0.4" bottom="0.4" header="0.2" footer="0.2"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>':'<autoFilter ref="A1:'+end+'"/>')+'</worksheet>';
+    const sheet='<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+(compact?'<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>':'')+'<dimension ref="A1:'+end+'"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'+(compact?'<sheetFormatPr defaultRowHeight="32"/>':'')+'<cols>'+rows[0].map((_,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+(compact&&layout?Math.max(1,(layout.columnWidth-3.75)/layout.digitWidth).toFixed(3):24)+'" customWidth="1"/>').join('')+'</cols><sheetData>'+rows.map((row,r)=>'<row r="'+(r+1)+'"'+(compact?' ht="'+(r===0?(layout?.titleHeight||45):(layout?.rowHeights[r-1]||32))+'" customHeight="1"':'')+'>'+row.map((v,c)=>{const ref=column(c)+(r+1),style=compact?(r===0?1:(r-1+c)%2===0?2:3):r===0?1:0;if(typeof v==='number'&&Number.isFinite(v))return '<c r="'+ref+'" s="'+style+'"><v>'+v+'</v></c>';if(String(v??'').length>32767)throw new Error('Un dato supera i 32767 caratteri consentiti da Excel.');return '<c r="'+ref+'" s="'+style+'" t="inlineStr"><is><t xml:space="preserve">'+xml(v)+'</t></is></c>';}).join('')+'</row>').join('')+'</sheetData>'+(compact?'<mergeCells count="1"><mergeCell ref="A1:'+column(width-1)+'1"/></mergeCells><printOptions horizontalCentered="1"/><pageMargins left="0.3937" right="0.3937" top="0.3937" bottom="0.3937" header="0.2" footer="0.2"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="'+(layout?.onePage?1:0)+'"/>':'<autoFilter ref="A1:'+end+'"/>')+'</worksheet>';
     const files={
       '[Content_Types].xml':'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>',
       '_rels/.rels':'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
@@ -56,7 +92,7 @@
       'xl/worksheets/sheet1.xml':sheet
     };
     if(compact){
-      files['xl/styles.xml']='<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="16"/><name val="Calibri"/></font></fonts><fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF2F2F2"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border/><border><left style="thin"><color rgb="FFD9D9D9"/></left><right style="thin"><color rgb="FFD9D9D9"/></right><top style="thin"><color rgb="FFD9D9D9"/></top><bottom style="thin"><color rgb="FFD9D9D9"/></bottom></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+[1,2,3].map(style=>'<xf numFmtId="0" fontId="'+(style===1?1:0)+'" fillId="'+(style===3?3:2)+'" borderId="'+(style===1?0:1)+'" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>').join('')+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+      files['xl/styles.xml']='<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="'+(layout?.fontSize||11)+'"/><name val="Arial"/></font><font><b/><sz val="16"/><name val="Arial"/></font></fonts><fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF2F2F2"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border/><border><left style="thin"><color rgb="FFD9D9D9"/></left><right style="thin"><color rgb="FFD9D9D9"/></right><top style="thin"><color rgb="FFD9D9D9"/></top><bottom style="thin"><color rgb="FFD9D9D9"/></bottom></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+[1,2,3].map(style=>'<xf numFmtId="0" fontId="'+(style===1?1:0)+'" fillId="'+(style===3?3:2)+'" borderId="'+(style===1?0:1)+'" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>').join('')+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
     }
     const encoder=new TextEncoder(),parts=[],directory=[];let offset=0;
     const header=(size,signature)=>{const bytes=new Uint8Array(size);new DataView(bytes.buffer).setUint32(0,signature,true);return bytes;};
@@ -608,8 +644,9 @@
           try { exportRows=await readAll();
           if(compactSelected()){
             if(!exportRows.length){say('Nessuna persona da esportare con i filtri attuali.');return;}
-            const rows=[[select.selectedOptions[0]?.textContent||'Evento','','','',''],...compactReportRows(exportRows)];
-            const url=URL.createObjectURL(reportWorkbook(rows,{compact:true})),link=document.createElement('a');link.href=url;link.download='evento-'+event+'-elenco-compatto.xlsx';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);say('Esportate '+exportRows.length+' persone in elenco compatto.');return;
+            const title=select.selectedOptions[0]?.textContent||'Evento',layout=createCompactReport(exportRows,title);
+            const rows=[[title,...Array(layout.columns-1).fill('')],...layout.rows];
+            const url=URL.createObjectURL(reportWorkbook(rows,{compact:true,layout})),link=document.createElement('a');link.href=url;link.download='evento-'+event+'-elenco-compatto.xlsx';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);say('Esportate '+exportRows.length+' persone in elenco compatto.');return;
           }
           const individual=listContext.view==='people',selected=reportColumnsWithTimestamps(individual?columns.filter(([key])=>content.querySelector('[data-export-column="'+key+'"]').checked):[['code','Prenotazione'],['name','Persone'],['status','Stato'],['paid','Versato netto (EUR)'],['balance','Residuo (EUR)']],features.registration_timestamps);
           if(!selected.length){say('Seleziona almeno una colonna.');return;}
@@ -729,12 +766,16 @@
         searchButton.onclick=runSearch;
 
         requestFilter.onchange=()=>{listContext.requests=requestFilter.value;listContext.shown=30;draw();};deadlineFilter.onchange=()=>{listContext.deadline=deadlineFilter.value;listContext.shown=30;draw();};serviceFilter.onchange=()=>{listContext.service=serviceFilter.value;listContext.shown=30;draw();};
-        await draw();printList=async()=>{let printHost;const cleanup=()=>{printHost?.remove();root.classList.remove('mi-printing-list');document.body.classList.remove('mi-management-printing');};try{
+        await draw();printList=async()=>{let printHost;const compactAncestors=[];const cleanup=()=>{printHost?.remove();compactAncestors.forEach(element=>element.classList.remove('mi-compact-print-path'));root.classList.remove('mi-printing-list','mi-printing-compact');document.body.classList.remove('mi-management-printing');};try{
           if(compactSelected()){
             const rows=await readAll();if(!rows.length){say('Nessuna persona da stampare con i filtri attuali.');return;}
             printHost=document.createElement('section');printHost.dataset.printList='1';printHost.className='mi-compact-report';
-            printHost.innerHTML='<style>@media print{@page{size:A4 landscape;margin:12mm}}</style><table><thead><tr><th colspan="5">'+esc(select.selectedOptions[0]?.textContent||'Evento')+'</th></tr></thead><tbody>'+compactReportRows(rows).map(row=>'<tr>'+row.map(label=>'<td>'+esc(label)+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
-            root.append(printHost);root.classList.add('mi-printing-list');document.body.classList.add('mi-management-printing');window.addEventListener('afterprint',cleanup,{once:true});window.print();return;
+            const title=select.selectedOptions[0]?.textContent||'Evento',layout=createCompactReport(rows,title);
+            printHost.style.setProperty('--mi-compact-font',layout.fontSize+'pt');printHost.style.setProperty('--mi-compact-padding',layout.padding+'pt');
+            printHost.innerHTML='<style>@media print{@page{size:A4 landscape;margin:10mm}}</style><table><thead><tr><th colspan="'+layout.columns+'" style="height:'+layout.titleHeight+'pt">'+esc(title)+'</th></tr></thead><tbody>'+layout.rows.map((row,index)=>'<tr style="height:'+layout.rowHeights[index]+'pt">'+row.map(label=>'<td>'+esc(label)+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
+            root.append(printHost);root.classList.add('mi-printing-list');document.body.classList.add('mi-management-printing');root.classList.add('mi-printing-compact');
+            for(let ancestor=root;ancestor;ancestor=ancestor.parentElement){ancestor.classList.add('mi-compact-print-path');compactAncestors.push(ancestor);}
+            window.addEventListener('afterprint',cleanup,{once:true});window.print();return;
           }
           const individual=listContext.view==='people',chosen=individual?columns.filter(([key])=>content.querySelector('[data-export-column="'+key+'"]').checked):[],selected=individual?[['ordinal','N.'],...(features.rooms?[['room','Stanza']]:[]),...chosen.filter(([key])=>key!=='room')]:[['code','Prenotazione'],['name','Persone'],['status','Stato'],['paid','Versato netto (EUR)'],['balance','Residuo (EUR)']];
           if(!selected.length){say('Seleziona almeno una colonna.');return;}
