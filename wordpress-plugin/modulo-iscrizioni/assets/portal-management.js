@@ -30,21 +30,25 @@
     return [...data,['registration_time','Iscrizione (data e ora)'],['cancellation_time','Cancellazione (data e ora)'],...tail];
   }
   // Il testo viene impostato esplicitamente: i numeri conservano gli zeri iniziali e il foglio non interpreta il valore come formula.
-  function compactReportRows(people,columns=5) {
+  function compactReportLabels(people) {
     const clean=value=>String(value??'').normalize('NFC').trim().replace(/\s+/gu,' ');
     const entries=people.map(person=>({last:clean(person.last_name),first:clean(person.first_name),full:clean(person.name)}));
     const counts=new Map();
     for(const entry of entries){entry.key=entry.last.toLocaleLowerCase('it');counts.set(entry.key,(counts.get(entry.key)||0)+1);}
     entries.sort((a,b)=>a.last.localeCompare(b.last,'it',{sensitivity:'base'})||a.first.localeCompare(b.first,'it',{sensitivity:'base'}));
-    const labels=entries.map(entry=>entry.last?(counts.get(entry.key)>1?[entry.last,entry.first].filter(Boolean).join(' '):entry.last):entry.full||entry.first);
-    const rows=[];
-    for(let index=0;index<labels.length;index+=columns)rows.push(Array.from({length:columns},(_,column)=>labels[index+column]||''));
-    return rows;
+    return entries.map(entry=>entry.last?(counts.get(entry.key)>1?[entry.last,entry.first].filter(Boolean).join(' '):entry.last):entry.full||entry.first);
+  }
+  function compactReportGrid(labels,columns) {
+    const height=Math.ceil(labels.length/columns);
+    return Array.from({length:height},(_,row)=>Array.from({length:columns},(_,column)=>labels[column*height+row]||''));
+  }
+  function compactReportRows(people,columns=5) {
+    return compactReportGrid(compactReportLabels(people),columns);
   }
   function compactReportLayout(people,title,measure) {
     // Dimensioni in punti: A4 orizzontale, margini 10 mm e un margine di sicurezza verticale.
     const pageWidth=277*72/25.4,pageHeight=190*72/25.4-8;
-    const labels=compactReportRows(people).flat().slice(0,people.length);
+    const labels=compactReportLabels(people);
     const lines=(text,width,size,bold=false)=>{
       let rest=String(text),count=1;
       while(measure(rest,size,bold)>width&&rest.length>1){
@@ -58,10 +62,10 @@
     const titleHeight=lines(title,pageWidth-8,16,true)*19+8;
     let best;
     for(let fontSize=11;fontSize>=6; fontSize-=.5){
-      for(let columns=5;columns<=10;columns++){
-        const padding=fontSize*.15,columnWidth=pageWidth/columns;
-        const rows=[];for(let index=0;index<labels.length;index+=columns)rows.push(Array.from({length:columns},(_,c)=>labels[index+c]||''));
-        const rowHeights=rows.map(row=>Math.max(...row.map(text=>lines(text,columnWidth-8,fontSize)))*fontSize*1.18+padding*2+1);
+      for(let columns=5;columns<=6;columns++){
+        const padding=fontSize*.1,columnWidth=pageWidth/columns;
+        const rows=compactReportGrid(labels,columns);
+        const rowHeights=rows.map(row=>Math.max(...row.map(text=>lines(text,columnWidth-8,fontSize)))*fontSize*1.12+padding*2+1);
         // Oltre 200 persone continua su più fogli, senza ridurre il carattere per l'intero evento.
         const height=titleHeight+rowHeights.slice(0,Math.ceil(Math.min(200,people.length)/columns)).reduce((sum,value)=>sum+value,0);
         const layout={rows,columns,fontSize,padding,columnWidth,rowHeights,titleHeight,pageWidth,pageHeight,onePage:people.length<=200,digitWidth:measure('0',fontSize)};
@@ -92,7 +96,7 @@
       'xl/worksheets/sheet1.xml':sheet
     };
     if(compact){
-      files['xl/styles.xml']='<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="'+(layout?.fontSize||11)+'"/><name val="Arial"/></font><font><b/><sz val="16"/><name val="Arial"/></font></fonts><fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF2F2F2"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border/><border><left style="thin"><color rgb="FFD9D9D9"/></left><right style="thin"><color rgb="FFD9D9D9"/></right><top style="thin"><color rgb="FFD9D9D9"/></top><bottom style="thin"><color rgb="FFD9D9D9"/></bottom></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+[1,2,3].map(style=>'<xf numFmtId="0" fontId="'+(style===1?1:0)+'" fillId="'+(style===3?3:2)+'" borderId="'+(style===1?0:1)+'" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>').join('')+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+      files['xl/styles.xml']='<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="'+(layout?.fontSize||11)+'"/><name val="Arial"/></font><font><b/><sz val="16"/><name val="Arial"/></font></fonts><fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF2F2F2"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border/><border><left style="thin"><color rgb="FFB8BEC6"/></left><right style="thin"><color rgb="FFB8BEC6"/></right><top style="thin"><color rgb="FFD9D9D9"/></top><bottom style="thin"><color rgb="FFD9D9D9"/></bottom></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+[1,2,3].map(style=>'<xf numFmtId="0" fontId="'+(style===1?1:0)+'" fillId="'+(style===3?3:2)+'" borderId="'+(style===1?0:1)+'" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>').join('')+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
     }
     const encoder=new TextEncoder(),parts=[],directory=[];let offset=0;
     const header=(size,signature)=>{const bytes=new Uint8Array(size);new DataView(bytes.buffer).setUint32(0,signature,true);return bytes;};

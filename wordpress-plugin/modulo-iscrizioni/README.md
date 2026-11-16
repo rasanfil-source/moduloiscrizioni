@@ -4,7 +4,7 @@ Plugin WordPress per creare e pubblicare moduli di iscrizione e gestire le attiv
 
 ## Funzioni
 
-La versione 3.27.70 mantiene il titolo Segreteria eventi a sinistra e dispone la campanella subito alla sua destra, nello stesso gruppo. Esci resta sul lato destro dell’intestazione. Icona e stati grafici sono invariati.
+La versione 3.27.71 dispone l’Elenco compatto in ordine alfabetico dall’alto in basso in ogni colonna, proseguendo poi verso destra. Stampa ed Excel sono predisposti in A4 orizzontale, con un massimo di sei colonne e carattere adattivo, dando priorità a una sola facciata fino a 200 nominativi. I separatori verticali sono leggermente più marcati.
 
 - Gruppi ed eventi con identità visiva, date, capienza e condizioni di iscrizione.
 - Moduli configurabili con tipologie, servizi e domande per partecipante.
