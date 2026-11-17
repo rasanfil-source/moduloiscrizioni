@@ -290,6 +290,31 @@ final class MI_Travel {
 		}
 		return MI_Modello_Email::crea_istantanea_istituzionale( $event_id, 'Partecipazione in attesa di passaggio', 'Richiesta registrata: in attesa di passaggio.', $html, $message );
 	}
+	/** Riepilogo nella conferma, letto dai viaggi effettivamente registrati. */
+	public static function confirmation_email( array $snapshot, array $event, $registration_id ) {
+		if ( empty( $event['travel']['enabled'] ) ) return $snapshot;
+		global $wpdb;
+		$people = $wpdb->get_results( $wpdb->prepare( "SELECT t.*,p.first_name,p.last_name FROM {$wpdb->prefix}mi_travel t JOIN {$wpdb->prefix}mi_participants p ON p.id=t.participant_id WHERE t.registration_id=%d AND t.event_id=%d AND p.status='ACTIVE' ORDER BY t.participant_id", $registration_id, $event['id'] ), ARRAY_A );
+		self::check();
+		$lines = array();
+		foreach ( $people as $person ) {
+			if ( 'DRIVER' === $person['mode'] ) {
+				$seats = (int) $person['seats'];
+				$line = 'Trasferimento con auto propria' . ( $seats > 0 ? ' e offerta di ' . $seats . ( 1 === $seats ? ' posto' : ' posti' ) : '' );
+			} elseif ( 'OWN' === $person['mode'] ) {
+				$line = 'Trasferimento autonomo';
+			} elseif ( 'NEED' === $person['mode'] ) {
+				if ( 'WAITING' === $person['state'] ) $line = ! empty( $person['required_ride'] ) ? 'In attesa di passaggio necessario per partecipare' : 'In attesa di passaggio';
+				else $line = self::state_label( $person['state'] );
+			} else continue;
+			if ( '' === $line ) continue;
+			$lines[] = ( count( $people ) > 1 ? trim( $person['first_name'] . ' ' . $person['last_name'] ) . ': ' : '' ) . $line;
+		}
+		if ( ! $lines ) return $snapshot;
+		$snapshot['html'] .= '<p><strong>Spostamenti:</strong><br>' . implode( '<br>', array_map( 'esc_html', $lines ) ) . '</p>';
+		$snapshot['testo'] .= "\n\nSpostamenti:\n" . implode( "\n", $lines );
+		return $snapshot;
+	}
 	private static function notify_locked( array $row, $subject, $message, array $management = array() ) {
 		if ( empty( $row['buyer_email'] ) ) return;
 		global $wpdb;

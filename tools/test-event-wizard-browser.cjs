@@ -35,8 +35,11 @@ const server=http.createServer((req,res)=>{
   for(let n=0;n<3;n++)await next();
   assert.match(await demo.locator('.mi-wizard-step.is-active h2').innerText(),/Date e posti/);
   assert.equal(await field('waitlist_enabled').isChecked(),false);
+  assert.equal(await field('waitlist_fast').isVisible(),false);assert.equal(await field('waitlist_fast').isDisabled(),true);
   assert.equal(await field('waitlist_capacity').isVisible(),false);assert.equal(await field('waitlist_capacity').isDisabled(),true);
   await field('waitlist_enabled').check();assert.equal(await field('waitlist_capacity').isVisible(),true);
+  assert.equal(await field('waitlist_fast').isVisible(),true);assert.equal(await field('waitlist_fast').isChecked(),false);
+  await field('waitlist_fast').check();assert.equal(await field('waitlist_fast').isChecked(),true);
   await field('waitlist_capacity').fill('35');await field('waitlist_enabled').uncheck();assert.equal(await field('waitlist_capacity').isVisible(),false);
   await field('waitlist_enabled').check();assert.equal(await field('waitlist_capacity').inputValue(),'35');assert.equal(await field('waitlist_capacity').isDisabled(),false);
   await field('closes_at').fill('');await field('starts_at').fill('02/11/2027 12:00');

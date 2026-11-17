@@ -188,8 +188,8 @@ final class MI_Modello_Email {
 			'internal_recipients' => array(),
 			'subject'   => 'Iscrizione confermata — {{evento.titolo}}',
 			'preheader' => 'L’iscrizione è stata registrata. Di seguito il riepilogo e le prossime indicazioni.',
-			'html'      => '<p style="margin:0 0 16px;">Buongiorno {{sottoscrittore.nome_completo}}.</p><p style="margin:0 0 20px;">L’iscrizione a <strong>{{evento.titolo}}</strong> è stata registrata.</p><p style="margin:0 0 20px;"><strong>Quando:</strong> {{evento.data}}<br><strong>Dove:</strong> {{evento.luogo}}<br><strong>Stato:</strong> {{ordine.stato}}<br><strong>Partecipazione:</strong> {{ordine.riepilogo}}</p><p style="margin:0 0 20px;"><strong>Situazione economica:</strong><br>{{ordine.riepilogo_economico}}</p><p style="margin:0 0 20px;"><strong>Indicazioni per il pagamento:</strong><br>{{pagamento.istruzioni}}<br><strong>Scadenza:</strong> {{pagamento.scadenza}}<br><strong>Causale:</strong> {{pagamento.causale}}</p><p style="margin:24px 0 0;"><strong>Riferimenti dell’iscrizione:</strong> questa email contiene i riferimenti utili per l’iscrizione.</p>',
-			'text'      => "Buongiorno {{sottoscrittore.nome_completo}}.\n\nL’iscrizione a {{evento.titolo}} è stata registrata.\n\nQuando: {{evento.data}}\nDove: {{evento.luogo}}\nStato: {{ordine.stato}}\nPartecipazione: {{ordine.riepilogo}}\n\nSituazione economica: {{ordine.riepilogo_economico}}\nIndicazioni per il pagamento: {{pagamento.istruzioni}}\nScadenza: {{pagamento.scadenza}}\nCausale: {{pagamento.causale}}\n\nRiferimenti dell’iscrizione: questa email contiene i riferimenti utili per l’iscrizione.",
+			'html'      => '<p style="margin:0 0 16px;">Buongiorno {{sottoscrittore.nome_completo}}.</p><p style="margin:0 0 20px;">L’iscrizione a <strong>{{evento.titolo}}</strong> è stata registrata.</p><p style="margin:0 0 20px;"><strong>Quando:</strong> {{evento.data}}<br><strong>Dove:</strong> {{evento.luogo}}<br><strong>Stato:</strong> {{ordine.stato}}<br><strong>Partecipazione:</strong> {{ordine.riepilogo}}</p><p style="margin:0 0 20px;"><strong>Situazione economica:</strong><br>{{ordine.riepilogo_economico}}</p><p style="margin:0 0 20px;"><strong>Indicazioni per il pagamento:</strong><br>{{pagamento.istruzioni}}<br><strong>Scadenza:</strong> {{pagamento.scadenza}}<br><strong>Causale:</strong> {{pagamento.causale}}</p>',
+			'text'      => "Buongiorno {{sottoscrittore.nome_completo}}.\n\nL’iscrizione a {{evento.titolo}} è stata registrata.\n\nQuando: {{evento.data}}\nDove: {{evento.luogo}}\nStato: {{ordine.stato}}\nPartecipazione: {{ordine.riepilogo}}\n\nSituazione economica: {{ordine.riepilogo_economico}}\nIndicazioni per il pagamento: {{pagamento.istruzioni}}\nScadenza: {{pagamento.scadenza}}\nCausale: {{pagamento.causale}}",
 			'footer'    => 'A presto!',
 		);
 		$saved = get_post_meta( $event_id, '_mi_email_template', true );
@@ -198,8 +198,23 @@ final class MI_Modello_Email {
 		if ( empty( $settings['reply_to'] ) || 'wordpress@parrocchiasanteugenio.it' === strtolower( $settings['reply_to'] ) ) $settings['reply_to'] = self::EMAIL_SEGRETERIA;
 		$settings = self::ripara_modello_testuale( $settings );
 		foreach ( array( 'subject', 'preheader', 'html', 'text', 'footer' ) as $field ) $settings[$field] = self::uniforma_testo_comunicazione( $settings[$field], 'html' === $field );
+		$settings['html'] = self::rimuovi_frase_riferimenti( $settings['html'], true );
+		$settings['text'] = self::rimuovi_frase_riferimenti( $settings['text'] );
 		$settings['html'] = self::uniforma_grafica_corpo( $settings['html'] );
 		return $settings;
+	}
+
+	/** Elimina solo la vecchia frase standard, conservando eventuali riferimenti personalizzati. */
+	private static function rimuovi_frase_riferimenti( $text, $html = false ) {
+		$is_standard = static function ( $line ) {
+			$line = trim( preg_replace( '/\s+/u', ' ', html_entity_decode( strip_tags( $line ), ENT_QUOTES, 'UTF-8' ) ) );
+			return in_array( $line, array(
+				'Riferimenti dell’iscrizione: questa email contiene i riferimenti utili per l’iscrizione.',
+				'Riferimenti dell’iscrizione: contiene i riferimenti utili per l’iscrizione.',
+			), true );
+		};
+		if ( $html ) return preg_replace_callback( '#<p\b[^>]*>.*?</p>#is', static function ( $match ) use ( $is_standard ) { return $is_standard( $match[0] ) ? '' : $match[0]; }, $text );
+		return trim( implode( "\n", array_filter( explode( "\n", $text ), static function ( $line ) use ( $is_standard ) { return ! $is_standard( $line ); } ) ) );
 	}
 
 	/** Uniforma la grafica dei modelli senza modificare il testo personalizzato. */
@@ -454,6 +469,15 @@ final class MI_Modello_Email {
 		$snapshot['status_url'] = '';
 		$snapshot['action_url'] = esc_url_raw( (string) $offer_url );
 		$snapshot['action_label'] = 'Risposta alla proposta';
+		return $snapshot;
+	}
+
+	/** Evidenzia la durata effettiva, anche se limitata dalla scadenza comune. */
+	public static function avviso_coda_rapida( $snapshot, $hours ) {
+		$hours_label = str_replace( '.', ',', (string) max( 0.01, round( $hours, 2 ) ) );
+		$urgent = 'Hai solo ' . $hours_label . ' Ore per poter accettare il posto.';
+		$snapshot['html'] = '<p style="color:#b91c1c"><strong>' . esc_html( $urgent ) . '</strong></p>' . $snapshot['html'];
+		$snapshot['testo'] = $urgent . "\n\n" . $snapshot['testo'];
 		return $snapshot;
 	}
 
