@@ -46,6 +46,37 @@ final class MI_Travel {
 		$config = (array) get_post_meta( $event_id, '_mi_travel', true );
 		return array( 'enabled' => ! empty( $config['enabled'] ), 'instructions' => (string) ( $config['instructions'] ?? '' ), 'price_mode' => 'DRIVER' === ( $config['price_mode'] ?? '' ) ? 'DRIVER' : 'FIXED', 'price_cents' => max( 0, (int) ( $config['price_cents'] ?? 0 ) ), 'deadline' => (string) ( $config['deadline'] ?? '' ) );
 	}
+	/** Quattro soli contatori, letti senza caricare nominativi o avviare assegnazioni. */
+	public static function management_overview( $event_id ) {
+		global $wpdb;
+		$driver_active = "d.mode='DRIVER' AND d.seats>0 AND dp.status='ACTIVE' AND dr.capacity_released_at IS NULL AND dr.status IN ('CONFIRMED','PENDING_PAYMENT')";
+		$now = gmdate( 'Y-m-d H:i:s' );
+		$row = $wpdb->get_row( $wpdb->prepare(
+			"SELECT
+			 COALESCE(SUM(CASE WHEN t.mode='NEED' AND t.state IN ('WAITING','OFFERED') THEN 1 ELSE 0 END),0) waiting,
+			 COALESCE(SUM(CASE WHEN t.mode='NEED' AND t.state='ASSIGNED' AND {$driver_active} THEN 1 ELSE 0 END),0) assigned,
+			 COALESCE(SUM(CASE WHEN t.mode='NEED' AND t.state='OFFERED' AND t.offer_expires_at>%s AND {$driver_active} THEN 1 ELSE 0 END),0) reserved,
+			 COALESCE(SUM(CASE WHEN t.mode='DRIVER' AND t.seats>0 AND r.status IN ('CONFIRMED','PENDING_PAYMENT') THEN GREATEST(0,CAST(t.seats AS SIGNED)-(
+			  SELECT COUNT(*) FROM {$wpdb->prefix}mi_travel used
+			  JOIN {$wpdb->prefix}mi_participants up ON up.id=used.participant_id AND up.registration_id=used.registration_id
+			  JOIN {$wpdb->prefix}mi_registrations ur ON ur.id=used.registration_id AND ur.event_id=used.event_id
+			  WHERE used.driver_id=t.participant_id AND used.event_id=t.event_id AND up.status='ACTIVE' AND ur.capacity_released_at IS NULL
+			  AND ur.status IN ('CONFIRMED','PENDING_PAYMENT','TRAVEL_PENDING') AND (used.state='ASSIGNED' OR (used.state='OFFERED' AND used.offer_expires_at>%s))
+			 )) ELSE 0 END),0) available
+			 FROM {$wpdb->prefix}mi_travel t
+			 JOIN {$wpdb->prefix}mi_participants p ON p.id=t.participant_id AND p.registration_id=t.registration_id
+			 JOIN {$wpdb->prefix}mi_registrations r ON r.id=t.registration_id AND r.event_id=t.event_id
+			 LEFT JOIN {$wpdb->prefix}mi_travel d ON d.participant_id=t.driver_id AND d.event_id=t.event_id
+			 LEFT JOIN {$wpdb->prefix}mi_participants dp ON dp.id=d.participant_id AND dp.registration_id=d.registration_id
+			 LEFT JOIN {$wpdb->prefix}mi_registrations dr ON dr.id=d.registration_id AND dr.event_id=d.event_id
+			 WHERE t.event_id=%d AND p.status='ACTIVE' AND r.capacity_released_at IS NULL AND r.status IN ('CONFIRMED','PENDING_PAYMENT','TRAVEL_PENDING')",
+			$now, $now, $event_id
+		), ARRAY_A );
+		self::check();
+		if ( ! is_array( $row ) ) throw new RuntimeException( 'Riepilogo passaggi non disponibile.' );
+		return array_map( 'intval', $row );
+	}
+
 	public static function has_records( $event_id ) {
 		global $wpdb;
 		$result = $wpdb->get_var( $wpdb->prepare( "SELECT participant_id FROM {$wpdb->prefix}mi_travel WHERE event_id=%d LIMIT 1", $event_id ) ); self::check();

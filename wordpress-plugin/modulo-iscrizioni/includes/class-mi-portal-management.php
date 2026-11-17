@@ -48,6 +48,10 @@ final class MI_Portal_Management {
 				elseif ( 'summary_panel' === $operation ) $result = MI_Management_List::panel( $result, $panel );
 				elseif ( 'summary' === $operation ) {
 					$result = MI_Management_List::overview( $result );
+					if ( empty( $result['metrics']['missing'] ) && class_exists( 'MI_Travel' ) && MI_Travel::config( $event_id )['enabled'] ) {
+						try { $result['travel_overview'] = MI_Travel::management_overview( $event_id ); }
+						catch ( Throwable $error ) { $result['travel_overview'] = null; }
+					}
 					$result['attendance_availability'] = MI_Management_Service::attendance_availability( $event_id );
 				}
 			}

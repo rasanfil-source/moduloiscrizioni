@@ -51,3 +51,21 @@ check(MI_Event_Deletion::preview(43)['fingerprint']===$preview,'Technical token 
 $wpdb->fail='INSERT INTO wp_mi_email_outbox';
 check(is_wp_error(MI_Travel::replace_link(43))&&$valid->invoke(null,43,$replaced),'Failed replacement did not roll back old link');
 echo "PASS: random stable links, participant isolation, legacy grace/expiry, access control, individual revocation, registered recipient, audit redaction and rollback.\n";
+
+// Contatori aggregati reali: prenotazione 43 attiva, evento 42 isolato.
+$wpdb->query("UPDATE wp_mi_travel SET mode='DRIVER',seats=5 WHERE participant_id=43");
+$wpdb->query("UPDATE wp_mi_travel SET mode='NEED',state='ASSIGNED',driver_id=43 WHERE participant_id=44");
+foreach ([45=>['OFFERED',3600],46=>['OFFERED',-3600],47=>['WAITING',0],48=>['DECLINED',0],49=>['ASSIGNED',0]] as $id=>[$state,$seconds]) {
+    check(false!==$wpdb->query("INSERT INTO wp_mi_participants (id,registration_id,first_name,last_name,extra_json,status) VALUES ($id,43,'Persona','Sintetica','{}','".($id===49?'CANCELLED':'ACTIVE')."')"),$wpdb->last_error);
+    $expiry=gmdate('Y-m-d H:i:s',time()+$seconds);
+    check(false!==$wpdb->query("INSERT INTO wp_mi_travel (participant_id,registration_id,event_id,mode,state,driver_id,offer_expires_at,created_at) VALUES ($id,43,43,'NEED','$state',43,'$expiry',UTC_TIMESTAMP())"),$wpdb->last_error);
+}
+try { $counts=MI_Travel::management_overview(43); }
+catch (RuntimeException $error) { throw new RuntimeException($error->getMessage().' SQL fixture: '.$wpdb->last_error, 0, $error); }
+check($counts===['waiting'=>3,'assigned'=>1,'reserved'=>1,'available'=>3], 'Conteggi passaggi errati: '.json_encode($counts));
+$wpdb->query("UPDATE wp_mi_travel SET seats=1 WHERE participant_id=43");
+check(MI_Travel::management_overview(43)['available']===0,'Disponibilità negativa');
+$wpdb->query("UPDATE wp_mi_registrations SET capacity_released_at=UTC_TIMESTAMP() WHERE id=43");
+check(array_sum(MI_Travel::management_overview(43))===0,'Prenotazione rilasciata inclusa');
+check(array_sum(MI_Travel::management_overview(999))===0,'Evento vuoto non azzerato');
+echo "PASS: contatori SQL passaggi, proposte valide/scadute, assegnazioni, annullati, capienza rilasciata, eventi isolati e disponibilità non negativa.\n";
