@@ -16,7 +16,7 @@ const version=fs.readFileSync('wordpress-plugin/modulo-iscrizioni/modulo-iscrizi
  await page.screenshot({path:`${folder}/iscrizione-passaggio-disponibile-${width}.png`,fullPage:true});
  await page.locator('#demo-rides').selectOption('EMPTY');
  await page.waitForFunction(()=>document.querySelectorAll('[data-travel="ride_offer"]').length===0);
- assert.equal(await field('wanted_origin').count(),0,'Unnecessary requested departure location is still shown');await field('waitlist').check();
+ assert.equal(await field('wanted_origin').count(),0,'Unnecessary requested departure location is still shown');assert.equal(await field('waitlist').count(),0);
  await page.screenshot({path:`${folder}/iscrizione-attesa-${width}.png`,fullPage:true});
  await page.locator('[data-mi-next]').click();assert.match(await page.locator('[data-mi-confirmation-summary]').innerText(),/Nessun pagamento/);
  await page.screenshot({path:`${folder}/iscrizione-riepilogo-${width}.png`,fullPage:true});

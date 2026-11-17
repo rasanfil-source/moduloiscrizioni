@@ -7,7 +7,7 @@
     const value = key => host.querySelector(`[data-travel="${key}"]`)?.value || '';
     const select = host.querySelector('[data-travel="driver_id"]');
     const assignments = Array.from(host.querySelectorAll('[data-travel="ride_offer"]:checked')).map(input => ({ route_key: input.dataset.routeKey, driver_id: Number(input.dataset.driverId), seats: Number(input.dataset.seats), price_cents: Number(input.dataset.priceCents) }));
-    return { mode: value('mode'), seats: value('seats'), origin: value('mode') === 'NEED' ? '' : value('origin'), departure: value('departure'), price: value('price'), fallback: value('fallback'), driver_id: Number(value('driver_id')) || 0, price_cents: Number(select?.selectedOptions[0]?.dataset.priceCents) || 0, assignments, waitlist: Boolean(host.querySelector('[data-travel="waitlist"]')?.checked) };
+    return { mode: value('mode'), seats: value('seats'), origin: value('mode') === 'NEED' ? '' : value('origin'), departure: value('departure'), price: value('price'), fallback: value('fallback'), driver_id: Number(value('driver_id')) || 0, price_cents: Number(select?.selectedOptions[0]?.dataset.priceCents) || 0, assignments, waitlist: value('mode') === 'NEED' };
   }
   function render(config, previous = {}, index, party = []) {
     const host = document.createElement('fieldset');
@@ -50,7 +50,6 @@
     const rides = document.createElement('div'); rides.dataset.travelOffers = ''; need.append(rides);
     const status = note('', need); status.setAttribute('role', 'status');
     const reload = document.createElement('button'); reload.type = 'button'; reload.textContent = 'Riprova'; reload.hidden = true; need.append(reload);
-    const wait = field('Desidero essere avvisato quando si trova un passaggio', 'waitlist', 'checkbox', need); wait.checked = Boolean(previous.waitlist);
     const fallback = field(party.length > 1 ? 'Se una o più persone restano senza passaggio' : 'Se il passaggio non è più disponibile', 'fallback', 'select', need);
     option(fallback, '', party.length > 1 ? 'Scegli cosa fare' : 'Scegli come partecipare');
     option(fallback, 'REQUIRED', party.length > 1 ? 'Annulla la partecipazione delle persone senza passaggio' : 'Parteciperò solo se trovo un passaggio');
@@ -90,11 +89,11 @@
         }
         status.textContent = !acceptingNewRequests
           ? 'Le nuove richieste e offerte di passaggio sono chiuse. Se avevi già scelto un passaggio, rivedi la scelta e seleziona come vuoi partecipare.'
-          : available.length ? (party.length > 1 ? 'Seleziona una o più auto: distribuiremo i posti tra le persone della prenotazione.' : 'Seleziona un passaggio oppure chiedi di entrare in lista d’attesa auto.') : 'Al momento non ci sono passaggi disponibili. Puoi chiedere di entrare in lista d’attesa auto.';
+          : available.length ? (party.length > 1 ? 'Puoi selezionare una o più auto.' : 'Puoi selezionare un passaggio.') : 'Al momento non ci sono passaggi disponibili.';
         loadedOnce = true;
       } catch (error) {
         rides.replaceChildren();
-        status.textContent = 'Non è stato possibile verificare i passaggi disponibili. È possibile riprovare oppure chiedere di entrare in lista d’attesa auto.';
+        status.textContent = 'Non è stato possibile verificare i passaggi disponibili. È possibile riprovare.';
         reload.hidden = false;
       } finally { loading = false; reload.disabled = false; update(); }
     }
@@ -110,13 +109,11 @@
       const selectedSeats = Array.from(host.querySelectorAll('[data-travel="ride_offer"]:checked')).reduce((sum, input) => sum + Number(input.dataset.seats || 0), 0);
       const unassigned = Math.max(0, (party.length || 1) - selectedSeats);
       if (mode.value === 'NEED' && rides.childElementCount && selectedSeats > 0) status.textContent = party.length > 1
-        ? `Hai selezionato posti per ${Math.min(selectedSeats, party.length)} persone su ${party.length}.${unassigned ? ' Seleziona altre auto o chiedi di entrare in lista d’attesa per le persone rimanenti.' : ' Tutte le persone hanno un posto selezionato.'}`
+        ? `Hai selezionato posti per ${Math.min(selectedSeats, party.length)} persone su ${party.length}.${unassigned ? ' Continueremo a cercare per le persone rimanenti.' : ' Tutte le persone hanno un posto selezionato.'}`
         : 'Passaggio selezionato. La disponibilità sarà verificata al momento dell’iscrizione.';
       fallback.required = mode.value === 'NEED';
       fallback.closest('label').hidden = mode.value !== 'NEED';
       fallbackHelp.hidden = mode.value !== 'NEED';
-      wait.required = mode.value === 'NEED' && unassigned > 0;
-      wait.closest('label').hidden = mode.value !== 'NEED' || unassigned === 0;
     }
     mode.addEventListener('change', () => { update(); if (mode.value === 'NEED') load(); });
     seats.addEventListener('change', update); rides.addEventListener('change', update); reload.addEventListener('click', load);

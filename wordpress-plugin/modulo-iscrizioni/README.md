@@ -4,7 +4,7 @@ Plugin WordPress per creare e pubblicare moduli di iscrizione e gestire le attiv
 
 ## Funzioni
 
-La versione 3.27.80 usa «Mi organizzo diversamente» nella scelta del viaggio e «Ci organizziamo diversamente» nelle prenotazioni multiple. Conserva l’ordine auto, ricerca passaggio, altra organizzazione. Semplifica inoltre le etichette delle caselle privacy e avvisi sulle future iniziative.
+La versione 3.27.81 elimina la casella «Desidero essere avvisato quando si trova un passaggio»: scegliere «Cerco un passaggio in auto» attiva automaticamente la richiesta di attesa, anche senza selezionare posti disponibili. Nelle prenotazioni multiple chi non ha un posto selezionato resta in attesa.
 
 - Gruppi ed eventi con identità visiva, date, capienza e condizioni di iscrizione.
 - Moduli configurabili con tipologie, servizi e domande per partecipante.
