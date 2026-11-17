@@ -27,7 +27,7 @@ const version=fs.readFileSync('wordpress-plugin/modulo-iscrizioni/modulo-iscrizi
  await field('mode').selectOption('DRIVER');await field('seats').selectOption('2');assert.equal(await field('driver_key').count(),0,'The form should not ask who drives');
  assert.match(await page.locator('[data-mi-travel]').innerText(),/comunicheremo i vostri recapiti/i,'Driver contact sharing should be disclosed when seats are offered');
  assert.equal(await field('seats').count(),1,'Seats duplicated per participant');
- assert.equal(await field('mode').locator('option[value=OWN]').innerText(),'Ci organizziamo autonomamente');assert.equal(await field('mode').locator('option[value=DRIVER]').innerText(),'Veniamo in auto');assert.equal(await field('mode').locator('option[value=NEED]').innerText(),'Cerchiamo un passaggio in auto');assert.equal(await field('mode').locator('option[value=PUBLIC]').count(),0);
+ assert.equal(await field('mode').locator('option[value=OWN]').innerText(),'Ci organizziamo diversamente');assert.equal(await field('mode').locator('option[value=DRIVER]').innerText(),'Veniamo in auto');assert.equal(await field('mode').locator('option[value=NEED]').innerText(),'Cerchiamo un passaggio in auto');assert.equal(await field('mode').locator('option[value=PUBLIC]').count(),0);
  assert.equal(await page.getByText('I passaggi comprendono andata e ritorno. L’eventuale contributo si versa direttamente al conducente ed è separato dalle eventuali quote.',{exact:true}).isHidden(),true);
  await page.screenshot({path:`${folder}/iscrizione-prenotazione-tre-persone-${width}.png`,fullPage:true});
  await page.locator('[data-mi-back]').click();await page.locator('[data-mi-next]').click();

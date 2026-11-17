@@ -4,7 +4,7 @@ Plugin WordPress per creare e pubblicare moduli di iscrizione e gestire le attiv
 
 ## Funzioni
 
-La versione 3.27.79 rende più invitante la domanda sui posti offerti: «Vuoi mettere a disposizione qualche posto per altri iscritti? (esclusi conducente e accompagnatori già previsti)». Nelle prenotazioni multiple usa «Volete» e «0 — Non offriamo posti».
+La versione 3.27.80 usa «Mi organizzo diversamente» nella scelta del viaggio e «Ci organizziamo diversamente» nelle prenotazioni multiple. Conserva l’ordine auto, ricerca passaggio, altra organizzazione. Semplifica inoltre le etichette delle caselle privacy e avvisi sulle future iniziative.
 
 - Gruppi ed eventi con identità visiva, date, capienza e condizioni di iscrizione.
 - Moduli configurabili con tipologie, servizi e domande per partecipante.
