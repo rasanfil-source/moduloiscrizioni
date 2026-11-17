@@ -33,8 +33,8 @@
     const driver = document.createElement('div'); host.append(driver);
     const cutoffNotice = note('', host); cutoffNotice.dataset.travel = 'closed_notice'; cutoffNotice.hidden = true;
     const closedDriverNote = note('In questo momento puoi venire in auto, ma non attivare nuovi posti per altre persone.', driver); closedDriverNote.hidden = true;
-    const seats = field('Posti disponibili per altri iscritti, esclusi conducente e accompagnatori già previsti', 'seats', 'select', driver);
-    for (let n = 0; n <= 8; n++) option(seats, String(n), n === 0 ? '0 — Non offro posti' : String(n));
+    const seats = field(plural ? 'Volete mettere a disposizione qualche posto per altri iscritti? (esclusi conducente e accompagnatori già previsti)' : 'Vuoi mettere a disposizione qualche posto per altri iscritti? (esclusi conducente e accompagnatori già previsti)', 'seats', 'select', driver);
+    for (let n = 0; n <= 8; n++) option(seats, String(n), n === 0 ? (plural ? '0 — Non offriamo posti' : '0 — Non offro posti') : String(n));
     seats.value = String(previous.seats || 0);
     const details = document.createElement('div'); driver.append(details);
     const eventOrigin = String(config.event.event_location || '').trim();
