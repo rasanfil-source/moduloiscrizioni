@@ -14,8 +14,6 @@
     host.dataset.miTravel = '';
     host.className = 'mi-registration__travel';
     const legend = document.createElement('legend'); legend.textContent = party.length > 1 ? 'Come raggiungerete l’evento?' : 'Come raggiungerai l’evento?'; host.append(legend);
-    note('Per lasciare 24 ore complete per ogni risposta, le nuove richieste e offerte di passaggio chiudono 24 ore prima del termine indicato.');
-    if (party.length > 1) note('Una sola modalità di viaggio per la prenotazione. Puoi selezionare più auto: assegneremo un posto a ogni persona.');
     function note(text, parent = host) { const p = document.createElement('p'); p.textContent = text; parent.append(p); return p; }
     function field(label, key, type = 'text', parent = host) {
       const wrap = document.createElement('label');
@@ -48,7 +46,6 @@
     const price = field('Contributo per persona, andata e ritorno (€)', 'price', 'text', details); price.inputMode = 'decimal'; price.value = config.event.travel.price_mode === 'FIXED' ? String(config.event.travel.price_cents / 100).replace('.', ',') : previous.price || '0'; price.readOnly = config.event.travel.price_mode === 'FIXED';
     const need = document.createElement('div'); host.append(need);
     note('I passaggi comprendono andata e ritorno. L’eventuale contributo si versa direttamente al conducente ed è separato dalle eventuali quote.', need);
-    if (party.length > 1) note(`Si richiede un posto per ciascuna delle ${party.length} persone. Le proposte sono individuali e possono riguardare auto diverse.`, need);
     const ridesLabel = document.createElement('strong'); ridesLabel.textContent = 'Passaggi disponibili'; need.append(ridesLabel);
     const rides = document.createElement('div'); rides.dataset.travelOffers = ''; need.append(rides);
     const status = note('', need); status.setAttribute('role', 'status');

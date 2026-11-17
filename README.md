@@ -23,11 +23,11 @@ Le richieste tra WordPress e Apps Script sono firmate. MySQL conserva il registr
 
 - [Distribuzioni conservate: ultimi cinque rilasci](docs/distribuzioni-conservate.md)
 - [Download delle release pubblicate](https://github.com/rasanfil-source/moduloiscrizioni/releases)
+- [Rilascio 3.27.77: scelta del viaggio più semplice nel modulo](docs/rilascio-3.27.77.md)
 - [Rilascio 3.27.76: riepilogo passaggi nella scheda Iscrizioni](docs/rilascio-3.27.76.md)
 - [Rilascio 3.27.74: trasferimenti nelle email alla segreteria](docs/rilascio-3.27.74.md)
 - [Rilascio 3.27.73: coda rapida negli ultimi giorni](docs/rilascio-3.27.73.md)
 - [Rilascio 3.27.72: spostamenti nell’email di conferma](docs/rilascio-3.27.72.md)
-- [Rilascio 3.27.71: elenco compatto con lettura per colonne](docs/rilascio-3.27.71.md)
 - [Gestione degli spostamenti](docs/SPOSTAMENTI.md)
 - [Regole di assegnazione delle camere](docs/REGOLE_ASSEGNAZIONE_CAMERE.md)
 - [Plugin WordPress](wordpress-plugin/modulo-iscrizioni/README.md)

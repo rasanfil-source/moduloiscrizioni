@@ -4,7 +4,7 @@ Plugin WordPress per creare e pubblicare moduli di iscrizione e gestire le attiv
 
 ## Funzioni
 
-La versione 3.27.76 sostituisce la casella Dati mancanti, quando non segnala problemi e sono attivi i passaggi auto, con i conteggi di persone in attesa, posti disponibili, assegnati e riservati da proposte in corso. Non aggiunge richieste all’apertura del portale; i contatori sono letti solo per il riepilogo dell’evento selezionato.
+La versione 3.27.77 elimina dal modulo pubblico le avvertenze introduttive sulle regole interne e la spiegazione sulle auto diverse nelle prenotazioni multiple, senza testi sostitutivi. Mantiene il riepilogo passaggi nella scheda Iscrizioni.
 
 - Gruppi ed eventi con identità visiva, date, capienza e condizioni di iscrizione.
 - Moduli configurabili con tipologie, servizi e domande per partecipante.
