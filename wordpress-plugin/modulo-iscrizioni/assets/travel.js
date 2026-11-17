@@ -27,7 +27,7 @@
     function option(select, value, label) { const o = document.createElement('option'); o.value = value; o.textContent = label; select.append(o); return o; }
     const mode = field('Modalità di spostamento', 'mode', 'select');
     const plural = party.length > 1;
-    [['', 'Scegli come viaggiare'], ['DRIVER', plural ? 'Veniamo in auto' : 'Vengo in auto'], ['NEED', plural ? 'Cerchiamo un passaggio in auto' : 'Cerco un passaggio in auto'], ['OWN', plural ? 'Ci organizziamo autonomamente' : 'Mi organizzo autonomamente']].forEach(([v, t]) => option(mode, v, t));
+    [['', 'Scegli come viaggiare'], ['DRIVER', plural ? 'Veniamo in auto' : 'Vengo in auto'], ['NEED', plural ? 'Cerchiamo un passaggio in auto' : 'Cerco un passaggio in auto'], ['OWN', plural ? 'Ci organizziamo diversamente' : 'Mi organizzo diversamente']].forEach(([v, t]) => option(mode, v, t));
     mode.value = previous.mode || ''; mode.required = true;
     if (config.event.travel.instructions) note(config.event.travel.instructions);
     const driver = document.createElement('div'); host.append(driver);
