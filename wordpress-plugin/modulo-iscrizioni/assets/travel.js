@@ -51,7 +51,7 @@
     const status = note('', need); status.setAttribute('role', 'status');
     const reload = document.createElement('button'); reload.type = 'button'; reload.textContent = 'Riprova'; reload.hidden = true; need.append(reload);
     const fallback = field(party.length > 1 ? 'Se una o più persone restano senza passaggio' : 'Se il passaggio non è più disponibile', 'fallback', 'select', need);
-    option(fallback, '', party.length > 1 ? 'Scegli cosa fare' : 'Scegli come partecipare');
+    option(fallback, '', party.length > 1 ? 'Che farete?' : 'Che farai?');
     option(fallback, 'REQUIRED', party.length > 1 ? 'Annulla la partecipazione delle persone senza passaggio' : 'Parteciperò solo se trovo un passaggio');
     option(fallback, 'ANYWAY', party.length > 1 ? 'Parteciperanno comunque e si organizzeranno diversamente' : 'Parteciperò comunque e mi organizzerò diversamente'); fallback.value = previous.fallback || '';
     let loading = false; let loadedOnce = false; let acceptingNewRequests = true;

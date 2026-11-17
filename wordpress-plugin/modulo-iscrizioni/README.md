@@ -4,7 +4,7 @@ Plugin WordPress per creare e pubblicare moduli di iscrizione e gestire le attiv
 
 ## Funzioni
 
-La versione 3.27.82 elimina la casella «Desidero essere avvisato quando si trova un passaggio»: scegliere «Cerco un passaggio in auto» attiva automaticamente la richiesta di attesa, anche senza selezionare posti disponibili. Nelle prenotazioni multiple chi non ha un posto selezionato resta in attesa. Rimuove anche i paragrafi esplicativi sul ritiro dei posti e sulle 24 ore delle proposte, mantenendo le scelte operative.
+La versione 3.27.83 elimina la casella «Desidero essere avvisato quando si trova un passaggio»: scegliere «Cerco un passaggio in auto» attiva automaticamente la richiesta di attesa, anche senza selezionare posti disponibili. Nelle prenotazioni multiple chi non ha un posto selezionato resta in attesa. Rimuove anche i paragrafi esplicativi sul ritiro dei posti e sulle 24 ore delle proposte, mantenendo le scelte operative.
 
 - Gruppi ed eventi con identità visiva, date, capienza e condizioni di iscrizione.
 - Moduli configurabili con tipologie, servizi e domande per partecipante.
