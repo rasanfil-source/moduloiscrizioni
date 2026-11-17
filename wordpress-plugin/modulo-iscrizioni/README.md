@@ -4,7 +4,7 @@ Plugin WordPress per creare e pubblicare moduli di iscrizione e gestire le attiv
 
 ## Funzioni
 
-La versione 3.27.77 elimina dal modulo pubblico le avvertenze introduttive sulle regole interne e la spiegazione sulle auto diverse nelle prenotazioni multiple, senza testi sostitutivi. Mantiene il riepilogo passaggi nella scheda Iscrizioni.
+La versione 3.27.78 presenta le scelte del viaggio nell’ordine: Vengo in auto, Cerco un passaggio in auto, Mi organizzo autonomamente. Lo stesso ordine vale per le prenotazioni multiple. Mantiene la rimozione delle spiegazioni introduttive della 3.27.77.
 
 - Gruppi ed eventi con identità visiva, date, capienza e condizioni di iscrizione.
 - Moduli configurabili con tipologie, servizi e domande per partecipante.
