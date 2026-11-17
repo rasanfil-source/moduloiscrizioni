@@ -627,6 +627,7 @@ final class MI_Registration_Service {
 			}
 			$secretariat_recipient = MI_Spedizione_Email::destinatario_evento( $event_id );
 			$secretariat_snapshot = MI_Modello_Email::crea_istantanea_nuova_iscrizione_segreteria( $event_id, $email_values, $registration_id );
+			if ( class_exists( 'MI_Travel' ) ) $secretariat_snapshot = MI_Travel::confirmation_email( $secretariat_snapshot, $event, $registration_id );
 			$secretariat_status = MI_Spedizione_Email::stato_nuova_email( $secretariat_snapshot );
 			$secretariat_payload = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $order_code, 'status' => $status, 'quantity' => $selection['quantity'], 'email_preview' => $secretariat_snapshot ) );
 			if ( false === $secretariat_payload || false === $wpdb->insert( $outbox_table, array( 'registration_id' => $registration_id, 'recipient' => $secretariat_recipient, 'template_type' => 'REGISTRATION_SECRETARIAT_NOTIFICATION', 'payload_json' => $secretariat_payload, 'status' => $secretariat_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) {
