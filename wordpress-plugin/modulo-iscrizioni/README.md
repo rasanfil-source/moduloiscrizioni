@@ -4,7 +4,7 @@ Plugin WordPress per creare e pubblicare moduli di iscrizione e gestire le attiv
 
 ## Funzioni
 
-La versione 3.27.73 elimina la frase generica sui riferimenti dell’iscrizione dalle conferme e riepiloga gli spostamenti: auto propria e posti offerti, viaggio autonomo, attesa di passaggio necessario o facoltativo, passaggio assegnato o proposto. Le prenotazioni multiple riportano il viaggio di ciascuna persona.
+La versione 3.27.74 aggiunge il tipo di trasferimento scelto anche alle notifiche di nuova prenotazione alla segreteria: auto propria e posti offerti, trasferimento autonomo, attesa di passaggio necessario o facoltativo, passaggio assegnato o proposto. Le prenotazioni multiple riportano il viaggio di ciascuna persona. Mantiene la coda rapida della 3.27.73 e il riepilogo degli spostamenti nelle conferme ai partecipanti.
 
 - Gruppi ed eventi con identità visiva, date, capienza e condizioni di iscrizione.
 - Moduli configurabili con tipologie, servizi e domande per partecipante.

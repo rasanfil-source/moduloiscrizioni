@@ -32,6 +32,12 @@ foreach ($cases as [$person, $expected]) {
     $sample = MI_Travel::confirmation_email($base, $event, 9);
     expect(str_ends_with($sample['testo'], "Spostamenti:\n" . $expected), 'Riepilogo errato: ' . $expected);
     expect(str_contains($sample['html'], esc_html($expected)), 'Riepilogo HTML mancante');
+    $internal = MI_Modello_Email::crea_istantanea_nuova_iscrizione_segreteria(42, ['{{evento.titolo}}'=>'Evento sintetico', '{{sottoscrittore.nome_completo}}'=>'Persona Esempio'], 9);
+    $internal = MI_Travel::confirmation_email($internal, $event, 9);
+    foreach (['html', 'testo'] as $format) {
+        expect(str_contains($internal[$format], $expected), 'Trasferimento assente nella notifica segreteria');
+        expect(str_contains($internal[$format], 'Persona Esempio'), 'Riferimenti prenotazione persi');
+    }
     if (($person['state'] ?? '') === 'ASSIGNED') expect(!str_contains($sample['testo'], 'In attesa di passaggio'), 'Passaggio assegnato indicato in attesa');
 }
 $wpdb->people = [
@@ -41,6 +47,9 @@ $wpdb->people = [
 $sample = MI_Travel::confirmation_email($base, $event, 9);
 expect(str_contains($sample['html'], 'Ada &amp; &lt;test&gt; Esempio:'), 'Nomi multipli senza escaping');
 expect(str_contains($sample['testo'], 'Bruno Esempio: In attesa di passaggio necessario'), 'Stati individuali persi');
+$internal = MI_Travel::confirmation_email(MI_Modello_Email::crea_istantanea_nuova_iscrizione_segreteria(42, [], 9), $event, 9);
+expect(str_contains($internal['html'], 'Ada &amp; &lt;test&gt; Esempio:'), 'Nomi nella notifica segreteria senza escaping');
+expect(str_contains($internal['testo'], 'Bruno Esempio: In attesa di passaggio necessario'), 'Trasferimenti multipli persi nella segreteria');
 $pending = MI_Travel::confirmation_email(MI_Travel::pending_email(42, []), $event, 9);
 foreach (['html', 'testo'] as $format) {
     expect(str_contains($pending[$format], 'Durante l’attesa non è richiesto alcun pagamento'), 'Condizioni della partecipazione in attesa perse');
