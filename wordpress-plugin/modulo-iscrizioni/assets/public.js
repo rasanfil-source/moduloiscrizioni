@@ -432,7 +432,7 @@
         const freeRegistrationText = document.createElement('strong');
         freeRegistrationText.textContent = `Iscrizione di ${buyerName}`;
         freeRegistration.append(freeRegistrationText);
-        if (pendingTravelNote) freeRegistration.append(document.createTextNode(pendingTravelNote));
+        if (pendingTravelNote) freeRegistration.append(document.createElement('br'), document.createTextNode(pendingTravelNote.trimStart()));
         summary.append(freeRegistration);
         return;
       }
