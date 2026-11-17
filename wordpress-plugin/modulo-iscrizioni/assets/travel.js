@@ -54,11 +54,6 @@
     option(fallback, '', party.length > 1 ? 'Scegli cosa fare' : 'Scegli come partecipare');
     option(fallback, 'REQUIRED', party.length > 1 ? 'Annulla la partecipazione delle persone senza passaggio' : 'Parteciperò solo se trovo un passaggio');
     option(fallback, 'ANYWAY', party.length > 1 ? 'Parteciperanno comunque e si organizzeranno diversamente' : 'Parteciperò comunque e mi organizzerò diversamente'); fallback.value = previous.fallback || '';
-    const fallbackHelp = note(party.length > 1
-      ? 'La scelta vale anche se un conducente ritira un posto già assegnato: puoi mantenere solo le persone con un passaggio oppure confermare che tutte parteciperanno organizzandosi diversamente.'
-      : 'La scelta vale anche se il conducente ritira un posto già assegnato: puoi mantenere la partecipazione solo con un passaggio oppure confermare che parteciperai organizzandoti diversamente.', need);
-    const hasFixedContribution = config.event.travel.price_mode === 'FIXED' && Number(config.event.travel.price_cents) > 0;
-    note('Ogni proposta riserva il posto per 24 ore. Le proposte automatiche arrivano via email: ' + (hasFixedContribution ? 'partenza e contributo sono indicati' : 'la partenza è indicata') + ' nell’email e nella pagina personale del passaggio, prima di accettare. L’attesa auto è distinta dalla lista d’attesa dell’evento.', need);
     let loading = false; let loadedOnce = false; let acceptingNewRequests = true;
     async function load() {
       if (loading) return;
@@ -113,7 +108,6 @@
         : 'Passaggio selezionato. La disponibilità sarà verificata al momento dell’iscrizione.';
       fallback.required = mode.value === 'NEED';
       fallback.closest('label').hidden = mode.value !== 'NEED';
-      fallbackHelp.hidden = mode.value !== 'NEED';
     }
     mode.addEventListener('change', () => { update(); if (mode.value === 'NEED') load(); });
     seats.addEventListener('change', update); rides.addEventListener('change', update); reload.addEventListener('click', load);
