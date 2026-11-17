@@ -60,7 +60,8 @@ foreach ([45=>['OFFERED',3600],46=>['OFFERED',-3600],47=>['WAITING',0],48=>['DEC
     $expiry=gmdate('Y-m-d H:i:s',time()+$seconds);
     check(false!==$wpdb->query("INSERT INTO wp_mi_travel (participant_id,registration_id,event_id,mode,state,driver_id,offer_expires_at,created_at) VALUES ($id,43,43,'NEED','$state',43,'$expiry',UTC_TIMESTAMP())"),$wpdb->last_error);
 }
-$counts=MI_Travel::management_overview(43);
+try { $counts=MI_Travel::management_overview(43); }
+catch (RuntimeException $error) { throw new RuntimeException($error->getMessage().' SQL fixture: '.$wpdb->last_error, 0, $error); }
 check($counts===['waiting'=>3,'assigned'=>1,'reserved'=>1,'available'=>3], 'Conteggi passaggi errati: '.json_encode($counts));
 $wpdb->query("UPDATE wp_mi_travel SET seats=1 WHERE participant_id=43");
 check(MI_Travel::management_overview(43)['available']===0,'Disponibilità negativa');
