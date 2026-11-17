@@ -81,8 +81,8 @@
   },
   "portal.js": {
     "file": "min/portal.js",
-    "source": "e9b0d32e564020e4c0d45dc80c1f27decd3f7bfd0bebe48bcbd99d68b343659c",
-    "hash": "c81b9624d3953100c51ce662743b1a2fcc9bfa7cd254be8e1d4cfef38fa0f0d0"
+    "source": "3556cced0d3c13e08b7874f4498d78231c3b37277dffbb73fe32ff253ba574df",
+    "hash": "2ba55591201c767ddbe6aea49c78ac3c0f198217b077baaf6d7297123fc1ee6a"
   },
   "public-balance.css": {
     "file": "min/public-balance.css",

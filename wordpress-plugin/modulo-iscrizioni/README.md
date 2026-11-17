@@ -4,7 +4,7 @@ Plugin WordPress per creare e pubblicare moduli di iscrizione e gestire le attiv
 
 ## Funzioni
 
-La versione 3.27.71 dispone l’Elenco compatto in ordine alfabetico dall’alto in basso in ogni colonna, proseguendo poi verso destra. Stampa ed Excel sono predisposti in A4 orizzontale, con un massimo di sei colonne e carattere adattivo, dando priorità a una sola facciata fino a 200 nominativi. I separatori verticali sono leggermente più marcati.
+La versione 3.27.73 elimina la frase generica sui riferimenti dell’iscrizione dalle conferme e riepiloga gli spostamenti: auto propria e posti offerti, viaggio autonomo, attesa di passaggio necessario o facoltativo, passaggio assegnato o proposto. Le prenotazioni multiple riportano il viaggio di ciascuna persona.
 
 - Gruppi ed eventi con identità visiva, date, capienza e condizioni di iscrizione.
 - Moduli configurabili con tipologie, servizi e domande per partecipante.

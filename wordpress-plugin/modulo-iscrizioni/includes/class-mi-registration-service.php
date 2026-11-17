@@ -206,6 +206,7 @@ final class MI_Registration_Service {
 			'waitlist_capacity' => min( 10000, max( 1, absint( get_post_meta( $event_id, '_mi_waitlist_capacity', true ) ?: 20 ) ) ),
 			'reopened_payment_hours' => min( 168, max( 1, absint( get_post_meta( $event_id, '_mi_reopened_payment_hours', true ) ?: 48 ) ) ),
 			'waitlist_offer_hours' => min( 168, max( 1, absint( get_post_meta( $event_id, '_mi_waitlist_offer_hours', true ) ?: 48 ) ) ),
+			'waitlist_fast' => '1' === (string) get_post_meta( $event_id, '_mi_waitlist_fast', true ),
 			'opens_at'         => (string) get_post_meta( $event_id, '_mi_registration_opens_at', true ),
 			'closes_at'        => (string) get_post_meta( $event_id, '_mi_registration_closes_at', true ),
 			'travel'           => class_exists( 'MI_Travel' ) ? MI_Travel::config( $event_id ) : array( 'enabled' => false ),
@@ -614,6 +615,7 @@ final class MI_Registration_Service {
 				$email_snapshot['status_url'] = MI_Portal::status_url( $registration_id, $order_code, $buyer['email'] );
 			}
 			if ( 'TRAVEL_PENDING' === $status ) $email_snapshot = MI_Travel::pending_email( $event_id, $participant_management );
+			if ( 'WAITLISTED' !== $status && class_exists( 'MI_Travel' ) ) $email_snapshot = MI_Travel::confirmation_email( $email_snapshot, $event, $registration_id );
 			// L'email può essere facoltativa: nessun invio partecipante da pianificare.
 			$email_status = '';
 			if ( $buyer['email'] ) {
@@ -1643,6 +1645,7 @@ final class MI_Registration_Service {
 		}
 		$values['_participant_management'] = $management;
 		$snapshot = 'TRAVEL_PENDING' === $target ? MI_Travel::pending_email( (int) $row['event_id'], $management ) : MI_Modello_Email::crea_istantanea( (int) $row['event_id'], $values );
+		if ( class_exists( 'MI_Travel' ) ) $snapshot = MI_Travel::confirmation_email( $snapshot, $event, (int) $row['id'] );
 		if ( 'TRAVEL_PENDING' !== $target && in_array( $economic['mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) && (int) ( $economic['total_cents'] ?? 0 ) > 0 ) {
 			$snapshot['status_url'] = MI_Portal::status_url( (int) $row['id'], $row['order_code'], $row['buyer_email'] );
 		}
@@ -1721,9 +1724,9 @@ final class MI_Registration_Service {
 				$items = array( array( 'ticket_type_code' => $partial_type, 'quantity' => 1 ) );
 			}
 			$offer_token = bin2hex( random_bytes( 32 ) );
-			$offer_hours = min( 168, max( 1, absint( $event['waitlist_offer_hours'] ?? 48 ) ) );
 			$base = DateTimeImmutable::createFromFormat( 'Y-m-d H:i:s', $now, new DateTimeZone( 'UTC' ) );
 			if ( ! $base ) throw new RuntimeException( 'Scadenza proposta non calcolabile.' );
+			$offer_hours = self::waitlist_offer_hours( $event, $base->getTimestamp() );
 			$offer_expires_timestamp = $base->getTimestamp() + $offer_hours * HOUR_IN_SECONDS;
 			if ( null !== $common_deadline_timestamp ) $offer_expires_timestamp = min( $offer_expires_timestamp, $common_deadline_timestamp );
 			if ( $offer_expires_timestamp <= $base->getTimestamp() ) continue;
@@ -1756,6 +1759,10 @@ final class MI_Registration_Service {
 			$email_snapshot = $partial_type
 				? MI_Modello_Email::crea_offerta_un_posto_per_due( $event_id, $email_values, $offer_url, $expires_label )
 				: MI_Modello_Email::crea_istantanea_offerta_lista_attesa( $event_id, $email_values, $offer_url, $expires_label );
+			if ( $offer_hours < min( 168, max( 1, absint( $event['waitlist_offer_hours'] ?? 48 ) ) ) ) {
+				$remaining_hours = ( $offer_expires_timestamp - $base->getTimestamp() ) / HOUR_IN_SECONDS;
+				$email_snapshot = MI_Modello_Email::avviso_coda_rapida( $email_snapshot, $remaining_hours );
+			}
 			$email_status = MI_Spedizione_Email::stato_nuova_email( $email_snapshot );
 			$payload_json = wp_json_encode( array( 'event_title' => $event['title'], 'order_code' => $candidate['order_code'], 'status' => 'WAITLIST_OFFERED', 'email_preview' => $email_snapshot ) );
 			if ( false === $payload_json || false === $wpdb->insert( $outbox, array( 'registration_id' => $candidate['id'], 'recipient' => $candidate['buyer_email'], 'template_type' => 'WAITLIST_OFFER', 'payload_json' => $payload_json, 'status' => $email_status, 'created_at' => $now ), array( '%d', '%s', '%s', '%s', '%s', '%s' ) ) ) throw new RuntimeException( 'Email proposta non accodata.' );
@@ -2083,6 +2090,15 @@ final class MI_Registration_Service {
 			return new WP_Error( 'mi_buyer_invalid', 'Controlla le informazioni di contatto.', array( 'status' => 400 ) );
 		}
 		return $buyer;
+	}
+
+	/** Durata delle nuove proposte: metà a sette giorni, un quarto a tre giorni. */
+	public static function waitlist_offer_hours( $event, $now ) {
+		$hours = min( 168, max( 1, absint( $event['waitlist_offer_hours'] ?? 48 ) ) );
+		$starts = self::local_datetime( $event['event_starts_at'] ?? '' );
+		if ( empty( $event['waitlist_fast'] ) || ! $starts ) return $hours;
+		$remaining = $starts->getTimestamp() - $now;
+		return $hours / ( $remaining <= 3 * DAY_IN_SECONDS ? 4 : ( $remaining <= 7 * DAY_IN_SECONDS ? 2 : 1 ) );
 	}
 
 	private static function local_datetime( $value ) {

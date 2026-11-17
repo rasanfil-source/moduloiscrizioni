@@ -319,10 +319,10 @@ document.addEventListener('DOMContentLoaded', () => {
 	form.querySelector('[name="activity_id"]')?.addEventListener('change', updateLogoGroupLabel);
 	updateLogoGroupLabel();
 	const waitlist = form.querySelector('[data-mi-waitlist]');
-	const waitlistOffer = form.querySelector('[data-mi-waitlist-offer]');
+	const waitlistOffers = form.querySelectorAll('[data-mi-waitlist-offer]');
 	const waitlistCapacity = form.querySelector('[data-mi-waitlist-capacity]');
 	const updateWaitlist = () => {
-	  for (const panel of [waitlistOffer, waitlistCapacity]) {
+	  for (const panel of [...waitlistOffers, waitlistCapacity]) {
 	    if (!panel) continue;
 	    panel.hidden = !waitlist?.checked;
 	    const input = panel.querySelector('input');

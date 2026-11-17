@@ -32,6 +32,8 @@ jobs:
       - name: Verify public balance workflow and actual payments
         run: |
           php wordpress-plugin/tests/travel.php
+          php wordpress-plugin/tests/email-travel.php
+          php wordpress-plugin/tests/waitlist-fast.php
           php wordpress-plugin/tests/email-error-length.php
           php wordpress-plugin/tests/email-job-cleanup.php
           php wordpress-plugin/tests/option-key-duplicates.php
