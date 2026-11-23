@@ -6,6 +6,16 @@ const source=await readFile(new URL('../modulo-iscrizioni/assets/portal-manageme
 const context=vm.createContext({Blob,TextEncoder,Uint8Array,DataView});
 vm.runInContext(source.slice(source.indexOf('  function reportColumnsWithTimestamps'),source.indexOf('  const esc =')),context);
 const grid=people=>JSON.parse(JSON.stringify(context.compactReportRows(people)));
+test('compact print and Excel exclude waitlisted and offered people before duplicate-name processing',async()=>{
+ const people=[{last_name:'Rossi',first_name:'Ada',status:'CONFIRMED'},{last_name:'Rossi',first_name:'Luca',status:'WAITLISTED'},{last_name:'Offerta',status:'WAITLIST_OFFERED'},{last_name:'Attesa',status:'ACTIVE',booking_status:'WAITLISTED'},{last_name:'Proposta',status:'ACTIVE',booking_status:'WAITLIST_OFFERED'}];
+ assert.deepEqual(grid(people).flat().filter(Boolean),['Rossi']);
+ const layout=context.compactReportLayout(people,'Evento',(text,size)=>text.length*size*.55);
+ assert.deepEqual(JSON.parse(JSON.stringify(layout.rows)).flat().filter(Boolean),['Rossi']);
+ const xml=await context.reportWorkbook([['Evento',...Array(layout.columns-1).fill('')],...layout.rows],{compact:true,layout}).text();
+ assert.doesNotMatch(xml,/Luca|Offerta|Attesa|Proposta/);
+ assert.equal(context.compactReportPeople(people.slice(1)).length,0);
+ assert.equal(people.length,5);
+});
 test('compact grid keeps compound surnames and distinguishes every duplicate across rows',()=>{
  const people=[{last_name:'Rossi',first_name:'Luca'},{last_name:'De Santis',first_name:'Ada'},{last_name:' rossi ',first_name:' Anna '},{last_name:'Bianchi',first_name:'Paola'},{last_name:'D’Amico',first_name:'Carlo'},{last_name:'Verdi',first_name:'Luigi'}];
  assert.deepEqual(grid(people),[['Bianchi','De Santis','Rossi Luca','',''],['D’Amico','rossi Anna','Verdi','','']]);

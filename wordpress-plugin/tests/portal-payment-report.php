@@ -42,7 +42,7 @@ class MI_Spedizione_Email {static $mode='OPERATIVO';static $ready=true;static fu
 class ReportDB {
  public $prefix='wp_',$posts='wp_posts',$queries=[];
  function prepare($q,...$args){$args=is_array($args[0]??null)?$args[0]:$args;return preg_replace_callback('/%[ds]/',function($m)use(&$args){$v=array_shift($args);return $m[0]==='%d'?(string)(int)$v:"'".addslashes($v)."'";},$q);}
- function get_results($q,$mode){$this->queries[]=$q;return [['effective_at'=>'2026-09-24 08:00:00','order_code'=>'DEMO-001','event_title'=>'Evento dimostrativo','transaction_kind'=>'PAYMENT','installment_kind'=>'BALANCE','amount_cents'=>12500,'payment_source'=>'CARD','external_reference'=>'Riferimento <sicuro>','operator_label'=>'Operatore demo']];}
+ function get_results($q,$mode){$this->queries[]=$q;return $GLOBALS['reportFixture']??[['effective_at'=>'2026-09-24 08:00:00','order_code'=>'DEMO-001','event_title'=>'Evento dimostrativo','transaction_kind'=>'PAYMENT','installment_kind'=>'BALANCE','amount_cents'=>12500,'payment_source'=>'CARD','external_reference'=>'Riferimento <sicuro>','operator_label'=>'Operatore demo']];}
  function get_var($q){$this->queries[]=$q;return 101;}
  function get_row($q,$mode){$this->queries[]=$q;return ['payments'=>12500,'refunds'=>1500,'bank_transfers'=>0,'cards'=>12500,'cash'=>-1500];}
 }
@@ -57,6 +57,12 @@ if(($argv[1]??'')==='--html'){parse_str($argv[2]??'', $query);$_GET=array_merge(
 check(str_contains(MI_Portal::render(),'mi-payment-report-title'),'Portal route missing');$wpdb->queries=[];
 $portal=report_html();$queries=$wpdb->queries;$wpdb->queries=[];report_html(false);check($queries===$wpdb->queries,'Admin and portal queries differ');
 $admin=report_html(false);
+$base=$wpdb->get_results('',ARRAY_A)[0];$reportFixture=[];
+foreach(['DEPOSIT'=>'Acconto','BALANCE'=>'Saldo','FULL'=>'Quota intera','OTHER'=>'Altro'] as $kind=>$label) $reportFixture[]=array_replace($base,['installment_kind'=>$kind]);
+$reportFixture[]=array_replace($base,['transaction_kind'=>'REFUND','movement_kind'=>'STORNO','reverses_payment_id'=>12]);
+$reportFixture[]=array_replace($base,['transaction_kind'=>'REFUND','movement_kind'=>'RIMBORSO']);
+foreach([true,false] as $portalMode){$rendered=report_html($portalMode);foreach(['Acconto','Saldo','Quota intera','Altro','Storno','Rimborso','Versamento'] as $label)check(str_contains($rendered,'>'.$label.'</td>'),'Missing report label: '.$label);foreach(['DEPOSIT','BALANCE','FULL','OTHER'] as $raw)check(!str_contains($rendered,'>'.$raw.'</td>'),'Raw installment shown');}
+unset($reportFixture);
 preg_match('/<form[^>]*class="mi-admin-filters"[^>]*>(.*?)<\/form>/s',$admin,$admin_form);
 foreach(['payment_from','payment_to'] as $key)check(str_contains($admin_form[1]??'','name="'.$key.'" value="'.$_GET[$key].'"'),'Admin date filter lost: '.$key);
 check(strpos($admin,'<div class="wrap">')<strpos($admin,'Azzera filtri'),'Admin filters outside wrapper');

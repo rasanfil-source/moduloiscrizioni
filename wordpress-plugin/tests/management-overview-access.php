@@ -28,6 +28,8 @@ foreach ([[false,true,'rooms',403,0],[true,false,'attendance',403,0],[true,true,
 echo "Panel endpoint: nonce, event access and panel allowlist verified.\n";
 
 class MI_Travel {
+    static $crewCalls=0;
+    static function management_crews($id){self::$crewCalls++;if(self::$fail)throw new RuntimeException('Errore sintetico');return [];}
     static $enabled=false, $calls=0, $fail=false;
     static function config($id){return ['enabled'=>self::$enabled];}
     static function management_overview($id){self::$calls++;if(self::$fail)throw new RuntimeException('Errore sintetico');return ['waiting'=>3,'available'=>4,'assigned'=>2,'reserved'=>1];}
@@ -39,6 +41,16 @@ foreach ([[false,0,false,false],[true,1,false,false],[true,0,false,true],[true,0
     try{MI_Portal_Management::ajax();throw new RuntimeException('No response');}catch(JsonResponse $response){
         if($response->getCode()!==200||MI_Travel::$calls!==(int)$expected||array_key_exists('travel_overview',$response->data)!==$expected)throw new RuntimeException('Condizione casella passaggi errata');
         if($expected&&($fail?$response->data['travel_overview']!==null:$response->data['travel_overview']['available']!==4))throw new RuntimeException('Conteggi/fallback errati');
+        if(MI_Travel::$crewCalls!==0||array_key_exists('travel_crews',$response->data))throw new RuntimeException('Equipaggi caricati senza comando');
     }
 }
 echo "PASS: passaggi letti solo con funzione attiva e nessun dato mancante; errore isolato dal riepilogo.\n";
+foreach([[false,true,true,false,403,0],[true,false,true,false,403,0],[true,true,false,false,400,0],[true,true,true,false,200,1],[true,true,true,true,503,1]] as [$nonce,$access,$enabled,$fail,$status,$calls]){
+    MI_Travel::$enabled=$enabled;MI_Travel::$fail=$fail;MI_Travel::$crewCalls=0;$reads=0;
+    $_POST=['operation'=>'travel_crews','event_id'=>42];
+    try{MI_Portal_Management::ajax();throw new RuntimeException('No response');}catch(JsonResponse $response){
+        if($response->getCode()!==$status||MI_Travel::$crewCalls!==$calls||$reads!==0)throw new RuntimeException('Accesso o lettura equipaggi non corretti');
+        if($status===200&&$response->data!==['crews'=>[]])throw new RuntimeException('Risposta equipaggi non valida');
+    }
+}
+echo "PASS: equipaggi solo su richiesta, nonce e ambito evento verificati, funzione disattivata e errore gestiti.\n";

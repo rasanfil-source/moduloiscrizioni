@@ -30,6 +30,11 @@ $rendered = array();
 foreach ( $samples as $name => $snapshot ) {
 	$before = $snapshot;
 	$rendered[$name] = MI_Modello_Email::componi_html( $snapshot );
+	preg_match_all('/<td[^>]*bgcolor="([^"]+)"[^>]*>\s*<a[^>]*style="([^"]*display:inline-block[^"]*)"/i', $rendered[$name], $buttons, PREG_SET_ORDER);
+	foreach ($buttons as $button) {
+		expect(strtolower($button[1]) === '#151b38', 'Pulsante non blu scuro: '.$name);
+		expect(stripos($button[2], 'color:#ffffff') !== false, 'Testo pulsante non bianco: '.$name);
+	}
 	expect( $snapshot === $before, 'Snapshot modificata durante la composizione: ' . $name );
 	expect( str_contains( $rendered[$name], 'font-size:' . ( 'maggiore' === $name ? '20' : '17' ) . 'px;line-height:1.68;' ), 'Formato comune assente: ' . $name );
 }

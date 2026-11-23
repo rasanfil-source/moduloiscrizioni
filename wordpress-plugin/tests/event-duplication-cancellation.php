@@ -20,6 +20,7 @@ class DuplicateDB {
 $wpdb = new DuplicateDB();
 $posts = [42 => (object)['ID' => 42, 'post_type' => 'mi_event', 'post_status' => 'draft', 'post_title' => 'Evento annullato sintetico', 'post_content' => '', 'post_excerpt' => '', 'menu_order' => 0, 'comment_status' => 'closed', 'ping_status' => 'closed']];
 $meta = [42 => ['_mi_capacity' => 10, '_mi_event_cancelled_at' => '2026-09-29 12:00:00', '_mi_event_cancellation_reason' => 'Prova', '_mi_event_cancellation_job' => ['reason' => 'Prova', 'recipients' => [['order_code' => 'TEST-OLD']]]]];
+$meta[42] += ['_mi_event_starts_at'=>'2026-12-01T10:00','_mi_event_ends_at'=>'2026-12-01T18:00','_mi_registration_opens_at'=>'2026-11-01T10:00','_mi_registration_closes_at'=>'2026-11-30T10:00','_mi_registration_timestamps'=>['old'],'_mi_travel'=>['enabled'=>true,'deadline'=>'2026-11-30T09:00','price_cents'=>500,'instructions'=>'Partenza da Roma']];
 $original = $meta[42];
 require __DIR__ . '/../modulo-iscrizioni/includes/class-mi-event-duplicator.php';
 $copy = MI_Event_Duplicator::duplicate(42, '12345678-1234-4234-8234-123456789abc');
@@ -28,4 +29,7 @@ foreach (['_mi_event_cancelled_at', '_mi_event_cancellation_reason', '_mi_event_
     if (isset($meta[43][$key])) throw new RuntimeException('Copied cancellation state: ' . $key);
 }
 if ($meta[43]['_mi_privacy_consent_id'] !== 'privacy-43') throw new RuntimeException('Copied consent identity');
+foreach (['_mi_event_starts_at','_mi_event_ends_at','_mi_registration_opens_at','_mi_registration_closes_at','_mi_registration_timestamps'] as $key) if (isset($meta[43][$key])) throw new RuntimeException('Old date copied: '.$key);
+$expected_travel = $original['_mi_travel']; $expected_travel['deadline']='';
+if ($meta[43]['_mi_travel'] !== $expected_travel) throw new RuntimeException('Travel settings lost or deadline retained');
 echo "PASS: cancelled event duplicates retain configuration and new consent IDs, without cancellation state; source remains intact.\n";

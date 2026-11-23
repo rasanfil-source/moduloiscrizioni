@@ -9,6 +9,11 @@ $samples = array(
     'offerta' => MI_Modello_Email::crea_istantanea_offerta_lista_attesa( 42, $values, 'https://example.invalid/offerta', '15/11/2026 18:00' ),
 );
 $samples['offerta-parziale'] = MI_Modello_Email::crea_offerta_un_posto_per_due( 42, $values, 'https://example.invalid/offerta', '15/11/2026 18:00' );
+foreach ( array( 1 => 'Si è liberato il posto richiesto', 2 => 'Si sono liberati i posti richiesti' ) as $quantity => $expected ) {
+    $offer_values = array_replace( $values, array( '{{ordine.partecipanti}}' => (string) $quantity ) );
+    $offer = MI_Modello_Email::crea_istantanea_offerta_lista_attesa( 42, $offer_values, 'https://example.invalid/offerta', 'domani' );
+    foreach ( array( 'html', 'testo' ) as $format ) expect( str_contains( $offer[$format], $expected ), 'Numero grammaticale della proposta errato' );
+}
 foreach ( array( 'PRE_DEPARTURE_REMINDER', 'BALANCE_REMINDER', 'DEPOSIT_REMINDER', 'EVENT_CANCELLATION', 'REGISTRATION_CANCELLATION', 'MATERIAL_DELIVERY' ) as $type ) {
     $samples[$type] = MI_Modello_Email::crea_istantanea_operativa( 42, $values, $type, '', '' );
 }

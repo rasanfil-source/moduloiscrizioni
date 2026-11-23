@@ -6,13 +6,16 @@ function avviaCronWordPress() {
   const base = endpoint.replace(/\/wp-json\/modulo-iscrizioni\/v1\/workspace\/commands\/?$/, '/');
   if (base === endpoint || !/^https:\/\/[^/?#]+(?:\/[^?#]*)?\/$/.test(base)) throw new Error('Collegamento WordPress non valido.');
   // Il sito può applicare il proprio redirect canonico (per esempio verso www).
-  const response = UrlFetchApp.fetch(base + 'wp-cron.php', {method:'get',followRedirects:true,muteHttpExceptions:true});
-  const code = response.getResponseCode();
-  if (code < 200 || code >= 300) throw new Error('Avvio cron WordPress: HTTP ' + code);
-  if(typeof manutenzioneRicevuteEmail==='function'){
-    try{manutenzioneRicevuteEmail();}catch(error){console.error('EMAIL_MAINTENANCE_DEFERRED',String(error));}
+  try {
+    const response = UrlFetchApp.fetch(base + 'wp-cron.php', {method:'get',followRedirects:true,muteHttpExceptions:true,timeoutSeconds:30});
+    const code = response.getResponseCode();
+    if (code < 200 || code >= 300) throw new Error('Avvio cron WordPress: HTTP ' + code);
+    return {ok:true,http_status:code};
+  } finally {
+    if(typeof manutenzioneRicevuteEmail==='function'){
+      try{manutenzioneRicevuteEmail();}catch(error){console.error('EMAIL_MAINTENANCE_DEFERRED',String(error));}
+    }
   }
-  return {ok:true,http_status:code};
 }
 
 function attivaCronWordPress() {

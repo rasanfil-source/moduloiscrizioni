@@ -44,9 +44,9 @@ class MI_Management_Service {
 }
 class MI_Portal {static function participant_cancel_url($id,$token){return 'https://example.invalid/cancel/'.$id;}static function status_url(...$args){return 'https://example.invalid/status';}static function waitlist_offer_url($id,$token){return 'https://example.invalid/offer/'.$id;}}
 class MI_Modello_Email {
- static function crea_istantanea_istituzionale($event,$subject,$preheader,$html,$text,$actions=[]){return ['attivo'=>true,'oggetto'=>$subject,'html'=>$html,'testo'=>$text];}
+ static function crea_istantanea_istituzionale($event,$subject,$preheader,$html,$text,$actions=[]){return ['attivo'=>true,'oggetto'=>$subject,'html'=>$html,'testo'=>$text,'azioni'=>$actions];}
  static function valori_ordine(...$args){return [];}
- static function crea_istantanea(...$args){return ['attivo'=>true];}
+ static function crea_istantanea(...$args){return ['attivo'=>true,'html'=>'','testo'=>''];}
  static function crea_istantanea_lista_attesa(...$args){return ['attivo'=>true];}
  static function crea_istantanea_nuova_iscrizione_segreteria(...$args){return ['attivo'=>true];}
  static function crea_istantanea_annullamento_partecipazione_iscritto(...$args){return ['attivo'=>true];}
@@ -64,6 +64,11 @@ $deadline=wp_date('Y-m-d\TH:i',time()+4*86400);
 $start=wp_date('Y-m-d\TH:i',time()+5*86400);
 $event=['id'=>42,'title'=>'Evento sintetico','event_starts_at'=>$start,'travel'=>['enabled'=>true,'price_mode'=>'FIXED','price_cents'=>1200,'deadline'=>$deadline]];
 $person=['ticket_type_code'=>'standard','ticket_index'=>1,'first_name'=>'Ada','last_name'=>'Esempio'];
+$party=[$person,array_replace($person,['ticket_index'=>2,'first_name'=>'Luca'])];
+$together=MI_Travel::validate_people($event,$party,[],'',['mode'=>'DRIVER','seats'=>0]);
+check_travel(!is_wp_error($together)&&$together[1]['travel']['companion_key']==='standard:1'&&$together[1]['travel']['seats']===0&&$together[1]['travel']['driver_id']===null,'Companion must not reserve offered seats');
+$separate=MI_Travel::validate_people($event,$party,[],'',['mode'=>'OWN','companion_key'=>'forged']);
+check_travel(!is_wp_error($separate)&&!isset($separate[1]['travel']['companion_key']),'Forged companion accepted');
 function validated_travel($choice,$email='ada@example.invalid'){global $event,$person;return MI_Travel::validate_people($event,[$person],[array_merge($person,['travel'=>$choice])],$email);}
 check_travel(is_wp_error(validated_travel([])),'Missing mode accepted');
 check_travel(!is_wp_error(validated_travel(['mode'=>'OWN'],'')),'Own travel should not require email');
@@ -237,6 +242,11 @@ check_travel(is_wp_error($staleResult)&&$beforeCount===$wpdb->get_var('SELECT CO
 $rideChoice['route_key']=ride_key(44,$resizableRow['participant_id']);
 $rideOne=create_travel_booking($rideChoice,10,44);$rideOneRow=travel_row($rideOne);
 check_travel($rideOneRow['state']==='ASSIGNED','Direct test passenger was not assigned');
+check_travel(true===MI_Travel::decide($resizableRow['participant_id'],$resizableToken,'reduce_seats',0,'',1),'Partial withdrawal of free seat failed');
+check_travel(travel_row($rideOne)['state']==='ASSIGNED'&&(int)travel_row($resizable)['seats']===1,'Partial withdrawal changed assigned passenger');
+check_travel(is_wp_error(MI_Travel::decide($resizableRow['participant_id'],$resizableToken,'reduce_seats',0,'',0)),'Partial withdrawal removed occupied seat');
+check_travel(is_wp_error(MI_Travel::decide($resizableRow['participant_id'],$resizableToken,'reduce_seats',0,'',2)),'Partial withdrawal increased offer');
+check_travel(true===MI_Travel::decide($resizableRow['participant_id'],$resizableToken,'update_seats',0,'',2),'Could not restore fixture offer');
 check_travel(true===MI_Travel::decide($resizableRow['participant_id'],$resizableToken,'update_seats',0,'',1),'Driver could not reduce unoccupied offer');
 check_travel((int)travel_row($resizable)['seats']===1,'Reduced seat count was not stored');
 check_travel(true===MI_Travel::decide($resizableRow['participant_id'],$resizableToken,'update_seats',0,'',2),'Driver could not increase offer');
@@ -295,7 +305,7 @@ $groupDriver=create_travel_booking(array_replace($driverChoice,['seats'=>2]),47,
 $groupPayload=['buyer'=>['first_name'=>'Ada','last_name'=>'Esempio','email'=>'ada@example.invalid','phone'=>'+390000000000'],'tickets'=>['standard'=>2],'participants'=>[array_replace($person,['first_name'=>'Persona A','last_name'=>'Esempio','ticket_index'=>1]),array_replace($person,['first_name'=>'Persona B','last_name'=>'Esempio','ticket_index'=>2])],'travel_booking'=>['mode'=>'NEED','fallback'=>'ANYWAY','assignments'=>[['route_key'=>ride_key(47,$groupDriverRow['participant_id']),'driver_id'=>(int)$groupDriverRow['participant_id'],'seats'=>2,'price_cents'=>1200]]],'privacy_accepted'=>true];
 $groupBooking=MI_Registration_Service::create(47,$groupPayload,bin2hex(random_bytes(16)),false,'TEST',true);check_travel(!is_wp_error($groupBooking),'Group travel registration failed');
 $groupBookingRow=travel_row($groupBooking);$groupPassengerNotices=$wpdb->get_results($wpdb->prepare("SELECT payload_json FROM wp_mi_email_outbox WHERE registration_id=%d AND template_type='TRAVEL_UPDATE'",$groupBookingRow['registration_id']));
-check_travel(count($groupPassengerNotices)===1&&substr_count(json_decode($groupPassengerNotices[0]['payload_json'],true)['email_preview']['html']??'','mi_travel=')===2,'Group passengers received duplicate notices or lack individual links');
+check_travel(count($groupPassengerNotices)===1&&count(json_decode($groupPassengerNotices[0]['payload_json'],true)['email_preview']['azioni']??[])===2,'Group passengers received duplicate notices or lack individual links');
 $groupDriverNotices=$wpdb->get_results($wpdb->prepare("SELECT payload_json FROM wp_mi_email_outbox WHERE registration_id=%d AND template_type='TRAVEL_UPDATE' AND payload_json LIKE %s",$groupDriverRow['registration_id'],'%Persona A%'));
 check_travel(count($groupDriverNotices)===1&&str_contains($groupDriverNotices[0]['payload_json'],'Persona B'),'Driver did not receive a single combined group notice');
 echo "PASS travel offer edit, committed-seat guard, audit trail, and driver notices for passenger release/cancellation.\n";
@@ -423,3 +433,21 @@ foreach(['BOOKING'=>157,'PERSON'=>158] as $action=>$eventId){
  check_travel($wpdb->get_var($wpdb->prepare('SELECT status FROM wp_mi_registrations WHERE order_code=%s',$promotedCode))==='WAITLIST_OFFERED','Cancellation failed to reoffer freed partial seat');
 }
 echo "PASS partial cancellations promote the next booking or the remaining person.\n";
+
+// Ritiro dei soli posti liberi: preserva anche le proposte pendenti, ammette zero se l'auto è vuota.
+$reduceEvent=json_decode($wpdb->get_var('SELECT config_json FROM wp_mi_event_revisions WHERE event_id=47 LIMIT 1'),true);
+$reduceEvent['id']=159;
+$wpdb->insert('wp_mi_event_revisions',['event_id'=>159,'revision_number'=>1,'config_hash'=>str_repeat('9',64),'config_json'=>json_encode($reduceEvent),'created_at'=>gmdate('Y-m-d H:i:s')]);
+$GLOBALS['meta'][159]=['_mi_published_revision_id'=>$wpdb->insert_id,'_mi_travel'=>$reduceEvent['travel'],'_mi_capacity'=>50,'_mi_waitlist_enabled'=>'1','_mi_event_starts_at'=>$start];
+$pending=create_travel_booking($needChoice,159,159);
+$reducing=create_travel_booking(array_replace($driverChoice,['seats'=>3]),160,159);
+$reducingRow=travel_row($reducing);$reducingToken=travel_link_token($reducingRow['participant_id']);$pendingBefore=travel_row($pending);
+check_travel($pendingBefore['state']==='OFFERED','Partial withdrawal pending fixture missing');
+check_travel(MI_Travel::decide($reducingRow['participant_id'],$reducingToken,'reduce_seats',0,'',1)===true,'Could not remove two free seats');
+$pendingAfter=travel_row($pending);
+check_travel($pendingAfter['state']==='OFFERED'&&$pendingAfter['driver_id']===$pendingBefore['driver_id']&&$pendingAfter['offer_expires_at']===$pendingBefore['offer_expires_at'],'Pending proposal changed by partial withdrawal');
+check_travel(is_wp_error(MI_Travel::decide($reducingRow['participant_id'],$reducingToken,'reduce_seats',0,'',0)),'Reserved seat withdrawn');
+check_travel(MI_Travel::decide($pendingAfter['participant_id'],travel_link_token($pendingAfter['participant_id']),'own')===true,'Could not release proposal fixture');
+$GLOBALS['meta'][159]['_mi_travel']['deadline']=wp_date('Y-m-d\TH:i',time()-60);
+check_travel(MI_Travel::decide($reducingRow['participant_id'],$reducingToken,'reduce_seats',0,'',0)===true&&(int)travel_row($reducing)['seats']===0,'Could not withdraw last free seat after deadline');
+echo "PASS partial free-seat withdrawal: assigned and offered passengers protected, stale request rejected, zero and closed deadline allowed.\n";
