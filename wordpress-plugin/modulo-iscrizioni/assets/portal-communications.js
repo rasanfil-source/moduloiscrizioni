@@ -49,6 +49,28 @@
   const help = form.querySelector('[data-mi-communication-help]');
   const reset = form.querySelector('[data-mi-communication-reset]');
   if (!select || !field || !help || !reset) return;
+  const audience = form.querySelector('[name="future_only"]');
+  const subject = form.querySelector('[data-mi-communication-subject]');
+  const subjectField = subject?.querySelector('input');
+  const subjects = new Map([[select.value, subjectField?.value || '']]);
+  let subjectType = select.value;
+  let optionalAudience = audience && !audience.disabled ? audience.value : '0';
+  const syncAudience = () => {
+    const invite = select.value === 'SIMILAR_EVENTS_INVITE';
+    if (audience) {
+      if (!audience.disabled) optionalAudience = audience.value;
+      audience.value = invite ? '1' : optionalAudience;
+      audience.disabled = invite;
+    }
+    if (subjectField) {
+      subjects.set(subjectType, subjectField.value);
+      subjectType = select.value;
+      subjectField.value = subjects.get(subjectType) || '';
+      subject.hidden = !invite && !subjectType.startsWith('CUSTOM_');
+    }
+  };
+  syncAudience();
+  select.addEventListener('change', syncAudience);
   const drafts = new Map();
   let activeType = select.value;
   const saveCurrent = () => { if (activeType) drafts.set(activeType, field.value); };

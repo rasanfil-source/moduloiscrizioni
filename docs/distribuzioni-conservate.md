@@ -1,3 +1,3 @@
 # Distribuzioni conservate
 
-17 novembre 2026. In locale sono conservati i cinque rilasci validi 3.27.77–3.27.80 e 3.27.83 con i due ZIP, il sorgente MODULI AUTONOMO e i checksum. Le versioni 3.27.75, 3.27.81 e 3.27.82 sono state ritirate prima della pubblicazione e restano assegnate. Per GitHub usare il pacchetto pubblico. Installazione a cura del gestore. I numeri precedenti restano assegnati e non sono riutilizzabili.
+23 novembre 2026. In locale sono conservati i cinque rilasci validi 3.27.128, 3.27.129, 3.27.130, 3.27.131 e 3.27.132 con i due ZIP, il sorgente MODULI AUTONOMO e i checksum. La 3.27.88 è stata inclusa nella 3.27.89 prima del confezionamento: il numero resta assegnato. Le versioni 3.27.75, 3.27.81 e 3.27.82 sono state ritirate prima della pubblicazione e restano assegnate. Per GitHub usare il pacchetto pubblico. Installazione a cura del gestore. I numeri precedenti restano assegnati e non sono riutilizzabili.

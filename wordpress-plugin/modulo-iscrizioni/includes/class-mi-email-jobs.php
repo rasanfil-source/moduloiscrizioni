@@ -10,6 +10,7 @@ final class MI_Email_Jobs {
 		add_action( 'wp_ajax_nopriv_mi_email_worker', array( __CLASS__, 'worker' ) );
 		add_action( 'wp_ajax_mi_email_progress', array( __CLASS__, 'progress' ) );
 		add_action( 'mi_prepara_comunicazioni', array( 'MI_Spedizione_Email', 'spedisci_coda' ) );
+		add_action( 'mi_avvia_comunicazione_programmata', array( __CLASS__, 'wake_scheduled' ) );
 		add_action( 'mi_pulisci_bozze_cestinate', array( __CLASS__, 'cleanup' ), 30 );
 		add_action( 'mi_pulisci_email_jobs', array( __CLASS__, 'cleanup' ) );
 	}
@@ -18,6 +19,7 @@ final class MI_Email_Jobs {
 	}
 	public static function enqueue( array $payload ) {
 		$mode = ! empty( $payload['test_only'] ) ? 'PROVA_PUNTUALE' : ( 'publish' === get_post_status( absint( $payload['event_id'] ?? 0 ) ) && ! empty( $payload['allow_operational'] ) ? MI_Spedizione_Email::modalita() : 'ANTEPRIMA' );
+		if ( empty( $payload['test_only'] ) && ! empty( $payload['start_at'] ) && 'OPERATIVO' !== $mode ) return new WP_Error( 'mi_email_schedule_mode', 'La programmazione richiede un evento pubblicato e la modalità operativa.' );
 		if ( empty( $payload['test_only'] ) && ! self::mode_ready( $mode ) ) return new WP_Error( 'mi_email_mode_unverified', 'Invio non abilitato: configura la casella di prova e completa una prova riuscita nelle impostazioni email.' );
 		if ( 'ANTEPRIMA' === $mode ) $payload['allow_operational'] = false;
 		$id = hash( 'sha256', get_current_user_id() . '|' . ( $payload['communication_id'] ?? '' ) );
@@ -29,16 +31,63 @@ final class MI_Email_Jobs {
 			if ( ! $recipients || count( $recipients ) > 1000 ) return new WP_Error( 'mi_email_recipients', 'Numero di destinatari non valido.' );
 			$payload['recipients'] = $recipients;
 			$job = array( 'owner' => get_current_user_id(), 'event_id' => absint( $payload['event_id'] ), 'test_only' => ! empty( $payload['test_only'] ), 'state' => 'pending', 'mode' => $mode, 'payload' => $payload, 'offset' => 0, 'total' => count( $recipients ), 'origin_keys' => array(), 'excluded' => 0, 'error' => '', 'created_at' => time() );
+			if ( 'OPERATIVO' === $mode && ! empty( $payload['start_at'] ) ) $job['start_at'] = (int) $payload['start_at'];
 			if ( ! add_option( $key, $job, '', false ) && ! is_array( get_option( $key ) ) ) return new WP_Error( 'mi_email_storage', 'Richiesta non salvata: riprova.' );
 			$job = get_option( $key );
 		}
 		update_option( ( ! empty( $job['test_only'] ) ? 'mi_email_last_test_job_' : 'mi_email_last_job_' ) . get_current_user_id(), $id, false );
 		if ( 'pending' === $job['state'] ) {
+			if ( ! empty( $job['start_at'] ) && empty( $job['started_at'] ) ) {
+				$args = array( $id );
+				if ( ! wp_next_scheduled( 'mi_avvia_comunicazione_programmata', $args ) && ! wp_schedule_single_event( max( time(), $job['start_at'] ), 'mi_avvia_comunicazione_programmata', $args ) ) return new WP_Error( 'mi_email_schedule', 'Programmazione non registrata nel cron. Riprova.' );
+				add_option( 'mi_email_pending_' . $id, $id, '', false );
+				update_option( 'mi_email_scheduled_' . $job['owner'] . '_' . $id, $id, false );
+				return array( 'ok' => true, 'job_id' => $id, 'count' => $job['total'], 'mode' => $job['mode'], 'start_at' => $job['start_at'] );
+			}
 			add_option( 'mi_email_pending_' . ( ! empty( $job['test_only'] ) ? 'test_' : '' ) . $id, $id, '', false );
 			if ( ! wp_next_scheduled( 'mi_prepara_comunicazioni' ) ) wp_schedule_single_event( time(), 'mi_prepara_comunicazioni' );
 			add_action( 'shutdown', array( __CLASS__, 'dispatch' ) );
 		}
 		return array( 'ok' => true, 'job_id' => $id, 'count' => $job['total'], 'mode' => $job['mode'] );
+	}
+	public static function wake_scheduled( $id ) {
+		MI_Spedizione_Email::spedisci_coda();
+		$job = get_option( 'mi_email_job_' . $id );
+		if ( is_array( $job ) && 'pending' === $job['state'] && empty( $job['started_at'] ) && ! empty( $job['start_at'] ) ) {
+			wp_schedule_single_event( max( time() + 60, $job['start_at'] ), 'mi_avvia_comunicazione_programmata', array( $id ) );
+		}
+	}
+	public static function cancel_scheduled( $id ) {
+		global $wpdb;
+		if ( ! preg_match( '/^[a-f0-9]{64}$/D', $id ) ) return false;
+		$lock = 'mi_mail_worker_' . md5( $wpdb->prefix );
+		if ( 1 !== (int) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $lock ) ) ) return false;
+		try {
+			$key = 'mi_email_job_' . $id;
+			$job = get_option( $key );
+			if ( ! is_array( $job ) || empty( $job['start_at'] ) || ! empty( $job['started_at'] ) || 'pending' !== $job['state'] || $job['owner'] !== get_current_user_id() || ! MI_Access::can_access_event( $job['event_id'] ) ) return false;
+			$job['state'] = 'cancelled';
+			unset( $job['payload'] );
+			if ( ! update_option( $key, $job, false ) ) return false;
+			self::remove_pending( $id );
+			delete_option( 'mi_email_scheduled_' . $job['owner'] . '_' . $id );
+			wp_clear_scheduled_hook( 'mi_avvia_comunicazione_programmata', array( $id ) );
+			return true;
+		} finally { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); }
+	}
+
+	public static function render_scheduled() {
+		global $wpdb;
+		$prefix = $wpdb->esc_like( 'mi_email_scheduled_' . get_current_user_id() . '_' ) . '%';
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s", $prefix ) );
+		foreach ( (array) $ids as $id ) {
+			$job = get_option( 'mi_email_job_' . $id );
+			if ( ! is_array( $job ) || 'pending' !== $job['state'] || ! empty( $job['started_at'] ) || ! MI_Access::can_access_event( $job['event_id'] ) ) continue;
+			echo '<form method="post"><p><strong>Programmato</strong> · ' . esc_html( get_the_title( $job['event_id'] ) . ' · ' . wp_date( 'd/m/Y H:i', $job['start_at'], new DateTimeZone( 'Europe/Rome' ) ) ) . '</p>';
+			echo '<input type="hidden" name="mi_portal_action" value="cancel_scheduled_communication"><input type="hidden" name="scheduled_job" value="' . esc_attr( $id ) . '">';
+			wp_nonce_field( 'mi_portal_cancel_scheduled_communication', 'mi_portal_nonce' );
+			echo '<button type="submit" class="mi-secondary">Annulla invio programmato</button></form>';
+		}
 	}
 	public static function dispatch() {
 		$stamp = (string) time();
@@ -71,9 +120,15 @@ final class MI_Email_Jobs {
 			$key = 'mi_email_job_' . $id;
 			$job = get_option( $key );
 			if ( ! is_array( $job ) || 'pending' !== $job['state'] ) { self::remove_pending( $id ); continue; }
+			if ( (int) ( $job['start_at'] ?? 0 ) > time() ) continue;
 			$payload = $job['payload'];
 			if ( empty( $payload['test_only'] ) && 'ANTEPRIMA' !== $job['mode'] && ( $job['mode'] !== MI_Spedizione_Email::modalita() || ! self::mode_ready( $job['mode'] ) ) ) continue;
 			if ( 'ANTEPRIMA' === $job['mode'] ) $payload['allow_operational'] = false;
+			if ( ! empty( $job['start_at'] ) && empty( $job['started_at'] ) ) {
+				$job['started_at'] = time();
+				if ( ! update_option( $key, $job, false ) ) continue;
+				delete_option( 'mi_email_scheduled_' . $job['owner'] . '_' . $id );
+			}
 			$chunk = array_slice( $payload['recipients'], $job['offset'], 10 );
 			$payload['recipients'] = $chunk;
 			$payload['communication_id'] = 'job-' . $id . '-' . $job['offset'];
@@ -159,7 +214,7 @@ final class MI_Email_Jobs {
 				}
 				if ( ! preg_match( '/^mi_email_job_([a-f0-9]{64})$/D', $row['option_name'], $match ) ) continue;
 				$id = $match[1]; $job = get_option( $row['option_name'] );
-				if ( ! is_array( $job ) || ! in_array( $job['state'] ?? '', array( 'prepared', 'failed' ), true ) ) continue;
+				if ( ! is_array( $job ) || ! in_array( $job['state'] ?? '', array( 'prepared', 'failed', 'cancelled' ), true ) ) continue;
 				$delivery = self::delivery_state( $job );
 				if ( false === $delivery ) continue;
 				$counts = $delivery[0];
@@ -193,6 +248,8 @@ final class MI_Email_Jobs {
 	}
 	public static function render_progress( $id ) {
 		if ( ! is_string( $id ) ) return;
+		$job = preg_match( '/^[a-f0-9]{64}$/D', $id ) ? get_option( 'mi_email_job_' . $id ) : false;
+		if ( is_array( $job ) && ( 'cancelled' === $job['state'] || ( 'pending' === $job['state'] && ! empty( $job['start_at'] ) && empty( $job['started_at'] ) ) ) ) return;
 		$state = self::status( $id );
 		if ( ! $state || ( $state['done'] && 0 === $state['dismiss_after'] ) ) return;
 		echo '<p role="status" aria-live="polite" data-mi-email-progress data-job="' . esc_attr( $id ) . '" data-url="' . esc_url( admin_url( 'admin-ajax.php' ) ) . '" data-nonce="' . esc_attr( wp_create_nonce( 'mi_email_progress' ) ) . '">Preparazione e invio in background. Verifica dell’avanzamento…</p>';

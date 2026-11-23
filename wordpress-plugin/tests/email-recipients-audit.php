@@ -32,4 +32,23 @@ $result = prepare_recipient_audit('REGISTRATION_CANCELLATION');
 expect(str_contains($wpdb->last_select,"status='CANCELLED'"), 'Annullamento cerca iscrizioni attive');
 $result = prepare_recipient_audit('PRE_DEPARTURE_REMINDER', array('recipients'=>array_fill(0,1001,array('order_code'=>'AUDIT1'))));
 expect(is_wp_error($result), 'Oltre 1000 destinatari troncati senza errore');
+$wpdb = new RecipientAuditDatabase();
+$wpdb->recipient = 'persona@example.invalid';
+$invite = prepare_recipient_audit('SIMILAR_EVENTS_INVITE', array('message'=>'', 'subject'=>'Domenica al cineforum'));
+expect($invite['count'] === 1 && str_contains($wpdb->last_select, MI_Spedizione_Email::future_events_condition()), 'Filtro obbligatorio mancante nel worker inviti');
+$snapshot = $wpdb->payloads[1]['email_preview'];
+expect($snapshot['oggetto'] === 'Domenica al cineforum' && $snapshot['titolo'] === 'Invito eventi simili', 'Oggetto o titolo invito errato');
+foreach (array('testo','html') as $format) expect(str_contains($snapshot[$format], 'è stato espresso') && str_contains($snapshot[$format], 'Evento sintetico') && !str_contains($snapshot[$format], 'allegat'), 'Invito non impersonale o incompleto');
+expect($snapshot['status_url'] === '' && $snapshot['evento']['url'] === '', 'Invito con link alla vecchia prenotazione');
+$GLOBALS['email_test_options']['mi_custom_communication_types'] = array('CUSTOM_CINEFORUM'=>'Invito esteso a tutti');
+foreach (array(false, true) as $test_only) {
+    $result = prepare_recipient_audit('CUSTOM_CINEFORUM', array('subject'=>'Domenica al cineforum', 'test_only'=>$test_only, 'test_recipient'=>'test@example.invalid'));
+    expect($result['count'] === 1, 'Messaggio personalizzato non preparato');
+    $custom = $wpdb->payloads[$test_only ? 0 : 1]['email_preview'];
+    expect($custom['oggetto'] === 'Domenica al cineforum' && $custom['titolo'] === 'Domenica al cineforum', 'Oggetto personalizzato perso nella coda o sotto il banner');
+}
+prepare_recipient_audit('PRE_DEPARTURE_REMINDER', array('future_only'=>true));
+expect(str_contains($wpdb->last_select, MI_Spedizione_Email::future_events_condition()), 'Filtro facoltativo perso nel worker');
+prepare_recipient_audit('PRE_DEPARTURE_REMINDER');
+expect(!str_contains($wpdb->last_select, MI_Spedizione_Email::future_events_condition()), 'Filtro applicato anche senza richiesta');
 echo "PASS: recapiti esclusi, prova anonima, caparra coperta/residua, annullamenti e limite esplicito.\n";

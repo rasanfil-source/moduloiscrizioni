@@ -37,6 +37,7 @@ class MI_Spedizione_Email{
  static function destinatario_evento($id){return 'group@example.invalid';}
 }
 class MI_Email_Jobs {
+ static function render_scheduled(){}
  static function enqueue($p){$r=MI_Spedizione_Email::accoda_comunicazione_operativa($p);$r['job_id']=str_repeat('b',64);return $r;}
  static function render_progress($id){}
 }

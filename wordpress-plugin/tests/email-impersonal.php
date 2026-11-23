@@ -18,6 +18,11 @@ foreach ( array( 'PRE_DEPARTURE_REMINDER', 'BALANCE_REMINDER', 'DEPOSIT_REMINDER
     $samples[$type] = MI_Modello_Email::crea_istantanea_operativa( 42, $values, $type, '', '' );
 }
 $paid_values = MI_Modello_Email::valori_ordine( array( 'title' => 'Evento', 'economic_mode' => 'FULL_PAYMENT' ), 'TEST', 'Da pagare', 1, 'Ada Esempio', array( 'mode' => 'FULL_PAYMENT', 'total_cents' => 1000, 'initial_due_cents' => 1000, 'balance_cents' => 1000, 'payment_methods' => array( 'BANK_TRANSFER', 'CARD', 'CASH' ) ) );
+$GLOBALS['email_test_options']['mi_custom_communication_types'] = array( 'CUSTOM_TEST' => 'Avviso personalizzato' );
+$custom = MI_Modello_Email::crea_istantanea_operativa( 42, $values, 'CUSTOM_TEST', 'Testo scritto in Messaggi.', '' );
+expect( $custom['html'] === '<p>Buongiorno Ada Esempio.</p>Testo scritto in Messaggi.<br>', 'Introduzione automatica nel messaggio personalizzato HTML' );
+expect( $custom['testo'] === "Buongiorno Ada Esempio.\n\nTesto scritto in Messaggi.", 'Introduzione automatica nel messaggio personalizzato testo' );
+expect( str_contains( $samples['PRE_DEPARTURE_REMINDER']['testo'], 'Ecco le informazioni aggiornate' ), 'Introduzione rimossa dal messaggio di sistema' );
 $samples['conferma-pagamento'] = MI_Modello_Email::crea_istantanea( 42, $paid_values );
 expect( str_contains( $samples['conferma-pagamento']['testo'], 'Indicazioni per il pagamento:' ), 'Pagamento richiesto eliminato dalla conferma' );
 expect( str_contains( $samples['conferma-pagamento']['testo'], 'utilizzare il codice' ) && ! preg_match( '/\b(usa|segui|concorda)\b/u', $samples['conferma-pagamento']['testo'] ), 'Istruzioni di pagamento confidenziali' );
@@ -33,6 +38,13 @@ foreach ( array( 'html', 'testo' ) as $format ) {
 }
 $html = MI_Modello_Email::componi_html( $samples['conferma'] );
 $text = MI_Modello_Email::componi_testo( $samples['conferma'] );
+$signed = $samples['conferma'];
+$signed['evento']['url'] = 'https://example.invalid/evento';
+$signed['html'] = '<p>Messaggio.</p><p>A presto!</p>';
+$signed['testo'] = "Messaggio.\n\nA presto!";
+foreach ( array( MI_Modello_Email::componi_html( $signed ), MI_Modello_Email::componi_testo( $signed ) ) as $signed_body ) {
+    expect( substr_count( $signed_body, 'A presto!' ) === 1 && substr_count( $signed_body, 'Segreteria parrocchiale Sant’Eugenio' ) === 1, 'Firma duplicata o assente nel messaggio con link evento' );
+}
 expect( str_contains( $html, '>Per assistenza<' ) && str_contains( $html, '>Scrivere a:<' ), 'Assistenza HTML non aggiornata' );
 expect( str_contains( $text, 'Per assistenza — Scrivere a:' ), 'Assistenza testo non aggiornata' );
 $single = MI_Modello_Email::crea_istantanea_annullamento_partecipazione_iscritto( 42, 'Ada Esempio', '', 0, 'Ada Esempio', false );

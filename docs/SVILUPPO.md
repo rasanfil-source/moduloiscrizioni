@@ -13,6 +13,8 @@ Guida alla struttura del progetto e alla gestione dei sorgenti. Le regole funzio
 
 MySQL conserva i dati autorevoli di iscrizioni, partecipanti, pagamenti e assegnazioni. Google riceve le proiezioni e ospita i fogli di lavoro degli eventi. Il sorgente Apps Script destinato all'uso operativo viene generato per MODULI AUTONOMO.
 
+Il plugin richiede il supporto a più `GET_LOCK` simultanei nella stessa connessione: MySQL almeno 5.7.5 oppure MariaDB almeno 10.0.2. Il requisito viene verificato prima dell’avvio e dell’attivazione; su motori incompatibili le operazioni non vengono avviate e l’amministratore vede il motivo. Questi sono limiti tecnici di compatibilità, non raccomandazioni sulle versioni da installare.
+
 ## Asset e sorgenti Apps Script
 
 Gli asset modificabili risiedono in `wordpress-plugin/modulo-iscrizioni/assets`; i file in `assets/min` sono generati da `tools/asset-build/build.cjs`. Per preparare il sorgente Apps Script eseguire dalla radice del progetto:
@@ -36,6 +38,8 @@ Editor WordPress, portale e Workspace operano sugli stessi metadati dell'evento.
 ## Rate limit dietro proxy
 
 Il limite per indirizzo IP usa `REMOTE_ADDR` come valore attendibile. Gli header `CF-Connecting-IP` e `X-Forwarded-For` vengono letti solo quando `REMOTE_ADDR` appartiene a una rete proxy configurata in `MI_TRUSTED_PROXY_CIDRS` (array di reti CIDR in `wp-config.php`) o nel filtro `mi_trusted_proxy_cidrs`. Inserire soltanto le reti reali dei proxy che si controllano; senza questa configurazione gli header inoltrati vengono ignorati.
+
+La disponibilità pubblica dei passaggi ammette 120 richieste per IP in 60 secondi, contando insieme tutti gli eventi. La finestra non viene prolungata dalle richieste successive. I contatori sono temporanei e la risposta HTTP 429 invita a riprovare dopo un minuto. I posti non sono memorizzati in cache; il salvataggio verifica sempre la disponibilità nella transazione.
 
 ## Dati temporanei
 

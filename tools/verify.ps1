@@ -42,6 +42,9 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Sintassi PHP non valida: $file" }
     }
     $phpTests = @(
+        'payment-settings-audit.php', 'travel-availability-audit.php',
+        'travel-companions.php', 'travel-legacy-companions.php',
+        'travel-notification-links.php',
         'email-model-audit.php', 'email-impersonal.php', 'email-access-audit.php', 'email-jobs-audit.php', 'email-progress-retention.php', 'email-event-retention.php', 'email-recipients-audit.php', 'email-outcomes-audit.php', 'audit-comproved-email.php', 'audit-schema-index.php', 'audit-32755.php', 'payment-people.php',
         'travel.php', 'email-travel.php', 'waitlist-fast.php', 'email-error-length.php', 'email-job-cleanup.php', 'demo-services.php', 'demo-cleanup.php', 'event-output-links.php',
         'audit-275-rooms.php', 'audit-275-email-waitlist.php', 'audit-275-editor.php', 'email-regeneration.php', 'php-event-activity-migration.php',

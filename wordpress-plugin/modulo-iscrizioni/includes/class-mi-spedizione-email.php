@@ -230,6 +230,11 @@ final class MI_Spedizione_Email {
 		return array( 'ok' => true, 'count' => $conteggio, 'mode' => $modalita );
 	}
 
+	public static function future_events_condition() {
+		// Le prenotazioni storiche possono documentare la scelta soltanto nello snapshot.
+		return "(COALESCE(marketing_consent_id, '') <> '' OR JSON_UNQUOTE(JSON_EXTRACT(IF(JSON_VALID(snapshot_json), snapshot_json, '{}'), '$.consents.marketing.accepted')) IN ('true','1'))";
+	}
+
 	public static function accoda_comunicazione_operativa( array $payload ) {
 		if ( class_exists( 'MI_Event_Deletion' ) ) { $lease = MI_Event_Deletion::enter( absint( $payload['event_id'] ?? 0 ) ); if ( is_wp_error( $lease ) ) return $lease; }
 		global $wpdb;
@@ -243,7 +248,8 @@ final class MI_Spedizione_Email {
 		if ( $test_only && ! is_email( $test_recipient ) ) return new WP_Error( 'mi_operational_email_test_recipient', 'Indirizzo email di prova non valido.', array( 'status' => 400 ) );
 		$custom_types = get_option( 'mi_custom_communication_types', array() );
 		$custom_allowed = is_array( $custom_types ) && isset( $custom_types[ $template_type ] ) && preg_match( '/^CUSTOM_[A-Z0-9_]{1,24}$/', $template_type );
-		if ( ! $communication_id || ! $event_id || ( ! in_array( $template_type, array( 'PRE_DEPARTURE_REMINDER', 'DEPOSIT_REMINDER', 'BALANCE_REMINDER', 'EVENT_NOTICE', 'EVENT_CANCELLATION', 'REGISTRATION_CANCELLATION', 'MATERIAL_DELIVERY', 'PARTICIPATION_CANCELLATION_REMINDER' ), true ) && ! $custom_allowed ) ) return new WP_Error( 'mi_operational_email_invalid', 'Comunicazione non valida.', array( 'status' => 400 ) );
+		$subject = sanitize_text_field( (string) ( $payload['subject'] ?? '' ) );
+		if ( ! $communication_id || ! $event_id || ( ! in_array( $template_type, array( 'PRE_DEPARTURE_REMINDER', 'DEPOSIT_REMINDER', 'BALANCE_REMINDER', 'EVENT_NOTICE', 'EVENT_CANCELLATION', 'REGISTRATION_CANCELLATION', 'MATERIAL_DELIVERY', 'PARTICIPATION_CANCELLATION_REMINDER', 'SIMILAR_EVENTS_INVITE' ), true ) && ! $custom_allowed ) ) return new WP_Error( 'mi_operational_email_invalid', 'Comunicazione non valida.', array( 'status' => 400 ) );
 		if ( ( 'PRE_DEPARTURE_REMINDER' === $template_type || $custom_allowed ) && ! $message ) return new WP_Error( 'mi_operational_email_message_required', 'La comunicazione richiede un testo.', array( 'status' => 400 ) );
 		if ( is_array( $payload['recipients'] ?? null ) && count( $payload['recipients'] ) > 1000 ) return new WP_Error( 'mi_email_recipients', 'Oltre 1000 prenotazioni: nessuna comunicazione preparata.' );
 		$recipient_payload = is_array( $payload['recipients'] ?? null ) ? $payload['recipients'] : array();
@@ -276,6 +282,7 @@ final class MI_Spedizione_Email {
 			if ( in_array( $template_type, array( 'EVENT_CANCELLATION', 'REGISTRATION_CANCELLATION' ), true ) ) $status_filter = "status='CANCELLED'";
 			elseif ( in_array( $template_type, array( 'BALANCE_REMINDER', 'DEPOSIT_REMINDER' ), true ) ) $status_filter = "status IN ('CONFIRMED','PENDING_PAYMENT','WAITLISTED','WAITLIST_OFFERED') AND capacity_released_at IS NULL";
 			else $status_filter = "status IN ('CONFIRMED','PENDING_PAYMENT','TRAVEL_PENDING','WAITLISTED','WAITLIST_OFFERED') AND capacity_released_at IS NULL";
+			if ( 'SIMILAR_EVENTS_INVITE' === $template_type || ! empty( $payload['future_only'] ) ) $status_filter .= ' AND ' . self::future_events_condition();
 			$registrations = $wpdb->get_results( $wpdb->prepare( "SELECT id,order_code,status,economic_mode,buyer_first_name,buyer_last_name,buyer_email,total_qty,total_cents,initial_due_cents,balance_cents,payment_methods_json,payment_deadline_at FROM {$registrations_table} WHERE event_id=%d AND order_code IN ({$placeholders}) AND {$status_filter} ORDER BY id LIMIT 1000", $query_args ), ARRAY_A );
 			if ( $wpdb->last_error ) return new WP_Error( 'mi_email_read', 'Prenotazioni non disponibili.' );
 			if ( 'EVENT_CANCELLATION' === $template_type && count( $registrations ) !== count( $order_codes ) ) return new WP_Error( 'mi_email_cancel_incomplete', 'Annullamento dei destinatari non completato.' );
@@ -323,6 +330,8 @@ final class MI_Spedizione_Email {
 					$live_participant_links = $live_participant_links && (bool) $participant_management;
 					if ( 'PARTICIPATION_CANCELLATION_REMINDER' === $template_type ) $status_url = '';
 					$snapshot = MI_Modello_Email::crea_istantanea_operativa( $event_id, $values, $template_type, $message, $status_url, $participant_management, $live_participant_links, 'OPERATIVO' !== $effective_mode );
+					if ( '' !== $subject && ( $custom_allowed || 'SIMILAR_EVENTS_INVITE' === $template_type ) ) $snapshot['oggetto'] = $subject;
+					if ( '' !== $subject && $custom_allowed ) $snapshot['titolo'] = $subject;
 					$status = $test_only ? 'TEST_PENDING' : ( 'ANTEPRIMA' !== $effective_mode ? self::stato_nuova_email( $snapshot ) : 'PREVIEW' );
 					$payload_json = wp_json_encode( array( 'communication_id' => $communication_id, 'event_id' => $event_id, 'event_title' => $event['title'], 'order_code' => $test_only ? 'PROVA' : $registration['order_code'], 'template_type' => $template_type, 'portal_test_copy' => $test_only, 'test_recipient' => $test_only ? $test_recipient : '', 'email_preview' => $snapshot ) );
 					if ( false === $payload_json ) throw new RuntimeException( 'Coda email non salvata.' );

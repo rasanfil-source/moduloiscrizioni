@@ -4,13 +4,14 @@ class WP_Error { public function __construct( public $code, public $message ) {}
 function is_wp_error( $v ) { return $v instanceof WP_Error; }
 function get_current_user_id() { return 7; }
 function absint( $v ) { return abs( (int) $v ); }
-function get_post_status( $id ) { return 'draft'; }
+function get_post_status( $id ) { return $GLOBALS['post_status'] ?? 'draft'; }
 function get_option( $k, $d = false ) { return $GLOBALS['options'][$k] ?? $d; }
 function update_option( $k, $v, ...$args ) { $GLOBALS['options'][$k] = $v; return true; }
 function add_option( $k, $v, ...$args ) { if ( isset( $GLOBALS['options'][$k] ) ) return false; $GLOBALS['options'][$k] = $v; $GLOBALS['ids'][$k] = count( $GLOBALS['ids'] ) + 1; return true; }
 function delete_option( $k ) { unset( $GLOBALS['options'][$k] ); }
 function wp_next_scheduled( $hook ) { return false; }
-function wp_schedule_single_event( ...$args ) { $GLOBALS['scheduled'][] = $args; }
+function wp_schedule_single_event( ...$args ) { $GLOBALS['scheduled'][] = $args; return true; }
+function wp_clear_scheduled_hook( ...$args ) { $GLOBALS['cleared'][] = $args; }
 function add_action( ...$args ) { $GLOBALS['actions'][] = $args; }
 function wp_salt( $scheme ) { return 'synthetic'; }
 function wp_remote_post( ...$args ) { $GLOBALS['loopbacks'][] = $args; }
@@ -24,6 +25,8 @@ class MI_Spedizione_Email {
 class MI_Event_Deletion { public static function release( $id ) {} }
 class AuditJobsDatabase {
     public $options = 'wp_options';
+    public $prefix = 'wp_';
+    public function get_var( $query ) { return 1; }
     public function esc_like( $v ) { return $v; }
     public function prepare( $sql, ...$args ) { return $args; }
     public function get_results( $args, $format ) {
@@ -71,3 +74,18 @@ if($cases['test_replaced_last_campaign'])throw new RuntimeException('Test hid ac
 foreach(range(1,3) as $run)if($cases['paused_jobs_run_'.$run]['prepared']!==10*$run)throw new RuntimeException('Paused jobs stalled active job');
 if($cases['preview_dispatch_global_pause']!==1 || $cases['preview_prepare_while_global_pause']!==10)throw new RuntimeException('Transport pause blocked preview');
 echo "PASS: effective draft mode, separate test pointer, paused-job scan and preview during pause.\n";
+if ( realpath( $_SERVER['SCRIPT_FILENAME'] ) !== __FILE__ ) return;
+class MI_Access { public static function can_access_event( $id ) { return true; } }
+reset_jobs();
+$GLOBALS['post_status'] = 'publish';
+MI_Spedizione_Email::$mode = 'OPERATIVO';
+$planned = MI_Email_Jobs::enqueue( array_replace( $payload, array( 'allow_operational' => true, 'start_at' => time() + 3600 ) ) );
+$scheduled_id = $planned['job_id'];
+$scheduled_key = 'mi_email_job_' . $scheduled_id;
+MI_Email_Jobs::prepare_next();
+if ( get_option( $scheduled_key )['offset'] !== 0 || $GLOBALS['scheduled'][0] !== array( $planned['start_at'], 'mi_avvia_comunicazione_programmata', array( $scheduled_id ) ) ) throw new RuntimeException( 'Scheduled send ran early or lacked a cron wakeup' );
+if ( ! MI_Email_Jobs::cancel_scheduled( $scheduled_id ) || get_option( $scheduled_key )['state'] !== 'cancelled' || get_option( 'mi_email_pending_' . $scheduled_id ) ) throw new RuntimeException( 'Scheduled send could not be cancelled' );
+$planned = MI_Email_Jobs::enqueue( array_replace( $payload, array( 'communication_id' => 'due', 'allow_operational' => true, 'start_at' => time() ) ) );
+MI_Email_Jobs::prepare_next();
+if ( get_option( 'mi_email_job_' . $planned['job_id'] )['offset'] !== 10 || MI_Email_Jobs::cancel_scheduled( $planned['job_id'] ) ) throw new RuntimeException( 'Due send did not start or was cancelled after starting' );
+echo "PASS: scheduled wakeup, no early send, cancellation and due send.\n";

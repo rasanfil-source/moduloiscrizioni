@@ -6,7 +6,7 @@ function current_user_can($cap){return $GLOBALS['caps'][$cap]??false;}
 function is_user_logged_in(){return $GLOBALS['logged'];}
 function is_ssl(){return true;}
 function wp_logout_url($url){return home_url('logout');}
-class MI_Email_Jobs {static function render_progress($id){}}
+class MI_Email_Jobs {static function render_progress($id){} static function render_scheduled(){}}
 function get_current_user_id(){return 7;}
 class MI_Portal_Management {static function url($id=0){return home_url('?mi_portal_view=management');}}
 function absint($v){return abs((int)$v);}
