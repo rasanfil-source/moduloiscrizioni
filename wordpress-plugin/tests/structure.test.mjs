@@ -2576,7 +2576,7 @@ test('il dettaglio costi di servizi e saldo è una fisarmonica chiusa inizialmen
 test('la configurazione locale dei pagamenti viene validata e importata nel database', async () => {
 	const balance = await read('includes/class-mi-public-balance.php');
 	assert.match(balance, /public-balance-config\.json/);
-	assert.match(balance, /\^IT\[0-9\]\{2\}\[A-Z\]\[0-9\]\{10\}\[A-Z0-9\]\{12\}\$/);
+	assert.match(balance, /MI_IBAN::valid\( \$iban \)/);
 	assert.match(balance, /esc_url_raw[\s\S]*array\( 'https' \)/);
 	assert.match(balance, /update_option\( 'mi_public_balance_payment', \$defaults, false \)/);
 });

@@ -11,7 +11,7 @@ class DeletionDatabase extends DatabaseAdapter {
 class WP_Error {function __construct(public $code,public $message){}function get_error_message(){return $this->message;}}
 class MI_Access {static function is_suspended(){return false;}static function is_global_manager(){return true;}static function can_access_event($id){return true;}}
 class MI_Event_Post_Type {const EVENT_TYPE='mi_event';}
-class MI_Modello_Email {const EMAIL_SEGRETERIA='office@example.invalid';static function crea_istantanea_istituzionale($id,$subject,$preheader,$html,$text){return ['attivo'=>true,'oggetto'=>$subject,'html'=>$html,'testo'=>$text];}}
+class MI_Modello_Email {const EMAIL_SEGRETERIA='office@example.invalid';static function crea_istantanea_istituzionale($id,$subject,$preheader,$html,$text,$actions=[]){return ['attivo'=>true,'oggetto'=>$subject,'html'=>$html,'testo'=>$text,'azioni'=>$actions];}}
 function sanitize_email($v){return $v;}function is_email($v){return filter_var($v,FILTER_VALIDATE_EMAIL);}
 function esc_html($v){return htmlspecialchars($v);}function esc_attr($v){return htmlspecialchars($v);}
 function get_the_title($id){return get_post($id)->post_title;}function current_time(...$args){return gmdate('Y-m-d H:i:s');}
