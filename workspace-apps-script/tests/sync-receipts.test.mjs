@@ -119,3 +119,23 @@ test('la conferma della replica preserva un ulteriore cambiamento locale',()=>{
  const changes=e.c.modificheCorrentiFoglio_(e.sheet).changes;
  assert.equal(e.value,'Nuova modifica');assert.equal(changes.length,1);assert.equal(changes[0].before,'Anna Maria');assert.equal(changes[0].after,'Nuova modifica');
 });
+
+test('annullamento dopo una ricevuta usa solo una revisione ordine sufficiente',()=>{
+ const e=environment(), payload={event_id:'42',direct_projection:true};
+ e.c.confermaModificheFoglio_({...payload,confirmations:[{...receipt,workspace_revision:8}]});
+ for (const revision of [7,9]) {
+   e.c.allineaBaseConVista_(e.sheet,{righe:[],revisioniOrdini:{DEMO:revision}});
+   assert.equal(e.c.modificheCorrentiFoglio_(e.sheet).changes.length,revision===7?1:0);
+ }
+});
+test('il ripristino al valore originale rimane sincronizzabile anche dopo la proiezione',()=>{
+ const e=environment(), payload={event_id:'42',direct_projection:true};
+ e.c.confermaModificheFoglio_({...payload,confirmations:[{...receipt,workspace_revision:8}]});
+ e.value=receipt.before;
+ for(const revision of [7,8]){
+   e.c.allineaBaseConVista_(e.sheet,{righe:[{codice_ordine:'DEMO',numero_partecipante:1,workspace_revision:revision,valori:{first_name:receipt.accepted}}]});
+   const [change]=e.c.leggiModificheEventoMysql_(payload).changes;
+   assert.equal(change.before,receipt.accepted);assert.equal(change.after,receipt.before);
+   assert.equal(e.c.modificheCorrentiFoglio_(e.sheet).changes.length,1);
+ }
+});

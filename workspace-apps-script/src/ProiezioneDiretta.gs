@@ -65,7 +65,7 @@ function generaVistaDaProiezioneDiretta_(projection) {
     if(!referente)['paid_cash','paid_transfer','paid_card'].forEach(key=>valori[key]='');
     return {codice_ordine:String(persona.codice_ordine),numero_partecipante:Number(persona.numero_partecipante),valori:valori,workspace_revision:String(iscrizione.workspace_revision||'')};
   });
-  return {evento:{id:idEvento,titolo:String(evento.titolo||idEvento)},sola_lettura:vistaEventoSolaLettura_(evento,colonne),profilo:profilo.id,nome_profilo:profilo.nome,personalizzata:false,conservata:false,colonne:colonne,righe:righe};
+  return {evento:{id:idEvento,titolo:String(evento.titolo||idEvento)},sola_lettura:vistaEventoSolaLettura_(evento,colonne),profilo:profilo.id,nome_profilo:profilo.nome,personalizzata:false,conservata:false,colonne:colonne,righe:righe,revisioniOrdini:Object.fromEntries(iscrizioni.map(row=>[row.codice_ordine,row.workspace_revision]))};
 }
 
 function apriFoglioEventoFirmato_(payload, create, title) {
@@ -150,7 +150,7 @@ function proiettaEventoDaWordPress_(payload) {
   try{
     if(typeof eventoInEliminazione_==='function'&&eventoInEliminazione_(eventId))throw new Error('EVENT_DELETED');
     verificaGenerazioneProiezione_(eventId,payload);
-    const opened=apriFoglioEventoFirmato_(payload,true,projection.event.titolo), properties=PropertiesService.getScriptProperties(), key='MI_DIRECT_VIEW_'+opened.book.getId(), fingerprint=String(payload.fingerprint||'');
+    const opened=apriFoglioEventoFirmato_(payload,true,projection.event.titolo), properties=PropertiesService.getScriptProperties(), key='MI_DIRECT_VIEW_'+opened.book.getId(), fingerprint=String(payload.fingerprint||payload.projection_hash);
       // Se la ricevuta contiene soltanto l'impronta, ricostruisci la proiezione per determinare read_only.
     let receipt;try{receipt=JSON.parse(properties.getProperty(key)||'null');}catch(error){receipt=null;}
     if(typeof riprendiScritturaProiezione_==='function')riprendiScritturaProiezione_(opened.sheet);

@@ -28,7 +28,7 @@ expect($snapshot['identita_email']['nome_mittente'] === 'Equipe evento' && $snap
 $GLOBALS['email_meta'][42] = [];
 $snapshot = MI_Modello_Email::crea_istantanea(42, []);
 expect($snapshot['identita_email']['nome_mittente'] === 'Segreteria', 'fallback identità default');
-expect(str_contains(MI_Modello_Email::componi_testo($snapshot), MI_Modello_Email::NOME_SEGRETERIA), 'firma default assente');
+expect(str_contains(MI_Modello_Email::componi_testo($snapshot), 'Segreteria parrocchiale Sant’Eugenio'), 'firma default assente');
 echo "Group identity and signature: OK\n";
 $snapshot = MI_Modello_Email::crea_istantanea_annullamento_partecipazione_iscritto(42, 'Persona Esempio', '', 1);
 expect(str_contains($snapshot['html'], 'Persona Esempio') && str_contains($snapshot['testo'], 'Persona Esempio'), 'persona cancellata assente');

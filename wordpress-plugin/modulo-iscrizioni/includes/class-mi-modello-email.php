@@ -6,6 +6,7 @@ final class MI_Modello_Email {
 	const OPZIONE_STILE_DEFAULT = 'mi_email_stile_default';
 	const EMAIL_SEGRETERIA = 'info@parrocchiasanteugenio.it';
 	const NOME_SEGRETERIA = 'Segreteria parrocchiale S. Eugenio';
+	private const FIRMA_PAGINA_EVENTO = 'Segreteria parrocchiale Sant’Eugenio';
 
 	/** Token sempre disponibili: le configurazioni di gruppo ed evento contengono solo override. */
 	public static function stile_default() {
@@ -1026,7 +1027,7 @@ final class MI_Modello_Email {
 	}
 
 	private static function firma_pagina_evento( $body, $html ) {
-		$signature = 'Segreteria parrocchiale Sant’Eugenio';
+		$signature = self::FIRMA_PAGINA_EVENTO;
 		$visible = trim( strip_tags( preg_replace( '~<br\s*/?>|</p>~i', "\n", $body ) ) );
 		if ( preg_match( '~A presto!\s*Segreteria parrocchiale Sant[’\x27]Eugenio$~u', $visible ) ) return $body;
 		if ( preg_match( '~(?:^|\n)A presto!$~u', $visible ) ) return rtrim( $body ) . ( $html ? '<div>' . $signature . '</div>' : "\n" . $signature );
@@ -1046,7 +1047,11 @@ final class MI_Modello_Email {
 	private static function chiusura_email( $istantanea, $signed_event = false ) {
 		$footer = sanitize_textarea_field( (string) ( $istantanea['footer'] ?? '' ) );
 		$firma = sanitize_textarea_field( (string) ( $istantanea['identita']['firma'] ?? '' ) );
-		if ( $signed_event && 'A presto!' === trim( $footer ) ) $footer = '';
+		if ( $signed_event ) {
+			$repeated_lines = array( 'A presto!', self::NOME_SEGRETERIA, self::FIRMA_PAGINA_EVENTO, str_replace( '’', "'", self::FIRMA_PAGINA_EVENTO ) );
+			$footer = trim( implode( "\n", array_diff( array_map( 'trim', explode( "\n", $footer ) ), $repeated_lines ) ) );
+			$firma = trim( implode( "\n", array_diff( array_map( 'trim', explode( "\n", $firma ) ), array_diff( $repeated_lines, array( 'A presto!' ) ) ) ) );
+		}
 		return implode( "\n", array_unique( array_filter( array( $footer, $firma ), static function ( $value ) { return '' !== $value; } ) ) );
 	}
 

@@ -11,6 +11,8 @@ function setup(){
   PropertiesService:{getScriptProperties:()=>({getProperty:key=>props[key]||null,setProperty:(key,value)=>{props[key]=value;},deleteProperty:key=>{delete props[key];}})},
   LockService:{getScriptLock:()=>({tryLock:()=>{if(busy)return false;locked=true;return true;},releaseLock:()=>{locked=false;}})},
   DriveApp:{getFileById:file},
+  seriaIdFoglioDiretto_:id=>/^[A-Za-z0-9_-]{20,}$/.test(id),
+  SpreadsheetApp:{DeveloperMetadataLocationType:{SHEET:'SHEET'},openById:()=>({createDeveloperMetadataFinder:()=>({withKey(){return this;},withLocationType(){return this;},find:()=>[{getValue:()=>'42'}]})})},
   ottieniFoglioDiLavoroAssociato_:()=>{throw Error('CENTRAL_WORKBOOK_ACCESSED');},
   ottieniSchedaObbligatoria_:()=>{throw Error('CENTRAL_WORKBOOK_ACCESSED');},
  });
@@ -77,4 +79,13 @@ test('preserve with missing WordPress sheet id requires the original Apps Script
  assert.equal(x.c.eliminaDatiEventoDaWordPress_(preserve).complete,true);
  assert.equal(x.c.eliminaDatiEventoDaWordPress_(preserve).complete,true);
  assert.equal(x.accessed.length,0);assert.equal(x.props.MI_DIRECT_SHEET_42,undefined);
+});
+
+test('un file senza associazione deve avere il metadato dello stesso evento',()=>{
+ for (const values of [[],['43'],['42','43']]) {
+   const x=setup();
+   x.c.SpreadsheetApp.openById=()=>({createDeveloperMetadataFinder:()=>({withKey(){return this;},withLocationType(){return this;},find:()=>values.map(value=>({getValue:()=>value}))})});
+   assert.equal(x.c.eliminaDatiEventoDaWordPress_(x.payload).error,'EVENT_SHEET_MISMATCH');
+   assert.equal(x.files.get(x.payload.id_foglio).trashed,false);
+ }
 });

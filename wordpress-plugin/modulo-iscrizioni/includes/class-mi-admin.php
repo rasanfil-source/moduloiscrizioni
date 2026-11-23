@@ -856,6 +856,17 @@ final class MI_Admin {
 		<?php foreach ( get_posts( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'post_status' => 'publish', 'numberposts' => -1 ) ) as $recovery_event ) : if ( ! MI_Access::can_access_event( $recovery_event->ID ) ) continue; ?><option value="<?php echo esc_attr( $recovery_event->ID ); ?>"><?php echo esc_html( $recovery_event->post_title . ' (#' . $recovery_event->ID . ')' ); ?></option><?php endforeach; ?>
 		</select> <button class="button">Prepara notifica evento</button></form></details>
 		<?php endif; ?>
+		<h2>Comunicazioni programmate</h2>
+		<?php $scheduled = MI_Email_Jobs::scheduled_jobs(); if ( $scheduled ) : ?>
+		<table class="widefat striped"><thead><tr><th>Invio previsto (ora italiana)</th><th>Evento</th><th>Comunicazione</th><th>Destinatari previsti</th></tr></thead><tbody>
+		<?php foreach ( $scheduled as $job ) : ?>
+		<tr><td><?php echo esc_html( wp_date( 'd/m/Y H:i', $job['start_at'], new DateTimeZone( 'Europe/Rome' ) ) ); ?></td>
+		<td><?php echo esc_html( get_the_title( $job['event_id'] ) ); ?></td>
+		<td><?php echo esc_html( $job['label'] ); ?></td>
+		<td><?php echo esc_html( (int) $job['total'] ); ?></td></tr>
+		<?php endforeach; ?></tbody></table>
+		<?php else : ?><p>Nessuna comunicazione programmata.</p><?php endif; ?>
+		<h2>Consegne individuali</h2>
 		<div class="mi-responsive-table" tabindex="0" role="region" aria-label="Coda email"><table class="widefat striped"><thead><tr><th>ID</th><th>Iscrizione</th><th>Destinatario</th><th>Modello</th><th>Stato</th><th>Tentativi</th><th>Ultimo errore</th><th>Inviata il</th><th>Data UTC</th><th></th></tr></thead><tbody>
 		<?php if ( ! $rows ) : ?><tr><td colspan="10">Coda vuota.</td></tr><?php endif; ?>
 		<?php foreach ( $rows as $row ) : ?><?php $preview_url = add_query_arg( array( 'post_type' => MI_Event_Post_Type::EVENT_TYPE, 'page' => 'mi-email-outbox', 'email_id' => (int) $row['id'] ), admin_url( 'edit.php' ) ); ?><tr><td><?php echo esc_html( $row['id'] ); ?></td><td><?php echo esc_html( $row['registration_id'] ); ?></td><td><?php echo esc_html( $row['recipient'] ); ?></td><td><?php echo esc_html( $row['template_type'] ); ?></td><td><?php echo esc_html( $row['status'] ); ?></td><td><?php echo esc_html( $row['attempts'] ); ?></td><td><?php echo esc_html( $row['last_error'] ?: 'Nessuno' ); ?></td><td><?php echo esc_html( $row['sent_at'] ?: 'Non inviata' ); ?></td><td><?php echo esc_html( $row['created_at'] ); ?></td><td><a href="<?php echo esc_url( $preview_url ); ?>">Apri dettaglio</a><?php if ( current_user_can( 'manage_options' ) && in_array( $row['status'], array( 'FAILED', 'TEST_FAILED' ), true ) ) : ?><form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;margin-left:8px"><input type="hidden" name="action" value="mi_riaccoda_email"><input type="hidden" name="email_id" value="<?php echo esc_attr( $row['id'] ); ?>"><?php wp_nonce_field( 'mi_riaccoda_email' ); ?><button class="button-link">Riaccoda</button></form><?php endif; ?></td></tr><?php endforeach; ?>

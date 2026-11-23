@@ -42,8 +42,11 @@ $signed = $samples['conferma'];
 $signed['evento']['url'] = 'https://example.invalid/evento';
 $signed['html'] = '<p>Messaggio.</p><p>A presto!</p>';
 $signed['testo'] = "Messaggio.\n\nA presto!";
+$signed['identita']['firma'] = MI_Modello_Email::NOME_SEGRETERIA;
+$signed['footer'] = "A presto!\n" . MI_Modello_Email::NOME_SEGRETERIA;
 foreach ( array( MI_Modello_Email::componi_html( $signed ), MI_Modello_Email::componi_testo( $signed ) ) as $signed_body ) {
     expect( substr_count( $signed_body, 'A presto!' ) === 1 && substr_count( $signed_body, 'Segreteria parrocchiale Sant’Eugenio' ) === 1, 'Firma duplicata o assente nel messaggio con link evento' );
+    expect( ! str_contains( $signed_body, MI_Modello_Email::NOME_SEGRETERIA ), 'Firma abbreviata ripetuta sotto il pulsante' );
 }
 expect( str_contains( $html, '>Per assistenza<' ) && str_contains( $html, '>Scrivere a:<' ), 'Assistenza HTML non aggiornata' );
 expect( str_contains( $text, 'Per assistenza — Scrivere a:' ), 'Assistenza testo non aggiornata' );

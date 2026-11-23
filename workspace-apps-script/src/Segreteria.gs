@@ -564,7 +564,7 @@ function riepilogoPagamentiIndicizzato_(payments) {
   const totals = Object.create(null);
   payments.forEach(p=>{
     const key=String(p.codice_ordine), source=String(p.fonte_pagamento).toUpperCase();
-    const amount=(Number(p.importo_centesimi)||0)*(['RIMBORSO','STORNO'].includes(String(p.tipo_movimento).toUpperCase())?-1:1);
+    const amount=Math.abs(Number(p.importo_centesimi)||0)*(['RIMBORSO','STORNO','REFUND'].includes(String(p.tipo_movimento).toUpperCase())?-1:1);
     const item=totals[key] || (totals[key]=Object.create(null));
     item.total=(item.total||0)+amount;item[source]=(item[source]||0)+amount;
   });

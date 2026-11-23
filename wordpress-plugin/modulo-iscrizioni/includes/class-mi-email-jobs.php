@@ -76,13 +76,25 @@ final class MI_Email_Jobs {
 		} finally { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) ); }
 	}
 
-	public static function render_scheduled() {
+	public static function scheduled_jobs( $owner = 0 ) {
 		global $wpdb;
-		$prefix = $wpdb->esc_like( 'mi_email_scheduled_' . get_current_user_id() . '_' ) . '%';
+		$prefix = $wpdb->esc_like( 'mi_email_scheduled_' . ( $owner ? $owner . '_' : '' ) ) . '%';
 		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name LIKE %s", $prefix ) );
+		$scheduled = array();
 		foreach ( (array) $ids as $id ) {
 			$job = get_option( 'mi_email_job_' . $id );
-			if ( ! is_array( $job ) || 'pending' !== $job['state'] || ! empty( $job['started_at'] ) || ! MI_Access::can_access_event( $job['event_id'] ) ) continue;
+			if ( ! is_array( $job ) || 'pending' !== $job['state'] || empty( $job['start_at'] ) || ! empty( $job['started_at'] ) || ( $owner && $owner !== (int) $job['owner'] ) || ! MI_Access::can_access_event( $job['event_id'] ) ) continue;
+			$scheduled[ $id ] = array(
+				'event_id' => $job['event_id'], 'start_at' => $job['start_at'], 'total' => $job['total'],
+				'label' => ( $job['payload']['subject'] ?? '' ) ?: ( $job['payload']['template_type'] ?? '' ),
+			);
+		}
+		uasort( $scheduled, static fn( $a, $b ) => $a['start_at'] <=> $b['start_at'] );
+		return $scheduled;
+	}
+
+	public static function render_scheduled() {
+		foreach ( self::scheduled_jobs( get_current_user_id() ) as $id => $job ) {
 			echo '<form method="post"><p><strong>Programmato</strong> · ' . esc_html( get_the_title( $job['event_id'] ) . ' · ' . wp_date( 'd/m/Y H:i', $job['start_at'], new DateTimeZone( 'Europe/Rome' ) ) ) . '</p>';
 			echo '<input type="hidden" name="mi_portal_action" value="cancel_scheduled_communication"><input type="hidden" name="scheduled_job" value="' . esc_attr( $id ) . '">';
 			wp_nonce_field( 'mi_portal_cancel_scheduled_communication', 'mi_portal_nonce' );

@@ -29,6 +29,9 @@ class AuditJobsDatabase {
     public function get_var( $query ) { return 1; }
     public function esc_like( $v ) { return $v; }
     public function prepare( $sql, ...$args ) { return $args; }
+    public function get_col( $args ) {
+        return array_values( array_filter( $GLOBALS['options'], static fn( $key ) => str_starts_with( $key, rtrim( $args[0], '%' ) ), ARRAY_FILTER_USE_KEY ) );
+    }
     public function get_results( $args, $format ) {
         $rows = array();
         foreach ( $GLOBALS['ids'] as $key => $id ) if ( str_starts_with( $key, 'mi_email_pending_' ) && isset( $GLOBALS['options'][$key] ) && ( $id > $args[1] || str_starts_with( $key, 'mi_email_pending_test_' ) ) ) $rows[] = array( 'option_id' => $id, 'option_value' => $GLOBALS['options'][$key] );
@@ -75,13 +78,22 @@ foreach(range(1,3) as $run)if($cases['paused_jobs_run_'.$run]['prepared']!==10*$
 if($cases['preview_dispatch_global_pause']!==1 || $cases['preview_prepare_while_global_pause']!==10)throw new RuntimeException('Transport pause blocked preview');
 echo "PASS: effective draft mode, separate test pointer, paused-job scan and preview during pause.\n";
 if ( realpath( $_SERVER['SCRIPT_FILENAME'] ) !== __FILE__ ) return;
-class MI_Access { public static function can_access_event( $id ) { return true; } }
+class MI_Access { public static function can_access_event( $id ) { return 42 === $id; } }
 reset_jobs();
 $GLOBALS['post_status'] = 'publish';
 MI_Spedizione_Email::$mode = 'OPERATIVO';
 $planned = MI_Email_Jobs::enqueue( array_replace( $payload, array( 'allow_operational' => true, 'start_at' => time() + 3600 ) ) );
 $scheduled_id = $planned['job_id'];
 $scheduled_key = 'mi_email_job_' . $scheduled_id;
+$other = get_option( $scheduled_key );
+$other['owner'] = 8;
+$other['start_at']--;
+foreach ( array( 'other' => 42, 'hidden' => 43 ) as $name => $event ) {
+    $other['event_id'] = $event;
+    update_option( 'mi_email_job_' . $name, $other );
+    update_option( 'mi_email_scheduled_8_' . $name, $name );
+}
+if ( array_keys( MI_Email_Jobs::scheduled_jobs() ) !== array( 'other', $scheduled_id ) || array_keys( MI_Email_Jobs::scheduled_jobs( 7 ) ) !== array( $scheduled_id ) ) throw new RuntimeException( 'Programmazioni visibili o ordine errati' );
 MI_Email_Jobs::prepare_next();
 if ( get_option( $scheduled_key )['offset'] !== 0 || $GLOBALS['scheduled'][0] !== array( $planned['start_at'], 'mi_avvia_comunicazione_programmata', array( $scheduled_id ) ) ) throw new RuntimeException( 'Scheduled send ran early or lacked a cron wakeup' );
 if ( ! MI_Email_Jobs::cancel_scheduled( $scheduled_id ) || get_option( $scheduled_key )['state'] !== 'cancelled' || get_option( 'mi_email_pending_' . $scheduled_id ) ) throw new RuntimeException( 'Scheduled send could not be cancelled' );

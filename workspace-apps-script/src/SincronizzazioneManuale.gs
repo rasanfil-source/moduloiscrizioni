@@ -34,15 +34,16 @@ function confrontaModificheFoglio_(base, current) {
   Object.keys(base).forEach(key => { if (!seen.has(key)) errors.push('Riga rimossa: annulla la partecipazione dal portale.'); });
   return {changes:changes,errors:errors};
 }
-function leggiBaseFoglio_(foglio) {
+function leggiBaseFoglio_(foglio, ricevute) {
   const sheet = foglio.getSheetByName('_MI_BASE');
   if (!sheet) return null;
   const base = Object.create(null);
   if (sheet.getLastRow() < 2) return base;
-  sheet.getRange(2,1,sheet.getLastRow()-1,3).getValues().forEach(row => {
+  sheet.getRange(2,1,sheet.getLastRow()-1,ricevute ? 4 : 3).getValues().forEach(row => {
     const key = JSON.stringify([String(row[0]),Number(row[1])]);
     if (base[key]) throw new Error('Base del foglio duplicata.');
     base[key] = JSON.parse(String(row[2]));
+    if (ricevute && row[3]) ricevute.set(key, JSON.parse(String(row[3])));
   });
   return base;
 }
@@ -91,7 +92,8 @@ function centesimiBaseFoglio_(value) {
   return Number.isSafeInteger(cents)&&cents<=100000000 ? sign*cents : null;
 }
 function modificheCorrentiFoglio_(sheet) {
-  const base = leggiBaseFoglio_(sheet.getParent());
+  const ricevute = new Map();
+  const base = leggiBaseFoglio_(sheet.getParent(), ricevute);
   if (!base) return {changes:[],errors:[],initialized:false};
   const columns = mappaColonneEvento_(sheet);
   if (!columns._ordine || !columns._numero) return {changes:[],errors:['Identificativi del foglio mancanti.'],initialized:true};
@@ -103,7 +105,12 @@ function modificheCorrentiFoglio_(sheet) {
     Object.keys(columns).filter(key=>!['_ordine','_numero'].includes(key)).forEach(key=>values[key]=row[columns[key]-1]);
     // La base può contenere un decimale senza formato valuta.
     // Accetta solo lo stesso valore numerico, mai un importo diverso.
-    const original=base[JSON.stringify([String(row[columns._ordine-1]),Number(row[columns._numero-1])])];
+    const identity=JSON.stringify([String(row[columns._ordine-1]),Number(row[columns._numero-1])]);
+    const original=base[identity];
+    // Dopo una conferma, tornare al valore precedente è una nuova modifica locale.
+    Object.entries(ricevute.get(identity)||{}).forEach(([key,receipt])=>{
+      if (original && original[key]===receipt.before && values[key]===receipt.before) original[key]=receipt.accepted;
+    });
     if(original)['total','paid','balance','paid_cash','paid_transfer','paid_card'].forEach(key=>{
       const before=String(original[key]??'');
       if(!Object.prototype.hasOwnProperty.call(values,key))return;
@@ -162,8 +169,8 @@ function allineaBaseConVista_(sheet, vista) {
     const id=JSON.stringify([change.order_code,change.number]), row=incoming[id], values=row&&row.valori;
     const receipt=receipts[id] && receipts[id][change.key];
     if (receipt) {
-      const revision=Number(row && row.workspace_revision);
-      if (Number.isSafeInteger(revision) && revision>=receipt.revision && change.before===receipt.before) {
+      const revision=Number(row ? row.workspace_revision : vista.revisioniOrdini?.[change.order_code]);
+      if (Number.isSafeInteger(revision) && revision>=receipt.revision && (change.before===receipt.before || (change.before===receipt.accepted && change.after===receipt.before))) {
         if (!confirmed[id]) confirmed[id]={};
         // La modifica locale successiva resta in sospeso rispetto al valore accettato nel database.
         confirmed[id][change.key]=receipt.accepted;
@@ -237,6 +244,7 @@ function confermaModificheFoglio_(payload) {
 	try {
 		const sheet=apriFoglioEventoFirmato_(payload,false).sheet;
     if (!sheet) throw new Error('EVENT_SHEET_MISSING');
+    if (typeof riprendiScritturaProiezione_==='function') riprendiScritturaProiezione_(sheet);
     let updated=0;
     const protection=sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET).find(p=>p.getDescription()==='MI_PROIEZIONE');
     const editable=protection?protection.getUnprotectedRanges():[];

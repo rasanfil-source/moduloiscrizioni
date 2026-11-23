@@ -776,6 +776,7 @@ final class MI_Portal {
 		$start_at = 0;
 		$schedule = sanitize_text_field( wp_unslash( $_POST['communication_start'] ?? '' ) );
 		if ( '' !== $schedule ) {
+			if ( ! preg_match( '/^[0-9]{4}-/', $schedule ) ) return self::redirect_communication_preview( $token, 'Inserisci un anno di quattro cifre.', true );
 			$date = DateTimeImmutable::createFromFormat( '!Y-m-d\TH:i', $schedule, new DateTimeZone( 'Europe/Rome' ) );
 			if ( ! $date || $date->format( 'Y-m-d\TH:i' ) !== $schedule || $date->getTimestamp() <= time() || 'OPERATIVO' !== $draft['mode'] || 'publish' !== get_post_status( $event_id ) ) return self::redirect_communication_preview( $token, 'Per programmare l’invio scegli una data e un’ora future in modalità operativa.', true );
 			$start_at = $date->getTimestamp();
@@ -1552,7 +1553,7 @@ final class MI_Portal {
 			echo '<form class="mi-communication-send" method="post"><input type="hidden" name="mi_portal_action" value="prepare_communication"><input type="hidden" name="communication_token" value="' . esc_attr( $token ) . '">';
 			wp_nonce_field( 'mi_portal_prepare_communication', 'mi_portal_nonce' );
 			$send_label = 'publish' !== get_post_status( $draft['event_id'] ) || 'ANTEPRIMA' === $draft['mode'] ? 'Conferma preparazione senza invio' : ( 'OPERATIVO' === $draft['mode'] ? 'Conferma invio ai destinatari reali' : 'Conferma invio di prova' );
-			if ( 'OPERATIVO' === $display_mode ) echo '<label>Programma invio <small>Ora italiana. Lascia vuoto per inviare subito.</small><input type="datetime-local" name="communication_start"></label>';
+			if ( 'OPERATIVO' === $display_mode ) echo '<label>Programma invio <small>Ora italiana. Lascia vuoto per inviare subito.</small><input type="datetime-local" name="communication_start" max="9999-12-31T23:59"></label>';
 			if ( ! empty( $draft['recipient_options'] ) ) {
 				echo '<details><summary>Escludi singole prenotazioni da questo invio</summary>';
 				foreach ( $draft['recipient_options'] as $code => $email ) echo '<label><input type="checkbox" name="omit_orders[]" value="' . esc_attr( $code ) . '"> Escludi ' . esc_html( $email . ' · ' . $code ) . '</label>';

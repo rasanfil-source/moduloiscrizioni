@@ -56,3 +56,11 @@ test('oversized and duplicate-key batches are rejected before any delivery',()=>
  const s=setup();for(const messages of [[],Array.from({length:11},(_,i)=>message(i)),[message(1),message(1)]])assert.equal(s.batch(messages).error,'INVALID_EMAIL_PAYLOAD');
  assert.equal(s.sent.length,0);
 });
+
+test('il lotto restituisce le consegne accettate anche se la quota finale è indisponibile',()=>{
+ const s=setup(), p={...message(1),mode:'PROVA_PUNTUALE',test_only:true,reply_to:'invalido'};
+ s.ctx.MailApp.getRemainingDailyQuota=()=>{if(s.sent.length)throw Error('Quota unavailable');return 1;};
+ const result=s.batch([p]);
+ assert.equal(result.results[p.delivery_key].ok,true);assert.equal(result.quota_remaining,undefined);
+ assert.equal(s.sent[0].replyTo,p.destinatario);
+});

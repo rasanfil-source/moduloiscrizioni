@@ -93,6 +93,11 @@ if(!str_contains($html,'Testo personalizzato da conservare</textarea>')||!preg_m
 if(isset($event_query['meta_query'])||empty($event_query['update_post_meta_cache'])||str_contains($html,'data-mi-event-period="past"'))throw new Exception('Heavy metadata joins or eagerly rendered history');
 $_GET=['mi_comm_preview'=>'testtoken'];ob_start();$view->invoke(null);$html=ob_get_clean();
 if(!str_contains($html,'mi_comm_edit=testtoken')||!str_contains($html,'communication_test_request'))throw new Exception('Preview lacks editing/request identity');
+if(!str_contains($html,'name="communication_start" max="9999-12-31T23:59"'))throw new Exception('Missing four-digit year limit');
+$before_calls=count(MI_Spedizione_Email::$calls);
+$_POST=['communication_token'=>'testtoken','communication_start'=>'202699-11-24T18:00'];
+run_action();
+if(count(MI_Spedizione_Email::$calls)!==$before_calls || !isset($transients['mi_comm_7_testtoken']))throw new Exception('Invalid year queued or consumed draft');
 echo "PASS: editing preserves event, type and custom text; history deferred; preview links to same draft.\n";
 $GLOBALS['audit_post_status']='draft';
 ob_start();$view->invoke(null);$html=ob_get_clean();

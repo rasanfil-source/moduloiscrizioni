@@ -122,7 +122,7 @@ function eseguiConsegnaEmail_(payload, context) {
   const props = PropertiesService.getScriptProperties();
   if (p.mode === 'PROVA' && recipient !== String(props.getProperty(MI_TEST_EMAIL_PROPERTY) || '').trim().toLowerCase()) return { ok: false, error: 'TEST_RECIPIENT_MISMATCH' };
   const replyTo = String(p.reply_to || sender.sender).trim().toLowerCase();
-  if (p.mode !== 'PROVA' && (replyTo.length > 254 || !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(replyTo))) return { ok: false, error: 'INVALID_REPLY_TO' };
+  if (p.mode === 'OPERATIVO' && (replyTo.length > 254 || !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(replyTo))) return { ok: false, error: 'INVALID_REPLY_TO' };
   if (!p.oggetto || !p.testo || !p.html || String(p.oggetto).length > 250 || String(p.testo).length > 100000 || String(p.html).length > 300000 || /[\r\n]/.test(String(p.oggetto))) return { ok: false, error: 'INVALID_EMAIL_PAYLOAD' };
   const lock = LockService.getScriptLock();
   const senderName = String(p.nome_mittente || '').trim() || 'Parrocchia Sant’Eugenio';
@@ -278,5 +278,8 @@ function inviaEmailLottoDaWordPress_(payload) {
     catch (error) { console.error('EMAIL_BATCH_ITEM_FAILED', String(error)); results[key] = {ok:false,error:'EMAIL_DELIVERY_UNCERTAIN'}; }
     if (['EMAIL_QUOTA_EXCEEDED','EMAIL_BUSY','WORKSPACE_BUSY','EMAIL_STORAGE_UNAVAILABLE'].includes(results[key].error)) stop = results[key].error;
   }
-  return {ok:true,channel:'GOOGLE_WORKSPACE',results:results,quota_remaining:MailApp.getRemainingDailyQuota()};
+  const response={ok:true,channel:'GOOGLE_WORKSPACE',results:results};
+  try { response.quota_remaining=MailApp.getRemainingDailyQuota(); }
+  catch (error) { console.error('EMAIL_QUOTA_UNAVAILABLE'); }
+  return response;
 }

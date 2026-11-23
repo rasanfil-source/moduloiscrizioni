@@ -37,7 +37,16 @@ function eliminaDatiEventoDaWordPress_(payload) {
     // Gli errori di permesso o di elemento non trovato restano visibili; il riferimento consente un nuovo tentativo esplicito.
     while (job.fileIndex < job.files.length) {
       if (mode==='trash') {
-        const file = DriveApp.getFileById(job.files[job.fileIndex]);
+        const fileId = job.files[job.fileIndex];
+        if (!seriaIdFoglioDiretto_(fileId)) return {ok:false,error:'EVENT_SHEET_MISMATCH'};
+        const file = DriveApp.getFileById(fileId);
+        const registered = props.getProperty('MI_DIRECT_SHEET_'+id);
+        if (registered && registered!==fileId) return {ok:false,error:'EVENT_SHEET_MISMATCH'};
+        if (!registered) {
+          const markers = SpreadsheetApp.openById(fileId).createDeveloperMetadataFinder().withKey('MI_ID_EVENTO')
+            .withLocationType(SpreadsheetApp.DeveloperMetadataLocationType.SHEET).find();
+          if (!markers.length || markers.some(marker=>marker.getValue()!==id)) return {ok:false,error:'EVENT_SHEET_MISMATCH'};
+        }
         if (!file.isTrashed()) file.setTrashed(true);
       }
       job.fileIndex++;
