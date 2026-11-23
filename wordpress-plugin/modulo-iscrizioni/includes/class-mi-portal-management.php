@@ -31,6 +31,12 @@ final class MI_Portal_Management {
 		}
 		$event_id = absint( $_POST['event_id'] ?? 0 );
 		if ( ! $event_id || ! MI_Access::can_access_event( $event_id ) ) wp_send_json_error( array( 'message' => 'Evento non accessibile.' ), 403 );
+		if ( 'travel_crews' === $operation ) {
+			if ( ! class_exists( 'MI_Travel' ) || ! MI_Travel::config( $event_id )['enabled'] ) wp_send_json_error( array( 'message' => 'Passaggi auto non attivi per questo evento.' ), 400 );
+			try { $crews = MI_Travel::management_crews( $event_id ); }
+			catch ( Throwable $error ) { wp_send_json_error( array( 'message' => 'Equipaggi non disponibili. Riprova tra poco.' ), 503 ); }
+			wp_send_json_success( array( 'crews' => $crews ) );
+		}
 		if ( 'open_sheet' === $operation ) {
 			$result = MI_Sheet_Open::step( $event_id, sanitize_text_field( wp_unslash( $_POST['token'] ?? '' ) ) );
 			if ( is_wp_error( $result ) ) wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
@@ -77,13 +83,17 @@ final class MI_Portal_Management {
 		} else {
 			global $wpdb;
 			$code = sanitize_text_field( wp_unslash( $_POST['order_code'] ?? '' ) );
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id,event_id,order_code FROM {$wpdb->prefix}mi_registrations WHERE order_code=%s AND event_id=%d", $code, $event_id ), ARRAY_A );
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT id,event_id,order_code,economic_mode FROM {$wpdb->prefix}mi_registrations WHERE order_code=%s AND event_id=%d", $code, $event_id ), ARRAY_A );
 			if ( ! $row ) wp_send_json_error( array( 'message' => 'Prenotazione non accessibile.' ), 403 );
 			$payload = array( 'event_id' => (string) $event_id, 'order_code' => $row['order_code'], 'operator_label' => mb_substr( 'WP#' . get_current_user_id() . ' · ' . wp_get_current_user()->display_name, 0, 100 ) );
 			if ( 'options_preview' === $operation ) {
 				$result = MI_Management_Service::options_preview( (int) $row['id'], json_decode( wp_unslash( $_POST['data'] ?? '{}' ), true ), sanitize_text_field( wp_unslash( $_POST['version'] ?? '' ) ) );
 			} elseif ( 'detail' === $operation ) {
 				$result = MI_Management_Service::detail( (int) $row['id'] );
+				if ( ! is_wp_error( $result ) && class_exists( 'MI_Travel' ) ) {
+					try { $result['travel_details'] = MI_Travel::management_details( $event_id, (int) $row['id'] ); }
+					catch ( Throwable $error ) { wp_send_json_error( array( 'message' => 'Spostamenti non disponibili. Riprova.' ), 503 ); }
+				}
 				if ( ! is_wp_error( $result ) && class_exists( 'MI_Travel' ) && MI_Travel::config( $event_id )['enabled'] ) {
 					$result['travel_participant_ids'] = array_map( 'intval', $wpdb->get_col( $wpdb->prepare( "SELECT participant_id FROM {$wpdb->prefix}mi_travel WHERE registration_id=%d", $row['id'] ) ) );
 					if ( $wpdb->last_error ) wp_send_json_error( array( 'message' => 'Viaggi non disponibili. Riprova.' ), 503 );
@@ -102,7 +112,14 @@ final class MI_Portal_Management {
 				$belongs = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$wpdb->prefix}mi_participants WHERE id=%d AND registration_id=%d", $participant_id, $row['id'] ) );
 				if ( ! $belongs ) wp_send_json_error( array( 'message' => 'Partecipante non accessibile.' ), 403 );
 				$result = MI_Registration_Service::cancel_participant( $participant_id, 'WP#' . get_current_user_id() . ' · ' . wp_get_current_user()->display_name );
-				if ( ! is_wp_error( $result ) ) $result = array( 'ok' => true, 'saved' => true, 'message' => 'Partecipazione annullata. Per gli eventi a pagamento, verifica il dovuto e usa «Rettifica il dovuto» se necessario: l’annullamento non riduce automaticamente gli importi. Eventuali rimborsi si registrano separatamente. L’allineamento dei fogli può richiedere qualche istante.' );
+				if ( ! is_wp_error( $result ) ) {
+					$message = 'Partecipazione annullata.';
+					if ( in_array( $row['economic_mode'] ?? '', array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true ) ) {
+						$message .= ' Verifica il dovuto e usa «Rettifica il dovuto» se necessario: l’annullamento non riduce automaticamente gli importi. Eventuali rimborsi si registrano separatamente.';
+					}
+					$message .= ' L’allineamento dei fogli può richiedere qualche istante.';
+					$result = array( 'ok' => true, 'saved' => true, 'message' => $message );
+				}
 			} elseif ( in_array( $operation, array( 'participant', 'room_save', 'room_delete', 'request_review', 'attendance', 'adjust_due', 'identity_link', 'change_options' ), true ) ) {
 				$request_id = sanitize_text_field( wp_unslash( $_POST['request_id'] ?? '' ) );
 				if ( ! preg_match( '/^[a-f0-9-]{36}$/i', $request_id ) ) wp_send_json_error( array( 'message' => 'Richiesta non valida.' ), 400 );

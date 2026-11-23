@@ -31,8 +31,8 @@
   },
   "form-submit.js": {
     "file": "min/form-submit.js",
-    "source": "3f10ee61755a7df9d13dd5e4f9338670d6412e1306a073e5e73a36a69bf1be6f",
-    "hash": "429c207cd8c097019cc8212859eb49e0edc9cdc56e3f5833fa420d21ab49e887"
+    "source": "1ed9815a5ee6431c23b6ebb441ca31b3d91ed184f9b80d737e82c27432d1d155",
+    "hash": "6d4679c4a716806aca4c60841808034307d917beb77006cfd8ca8a12c2030201"
   },
   "portal-communications.js": {
     "file": "min/portal-communications.js",
@@ -41,13 +41,13 @@
   },
   "portal-management.css": {
     "file": "min/portal-management.css",
-    "source": "0717145c1d4cc3ff39b55e4f34f2483d9aa6ca555217948434002c127ff17c33",
-    "hash": "070317c916893ad5b2391b9c1daa317c23c255a9af33fbfbb010c1265fea7d1a"
+    "source": "ab75c55a2caa4ece44c04bf704cd2dcc5aa35859b0c6030b7d87454d4eb9a3c0",
+    "hash": "9bd229203518290f6265a1b79bdd98ea56ac1238ed4c8be90ca29dafa88f7f33"
   },
   "portal-management.js": {
     "file": "min/portal-management.js",
-    "source": "3f1bdcbce32c4ec66bd90e38ea6c7f63235d4640427588be4c9120dcae39a0ac",
-    "hash": "2e6a5f0311c0299bd433956c9b80bdc1c33fcce97e6057121b4523552d4d749d"
+    "source": "351146d280bd5a831b5395c4a7746d9ecd1a4d1d07202108c9c643d2cfa3101e",
+    "hash": "f47029a95aa0cc6c9b297728f8cb974735222fc2cddf2742fa803ff256f0bd13"
   },
   "portal-payments.css": {
     "file": "min/portal-payments.css",
@@ -66,8 +66,8 @@
   },
   "portal-push.js": {
     "file": "min/portal-push.js",
-    "source": "4df205b87bee1d12357c91d6ab50ba50d2a6bf207140242eeed0847fcf985cbf",
-    "hash": "19f4b1c28d8156e198e46aa2a60702df3e86b2ac5b6b01e94089c635bba802ed"
+    "source": "a113e0ab8fd808cab5ad9b1e1650b131630db99049a9388b6bfa9aa6e9452a96",
+    "hash": "013ed5b3bc833ccd2cd4bcec0c3fbfc511d0c2a658c56230f930c9f9c70dcbcc"
   },
   "portal-pwa.js": {
     "file": "min/portal-pwa.js",
@@ -76,13 +76,13 @@
   },
   "portal.css": {
     "file": "min/portal.css",
-    "source": "8e38504f31237d896f948a16378a62ae9c77f7cc50fc662386fefb3bbffe9349",
-    "hash": "718e280bd02ce32d4c61fb7416ed5b786cd67159cf955c823079fa0e7a9155fb"
+    "source": "ce8ce712f38d1bfdc9763544f26d6ec69da5300c04785d6802e5c4ac7548ccb7",
+    "hash": "a1abfd2511fcb6b5373bbcf37655bd770d1bddba8f8a4f3109a7fcbccc038f92"
   },
   "portal.js": {
     "file": "min/portal.js",
-    "source": "3556cced0d3c13e08b7874f4498d78231c3b37277dffbb73fe32ff253ba574df",
-    "hash": "2ba55591201c767ddbe6aea49c78ac3c0f198217b077baaf6d7297123fc1ee6a"
+    "source": "e07f0c8d730a4570c849447dd8caa8390ca8454da0e6dfd7da6ab9cd377fb8ac",
+    "hash": "c1f489fbf1b08dbae1680c05c8a7aacaafdfe877528f836242d2c6002ffe003f"
   },
   "public-balance.css": {
     "file": "min/public-balance.css",
@@ -91,8 +91,8 @@
   },
   "public-balance.js": {
     "file": "min/public-balance.js",
-    "source": "7a269fa27acba6d8e3a4693ab04034360c3931ac88d156acb84ec4d821a267ce",
-    "hash": "e8e2f22b0f167a47e838b98620a32ab9287bebcea561561456e803c7eb95b57c"
+    "source": "3f9f701f1ad311aeef5d0385c8b1f72c097b438e78400305c318b5475d7ec8f9",
+    "hash": "5bab41843ebca78f957dd6e5efa49b5b5522e79ff5f845c556bdb4f4299c3425"
   },
   "public.css": {
     "file": "min/public.css",
@@ -101,13 +101,18 @@
   },
   "public.js": {
     "file": "min/public.js",
-    "source": "e84c6ee50bf5f2f977351ddd8e5c2e56d54889f447e8d90bf0deaf7fd6b73e9f",
-    "hash": "64552639e2852f9a07eafdf15a5d4bfa606605757486e0571d36e1e61fcddf02"
+    "source": "347bb0f1914f4f96bdf05493b1409e513087934cd7c00701474749a3e9bfab63",
+    "hash": "e312fa08b65e65217bac2e711e8a80eb0196b3004c1cbe28ffccf9cb95f4e887"
   },
   "qrcode-generator-2.0.4.js": {
     "file": "min/qrcode-generator-2.0.4.js",
     "source": "d7b28c149212ffed35751e69f672a1d1718d0e6b22e492b5ac801942ed75535a",
     "hash": "aa16820550b1b326bbc221383bf89de4eef7d5688874cf34fb9769c3fb0eab3f"
+  },
+  "travel-page.css": {
+    "file": "min/travel-page.css",
+    "source": "cc3dc87d1af84ef780c9343d286619a26be46474a9d6f310d43cd4e67ed816d2",
+    "hash": "566012dc80a556c3256fbf154fb9e21e910a9a7e11365253750a76e3e9c6e58e"
   },
   "travel.js": {
     "file": "min/travel.js",

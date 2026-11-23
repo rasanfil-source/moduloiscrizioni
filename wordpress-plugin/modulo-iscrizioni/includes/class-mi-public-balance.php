@@ -2,6 +2,7 @@
 defined( 'ABSPATH' ) || exit;
 require_once __DIR__ . '/class-mi-option-rules.php';
 require_once __DIR__ . '/class-mi-payment-people.php';
+require_once __DIR__ . '/class-mi-iban.php';
 
 /** Flusso pubblico per consultare e aggiornare le scelte dei partecipanti. */
 final class MI_Public_Balance {
@@ -40,7 +41,7 @@ final class MI_Public_Balance {
 			$iban = strtoupper( preg_replace( '/\s+/', '', sanitize_text_field( (string) ( $local['iban'] ?? '' ) ) ) );
 			$holder = sanitize_text_field( (string) ( $local['holder'] ?? '' ) );
 			$card_url = esc_url_raw( (string) ( $local['cardUrl'] ?? '' ), array( 'https' ) );
-			if ( preg_match( '/^IT[0-9]{2}[A-Z][0-9]{10}[A-Z0-9]{12}$/', $iban ) && $holder && $card_url && 'https' === wp_parse_url( $card_url, PHP_URL_SCHEME ) ) {
+			if ( MI_IBAN::valid( $iban ) && $holder && $card_url && 'https' === wp_parse_url( $card_url, PHP_URL_SCHEME ) ) {
 				$defaults = array( 'iban' => $iban, 'holder' => $holder, 'cardUrl' => $card_url );
 				update_option( 'mi_public_balance_payment', $defaults, false );
 			}
@@ -178,7 +179,7 @@ final class MI_Public_Balance {
 		if ( $receipt['deposit'] ) $text .= "\nCaparra versata: " . $money( $receipt['depositPaid'] ) . "\nCaparra da versare: " . $money( $receipt['depositDue'] ) . "\nSaldo da versare: " . $money( $receipt['saldoDue'] );
 		$text .= "\nTotale: " . $money( $receipt['total'] ) . "\nVersato (esclusi rimborsi effettuati): " . $money( $receipt['paid'] ) . "\nSaldo da versare: " . $money( $receipt['balance'] ) . "\nCausale: " . $receipt['causale'];
 		if ( $receipt['balance'] > 0 && in_array( 'BANK_TRANSFER', $payment['methods'], true ) ) $text .= "\nIBAN: " . $payment['iban'] . "\nIntestatario: " . $payment['holder'];
-		if ( $receipt['balance'] > 0 && in_array( 'CARD', $payment['methods'], true ) ) $text .= "\nPagamento con carta: " . $payment['cardUrl'];
+		if ( $receipt['balance'] > 0 && in_array( 'CARD', $payment['methods'], true ) && ! empty( $payment['cardUrl'] ) ) $text .= "\nPagamento con carta: " . $payment['cardUrl'];
 		foreach ( $receipt['people'] as $person ) if ( ! empty( $person['missing'] ) ) $text .= "\n\nPrima dell’evento — " . $person['name'] . ': ' . implode( ', ', $person['missing'] ) . '. Le informazioni richieste possono essere comunicate rispondendo a questa email.';
 		$snapshot = MI_Modello_Email::crea_istantanea( $event, array() );
 		$snapshot['attivo'] = true; $snapshot['oggetto'] = 'Riepilogo del saldo e istruzioni di pagamento — ' . get_the_title( $event ); $snapshot['testo'] = $text;

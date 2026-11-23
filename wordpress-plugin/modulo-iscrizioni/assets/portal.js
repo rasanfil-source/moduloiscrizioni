@@ -105,8 +105,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const logoutAnchor=document.createComment('portal logout position');
     if(logout)logout.before(logoutAnchor);
     const current=nav.querySelector('.is-active,[aria-current="page"]');
-    const toggle=document.createElement('button');toggle.type='button';toggle.className='mi-portal-menu-toggle';toggle.textContent='☰ Menu'+(current?' · '+current.textContent.trim():'');
-    nav.id=nav.id||'mi-portal-navigation-'+index;toggle.setAttribute('aria-controls',nav.id);toggle.setAttribute('aria-expanded','false');header.append(toggle);
+    const section=current?.textContent.trim();
+    const toggle=document.createElement('button');toggle.type='button';toggle.className='mi-portal-menu-toggle';
+    const menuLabel=document.createElement('span');menuLabel.className='mi-portal-menu-label';
+    menuLabel.textContent=section?'Menu · '+section:'Menu';
+    toggle.append('☰',menuLabel);
+    toggle.setAttribute('aria-label',section?'Menu · '+section:'Menu');
+    const actions=header.querySelector('.mi-portal-header__actions')||header;
+    nav.id=nav.id||'mi-portal-navigation-'+index;toggle.setAttribute('aria-controls',nav.id);toggle.setAttribute('aria-expanded','false');actions.append(toggle);
     portal.classList.add('mi-portal--responsive-nav');
     const layout=()=>{
       const hadFocus=nav.contains(document.activeElement)||document.activeElement===toggle;

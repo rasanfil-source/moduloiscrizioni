@@ -119,7 +119,6 @@
       await postSubscription('subscribe', subscription.toJSON());
       remember(true);
       setActive(true);
-      showStatus('Notifiche attive su questo dispositivo.', 4000);
     }).catch(() => {
       setActive(false);
       showStatus('Ricarica il portale per verificare le notifiche.');
@@ -170,7 +169,6 @@
       await postSubscription('subscribe', subscription.toJSON());
       remember(true);
       setActive(true);
-      showStatus('Notifiche attive su questo dispositivo.', 4000);
     } catch (error) {
       setActive(false);
       showStatus(error?.message || 'Non è stato possibile attivare le notifiche. Riprova.');

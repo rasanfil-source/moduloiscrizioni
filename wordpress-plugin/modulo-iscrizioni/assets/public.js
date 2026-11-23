@@ -41,8 +41,7 @@
 	const waitlistChoice = document.createElement('input');waitlistChoice.type = 'checkbox';waitlistChoice.dataset.miWaitlistChoice = '';
 	const waitlistText = document.createElement('span');
 	waitlistLabel.append(waitlistChoice,waitlistText);
-	const capacityHelp = document.createElement('small');capacityHelp.textContent = 'La disponibilità viene verificata di nuovo all’invio. Nessun posto è riservato durante la compilazione.';
-	capacityNotice.append(capacityMessage,capacityDetails,reduceSelection,waitlistLabel,capacityHelp);steps[0].append(capacityNotice);
+	capacityNotice.append(capacityMessage,capacityDetails,reduceSelection,waitlistLabel);steps[0].append(capacityNotice);
 	let capacitySelectionKey = '';
 	const selectionCapacity = () => core.selectionCapacity(config.event,ticketSelection());
 	const isWaitlistSelection = () => { const capacity = selectionCapacity();return Boolean(capacity && !capacity.fits); };
@@ -58,7 +57,7 @@
 	  if (waitlistChoice.disabled) waitlistChoice.checked = false;
 	  if (needsChoice) {
 	    capacityMessage.textContent = `Hai richiesto ${capacity.quantity} ${capacity.quantity === 1 ? 'posto' : 'posti'}. Per questa selezione ${capacity.available === 1 ? 'è disponibile solo 1 posto' : 'sono disponibili '+capacity.available+' posti'}.`;
-	    capacityDetails.textContent = capacity.canWait ? 'Puoi ridurre il numero degli iscritti oppure inserire tutta la prenotazione in lista d’attesa. Riceverai per email le proposte di posto. Per confermare la partecipazione dovrai accettare la proposta entro la scadenza indicata.' : config.event.waitlist_enabled ? `La lista d’attesa non può accogliere tutta la richiesta: restano ${capacity.waitlistRemaining} posti in attesa. Riduci il numero degli iscritti.` : 'La lista d’attesa non è attiva. Riduci il numero degli iscritti ai posti disponibili.';
+	    capacityDetails.textContent = capacity.canWait ? 'Per confermare la partecipazione dovrai accettare la proposta entro la scadenza indicata.' : config.event.waitlist_enabled ? `La lista d’attesa non può accogliere tutta la richiesta: restano ${capacity.waitlistRemaining} posti in attesa. Riduci il numero degli iscritti.` : 'La lista d’attesa non è attiva. Riduci il numero degli iscritti ai posti disponibili.';
 	    for (const type of capacity.types.filter(type => type.available < type.requested)) {
 	      const name = (config.event.ticket_types || []).find(ticket => ticket.code === type.code)?.name || type.code;
 	      capacityDetails.textContent += ` ${name}: ${type.available} posti disponibili.`;
@@ -377,7 +376,12 @@
       }
       summary.replaceChildren();
       if (isWaitlistSelection()) {
-        const notice = document.createElement('p');notice.className = 'mi-registration__waitlist-summary';notice.textContent = 'Stai inviando una richiesta di lista d’attesa per tutti gli iscritti. Nessun posto è ancora confermato.';summary.append(notice);
+        const notice = document.createElement('p');
+        notice.className = 'mi-registration__waitlist-summary';
+        notice.textContent = selectionCapacity().quantity === 1
+          ? 'Stai inviando una richiesta di iscrizione alla lista d’attesa. Il tuo posto non è ancora confermato.'
+          : 'Stai inviando una richiesta di lista d’attesa per tutti gli iscritti. Nessun posto è ancora confermato.';
+        summary.append(notice);
       }
       const line = (parent, title, value, emphasizeValue = false) => {
         const row = document.createElement('p');
@@ -1101,6 +1105,7 @@
           throw new Error(result.message || 'Invio non riuscito.');
         }
         form.hidden = true;
+        root.querySelector('[data-mi-waitlist-closing]')?.remove();
         successBox.hidden = false;
 		const confirmationEmail = String(formData.get('buyerEmail') || '').trim();
 		const confirmationName = [formData.get('buyerFirstName'), formData.get('buyerLastName')]

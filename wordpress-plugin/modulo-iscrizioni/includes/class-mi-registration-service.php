@@ -1757,6 +1757,7 @@ final class MI_Registration_Service {
 			$offer_url = MI_Portal::waitlist_offer_url( (int) $candidate['id'], $offer_token );
 			$expires_timestamp = DateTimeImmutable::createFromFormat( 'Y-m-d H:i:s', $offer_expires, new DateTimeZone( 'UTC' ) )->getTimestamp();
 			$expires_label = wp_date( 'j F Y, \\o\\r\\e H:i', $expires_timestamp, wp_timezone() );
+			$expires_label = self::waitlist_deadline_label( $expires_label, ( $expires_timestamp - $base->getTimestamp() ) / HOUR_IN_SECONDS );
 			$email_snapshot = $partial_type
 				? MI_Modello_Email::crea_offerta_un_posto_per_due( $event_id, $email_values, $offer_url, $expires_label )
 				: MI_Modello_Email::crea_istantanea_offerta_lista_attesa( $event_id, $email_values, $offer_url, $expires_label );
@@ -2094,6 +2095,12 @@ final class MI_Registration_Service {
 	}
 
 	/** Durata delle nuove proposte: metà a sette giorni, un quarto a tre giorni. */
+	/** Durata effettiva fissata quando nasce la proposta, inclusi eventuali limiti comuni. */
+	public static function waitlist_deadline_label( $date, $hours ) {
+		$date = preg_replace_callback( '/^(\d+\s+)(\p{L})/u', static function ( $match ) { return $match[1] . mb_strtoupper( $match[2] ); }, $date );
+		$label = str_replace( '.', ',', (string) max( 0.01, round( $hours, 2 ) ) );
+		return $date . ' (' . $label . ( '1' === $label ? ' ora)' : ' ore)' );
+	}
 	public static function waitlist_offer_hours( $event, $now ) {
 		$hours = min( 168, max( 1, absint( $event['waitlist_offer_hours'] ?? 48 ) ) );
 		$starts = self::local_datetime( $event['event_starts_at'] ?? '' );

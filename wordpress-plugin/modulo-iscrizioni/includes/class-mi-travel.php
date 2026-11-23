@@ -26,6 +26,7 @@ final class MI_Travel {
 			required_ride tinyint(1) NOT NULL DEFAULT 0,
 			state varchar(24) NOT NULL DEFAULT 'NONE',
 			driver_id bigint(20) unsigned NULL,
+			companion_of bigint(20) unsigned NULL,
 			offer_expires_at datetime NULL,
 			decision_deadline_at datetime NULL,
 			access_token char(64) NULL,
@@ -37,7 +38,7 @@ final class MI_Travel {
 			KEY driver_seats (driver_id,state,offer_expires_at)
 		) ENGINE=InnoDB {$charset};" );
 		$columns = $wpdb->get_col( "SHOW COLUMNS FROM {$wpdb->prefix}mi_travel" );
-		if ( $wpdb->last_error || array_diff( array( 'access_token', 'legacy_token_allowed' ), (array) $columns ) ) return false;
+		if ( $wpdb->last_error || array_diff( array( 'access_token', 'legacy_token_allowed', 'companion_of' ), (array) $columns ) ) return false;
 		// Un'unica finestra di transizione, mai prorogata dagli aggiornamenti successivi.
 		add_option( 'mi_travel_legacy_tokens_until', time() + 30 * DAY_IN_SECONDS, '', false );
 		return true;
@@ -192,16 +193,63 @@ final class MI_Travel {
 			$person['travel'] = $travel;
 		}
 		unset( $person );
+		if ( is_array( $booking_choice ) && 'DRIVER' === ( $booking_choice['mode'] ?? '' ) ) {
+			foreach ( $people as $index => &$person ) if ( 0 !== $index ) $person['travel']['companion_key'] = $people[0]['ticket_type_code'] . ':' . $people[0]['ticket_index'];
+			unset( $person );
+		}
 		return $people;
 	}
 	public static function pending_people( array $people ) {
 		foreach ( $people as $person ) if ( ! empty( $person['travel']['required_ride'] ) && empty( $person['travel']['driver_id'] ) ) return true;
 		return false;
 	}
-	private static function rows( $event_id, $lock = false ) {
+	private static function rows( $event_id, $lock = false, $availability_only = false ) {
 		global $wpdb;
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT t.*,p.first_name,p.last_name,p.status person_status,p.cancellation_actor,r.status booking_status,r.buyer_email,r.buyer_phone,r.order_code,r.capacity_released_at FROM {$wpdb->prefix}mi_travel t JOIN {$wpdb->prefix}mi_participants p ON p.id=t.participant_id JOIN {$wpdb->prefix}mi_registrations r ON r.id=t.registration_id WHERE t.event_id=%d ORDER BY t.created_at,t.participant_id" . ( $lock ? ' FOR UPDATE' : '' ), $event_id ), ARRAY_A );
+		$columns = $availability_only
+			? 't.participant_id,t.driver_id,t.mode,t.seats,t.state,t.offer_expires_at,t.origin,t.departure_at,t.price_cents,p.status person_status,r.status booking_status,r.capacity_released_at'
+			: 't.*,p.first_name,p.last_name,p.ticket_type_code,p.ticket_index,p.status person_status,p.cancellation_actor,r.status booking_status,r.buyer_email,r.buyer_phone,r.order_code,r.capacity_released_at' . ( $lock ? '' : ',r.snapshot_json,r.total_cents booking_total_cents,r.total_qty booking_quantity' );
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT {$columns} FROM {$wpdb->prefix}mi_travel t JOIN {$wpdb->prefix}mi_participants p ON p.id=t.participant_id JOIN {$wpdb->prefix}mi_registrations r ON r.id=t.registration_id WHERE t.event_id=%d ORDER BY t.created_at,t.participant_id" . ( $lock ? ' FOR UPDATE' : '' ), $event_id ), ARRAY_A );
 		self::check();
+		return ! $lock && ! $availability_only ? self::restore_companions( $rows ) : $rows;
+	}
+	/** Ricostruisce in lettura i legami omessi dal vecchio modulo comune alla prenotazione. */
+	private static function restore_companions( array $rows ) {
+		$groups = array();
+		foreach ( $rows as $index => $row ) $groups[$row['registration_id']][] = $index;
+		foreach ( $groups as $indexes ) {
+			$snapshot = json_decode( (string) ( $rows[$indexes[0]]['snapshot_json'] ?? '' ), true );
+			$people = $snapshot['participants'] ?? array();
+			if ( ! is_array( $people ) || count( $people ) < 2 ) continue;
+			$people = array_values( $people );
+			$version = (string) ( $snapshot['schema_version'] ?? '' );
+			// Dalla 3.27.9 il modulo pubblico sceglie il mezzo per l'intera prenotazione.
+			$legacy = version_compare( $version, '3.27.9', '>=' ) && version_compare( $version, '3.27.89', '<' );
+			$first = $people[0];
+			if ( 'DRIVER' !== ( $first['travel']['mode'] ?? '' ) ) continue;
+			$driver_key = ( $first['ticket_type_code'] ?? '' ) . ':' . ( $first['ticket_index'] ?? '' );
+			$original = array(); $valid = true;
+			foreach ( $people as $n => $person ) {
+				$key = ( $person['ticket_type_code'] ?? '' ) . ':' . ( $person['ticket_index'] ?? '' );
+				if ( isset( $original[$key] ) || ( $n && 'OWN' !== ( $person['travel']['mode'] ?? '' ) ) ) { $valid = false; break; }
+				$original[$key] = $person['travel'];
+			}
+			if ( ! $valid ) continue;
+			$driver = null;
+			foreach ( $indexes as $index ) {
+				$row = $rows[$index];
+				if ( ( $row['ticket_type_code'] ?? '' ) . ':' . ( $row['ticket_index'] ?? '' ) === $driver_key && 'DRIVER' === $row['mode'] ) $driver = $row;
+			}
+			if ( ! $driver || ! self::admitted( $driver ) ) continue;
+			foreach ( $indexes as $index ) {
+				$row = $rows[$index];
+				$key = ( $row['ticket_type_code'] ?? '' ) . ':' . ( $row['ticket_index'] ?? '' );
+				$choice = $original[$key] ?? null;
+				if ( ! $choice || ! empty( $row['companion_of'] ) || ! empty( $row['driver_id'] ) || 'OWN' !== $row['mode'] || 'NONE' !== $row['state'] || ! self::admitted( $row ) ) continue;
+				if ( ( $choice['companion_key'] ?? '' ) === $driver_key || ( $legacy && 'OWN' === $choice['mode'] ) ) $rows[$index]['companion_of'] = (int) $driver['participant_id'];
+			}
+		}
+		foreach ( $rows as &$row ) unset( $row['snapshot_json'] );
+		unset( $row );
 		return $rows;
 	}
 	private static function admitted( array $row ) {
@@ -235,6 +283,10 @@ final class MI_Travel {
 		$driver_notices = array();
 		foreach ( $people as $person ) {
 			$data = $person['travel'];
+			if ( isset( $data['companion_key'] ) ) {
+				$data['companion_of'] = $ids[$data['companion_key']];
+				unset( $data['companion_key'] );
+			}
 			$id = $ids[$person['ticket_type_code'] . ':' . $person['ticket_index']];
 			if ( ! empty( $data['driver_id'] ) ) {
 				$rows = self::rows( $event['id'], true ); $driver = null;
@@ -322,6 +374,67 @@ final class MI_Travel {
 		return MI_Modello_Email::crea_istantanea_istituzionale( $event_id, 'Partecipazione in attesa di passaggio', 'Richiesta registrata: in attesa di passaggio.', $html, $message );
 	}
 	/** Riepilogo nella conferma, letto dai viaggi effettivamente registrati. */
+	public static function participant_summary( array $person, array $people ) {
+		$by_id = array_column( $people, null, 'participant_id' );
+		$companion = $by_id[$person['companion_of'] ?? 0] ?? null;
+		if ( 'OWN' === $person['mode'] && $companion ) return 'Viaggio in auto con ' . trim( $companion['first_name'] . ' ' . $companion['last_name'] );
+		if ( 'DRIVER' === $person['mode'] ) return 'Viaggio con auto propria' . ( $person['seats'] > 0 ? ' · Posti offerti: ' . (int) $person['seats'] : ' · Nessun posto offerto' );
+		if ( 'OWN' === $person['mode'] ) return 'Trasferimento autonomo';
+		$line = self::state_label( $person['state'] );
+		$driver = $by_id[$person['driver_id'] ?? 0] ?? null;
+		if ( $driver ) $line .= ' · Con ' . trim( $driver['first_name'] . ' ' . $driver['last_name'] );
+		return $line . ( ! empty( $person['required_ride'] ) ? ' · Partecipa solo con passaggio' : ' · Partecipa anche senza passaggio' );
+	}
+	/** Equipaggi letti solo nel contesto gestionale autorizzato. */
+	public static function management_crews( $event_id ) {
+		if ( ! MI_Portal_Management::allowed() || ! MI_Access::can_access_event( $event_id ) ) return array();
+		$rows = self::rows( $event_id ); $crews = array();
+		$without_seats = array();
+		$independent = array();
+		foreach ( $rows as $driver ) {
+			if ( ! self::admitted( $driver ) ) continue;
+			if ( 'OWN' === $driver['mode'] && empty( $driver['companion_of'] ) ) {
+				$id = $driver['registration_id'];
+				$independent[$id]['code'] = (string) $driver['order_code'];
+				$independent[$id]['names'][] = trim( $driver['first_name'] . ' ' . $driver['last_name'] );
+			}
+			if ( 'DRIVER' !== $driver['mode'] ) continue;
+			$members = array(); $reserved = 0; $assigned = 0;
+			foreach ( $rows as $person ) {
+				if ( ! self::admitted( $person ) ) continue;
+				$kind = '';
+				if ( (int) ( $person['companion_of'] ?? 0 ) === (int) $driver['participant_id'] ) $kind = 'Accompagnatore già a bordo';
+				elseif ( (int) $person['driver_id'] === (int) $driver['participant_id'] && 'ASSIGNED' === $person['state'] ) { $kind = 'Passaggio confermato'; ++$assigned; }
+				elseif ( (int) $person['driver_id'] === (int) $driver['participant_id'] && 'OFFERED' === $person['state'] && strtotime( $person['offer_expires_at'] . ' UTC' ) > time() ) { $kind = 'In attesa di risposta'; ++$reserved; }
+				if ( $kind ) $members[] = array( 'name' => trim( $person['first_name'] . ' ' . $person['last_name'] ), 'status' => $kind );
+			}
+			$crews[] = array( 'driver' => trim( $driver['first_name'] . ' ' . $driver['last_name'] ), 'booking_quantity' => (int) $driver['booking_quantity'], 'origin' => $driver['origin'], 'departure' => $driver['departure_at'] ? wp_date( 'd/m/Y H:i', strtotime( $driver['departure_at'] . ' UTC' ), wp_timezone() ) : 'Da definire', 'phone' => (string) $driver['buyer_phone'], 'email' => (string) $driver['buyer_email'], 'price_cents' => (int) $driver['price_cents'], 'seats' => (int) $driver['seats'], 'available' => self::driver_active( $driver ) ? self::free_seats( $driver, $rows ) : 0, 'assigned' => $assigned, 'reserved' => $reserved, 'members' => $members );
+			if ( (int) $driver['seats'] <= 0 ) $without_seats[] = array_pop( $crews );
+		}
+		$result = array_merge( $crews, $without_seats );
+		if ( $independent ) $result[] = array( 'independent' => array_values( $independent ) );
+		return $result;
+	}
+	public static function management_details( $event_id, $registration_id ) {
+		$rows = self::rows( $event_id ); $result = array();
+		foreach ( $rows as $row ) {
+			if ( (int) $row['registration_id'] !== (int) $registration_id ) continue;
+			$lines = array( self::participant_summary( $row, $rows ) );
+			if ( 'DRIVER' === $row['mode'] ) foreach ( $rows as $passenger ) {
+				if ( 'ACTIVE' !== $passenger['person_status'] ) continue;
+				$name = trim( $passenger['first_name'] . ' ' . $passenger['last_name'] );
+				if ( (int) ( $passenger['companion_of'] ?? 0 ) === (int) $row['participant_id'] ) $lines[] = 'Accompagnatore: ' . $name;
+				elseif ( (int) $passenger['driver_id'] === (int) $row['participant_id'] && in_array( $passenger['state'], array( 'ASSIGNED', 'OFFERED' ), true ) ) $lines[] = $name . ': ' . self::state_label( $passenger['state'] );
+			}
+			$driver = array_column( $rows, null, 'participant_id' )[$row['driver_id'] ?? $row['companion_of'] ?? 0] ?? $row;
+			if ( ! empty( $driver['origin'] ) ) $lines[] = 'Partenza: ' . $driver['origin'];
+			if ( ! empty( $driver['departure_at'] ) ) $lines[] = 'Orario: ' . wp_date( 'd/m/Y H:i', strtotime( $driver['departure_at'] . ' UTC' ), wp_timezone() );
+			if ( 'OWN' !== $row['mode'] ) $lines[] = 'Contributo A/R: ' . number_format( $row['price_cents'] / 100, 2, ',', '.' ) . ' €';
+			if ( 'OFFERED' === $row['state'] && ! empty( $row['offer_expires_at'] ) ) $lines[] = 'Risposta entro: ' . wp_date( 'd/m/Y H:i', strtotime( $row['offer_expires_at'] . ' UTC' ), wp_timezone() );
+			$result[(int) $row['participant_id']] = $lines;
+		}
+		return $result;
+	}
 	public static function confirmation_email( array $snapshot, array $event, $registration_id ) {
 		if ( empty( $event['travel']['enabled'] ) ) return $snapshot;
 		global $wpdb;
@@ -338,6 +451,7 @@ final class MI_Travel {
 				if ( 'WAITING' === $person['state'] ) $line = ! empty( $person['required_ride'] ) ? 'In attesa di passaggio necessario per partecipare' : 'In attesa di passaggio';
 				else $line = self::state_label( $person['state'] );
 			} else continue;
+			if ( ! empty( $person['companion_of'] ) ) $line = self::participant_summary( $person, $people );
 			if ( '' === $line ) continue;
 			$lines[] = ( count( $people ) > 1 ? trim( $person['first_name'] . ' ' . $person['last_name'] ) . ': ' : '' ) . $line;
 		}
@@ -353,16 +467,12 @@ final class MI_Travel {
 		$html = implode( '', array_map( static function ( $paragraph ) { return '<p>' . esc_html( $paragraph ) . '</p>'; }, preg_split( '/\n+/', trim( (string) $message ) ) ) );
 		$text = $message;
 		$actions = array();
-		if ( count( $management ) > 1 ) $html .= '<ul>';
 		foreach ( $management as $person ) {
 			$url = self::url( $person['participant_id'] );
 			$label = trim( (string) ( $person['name'] ?? '' ) );
 			$label = $label ? $label . ': ' : '';
-			$html .= ( count( $management ) > 1 ? '<li>' : '<p>' ) . esc_html( $label ) . '<a href="' . esc_url( $url ) . '">Gestione degli spostamenti</a>' . ( count( $management ) > 1 ? '</li>' : '</p>' );
-			$text .= "\n" . $label . $url;
 			$actions[] = array( 'label' => $label ? rtrim( $label ) . ' — gestione degli spostamenti' : 'Gestione degli spostamenti', 'url' => $url );
 		}
-		if ( count( $management ) > 1 ) $html .= '</ul>';
 		$event_id = ! empty( $row['event_id'] ) ? (int) $row['event_id'] : (int) $wpdb->get_var( $wpdb->prepare( "SELECT event_id FROM {$wpdb->prefix}mi_registrations WHERE id=%d", $row['registration_id'] ) ); self::check();
 		$snapshot = MI_Modello_Email::crea_istantanea_istituzionale( $event_id, $subject, $subject, $html, $text, $actions );
 		$status = MI_Spedizione_Email::stato_nuova_email( $snapshot );
@@ -383,6 +493,23 @@ final class MI_Travel {
 		global $wpdb;
 		$value = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}mi_travel t JOIN {$wpdb->prefix}mi_participants p ON p.id=t.participant_id WHERE t.registration_id=%d AND p.status='ACTIVE' AND t.required_ride=1 AND t.state<>'ASSIGNED'", $registration_id ) ); self::check();
 		return (int) $value > 0;
+	}
+	private static function additional_departure_instructions( $instructions, $origin, $departure ) {
+		$instructions = trim( $instructions );
+		if ( ! $origin || ! $departure ) return $instructions;
+
+		// Ometti solo una riga che ripete luogo e ora. Conserva indirizzi, eccezioni e altre indicazioni.
+		$normalize_place = static function ( $place ) {
+			$place = preg_replace( '/[’‘]/u', "'", trim( $place ) );
+			return strtolower( preg_replace( '/^parrocchia\s+/iu', '', $place ) );
+		};
+		$lines = preg_split( '/\R/u', $instructions );
+		foreach ( $lines as $key => $line ) {
+			if ( ! preg_match( '/^\s*(?:appuntamento|ritrovo|partenza)\s+(?:a|alla|presso)\s+(.+?)\s+alle\s+(?:ore\s+)?(\d{1,2})[.:](\d{2})(?:\s+in punto)?\s*\.?\s*$/iu', $line, $matches ) ) continue;
+			$time = sprintf( '%02d:%02d', (int) $matches[2], (int) $matches[3] );
+			if ( $time === substr( $departure, -5 ) && $normalize_place( $matches[1] ) === $normalize_place( $origin ) ) unset( $lines[$key] );
+		}
+		return trim( implode( "\n", $lines ) );
 	}
 	private static function describe( array $row ) {
 		return $row['origin'] . ' · ' . wp_date( 'd/m/Y H:i', strtotime( $row['departure_at'] . ' UTC' ), wp_timezone() ) . ' · €' . number_format( (int) $row['price_cents'] / 100, 2, ',', '.' ) . ' per persona, andata e ritorno, direttamente al conducente';
@@ -524,13 +651,15 @@ final class MI_Travel {
 		register_rest_route( MI_REST_Controller::NAMESPACE, '/events/(?P<id>\d+)/travel', array( 'methods' => 'GET', 'permission_callback' => '__return_true', 'callback' => array( __CLASS__, 'availability' ) ) );
 	}
 	public static function availability( $request ) {
+		$rate = self::availability_rate_limit();
+		if ( is_wp_error( $rate ) ) return $rate;
 		$event = MI_Registration_Service::public_event( absint( $request['id'] ) );
 		if ( is_wp_error( $event ) ) return $event;
 		$items = array(); $deadline = self::local_timestamp( $event['travel']['deadline'] ?? '' );
 		$accepting_new_requests = ! empty( $event['travel']['enabled'] ) && $deadline && time() < $deadline - self::OFFER_SECONDS && ! get_post_meta( $event['id'], '_mi_event_cancelled_at', true );
 		try {
 			if ( $accepting_new_requests ) {
-				$rows = self::rows( $event['id'] ); $occupied = self::seat_counts( $rows );
+				$rows = self::rows( $event['id'], false, true ); $occupied = self::seat_counts( $rows );
 				foreach ( $rows as $row ) {
 					$free = (int) $row['seats'] - ( $occupied[$row['participant_id']] ?? 0 );
 					if ( self::driver_active( $row ) && $free > 0 ) $items[] = array( 'route_key' => self::route_key( $row ), 'id' => (int) $row['participant_id'], 'origin' => $row['origin'], 'departure' => wp_date( 'd/m/Y H:i', strtotime( $row['departure_at'] . ' UTC' ), wp_timezone() ), 'seats' => $free, 'price_cents' => (int) $row['price_cents'] );
@@ -538,6 +667,22 @@ final class MI_Travel {
 			}
 			$response = new WP_REST_Response( array( 'rides' => $items, 'accepting_new_requests' => (bool) $accepting_new_requests ) ); $response->header( 'Cache-Control', 'no-store' ); return $response;
 		} catch ( Throwable $error ) { return new WP_Error( 'mi_travel_unavailable', 'Disponibilità passaggi non disponibile. Riprova.', array( 'status' => 503 ) ); }
+	}
+	private static function availability_rate_limit() {
+		global $wpdb;
+		$key = 'mi_travel_rate_' . hash_hmac( 'sha256', MI_Registration_Service::client_ip(), wp_salt( 'nonce' ) );
+		$lock = substr( $key, 0, 64 );
+		if ( '1' !== (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', $lock ) ) ) return new WP_Error( 'mi_travel_busy', 'Disponibilità momentaneamente occupata. Riprova.', array( 'status' => 503 ) );
+		try {
+			$now = time(); $window = get_transient( $key );
+			if ( ! is_array( $window ) || (int) ( $window['until'] ?? 0 ) <= $now ) $window = array( 'until' => $now + 60, 'count' => 0 );
+			if ( (int) $window['count'] >= 120 ) return new WP_Error( 'mi_travel_rate', 'Troppe richieste ravvicinate. Riprova tra un minuto.', array( 'status' => 429 ) );
+			++$window['count'];
+			set_transient( $key, $window, max( 1, $window['until'] - $now ) );
+			return true;
+		} finally {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) );
+		}
 	}
 	public static function tick() {
 		global $wpdb;
@@ -581,7 +726,7 @@ final class MI_Travel {
 			$config = self::config( $event_id );
 			$deadline = self::local_timestamp( $config['deadline'] );
 			$after_deadline = false === $deadline || $deadline <= time();
-			$allowed_after_deadline = in_array( $action, array( 'own', 'withdraw' ), true );
+			$allowed_after_deadline = in_array( $action, array( 'own', 'withdraw', 'reduce_seats' ), true );
 			if ( ! $config['enabled'] || ( $after_deadline && ! $allowed_after_deadline ) || get_post_meta( $event_id, '_mi_event_cancellation_job', true ) || get_post_meta( $event_id, '_mi_event_cancelled_at', true ) ) throw new InvalidArgumentException( 'Le assegnazioni sono chiuse. Puoi ancora organizzarti autonomamente, ritirare i posti offerti o annullare la partecipazione.' );
 			$rows = self::rows( $event_id, true ); $row = null; $by_id = array_column( $rows, null, 'participant_id' ); $released_driver = null; $released_message = ''; $audit_context = array();
 			foreach ( $rows as $entry ) if ( (int) $entry['participant_id'] === (int) $id ) $row = $entry;
@@ -623,6 +768,11 @@ final class MI_Travel {
 				$audit_context = array( 'previous_seats' => (int) $row['seats'], 'previous_origin' => $row['origin'], 'previous_departure_at' => $row['departure_at'], 'previous_price_cents' => (int) $row['price_cents'] );
 				$row['seats'] = $requested_seats;
 				$row['origin'] = $origin; $row['departure_at'] = $departure_utc; $row['price_cents'] = (int) $price;
+			} elseif ( 'reduce_seats' === $action && 'DRIVER' === $row['mode'] ) {
+				$used_seats = (int) ( self::seat_counts( $rows )[$id] ?? 0 );
+				if ( $requested_seats < $used_seats || $requested_seats < 0 || $requested_seats >= (int) $row['seats'] ) throw new InvalidArgumentException( 'La disponibilità è cambiata oppure il numero non è valido. Puoi ritirare solo posti ancora liberi: aggiorna il riepilogo.' );
+				$audit_context = array( 'previous_seats' => (int) $row['seats'] );
+				$row['seats'] = (int) $requested_seats;
 			} elseif ( 'withdraw' === $action && 'DRIVER' === $row['mode'] ) {
 				$audit_context = array( 'previous_seats' => (int) $row['seats'], 'previous_state' => $row['state'] );
 				$row['seats'] = 0;
@@ -671,7 +821,7 @@ final class MI_Travel {
 			} else {
 				$details = array( 'origin' => sanitize_text_field( wp_unslash( $_POST['origin'] ?? '' ) ), 'departure' => sanitize_text_field( wp_unslash( $_POST['departure'] ?? '' ) ), 'price' => sanitize_text_field( wp_unslash( $_POST['price'] ?? '' ) ) );
 				$result = self::decide( $id, $token, $action, absint( $_POST['driver_id'] ?? 0 ), sanitize_text_field( wp_unslash( $_POST['offer_expires_at'] ?? '' ) ), absint( $_POST['seats'] ?? 0 ), $details );
-				$message = is_wp_error( $result ) ? $result->get_error_message() : 'Spostamento aggiornato.';
+				$message = is_wp_error( $result ) ? $result->get_error_message() : ( 'reduce_seats' === $action ? 'Posti liberi ritirati. I passaggi già confermati o proposti restano invariati.' : ( 'update_seats' === $action ? 'Modifiche salvate. Il riepilogo qui sotto è aggiornato.' : 'Spostamento aggiornato.' ) );
 			}
 			} finally { MI_Event_Deletion::release( $event_id ); }
 		}
@@ -685,15 +835,27 @@ final class MI_Travel {
 		$event_cancelled = get_post_meta( $event_id, '_mi_event_cancellation_job', true ) || get_post_meta( $event_id, '_mi_event_cancelled_at', true );
 		$closed = $deadline_passed || $event_cancelled;
 		$decision_deadline = ! empty( $row['decision_deadline_at'] ) ? strtotime( $row['decision_deadline_at'] . ' UTC' ) : false;
-		echo '<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>I tuoi spostamenti</title><style>body{font:17px/1.6 system-ui;background:#f4f6fa;color:#151b38;margin:0}main{max-width:720px;margin:32px auto;padding:24px;background:white;border-radius:12px}button{font:inherit;padding:10px 16px;margin:8px;border:1px solid #337ab7;border-radius:6px;background:#fff;cursor:pointer}button:focus-visible,a:focus-visible{outline:3px solid #337ab7}label{display:block}table{width:100%}td,th{text-align:left;padding:8px;border-bottom:1px solid #ddd}</style></head><body><main><h1>I tuoi spostamenti</h1><h2>' . esc_html( get_the_title( $event_id ) ) . '</h2><p>' . esc_html( $row['first_name'] . ' ' . $row['last_name'] ) . '</p>';
+		$assigned = array();
+		$has_external_passages = false;
+		$withdrawal_warning = 'Verranno revocati anche i passaggi confermati e le proposte in attesa. Le persone interessate saranno avvisate.';
+		$name = trim( $row['first_name'] . ' ' . $row['last_name'] );
+		$title_intro = $name . ',';
+		$title = ( self::admitted( $row ) ? 'partecipi a: ' : 'la tua partecipazione a: ' ) . get_the_title( $event_id );
+		if ( 'DRIVER' === $row['mode'] && self::admitted( $row ) ) $title .= ', vai in auto e hai offerto ' . (int) $row['seats'] . ( 1 === (int) $row['seats'] ? ' passaggio' : ' passaggi' );
+		echo '<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' . esc_html( $title_intro . ' ' . $title ) . '</title><style>';
+		readfile( __DIR__ . '/../assets/travel-page.css' );
+		echo '</style></head><body><main class="mi-travel-page"><header><p class="eyebrow">Il tuo trasferimento</p><h1>' . esc_html( $title_intro ) . '<br><span class="travel-title-detail">' . esc_html( $title ) . '</span></h1></header>';
+
 		if ( $message ) echo '<p role="status">' . esc_html( $message ) . '</p>';
-		echo '<p>' . nl2br( esc_html( $config['instructions'] ) ) . '</p><p>Il contributo per il passaggio comprende andata e ritorno ed è versato direttamente al conducente, separatamente dalle eventuali quote dell’evento.</p>';
+		echo '<section class="travel-summary" aria-label="Riepilogo del trasferimento"><h2>La situazione del tuo trasferimento</h2>';
+		if ( 'CONFIRMED' !== $row['booking_status'] ) echo '<p><strong>Iscrizione: ' . esc_html( array( 'CONFIRMED' => 'Confermata', 'PENDING_PAYMENT' => 'Pagamento atteso', 'TRAVEL_PENDING' => 'In attesa di passaggio', 'CANCELLED' => 'Annullata', 'EXPIRED' => 'Scaduta', 'WAITLISTED' => 'In lista d’attesa', 'WAITLIST_OFFERED' => 'Posto proposto' )[$row['booking_status']] ?? $row['booking_status'] ) . '</strong></p>';
+		if ( 'DRIVER' !== $row['mode'] && trim( $config['instructions'] ) !== '' ) echo '<p>' . nl2br( esc_html( $config['instructions'] ) ) . '</p>';
 		if ( 'WAITING' === $row['state'] && ! $deadline_passed && $deadline - time() < self::OFFER_SECONDS ) echo '<p>Non verranno inviate nuove proposte automatiche: non restano 24 ore complete prima del termine. Puoi organizzarti autonomamente o annullare la partecipazione.</p>';
 		if ( 'DRIVER' === $row['mode'] && ! $deadline_passed && $deadline - time() < self::OFFER_SECONDS ) echo '<p>Nelle ultime 24 ore puoi ridurre o ritirare i posti, ma non aumentarli: ogni nuova proposta deve lasciare 24 ore complete per la risposta.</p>';
 		if ( false !== $decision_deadline && $decision_deadline > time() ) echo '<p>Il passaggio assegnato non è più disponibile. Puoi organizzarti autonomamente o annullare la partecipazione entro ' . esc_html( wp_date( 'd/m/Y H:i', $decision_deadline, wp_timezone() ) ) . '. ' . ( $row['required_ride'] ? 'Se non scegli, la partecipazione sarà annullata automaticamente perché avevi indicato che potevi partecipare solo con un passaggio.' : 'Se non scegli, parteciperai organizzandoti autonomamente.' ) . '</p>';
 		elseif ( false !== $decision_deadline && $decision_deadline <= time() && ! empty( $row['required_ride'] ) && 'WAITING' === $row['state'] ) echo '<p>Il termine per scegliere è trascorso; la cancellazione automatica della partecipazione è in elaborazione. Puoi ancora annullare la partecipazione da questa pagina.</p>';
 		$labels = array( 'WAITING' => 'In lista d’attesa per un passaggio', 'OFFERED' => 'Passaggio proposto: risposta richiesta entro 24 ore', 'ASSIGNED' => 'Passaggio assegnato', 'DECLINED' => 'Proposta rifiutata', 'EXPIRED' => 'Proposta scaduta', 'CLOSED' => 'Passaggio chiuso', 'NONE' => 'Viaggio autonomo' );
-		echo '<p><strong>' . esc_html( 'DRIVER' === $row['mode'] ? 'Posti offerti: ' . $row['seats'] : ( $labels[$row['state']] ?? $row['state'] ) ) . '</strong></p>';
+		if ( 'DRIVER' !== $row['mode'] ) echo '<p><strong>' . esc_html( $labels[$row['state']] ?? $row['state'] ) . '</strong></p>';
 		if ( 'TRAVEL_PENDING' === $row['booking_status'] ) echo '<p>La partecipazione è subordinata all’assegnazione di tutti i passaggi richiesti nella prenotazione. Il posto all’evento è riservato fino al termine dei passaggi. Nessun pagamento dell’evento è richiesto durante questa attesa.</p>';
 		if ( in_array( $row['booking_status'], array( 'WAITLISTED', 'WAITLIST_OFFERED' ), true ) ) echo '<p>Occorre prima completare l’ammissione all’evento; i passaggi saranno cercati successivamente.</p>';
 		if ( in_array( $row['state'], array( 'ASSIGNED', 'OFFERED' ), true ) ) {
@@ -704,33 +866,99 @@ final class MI_Travel {
 				if ( $driver ) echo '<p>Conducente: ' . esc_html( $driver['first_name'] . ' ' . $driver['last_name'] ) . ' · Contatto del referente: <a href="mailto:' . esc_attr( $driver['buyer_email'] ) . '">' . esc_html( $driver['buyer_email'] ) . '</a></p>';
 			}
 		}
-		if ( 'DRIVER' === $row['mode'] ) foreach ( $rows as $passenger ) if ( (int) $passenger['driver_id'] === $id && 'ASSIGNED' === $passenger['state'] && self::admitted( $passenger ) ) echo '<p>Passeggero: ' . esc_html( $passenger['first_name'] . ' ' . $passenger['last_name'] ) . ' · ' . esc_html( $passenger['buyer_email'] ) . '</p>';
+		if ( 'DRIVER' === $row['mode'] ) {
+			$reserved = array(); $companions = array();
+			foreach ( $rows as $passenger ) {
+				if ( ! self::admitted( $passenger ) ) continue;
+				$name = trim( $passenger['first_name'] . ' ' . $passenger['last_name'] );
+				if ( (int) ( $passenger['companion_of'] ?? 0 ) === $id ) $companions[] = $name;
+				elseif ( (int) $passenger['driver_id'] === $id ) {
+					if ( 'ASSIGNED' === $passenger['state'] ) {
+						$assigned[] = implode( ' · ', array_filter( array( $name, $passenger['buyer_phone'], $passenger['buyer_email'] ) ) );
+					} elseif ( 'OFFERED' === $passenger['state'] && strtotime( $passenger['offer_expires_at'] . ' UTC' ) > time() ) {
+						$reserved[] = $name;
+					} else {
+						continue;
+					}
+					if ( (int) $passenger['registration_id'] !== (int) $row['registration_id'] ) $has_external_passages = true;
+				}
+			}
+			foreach ( array( 'Accompagnatori della prenotazione' => $companions, 'Passeggeri confermati' => $assigned, 'Proposte in attesa di risposta' => $reserved ) as $heading => $names ) {
+				if ( ! $names ) continue;
+				echo '<h3>' . esc_html( $heading ) . '</h3><ul>';
+				foreach ( $names as $name ) echo '<li>' . esc_html( $name ) . '</li>';
+				echo '</ul>';
+			}
+			if ( self::driver_active( $row ) ) echo '<p><strong>Posti ancora liberi:</strong> ' . self::free_seats( $row, $rows ) . '</p>';
+			$departure = $row['departure_at'] ? wp_date( 'd/m/Y H:i', strtotime( $row['departure_at'] . ' UTC' ), wp_timezone() ) : '';
+			if ( $departure || $row['origin'] ) {
+				echo '<p><strong>Partenza:</strong> ' . esc_html( implode( ' · ', array_filter( array( $row['origin'], $departure ) ) ) ) . '</p>';
+			} elseif ( (int) $row['seats'] > 0 ) {
+				echo '<p><strong>Partenza:</strong> Da definire</p>';
+			}
+			$instructions = self::additional_departure_instructions( $config['instructions'], $row['origin'], $departure );
+			if ( '' !== $instructions ) echo '<p>' . nl2br( esc_html( $instructions ) ) . '</p>';
+			if ( (int) $row['seats'] > 0 && (int) $row['price_cents'] > 0 ) {
+				echo '<p><strong>Contributo per persona, andata e ritorno:</strong> ' . esc_html( number_format( $row['price_cents'] / 100, 2, ',', '.' ) ) . ' € da versare direttamente al conducente';
+				if ( (int) $row['booking_total_cents'] > 0 ) echo ', separatamente dalle quote dell’evento';
+				echo '.</p>';
+			}
+		}
+		echo '</section>';
+
 		if ( ! $event_cancelled && self::admitted( $row ) ) {
+			$is_driver = 'DRIVER' === $row['mode'];
+			$offered = $is_driver ? (int) $row['seats'] : 0;
+			$free = $is_driver ? self::free_seats( $row, $rows ) : 0;
+			$committed = $offered > $free;
+			if ( $free > 0 ) {
+				echo '<details class="travel-edit"><summary>Ritira posti liberi</summary><form method="post">'; wp_nonce_field( 'mi_travel_' . $id );
+				echo '<label>Quanti posti liberi vuoi ritirare?<select name="seats">';
+				for ( $count = 1; $count <= $free; ++$count ) {
+					$remaining = $offered - $count;
+					$label = $remaining ? $count . ( 1 === $count ? ' posto' : ' posti' ) : 'Tutti i posti offerti (' . $count . ')';
+					echo '<option value="' . $remaining . '">' . esc_html( $label ) . '</option>';
+				}
+				echo '</select></label><button name="travel_action" value="reduce_seats">Conferma ritiro dei posti liberi</button></form></details>';
+			}
 			echo '<form method="post">'; wp_nonce_field( 'mi_travel_' . $id );
 			echo '<input type="hidden" name="driver_id" value="' . esc_attr( $row['driver_id'] ) . '"><input type="hidden" name="offer_expires_at" value="' . esc_attr( $row['offer_expires_at'] ) . '">';
 			if ( ! $deadline_passed && 'OFFERED' === $row['state'] ) echo '<button name="travel_action" value="accept">Accetta il passaggio</button><button name="travel_action" value="decline">Rifiuta</button>';
 			if ( ! $closed && 'NEED' === $row['mode'] && in_array( $row['state'], array( 'DECLINED', 'EXPIRED' ), true ) ) echo '<button name="travel_action" value="rejoin">Rientra in lista d’attesa auto</button>';
 			if ( 'NEED' === $row['mode'] ) echo '<button name="travel_action" value="own">Partecipo organizzandomi autonomamente</button>';
-			if ( 'DRIVER' === $row['mode'] ) {
-				if ( ! $deadline_passed ) {
+			if ( $is_driver ) {
+				$can_add = ! $deadline_passed && $deadline - time() >= self::OFFER_SECONDS && $offered < 8;
+				$can_edit_route = ! $deadline_passed && ! $committed && ( $offered > 0 || $can_add );
+				if ( $can_add || $can_edit_route ) {
 					$default_departure = $row['departure_at'] ? wp_date( 'd/m/Y H:i', strtotime( $row['departure_at'] . ' UTC' ), wp_timezone() ) : '';
 					$default_price = 'FIXED' === $config['price_mode'] ? number_format( $config['price_cents'] / 100, 2, ',', '' ) : number_format( (int) $row['price_cents'] / 100, 2, ',', '' );
-					echo '<label>Posti che offri (da 1 a 8)<input type="number" name="seats" min="1" max="8" step="1" value="' . esc_attr( max( 1, (int) $row['seats'] ) ) . '" required></label>';
-					echo '<label>Località e punto di partenza<input name="origin" maxlength="180" value="' . esc_attr( $row['origin'] ) . '" required></label><label>Data e ora di partenza (gg/mm/aaaa hh:mm)<input name="departure" inputmode="numeric" placeholder="gg/mm/aaaa hh:mm" value="' . esc_attr( $default_departure ) . '" required></label>';
-					if ( 'DRIVER' === $config['price_mode'] ) echo '<label>Contributo per persona A/R (€)<input name="price" inputmode="decimal" value="' . esc_attr( $default_price ) . '" required></label>';
-					echo '<p>Per attivare un’offerta servono partenza, orario e contributo validi. Non puoi scendere sotto i posti già assegnati o riservati; se un posto è occupato o riservato non puoi cambiare i dettagli del viaggio.</p><button name="travel_action" value="update_seats">Aggiorna posti e dettagli</button>';
+					$label = ! $offered ? 'Offri posti in auto' : ( $can_add && $can_edit_route ? 'Aggiungi posti o modifica la partenza' : ( $can_add ? 'Aggiungi posti' : 'Modifica i dettagli della partenza' ) );
+					echo '<details class="travel-edit"><summary>' . esc_html( $label ) . '</summary><div class="travel-fields">';
+					if ( $can_add ) {
+						$minimum = max( 1, $offered + ( $can_edit_route ? 0 : 1 ) );
+						echo '<label>Totale posti da offrire<input type="number" name="seats" min="' . $minimum . '" max="8" step="1" value="' . $minimum . '" required></label>';
+					} else {
+						echo '<input type="hidden" name="seats" value="' . $offered . '">';
+					}
+					if ( $can_edit_route ) {
+						echo '<label>Località e punto di partenza<input name="origin" maxlength="180" value="' . esc_attr( $row['origin'] ) . '" required></label><label>Data e ora di partenza (gg/mm/aaaa hh:mm)<input name="departure" inputmode="numeric" placeholder="gg/mm/aaaa hh:mm" value="' . esc_attr( $default_departure ) . '" required></label>';
+						if ( 'DRIVER' === $config['price_mode'] ) echo '<label>Contributo per persona A/R (€)<input name="price" inputmode="decimal" value="' . esc_attr( $default_price ) . '" required></label>';
+					}
+					echo '<button name="travel_action" value="update_seats">Salva le modifiche</button></div></details>';
 				}
-				if ( (int) $row['seats'] ) echo '<p>Ritirando tutti i posti, i passeggeri assegnati saranno avvisati e potranno organizzarsi autonomamente o annullare la partecipazione.</p><button name="travel_action" value="withdraw" formnovalidate>Ritira tutti i posti offerti</button>';
+				if ( $committed ) echo '<details class="travel-edit"><summary>Ritira tutta l’offerta</summary><p>' . esc_html( $withdrawal_warning ) . '</p><button name="travel_action" value="withdraw" formnovalidate>Conferma ritiro di tutta l’offerta</button></details>';
 			}
-			echo '<hr><p>Se non partecipi più all’evento, usa questo pulsante: la segreteria sarà avvisata. Eventuali importi già versati richiedono una verifica separata.</p><button name="travel_action" value="cancel_participation" formnovalidate>Annulla la partecipazione all’evento</button>';
+			$collects_payments = 'ZERO' !== get_post_meta( $event_id, '_mi_pricing_mode', true )
+				&& in_array( get_post_meta( $event_id, '_mi_economic_mode', true ), array( 'FULL_PAYMENT', 'DEPOSIT_BALANCE' ), true );
+			echo '<hr><p>Il pulsante qui sotto consente di annullare la partecipazione all’evento. La segreteria sarà avvisata automaticamente.';
+			if ( $collects_payments ) echo ' Eventuali importi già versati richiedono una verifica separata.';
+			echo '</p>';
+			if ( $has_external_passages ) echo '<p>' . esc_html( $withdrawal_warning ) . '</p>';
+			echo '<button name="travel_action" value="cancel_participation" formnovalidate>Annulla la partecipazione all’evento</button>';
 			echo '</form>';
 		}
-		if ( MI_Portal_Management::allowed() && MI_Access::can_access_event( $event_id ) ) {
-			echo '<details><summary>Gestione del collegamento personale</summary><p>Sostituendo il collegamento, quello precedente smette di funzionare. Il nuovo viene inviato al referente della prenotazione.</p><form method="post">'; wp_nonce_field( 'mi_travel_' . $id );
-			echo '<button name="travel_action" value="replace_link">Sostituisci e invia il collegamento</button></form></details>';
-		}
 		if ( $closed ) echo '<p>Il termine per le nuove proposte è trascorso. Puoi ancora organizzarti autonomamente, ritirare i posti offerti o annullare la partecipazione.</p>';
-		if ( in_array( $row['booking_status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ) echo '<p><a href="' . esc_url( MI_Portal::status_url( $row['registration_id'], $row['order_code'], $row['buyer_email'] ) ) . '">Consulta la partecipazione e le eventuali quote dell’evento</a></p>';
+		if ( 'ZERO' !== get_post_meta( $event_id, '_mi_pricing_mode', true ) && in_array( $row['booking_status'], array( 'CONFIRMED', 'PENDING_PAYMENT' ), true ) ) echo '<p><a href="' . esc_url( MI_Portal::balance_url( $row['registration_id'], $row['order_code'], $row['buyer_email'] ) ) . '">Consulta le quote e il saldo della prenotazione</a></p>';
 		echo '</main></body></html>'; exit;
 	}
 	public static function render_config( $event_id ) {

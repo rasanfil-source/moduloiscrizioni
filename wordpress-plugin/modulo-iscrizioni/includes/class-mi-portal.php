@@ -147,7 +147,7 @@ final class MI_Portal {
 		$post = get_post();
 		if ( empty( $_GET['mi_portal'] ) && empty( $_GET['mi_status'] ) && empty( $_GET['mi_waitlist_offer'] ) && ( ! $post || ! has_shortcode( $post->post_content, self::SHORTCODE ) ) ) return;
 		wp_enqueue_style( 'mi-portal', MI_PLUGIN_URL . 'assets/portal.css', array(), MI_VERSION );
-		if ( self::needs_portal_script() || self::needs_management_script() ) wp_enqueue_script( 'mi-form-submit', MI_PLUGIN_URL . 'assets/form-submit.js', array(), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
+		if ( self::needs_portal_script() || ! empty( $_GET['mi_waitlist_offer'] ) ) wp_enqueue_script( 'mi-form-submit', MI_PLUGIN_URL . 'assets/form-submit.js', array(), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
 		if ( self::needs_portal_script() ) wp_enqueue_script( 'mi-portal', MI_PLUGIN_URL . 'assets/portal.js', array( 'mi-form-submit' ), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
 		if ( self::needs_portal_script() && 'communications' === self::current_view() ) wp_enqueue_script( 'mi-portal-communications', MI_PLUGIN_URL . 'assets/portal-communications.js', array( 'mi-portal' ), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
 		if ( self::needs_management_script() ) wp_enqueue_script( 'mi-portal-management', MI_PLUGIN_URL . 'assets/portal-management.js', array( 'mi-form-submit' ), MI_VERSION, array( 'in_footer' => true, 'strategy' => 'defer' ) );
@@ -900,7 +900,7 @@ final class MI_Portal {
 		if ( 'duplicate_event' === $action ) {
 			$result = MI_Event_Duplicator::duplicate( $event_id, sanitize_text_field( wp_unslash( $_POST['duplicate_request'] ?? '' ) ) );
 			if ( is_wp_error( $result ) ) return self::redirect_result( $result->get_error_message(), true, $event_id );
-			return self::redirect_result( 'Bozza creata: ' . get_the_title( $result ) . '. Date e impostazioni sono state mantenute.', false, $result );
+			return self::redirect_result( 'Bozza creata: ' . get_the_title( $result ) . '. Impostazioni mantenute: inserisci le nuove date e, se attivi, il termine dei passaggi.', false, $result );
 		}
 		if ( 'archive_event' === $action ) {
 			if ( ! get_post_meta( $event_id, '_mi_event_cancelled_at', true ) ) return self::redirect_result( 'Soltanto un evento annullato può essere archiviato.', true, $event_id );
@@ -1060,7 +1060,7 @@ final class MI_Portal {
 		</head>
 		<body class="mi-portal-standalone">
 			<?php echo self::render(); ?>
-			<?php if ( self::needs_portal_script() || self::needs_management_script() ) : ?><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/form-submit.js?ver=' . $asset_version ) ); ?>"></script><?php endif; ?>
+			<?php if ( self::needs_portal_script() || ! empty( $_GET['mi_waitlist_offer'] ) ) : ?><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/form-submit.js?ver=' . $asset_version ) ); ?>"></script><?php endif; ?>
 			<?php if ( self::needs_portal_script() ) : ?><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal.js?ver=' . $asset_version ) ); ?>"></script><?php endif; ?>
 				<?php if ( self::needs_portal_script() && 'communications' === self::current_view() ) : ?><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-communications.js?ver=' . $asset_version ) ); ?>"></script><?php endif; ?>
 			<?php if ( self::needs_payment_assets() ) : ?><script defer src="<?php echo esc_url( MI_Assets::filter_url( MI_PLUGIN_URL . 'assets/portal-payments.js?ver=' . $asset_version ) ); ?>"></script><?php endif; ?>
@@ -1288,7 +1288,7 @@ final class MI_Portal {
 		$requested_edit_id = absint( $_GET['mi_portal_edit'] ?? $_GET['mi_portal_draft'] ?? 0 );
 		$can_edit_requested = $requested_edit_id && ( current_user_can( 'mi_manage_events' ) || current_user_can( 'manage_options' ) ) && MI_Access::can_access_event( $requested_edit_id );
 		ob_start();
-		?><main class="mi-portal" data-mi-portal-scope="reserved"><header class="mi-portal-header"><div class="mi-portal-header__identity"><div><span class="mi-portal-eyebrow">Area riservata</span><h1>Segreteria eventi</h1></div><?php if ( class_exists( 'MI_Web_Push' ) ) MI_Web_Push::render_control(); ?></div><div class="mi-portal-header__actions"><a class="mi-portal-logout" href="<?php echo esc_url( wp_logout_url( self::base_url() ) ); ?>"><span aria-hidden="true">↗</span> Esci</a></div></header>
+		?><main class="mi-portal" data-mi-portal-scope="reserved"><header class="mi-portal-header"><div class="mi-portal-header__identity"><div><span class="mi-portal-eyebrow">Area riservata</span><h1>Segreteria eventi</h1></div></div><div class="mi-portal-header__actions"><?php if ( class_exists( 'MI_Web_Push' ) ) MI_Web_Push::render_control(); ?><a class="mi-portal-logout" href="<?php echo esc_url( wp_logout_url( self::base_url() ) ); ?>"><span aria-hidden="true">↗</span> Esci</a></div></header>
 		<nav class="mi-portal-switcher" aria-label="Segreteria eventi"><a class="<?php echo in_array( $view, array( 'management', 'registrations' ), true ) ? 'is-active' : ''; ?>" <?php if ( in_array( $view, array( 'management', 'registrations' ), true ) ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( ( isset( $_GET['mi_portal_event'] ) ? MI_Portal_Management::url( absint( $_GET['mi_portal_event'] ) ) : add_query_arg( 'mi_portal_view', 'management', self::base_url() ) ) ); ?>">Iscrizioni</a><a class="<?php echo 'manage' === $view ? 'is-active' : ''; ?>" <?php if ( 'manage' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'manage', self::base_url() ) ); ?>">Eventi</a><?php if ( $can_create ) : ?><a class="<?php echo 'create' === $view ? 'is-active' : ''; ?>" <?php if ( 'create' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'create', self::base_url() ) ); ?>">+ Crea evento</a><?php endif; ?><?php if ( MI_Portal_Payments::allowed() ) : ?><a class="<?php echo in_array( $view, array( 'payments', 'payment-report' ), true ) ? 'is-active' : ''; ?>" <?php if ( in_array( $view, array( 'payments', 'payment-report' ), true ) ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( array( 'mi_portal_view' => 'payments', 'mi_portal_event' => absint( $_GET['mi_portal_event'] ?? 0 ) ), self::base_url() ) ); ?>">Pagamenti</a><?php endif; ?><?php if ( self::can_manage_communications() ) : ?><a class="<?php echo 'communications' === $view ? 'is-active' : ''; ?>" <?php if ( 'communications' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'communications', self::base_url() ) ); ?>">Messaggi</a><?php endif; ?><?php if ( $can_view_groups ) : ?><a class="<?php echo 'groups' === $view ? 'is-active' : ''; ?>" <?php if ( 'groups' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'groups', self::base_url() ) ); ?>">Gruppi</a><?php endif; ?><?php if ( self::can_manage_module_users() ) : ?><a class="<?php echo 'operators' === $view ? 'is-active' : ''; ?>" <?php if ( 'operators' === $view ) echo 'aria-current="page"'; ?> href="<?php echo esc_url( add_query_arg( 'mi_portal_view', 'operators', self::base_url() ) ); ?>">Operatori</a><?php endif; ?></nav>
 
 		<?php $notice_near_outputs = 'manage' === $view && ! empty( $_GET['mi_portal_event'] ) && ! empty( $_GET['mi_portal_outputs'] ); if ( ! $notice_near_outputs ) self::notice(); ?>
@@ -1353,17 +1353,17 @@ final class MI_Portal {
 				'error'    => array( 'Scelta non registrata', 'Il collegamento non è valido, è scaduto oppure è già stato utilizzato.' ),
 			);
 			$message = $messages[ $result_code ] ?? $messages['error'];
-			return '<main class="mi-portal mi-public-status"><section class="mi-portal-login"><span class="mi-portal-eyebrow">Lista d’attesa</span><h1>' . esc_html( $message[0] ) . '</h1><p>' . esc_html( $message[1] ) . '</p></section></main>';
+			return '<main class="mi-portal mi-public-status mi-waitlist-offer"><section class="mi-portal-login"><span class="mi-portal-eyebrow">Lista d’attesa</span><h1>' . esc_html( $message[0] ) . '</h1><p>' . esc_html( $message[1] ) . '</p></section></main>';
 		}
 		$token = sanitize_text_field( wp_unslash( $_GET['mi_waitlist_token'] ?? '' ) );
 		$offer = MI_Registration_Service::waitlist_offer_from_token( $registration_id, $token );
 		if ( ! is_wp_error( $offer ) && isset( $offer['eligible_people'] ) ) {
 			$together = 'together' === sanitize_key( wp_unslash( $_GET['mi_offer_choice'] ?? '' ) );
 			ob_start(); ?>
-			<main class="mi-portal mi-public-status"><section class="mi-portal-login">
+			<main class="mi-portal mi-public-status mi-waitlist-offer"><section class="mi-portal-login">
 			<h1><?php echo $together ? 'Attendi 2 posti insieme' : 'Scegli chi partecipa'; ?></h1>
 			<p><?php echo esc_html( $offer['event_title'] . ' · Rispondi entro ' . $offer['expires_label'] ); ?></p>
-			<form method="post">
+			<form method="post" data-mi-waitlist-decision>
 			<input type="hidden" name="mi_portal_action" value="waitlist_offer_decision">
 			<input type="hidden" name="registration_id" value="<?php echo esc_attr( $registration_id ); ?>">
 			<input type="hidden" name="offer_token" value="<?php echo esc_attr( $token ); ?>">
@@ -1378,12 +1378,13 @@ final class MI_Portal {
 			<?php endforeach; ?></fieldset>
 			<p>L’altra persona conserverà la priorità in lista d’attesa.</p>
 			<button class="mi-primary" name="decision" value="ACCEPT">Conferma il posto per la persona scelta</button>
-			<?php endif; ?></form></section></main>
+			<?php endif; ?>
+			<div role="status" data-mi-waitlist-progress></div></form></section></main>
 			<?php return ob_get_clean();
 		}
-		if ( is_wp_error( $offer ) ) return '<main class="mi-portal mi-public-status"><section class="mi-portal-login"><span class="mi-portal-eyebrow">Lista d’attesa</span><h1>Proposta non disponibile</h1><p>' . esc_html( $offer->get_error_message() ) . '</p></section></main>';
+		if ( is_wp_error( $offer ) ) return '<main class="mi-portal mi-public-status mi-waitlist-offer"><section class="mi-portal-login"><span class="mi-portal-eyebrow">Lista d’attesa</span><h1>Proposta non disponibile</h1><p>' . esc_html( $offer->get_error_message() ) . '</p></section></main>';
 		ob_start(); ?>
-		<main class="mi-portal mi-public-status"><section class="mi-portal-login"><span class="mi-portal-eyebrow">Posto disponibile</span><h1>Vuoi accettare il posto?</h1><p><strong><?php echo esc_html( $offer['buyer_first_name'] . ' ' . $offer['buyer_last_name'] ); ?></strong>, i posti richiesti per <strong><?php echo esc_html( $offer['event_title'] ); ?></strong> sono riservati fino a <strong><?php echo esc_html( $offer['expires_label'] ); ?></strong>.</p><p>Scegli ora. Se l’evento prevede un pagamento, riceverai istruzioni e scadenza soltanto dopo l’accettazione.</p><form method="post"><input type="hidden" name="mi_portal_action" value="waitlist_offer_decision"><input type="hidden" name="registration_id" value="<?php echo esc_attr( $registration_id ); ?>"><input type="hidden" name="offer_token" value="<?php echo esc_attr( $token ); ?>"><?php wp_nonce_field( 'mi_waitlist_offer_' . $registration_id, 'mi_portal_nonce' ); ?><div class="mi-booking-detail__actions"><button class="mi-primary" type="submit" name="decision" value="ACCEPT">Accetta il posto</button><button class="mi-danger" type="submit" name="decision" value="DECLINE">Rinuncia</button></div></form></section></main>
+		<main class="mi-portal mi-public-status mi-waitlist-offer"><section class="mi-portal-login"><span class="mi-portal-eyebrow">Posto disponibile</span><h1>Vuoi accettare il posto?</h1><p><strong><?php echo esc_html( $offer['buyer_first_name'] . ' ' . $offer['buyer_last_name'] ); ?></strong>, i posti richiesti per <strong><?php echo esc_html( $offer['event_title'] ); ?></strong> sono riservati fino a <strong><?php echo esc_html( $offer['expires_label'] ); ?></strong>.</p><p>Scegli ora. Se l’evento prevede un pagamento, riceverai istruzioni e scadenza soltanto dopo l’accettazione.</p><form method="post" data-mi-waitlist-decision><input type="hidden" name="mi_portal_action" value="waitlist_offer_decision"><input type="hidden" name="registration_id" value="<?php echo esc_attr( $registration_id ); ?>"><input type="hidden" name="offer_token" value="<?php echo esc_attr( $token ); ?>"><?php wp_nonce_field( 'mi_waitlist_offer_' . $registration_id, 'mi_portal_nonce' ); ?><div class="mi-booking-detail__actions"><button class="mi-primary" type="submit" name="decision" value="ACCEPT">Accetta il posto</button><button class="mi-danger" type="submit" name="decision" value="DECLINE">Rinuncia</button></div><div role="status" data-mi-waitlist-progress></div></form></section></main>
 		<?php return ob_get_clean();
 	}
 

@@ -3,7 +3,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class MI_Activator {
-	const SCHEMA_REVISION = 10;
+	const SCHEMA_REVISION = 11;
 	public static function activate() {
 		self::upgrade_schema( true );
 		self::ensure_schedule();

@@ -584,6 +584,8 @@
   [data-mi-portal-scope="reserved"] .mi-management { width:100%; max-width:100%; }
   [data-mi-portal-scope="reserved"] .mi-management .mi-management-actionbar,
   [data-mi-portal-scope="reserved"] .mi-management .mi-participant-filters { align-items:stretch; flex-direction:column; }
+  /* In colonna la dimensione dei filtri segue il contenuto. */
+  [data-mi-portal-scope="reserved"] .mi-management .mi-participant-filters>label { flex:0 1 auto; }
   [data-mi-portal-scope="reserved"] .mi-management .mi-management-actionbar :is(button,a) { max-width:100%; white-space:normal; }
   [data-mi-portal-scope="reserved"] .mi-management .mi-event-toolbar { flex-direction:row; align-items:center; flex-wrap:wrap; }
   [data-mi-portal-scope="reserved"] .mi-management .mi-event-toolbar :is(button,a) { flex:0 0 auto; width:auto; min-height:44px; height:44px; margin:0; }
@@ -667,3 +669,14 @@
   [data-mi-portal-scope="reserved"] .mi-management .mi-management-actionbar .mi-event-toolbar>:is([data-refresh],.mi-sheet-menu) { flex:0 1 auto; width:auto; min-width:0; }
   [data-mi-portal-scope="reserved"] .mi-management .mi-management-actionbar>[data-new-registration] { margin:0; align-self:start; }
 }
+.mi-portal .mi-travel-crews{margin:24px 0;padding:24px;border:1px solid var(--line,#d7dde6);border-radius:14px}.mi-portal .mi-travel-crew{padding:20px;margin:16px 0;border:1px solid var(--line,#d7dde6);border-radius:10px;background:#f8faff;overflow-wrap:anywhere}.mi-portal .mi-travel-crew h4{margin:0;color:var(--navy,#17224a);font-size:19px}.mi-portal .mi-travel-crew li{margin:8px 0}
+.mi-portal .mi-travel-crew-contacts{display:flex;align-items:center;flex-wrap:wrap;gap:6px 20px}
+.mi-portal .mi-travel-crew-contacts>span{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;overflow-wrap:anywhere}
+.mi-portal .mi-travel-crew-contacts svg{width:1em;height:1em;flex:none;align-self:flex-start;margin-top:.2em;fill:none;stroke:var(--navy,#17224a);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mi-portal .mi-travel-phone-number{-webkit-user-select:text;user-select:text}
+.mi-portal .mi-travel-phone-trigger,.mi-portal .mi-travel-contact-popup a{display:inline-grid;place-items:center;min-width:44px;min-height:44px;padding:0;border:1px solid var(--line,#d7dde6);border-radius:8px;background:#fff;color:var(--navy,#17224a);cursor:pointer}
+.mi-portal .mi-travel-contact-popup{padding:10px;border:1px solid var(--line,#d7dde6);border-radius:10px;background:#fff;box-shadow:0 6px 20px #17203326}
+.mi-portal .mi-travel-contact-popup:popover-open{display:flex;gap:8px}
+.mi-portal .mi-travel-phone-trigger svg,.mi-portal .mi-travel-contact-popup svg{margin:0;align-self:center;width:18px;height:18px}
+@media screen {.mi-travel-crew .mi-crew-heading{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap}.mi-crew-heading h4{margin:0}.mi-crew-seats{border-radius:2rem;padding:.25rem .75rem;background:#e9edf2;color:#39465a;font-size:.85em;font-weight:650}.mi-crew-seats.has-space{background:#dff3ea;color:#165940}.mi-travel-crew .mi-crew-people{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));gap:1rem;margin:1rem 0;padding:1rem 0;border-block:1px solid #d8dfeb}.mi-crew-group strong{font-size:.85em;color:#43536b}.mi-crew-group ul{margin:.25rem 0 0;padding:0;list-style:none}.mi-travel-crew .mi-travel-crew-contacts{flex-wrap:wrap;overflow-wrap:anywhere}}
+.mi-portal .mi-travel-crew{background:#fff;border-color:#d6dfe2;border-radius:16px;padding:clamp(16px,3vw,28px);color:#182f49}.mi-portal .mi-travel-crew h4{font-size:21px}.mi-portal .mi-travel-crew .mi-crew-people,.mi-portal .mi-travel-crew .mi-crew-details{display:flex;flex-wrap:wrap;gap:16px 52px;margin:18px 0 0;padding:15px 0 0;border:0;border-top:1px solid #dae2e4}.mi-crew-details dt,.mi-travel-crew small{font-size:14px;color:#526771}.mi-crew-details dd{margin:2px 0}.mi-portal .mi-crew-group li{margin:2px 0}.mi-portal .mi-travel-crew .mi-travel-crew-contacts{border-top:1px solid #dae2e4;padding-top:14px;margin:18px 0 0;font-size:14px}

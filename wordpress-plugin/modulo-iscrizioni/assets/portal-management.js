@@ -1,4 +1,66 @@
 (() => {
+  let travelContactSequence=0;
+  function createTravelCrewsPanel(load,esc,isCurrent){
+    const panel=document.createElement('details');panel.className='mi-travel-crews';
+    panel.innerHTML='<summary>Equipaggi e passaggi auto</summary><div data-crews-body hidden><p role="status" data-crews-status></p><div data-crews-results></div><button type="button" data-crews-refresh>Aggiorna equipaggi</button></div>';
+    const body=panel.querySelector('[data-crews-body]'),status=panel.querySelector('[data-crews-status]'),results=panel.querySelector('[data-crews-results]'),refresh=panel.querySelector('[data-crews-refresh]');
+    let sequence=0;
+    const update=async()=>{
+      if(!panel.open||!isCurrent())return;
+      const ticket=++sequence;refresh.disabled=true;body.setAttribute('aria-busy','true');results.replaceChildren();status.textContent='Caricamento equipaggi…';
+      try{
+        const data=await load();
+        if(ticket!==sequence||!panel.open||!panel.isConnected||!isCurrent())return;
+        if(!Array.isArray(data.crews))throw new Error('Risposta non valida. Riprova.');
+        results.innerHTML=data.crews.map(c=>{
+          if(Array.isArray(c.independent)){
+            const bookings=c.independent.map(booking=>'<div class="mi-crew-people"><div class="mi-crew-group"><strong>Prenotazione '+esc(booking.code)+'</strong><ul>'+booking.names.map(name=>'<li>'+esc(name)+'</li>').join('')+'</ul></div></div>');
+            return '<article class="mi-travel-crew"><h4>Si organizzano diversamente</h4>'+bookings.join('')+'</article>';
+          }
+          const groups=[['Accompagnatore già a bordo','Nella stessa prenotazione'],['Passaggio confermato','Passeggeri accolti'],['In attesa di risposta','In attesa di risposta']];
+          const people=groups.map(([state,label,suffix=''])=>{
+            const members=c.members.filter(person=>person.status===state);
+            return members.length?'<div class="mi-crew-group"><strong>'+label+'</strong><ul>'+members.map(person=>'<li>'+esc(person.name)+suffix+'</li>').join('')+'</ul></div>':'';
+          }).join('');
+          const offersSeats=Number(c.seats)>0;
+          const availability=offersSeats
+            ? (Number(c.available)===1?'1 posto libero':Number(c.available)+' posti liberi')
+            : 'Nessun posto offerto';
+          const price=offersSeats&&Number(c.price_cents)>0?'<div><dt>Contributo A/R a persona</dt><dd>'+esc(new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(Number(c.price_cents)/100))+'</dd></div>':'';
+          const departure=[c.origin,c.departure].map(value=>String(value??'').trim())
+            .filter(value=>value&&value.toLowerCase()!=='da definire');
+          const departureText=[...new Set(departure)].map(value=>esc(value)).join('<br>');
+          const handset='<path d="M5 3h4l2 5-3 2a13 13 0 0 0 6 6l2-3 5 2v4a2 2 0 0 1-2 2A18 18 0 0 1 3 5a2 2 0 0 1 2-2Z"/>';
+          const phoneIcon='<svg aria-hidden="true" viewBox="0 0 24 24">'+handset+'</svg>';
+          const mobileIcon='<svg aria-hidden="true" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>';
+          const number=String(c.phone??'').trim().replace(/[\s().-]/g,'').replace(/^00/,'+');
+          const canCall=/^\+?\d{7,15}$/.test(number);
+          const popupId='mi-travel-contact-'+(++travelContactSequence);
+          const whatsapp=/^\+[1-9]\d{6,14}$/.test(number)
+            ? '<a href="https://wa.me/'+number.slice(1)+'" target="_blank" rel="noopener noreferrer" aria-label="Scrivi su WhatsApp" title="Scrivi su WhatsApp"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M21 11.5a9 9 0 0 1-13.4 7.9L3 21l1.6-4.4A9 9 0 1 1 21 11.5Z"/><path d="M8 8c0 4 4 8 8 8l1-2-3-1-1 1a7 7 0 0 1-3-3l1-1-1-3Z"/></svg></a>'
+            : '';
+          const phone=c.phone?'<span>'+
+            (canCall?'<button type="button" class="mi-travel-phone-trigger" popovertarget="'+popupId+'" aria-haspopup="dialog" aria-label="Contatta il referente" title="Contatta il referente">'+mobileIcon+'</button>':mobileIcon)+
+            '<span class="mi-travel-phone-number">'+esc(c.phone)+'</span>'+
+            (canCall?'<span id="'+popupId+'" class="mi-travel-contact-popup" popover role="dialog" aria-label="Contatta il referente"><a href="tel:'+number+'" aria-label="Chiama" title="Chiama">'+phoneIcon+'</a>'+whatsapp+'</span>':'')+'</span>':'';
+          const email=c.email?'<span><svg role="img" aria-label="Email del referente" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m3 6 9 7 9-7"/></svg><span>'+esc(c.email)+'</span></span>':'';
+          const contacts=phone||email?'<p class="mi-travel-crew-contacts">'+phone+email+'</p>':'';
+          const counts=offersSeats?'<small>'+Number(c.assigned)+(Number(c.assigned)===1?' passaggio confermato':' passaggi confermati')+' · '+Number(c.reserved)+' in attesa</small>':'';
+          const details=(departureText?'<div><dt>Partenza</dt><dd>'+departureText+'</dd></div>':'')+price;
+          return '<article class="mi-travel-crew"><header class="mi-crew-heading"><h4>'+esc(c.driver)+'</h4><span class="mi-crew-seats'+(offersSeats&&Number(c.available)>0?' has-space':'')+'">'+availability+'</span></header>'+counts+(people?'<div class="mi-crew-people">'+people+'</div>':'')+(details?'<dl class="mi-crew-details">'+details+'</dl>':'')+contacts+'</article>';
+        }).join('');
+        status.textContent=data.crews.length?'':'Nessun trasferimento disponibile al momento.';
+      }catch(error){if(ticket===sequence&&panel.open&&isCurrent())status.textContent='Equipaggi non disponibili. '+error.message;}
+      finally{if(ticket===sequence){refresh.disabled=false;body.removeAttribute('aria-busy');}}
+    };
+    panel.addEventListener('toggle',()=>{
+      body.hidden=!panel.open;
+      if(panel.open)update();
+      else{++sequence;results.replaceChildren();status.textContent='';refresh.disabled=false;body.removeAttribute('aria-busy');}
+    });
+    refresh.addEventListener('click',update);
+    return panel;
+  }
   const registrationSortOptions=[['name','Cognome','A–Z'],['created_at','Data iscrizione','Più recenti prima']];
   const registrationSortStorageKey='mi-registration-sort';
   const readRegistrationSort=()=>{try{const value=localStorage.getItem(registrationSortStorageKey);return registrationSortOptions.some(option=>option[0]===value)?value:'created_at';}catch(error){return 'created_at';}};
@@ -30,9 +92,12 @@
     return [...data,['registration_time','Iscrizione (data e ora)'],['cancellation_time','Cancellazione (data e ora)'],...tail];
   }
   // Il testo viene impostato esplicitamente: i numeri conservano gli zeri iniziali e il foglio non interpreta il valore come formula.
+  function compactReportPeople(people) {
+    return people.filter(person=>![person.status,person.booking_status].some(status=>['WAITLISTED','WAITLIST_OFFERED'].includes(status)));
+  }
   function compactReportLabels(people) {
     const clean=value=>String(value??'').normalize('NFC').trim().replace(/\s+/gu,' ');
-    const entries=people.map(person=>({last:clean(person.last_name),first:clean(person.first_name),full:clean(person.name)}));
+    const entries=compactReportPeople(people).map(person=>({last:clean(person.last_name),first:clean(person.first_name),full:clean(person.name)}));
     const counts=new Map();
     for(const entry of entries){entry.key=entry.last.toLocaleLowerCase('it');counts.set(entry.key,(counts.get(entry.key)||0)+1);}
     entries.sort((a,b)=>a.last.localeCompare(b.last,'it',{sensitivity:'base'})||a.first.localeCompare(b.first,'it',{sensitivity:'base'}));
@@ -395,6 +460,11 @@
           :summaryCard('Dati mancanti',sum('missing'),sum('missing')?'Richiede attenzione':'Dati completi',sum('missing')>0,'missing');
         const summaryCards=[summaryCard('Iscritti',registeredPeople,features.deposit?'Caparra versata: '+depositCovered:'Confermati: '+people('CONFIRMED')),features.payments?summaryCard('Da incassare',money(receivable),'Versato netto: '+money(netPaid),receivable>0):'',features.rooms?summaryCard('Senza camera',sum('unassigned'),sum('unassigned')?'Da assegnare':'Nessuna persona',sum('unassigned')>0):'',qualityCard,travelRows&&!hasTravelOverview?summaryCard('Passaggi da trovare',people('TRAVEL_PENDING'),'Partecipazione subordinata al viaggio'):'',waitlistRows?summaryCard('Lista d’attesa',people('WAITLISTED')+people('WAITLIST_OFFERED'),'In attesa: '+people('WAITLISTED')+' · Proposte: '+people('WAITLIST_OFFERED')):'' ].filter(Boolean).join('');
         content.innerHTML=`<section class="mi-management-summary" aria-label="Riepilogo evento"><h3>Riepilogo</h3><div class="mi-management-summary-cards">${summaryCards}</div></section><p data-new-registration><a class="mi-primary mi-new-registration" href="${esc(data.registration_url||'#')}" target="_blank" rel="noopener">Inserisci nuova iscrizione</a></p><label>Cerca nome o codice <input type="search" data-query></label><button data-clear-query>Cancella ricerca</button><div data-list></div>`;
+        if(hasTravelOverview){
+          const selectedEvent=event;
+          const panel=createTravelCrewsPanel(()=>request('travel_crews',{event_id:selectedEvent}),esc,()=>ticket===generation&&event===selectedEvent);
+          content.querySelector('.mi-management-summary').after(panel);
+        }
         const newRegistration=content.querySelector('[data-new-registration]');
         if(eventActions){eventActions.hidden=false;const actionBar=document.createElement('div');actionBar.className='mi-management-actionbar';newRegistration.before(actionBar);actionBar.append(eventActions,newRegistration);}
         // I conteggi restano visibili a ogni larghezza senza un riquadro da espandere.
@@ -406,6 +476,7 @@
         applyAttendanceSort(listContext,data.attendance_availability?.available);
         const states={CONFIRMED:'Partecipante',PENDING_PAYMENT:'Pagamento atteso',TRAVEL_PENDING: 'In attesa di passaggio', WAITLISTED:'Lista d’attesa',WAITLIST_OFFERED:'Posto proposto',CANCELLED:'Annullata',EXPIRED:'Scaduta per mancato pagamento'};
         const stateLabel=row=>{
+          if(row.status==='EXPIRED'&&!features.payments)return 'Scaduta';
           if(!features.payments||!['CONFIRMED','PENDING_PAYMENT'].includes(row.status))return states[row.status]||row.status;
           if(row.deposit_plan&&row.deposit_due===null)return 'Caparre da verificare';
           if(row.balance<=0)return 'Saldato';
@@ -569,8 +640,8 @@
         for(const [key,service] of [...allServices].sort((a,b)=>String(a[1].name).localeCompare(String(b[1].name),'it',{sensitivity:'base'}))){const option=document.createElement('option');option.value=key;option.textContent=service.name;serviceFilter.append(option);}serviceFilter.value=listContext.service;
         const offersCount=metrics?metrics.offers:data.items.filter(x=>x.status==='WAITLIST_OFFERED').length;
         if(offersCount){
-          const offerPanel=document.createElement('details');offerPanel.dataset.offerPanel='';offerPanel.innerHTML='<summary>Posti proposti e scadenze ('+offersCount+' prenotazioni)</summary><p>Il termine trascorso non equivale a un annullamento già eseguito: lo stato viene aggiornato dal processo automatico.</p>';content.querySelector('[data-list]').before(offerPanel);
-          lazyPanel(offerPanel,async()=>{const result=await loadPanel('offers');if(ticket!==generation)return;offerPanel.insertAdjacentHTML('beforeend','<ul>'+result.offers.map(x=>'<li>'+esc(x.name)+' · '+esc(x.code)+' · '+esc(deadlineLabel(x.offer_expires_at))+' <button data-open="'+esc(x.code)+'">Apri prenotazione</button></li>').join('')+'</ul>');});
+          const offerPanel=document.createElement('details');offerPanel.dataset.offerPanel='';offerPanel.innerHTML='<summary>Posti proposti e scadenze ('+offersCount+' prenotazioni)</summary><p>La scadenza del termine non comporta l’annullamento immediato: lo stato viene aggiornato dal processo automatico.</p>';content.querySelector('[data-list]').before(offerPanel);
+          lazyPanel(offerPanel,async()=>{const result=await loadPanel('offers');if(ticket!==generation)return;offerPanel.insertAdjacentHTML('beforeend','<ul>'+result.offers.map(x=>'<li>'+esc(x.name)+' · '+esc(deadlineLabel(x.offer_expires_at))+' <button data-open="'+esc(x.code)+'">Apri prenotazione</button></li>').join('')+'</ul>');});
         }
         const columns=[['name','Partecipante']];
         if(features.payments)columns.push(['status','Stato']);
@@ -652,6 +723,7 @@
         content.querySelector('[data-export]').onclick=async()=>{
           try { exportRows=await readAll();
           if(compactSelected()){
+            exportRows=compactReportPeople(exportRows);
             if(!exportRows.length){say('Nessuna persona da esportare con i filtri attuali.');return;}
             const title=select.selectedOptions[0]?.textContent||'Evento',layout=createCompactReport(exportRows,title);
             const rows=[[title,...Array(layout.columns-1).fill('')],...layout.rows];
@@ -777,7 +849,7 @@
         requestFilter.onchange=()=>{listContext.requests=requestFilter.value;listContext.shown=30;draw();};deadlineFilter.onchange=()=>{listContext.deadline=deadlineFilter.value;listContext.shown=30;draw();};serviceFilter.onchange=()=>{listContext.service=serviceFilter.value;listContext.shown=30;draw();};
         await draw();printList=async()=>{let printHost;const compactAncestors=[];const cleanup=()=>{printHost?.remove();compactAncestors.forEach(element=>element.classList.remove('mi-compact-print-path'));root.classList.remove('mi-printing-list','mi-printing-compact');document.body.classList.remove('mi-management-printing');};try{
           if(compactSelected()){
-            const rows=await readAll();if(!rows.length){say('Nessuna persona da stampare con i filtri attuali.');return;}
+            const rows=compactReportPeople(await readAll());if(!rows.length){say('Nessuna persona da stampare con i filtri attuali.');return;}
             printHost=document.createElement('section');printHost.dataset.printList='1';printHost.className='mi-compact-report';
             const title=select.selectedOptions[0]?.textContent||'Evento',layout=createCompactReport(rows,title);
             printHost.style.setProperty('--mi-compact-font',layout.fontSize+'pt');printHost.style.setProperty('--mi-compact-padding',layout.padding+'pt');
@@ -862,7 +934,7 @@
         const bookingOverview='<details class="mi-booking-overview" data-booking-overview><summary>Vedi tutta la prenotazione</summary><h4>'+esc(b.event_title)+'</h4>'+b.participants.map(p=>'<section><h4><button type="button" data-open="'+esc(b.order_code)+'" data-person-focus="'+p.number+'">'+esc(personName(p))+'</button>'+(p.status==='CANCELLED'?' · Annullata':p.status==='EXPIRED'?' · Scaduta per mancato pagamento':'')+'</h4>'+participantOptionsGroups(p.options,b.option_definitions)+(b.features?.rooms?'<p>Camera assegnata: '+esc(p.room||'Da assegnare')+'</p>':'')+(!b.is_free_event?economics(position?.people?.find(row=>row.id===p.id)):'')+'</section>').join('')+((b.order_options||[]).length?'<h4>Servizi della prenotazione</h4>'+participantOptionsGroups(b.order_options,b.option_definitions):'')+(!b.is_free_event?'<section class="mi-booking-totals"><h4>Totali della prenotazione</h4><p>Quota '+money(b.total_cents)+' · Versato '+money(b.paid_cents)+' · '+(position?.quotes_known&&position?.payments_known?'Residui individuali '+money(personalBalances)+(personalCredits?' · Crediti da restituire '+money(personalCredits):''):'Residuo netto '+money(b.balance_cents))+'</p></section>':'')+'</details>';
         content.querySelector('[data-person-intro-end]').insertAdjacentHTML('beforebegin',bookingOverview);
         if(selectedPerson&&(b.travel_participant_ids||[]).includes(selectedPerson.id)){
-          const tools=document.createElement('details');tools.innerHTML='<summary>Collegamento degli spostamenti</summary><p>Puoi revocare il collegamento precedente e inviarne uno nuovo al referente della prenotazione.</p><button type="button">Sostituisci e invia il collegamento</button>';
+          const tools=document.createElement('details');tools.innerHTML='<summary>Recupero e sicurezza del link del viaggio</summary><p>Usa questa funzione se il referente ha perso il link o lo ha condiviso per errore. Il vecchio link smetterà di funzionare; quello nuovo sarà inviato al referente della prenotazione. Equipaggio e posti non cambiano.</p><button type="button">Sostituisci e invia il collegamento</button>';
           content.querySelector('[data-person-intro-end]').before(tools);
           tools.querySelector('button').addEventListener('click',async e=>{
             const button=e.currentTarget;
@@ -872,6 +944,9 @@
             try{const result=await request('travel_link_replace',{event_id:b.event_id,order_code:b.order_code,participant_id:selectedPerson.id});say(result.message);}
             catch(error){say(error.message);}finally{button.disabled=false;}
           });
+        }
+        if(selectedPerson && b.travel_details?.[selectedPerson.id]){
+          content.querySelector('[data-person-intro-end]').insertAdjacentHTML('beforebegin','<section aria-label="Spostamenti" class="mi-person-travel"><h4>Spostamenti</h4>'+b.travel_details[selectedPerson.id].map(line=>'<p>'+esc(line)+'</p>').join('')+'</section>');
         }
         if(selectedPerson){
           const contact=content.querySelector('[data-person-contact]');

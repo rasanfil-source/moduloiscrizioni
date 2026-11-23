@@ -7,6 +7,9 @@ const GAS_ENDPOINT = MIBalance.endpoint;
 const FETCH_TIMEOUT_MS       = 15000; // scrittura foglio (operazione veloce)
 const FETCH_TIMEOUT_EMAIL_MS = 35000; // invio email + adempimenti (più lenta)
 const TINABA_URL = MIBalance.cardUrl;
+const CAN_PAY_CARD = MIBalance.methods.includes('CARD') && (() => {
+  try { return new URL(TINABA_URL).protocol === 'https:'; } catch { return false; }
+})();
 
 
 const LABELS = {
@@ -834,7 +837,7 @@ async function confermaEInvia() {
     showAmounts(result,lines);document.getElementById('totalBoxLabel').textContent='Totale da versare:';
     setBookingStatus('confirmed');setCalcButtons({text:LABELS.confirmed,disabled:true});clearCalcButtonsHideTimer();_calcButtonsHideTimer=setTimeout(()=>setCalcButtons({display:'none'}),1200);
     hideRecalcBanner();emailSection.style.display='none';
-    btnPay.disabled=false;actionSection.style.display=result.balance>0&&MIBalance.methods.includes('CARD')?'block':'none';
+    btnPay.disabled=!CAN_PAY_CARD;actionSection.style.display=result.balance>0&&CAN_PAY_CARD?'block':'none';
     setGlobalStatus(result.emailQueued?'ok':'error',result.emailQueued?'✅ Scelte confermate — riepilogo in invio':'Scelte confermate. L’invio email è in modalità anteprima: il riepilogo è disponibile alla segreteria.');
     document.getElementById('ibanIntro').textContent=result.emailQueued?'Le tue scelte sono state registrate. Riceverai una email con il riepilogo della prenotazione e le istruzioni per il pagamento.':'Le tue scelte sono state registrate. L’email non viene inviata perché la segreteria ha attivato la modalità anteprima.';
     document.getElementById('bankDetails').hidden=!(result.balance>0&&MIBalance.methods.includes('BANK_TRANSFER'));
@@ -893,7 +896,7 @@ async function copyPopupField(fieldId, btn) {
 }
 
 function openTinaba() {
-  window.open(TINABA_URL, '_blank');
+  if (CAN_PAY_CARD) window.open(TINABA_URL, '_blank', 'noopener,noreferrer');
 }
 
 function onGlobalEnterShortcut(e) {

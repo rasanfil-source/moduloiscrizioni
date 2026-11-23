@@ -459,11 +459,15 @@ final class MI_Modello_Email {
 		$name = sanitize_text_field( (string) ( $values['{{sottoscrittore.nome_completo}}'] ?? '' ) );
 		$title = sanitize_text_field( (string) ( $values['{{evento.titolo}}'] ?? get_the_title( $event_id ) ) );
 		$expires_label = sanitize_text_field( (string) $expires_label );
-		$snapshot['oggetto'] = 'Si è liberato un posto — ' . $title;
+		$single = 1 === absint( $values['{{ordine.partecipanti}}'] ?? 1 );
+		$availability = $single ? 'Si è liberato il posto richiesto per ' : 'Si sono liberati i posti richiesti per ';
+		$reservation = $single ? 'Il posto è riservato fino alla seguente data: ' : 'I posti sono riservati fino alla seguente data: ';
+		$expiry = $single ? 'il posto passerà' : 'i posti passeranno';
+		$snapshot['oggetto'] = ( $single ? 'Si è liberato un posto — ' : 'Si sono liberati i posti richiesti — ' ) . $title;
 		$payment_note = ! empty( $values['_payment_expected'] ) ? 'Il pagamento potrà essere effettuato soltanto dopo l’accettazione.' : '';
 		$snapshot['preheader'] = 'Accettazione o rinuncia entro ' . $expires_label . '.';
-		$snapshot['html'] = '<p>Buongiorno ' . esc_html( $name ) . '.</p><p>Si sono liberati i posti richiesti per <strong>' . esc_html( $title ) . '</strong>.</p><p>Li abbiamo riservati fino alla seguente data: <strong>' . esc_html( $expires_label ) . '</strong>.</p><p>Basta aprire il collegamento e scegliere <strong>Accetta il posto</strong> oppure <strong>Rinuncia</strong>. Se non si risponde entro il termine, la proposta scadrà e i posti passeranno alla richiesta successiva.</p>' . ( $payment_note ? '<p>' . esc_html( $payment_note ) . '</p>' : '' );
-		$snapshot['testo'] = "Buongiorno {$name}.\n\nSi sono liberati i posti richiesti per {$title}. Li abbiamo riservati fino alla seguente data: {$expires_label}.\n\nBasta aprire il collegamento e scegliere Accetta il posto oppure Rinuncia. Se non si risponde entro il termine, la proposta scadrà e i posti passeranno alla richiesta successiva." . ( $payment_note ? "\n\n" . $payment_note : '' );
+		$snapshot['html'] = '<p>Buongiorno ' . esc_html( $name ) . '.</p><p>' . esc_html( $availability ) . '<strong>' . esc_html( $title ) . '</strong>.</p><p>' . esc_html( $reservation ) . '<strong>' . esc_html( $expires_label ) . '</strong>.</p><p>Basta aprire il collegamento e scegliere <strong>Accetta il posto</strong> oppure <strong>Rinuncia</strong>. Se non si risponde entro il termine, la proposta scadrà e ' . esc_html( $expiry ) . ' alla richiesta successiva.</p>' . ( $payment_note ? '<p>' . esc_html( $payment_note ) . '</p>' : '' );
+		$snapshot['testo'] = "Buongiorno {$name}.\n\n{$availability}{$title}. {$reservation}{$expires_label}.\n\nBasta aprire il collegamento e scegliere Accetta il posto oppure Rinuncia. Se non si risponde entro il termine, la proposta scadrà e {$expiry} alla richiesta successiva." . ( $payment_note ? "\n\n" . $payment_note : '' );
 		$snapshot['identificativo'] = array( 'modalita' => 'NONE', 'codice' => '', 'payload_qr' => '' );
 		$snapshot['gestione_partecipanti'] = array();
 		$snapshot['status_url'] = '';
@@ -475,7 +479,7 @@ final class MI_Modello_Email {
 	/** Evidenzia la durata effettiva, anche se limitata dalla scadenza comune. */
 	public static function avviso_coda_rapida( $snapshot, $hours ) {
 		$hours_label = str_replace( '.', ',', (string) max( 0.01, round( $hours, 2 ) ) );
-		$urgent = 'Hai solo ' . $hours_label . ' Ore per poter accettare il posto.';
+		$urgent = 'Hai solo ' . $hours_label . ' ore per poter accettare il posto.';
 		$snapshot['html'] = '<p style="color:#b91c1c"><strong>' . esc_html( $urgent ) . '</strong></p>' . $snapshot['html'];
 		$snapshot['testo'] = $urgent . "\n\n" . $snapshot['testo'];
 		return $snapshot;
@@ -896,7 +900,7 @@ final class MI_Modello_Email {
 		}
 		$event_banner = ! empty( $event['cover_url'] ) ? '<tr><td background="' . esc_url( $event['cover_url'] ) . '" style="height:210px;background-color:#e4e8ef;background-image:url(\'' . esc_url( $event['cover_url'] ) . '\');background-position:center;background-size:cover;background-repeat:no-repeat;"></td></tr>' : '';
 		$event_url = ! empty( $event['url'] ) ? esc_url( $event['url'] ) : '';
-		$cta = $event_url ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;margin-bottom:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . $event_url . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">Pagina dell’evento</a></td></tr></table>' : '';
+		$cta = $event_url ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;margin-bottom:20px;"><tr><td bgcolor="#151b38" style="border-radius:12px;"><a href="' . $event_url . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#ffffff;text-decoration:none;font-weight:700;border-radius:12px;">Pagina dell’evento</a></td></tr></table>' : '';
 		$reply_to = ! empty( $email_identity['indirizzo_risposte'] ) && is_email( $email_identity['indirizzo_risposte'] ) ? sanitize_email( $email_identity['indirizzo_risposte'] ) : '';
 		$assistance = $reply_to ? '<span style="white-space:nowrap;">Scrivere a:</span> <a href="mailto:' . esc_attr( $reply_to ) . '" style="color:' . esc_attr( $primary ) . ';text-decoration:none;font-weight:700;">' . esc_html( $reply_to ) . '</a>.' : 'È possibile rispondere direttamente a questa email.';
 		$activity_name = sanitize_text_field( (string) ( $identity['nome_attivita'] ?? '' ) );
@@ -907,15 +911,15 @@ final class MI_Modello_Email {
 			$management_html = '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:18px;"><tr><td>';
 			foreach ( $istantanea['gestione_partecipanti'] as $item ) {
 				$management_label = $single_management ? 'Annullamento dell’iscrizione' : 'Annullamento dell’iscrizione di ' . sanitize_text_field( $item['nome'] ?? '' );
-				$management_html .= '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:7px 0;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:8px;"><a href="' . esc_url( $item['url'] ?? '' ) . '" style="display:inline-block;padding:9px 14px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.3;color:' . esc_attr( $secondary_text ) . ';font-weight:700;text-decoration:none;border-radius:8px;">' . esc_html( $management_label ) . '</a></td></tr></table>';
+				$management_html .= '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:7px 0;"><tr><td bgcolor="#151b38" style="border-radius:8px;"><a href="' . esc_url( $item['url'] ?? '' ) . '" style="display:inline-block;padding:9px 14px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.3;color:#ffffff;font-weight:700;text-decoration:none;border-radius:8px;">' . esc_html( $management_label ) . '</a></td></tr></table>';
 			}
 			$management_html .= '</td></tr></table>';
 			if ( ! empty( $istantanea['cancellation_demo'] ) ) $management_html .= '<p style="font-size:14px;line-height:1.5;">Collegamento dimostrativo: è possibile provare la conferma di cancellazione. Nessuna iscrizione reale verrà modificata.</p>';
 		}
-		$status_html = ! empty( $istantanea['status_url'] ) ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . esc_url( $istantanea['status_url'] ) . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">Stato e saldo</a></td></tr></table>' : '';
+		$status_html = ! empty( $istantanea['status_url'] ) ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;"><tr><td bgcolor="#151b38" style="border-radius:12px;"><a href="' . esc_url( $istantanea['status_url'] ) . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#ffffff;text-decoration:none;font-weight:700;border-radius:12px;">Stato e saldo</a></td></tr></table>' : '';
 		$action_url = ! empty( $istantanea['action_url'] ) ? esc_url( $istantanea['action_url'] ) : '';
 		$action_label = sanitize_text_field( (string) ( $istantanea['action_label'] ?? 'Collegamento' ) );
-		$action_html = $action_url ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;"><tr><td bgcolor="' . esc_attr( $secondary ) . '" style="border-radius:12px;"><a href="' . $action_url . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:' . esc_attr( $secondary_text ) . ';text-decoration:none;font-weight:700;border-radius:12px;">' . esc_html( $action_label ) . '</a></td></tr></table>' : '';
+		$action_html = $action_url ? '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:20px;"><tr><td bgcolor="#151b38" style="border-radius:12px;"><a href="' . $action_url . '" style="display:inline-block;padding:14px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#ffffff;text-decoration:none;font-weight:700;border-radius:12px;">' . esc_html( $action_label ) . '</a></td></tr></table>' : '';
 		$buttons_html = ! empty( $istantanea['cancellation_before_event'] ) ? $action_html . $status_html . $management_html . $cta : $action_html . $cta . $status_html . $management_html;
 		$footer = nl2br( self::testo_identita_html( self::chiusura_email( $istantanea ), $identity ) );
 		$code = (string) $codice_html;
@@ -948,7 +952,7 @@ final class MI_Modello_Email {
 			$url = esc_url( $action['url'] ?? '' ); $label = sanitize_text_field( $action['label'] ?? '' );
 			if ( $url && $label ) {
 				if ( $actions ) $actions .= '<td width="12" aria-hidden="true" style="width:12px;font-size:0;">&nbsp;</td>';
-				$actions .= '<td bgcolor="#111827" align="center" valign="middle" style="border-radius:7px;"><a href="' . $url . '" style="display:inline-block;padding:12px 17px;font-family:Arial,Helvetica,sans-serif;color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:700;">' . esc_html( $label ) . '</a></td>';
+				$actions .= '<td bgcolor="#151b38" align="center" valign="middle" style="border-radius:7px;"><a href="' . $url . '" style="display:inline-block;padding:12px 17px;font-family:Arial,Helvetica,sans-serif;color:#FFFFFF;text-decoration:none;font-size:14px;font-weight:700;">' . esc_html( $label ) . '</a></td>';
 			}
 		}
 		if ( $actions ) $actions = '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:14px;"><tr>' . $actions . '</tr></table>';
