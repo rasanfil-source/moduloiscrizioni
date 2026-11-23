@@ -1,5 +1,4 @@
 (() => {
-  let travelContactSequence=0;
   function createTravelCrewsPanel(load,esc,isCurrent){
     const panel=document.createElement('details');panel.className='mi-travel-crews';
     panel.innerHTML='<summary>Equipaggi e passaggi auto</summary><div data-crews-body hidden><p role="status" data-crews-status></p><div data-crews-results></div><button type="button" data-crews-refresh>Aggiorna equipaggi</button></div>';
@@ -17,37 +16,41 @@
             const bookings=c.independent.map(booking=>'<div class="mi-crew-people"><div class="mi-crew-group"><strong>Prenotazione '+esc(booking.code)+'</strong><ul>'+booking.names.map(name=>'<li>'+esc(name)+'</li>').join('')+'</ul></div></div>');
             return '<article class="mi-travel-crew"><h4>Si organizzano diversamente</h4>'+bookings.join('')+'</article>';
           }
-          const groups=[['Accompagnatore già a bordo','Nella stessa prenotazione'],['Passaggio confermato','Passeggeri accolti'],['In attesa di risposta','In attesa di risposta']];
-          const people=groups.map(([state,label,suffix=''])=>{
-            const members=c.members.filter(person=>person.status===state);
-            return members.length?'<div class="mi-crew-group"><strong>'+label+'</strong><ul>'+members.map(person=>'<li>'+esc(person.name)+suffix+'</li>').join('')+'</ul></div>':'';
-          }).join('');
-          const offersSeats=Number(c.seats)>0;
-          const availability=offersSeats
-            ? (Number(c.available)===1?'1 posto libero':Number(c.available)+' posti liberi')
-            : 'Nessun posto offerto';
-          const price=offersSeats&&Number(c.price_cents)>0?'<div><dt>Contributo A/R a persona</dt><dd>'+esc(new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(Number(c.price_cents)/100))+'</dd></div>':'';
+          const members=Array.isArray(c.members)?c.members:[];
+          const withStatus=state=>members.filter(person=>person.status===state);
+          const companions=withStatus('Accompagnatore già a bordo'),confirmed=withStatus('Passaggio confermato'),waiting=withStatus('In attesa di risposta');
+          const count=(n,one,many)=>n+' '+(n===1?one:many);
+          const initials=name=>String(name??'').trim().split(/\s+/).filter(Boolean).map(word=>word[0]).slice(0,2).join('').toUpperCase();
+          const seats=Math.max(0,Number(c.seats)||0),available=Math.max(0,Number(c.available)||0);
+          const assigned=Math.max(0,Number(c.assigned)||0),reserved=Math.max(0,Number(c.reserved)||0);
+          const offersSeats=seats>0;
+          const badge=!offersSeats?'<span class="mi-crew-seats">Non offre posti</span>'
+            :available>0?'<span class="mi-crew-seats has-space">'+count(available,'posto libero','posti liberi')+'</span>'
+            :'<span class="mi-crew-seats is-full">Auto completa</span>';
+          const together=companions.length?'<p class="mi-crew-together">Insieme con <strong>'+companions.map(person=>esc(person.name)).join(', ')+'</strong></p>':'';
+          const dot=kind=>'<span class="mi-seat-dot mi-seat-dot--'+kind+'"></span>';
+          const dots=Array.from({length:Math.min(seats,12)},(_,index)=>dot(index<assigned?'ok':index<assigned+reserved?'wait':'free')).join('');
+          const occupancy=offersSeats?'<div class="mi-crew-occupancy" role="group" aria-label="Posti auto"><span class="mi-seat-dots" aria-hidden="true">'+dots+'</span><span><strong>'+(assigned+reserved)+' di '+seats+'</strong> posti occupati</span><small>'+count(assigned,'confermato','confermati')+' · '+reserved+' in attesa di risposta</small></div>':'';
+          const price=offersSeats&&Number(c.price_cents)>0?'<div class="mi-crew-detail"><dt>Contributo A/R a persona</dt><dd class="mi-crew-price">'+esc(new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(Number(c.price_cents)/100))+'</dd></div>':'';
           const departure=[c.origin,c.departure].map(value=>String(value??'').trim())
             .filter(value=>value&&value.toLowerCase()!=='da definire');
-          const departureText=[...new Set(departure)].map(value=>esc(value)).join('<br>');
-          const handset='<path d="M5 3h4l2 5-3 2a13 13 0 0 0 6 6l2-3 5 2v4a2 2 0 0 1-2 2A18 18 0 0 1 3 5a2 2 0 0 1 2-2Z"/>';
-          const phoneIcon='<svg aria-hidden="true" viewBox="0 0 24 24">'+handset+'</svg>';
-          const mobileIcon='<svg aria-hidden="true" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>';
+          const departureText=[...new Set(departure)].map((value,index)=>index?'<small>'+esc(value)+'</small>':esc(value)).join('');
+          const details=offersSeats&&(departureText||price)?'<dl class="mi-crew-details">'+(departureText?'<div class="mi-crew-detail"><dt>Partenza</dt><dd>'+departureText+'</dd></div>':'')+price+'</dl>':'';
+          const person=(item,kind)=>'<li class="mi-crew-chip mi-crew-chip--'+kind+'"><i aria-hidden="true">'+esc(initials(item.name))+'</i>'+esc(item.name)+'<small>'+(kind==='ok'?'confermato':'in attesa')+'</small></li>';
+          const passengerItems=confirmed.map(item=>person(item,'ok')).concat(waiting.map(item=>person(item,'wait'))).join('');
+          const passengers=offersSeats?'<div class="mi-crew-passengers"><h5>Passeggeri</h5>'+(passengerItems?'<ul>'+passengerItems+'</ul>':'<p>Nessun passeggero assegnato.</p>')+'</div>':'';
+          const icon=path=>'<svg aria-hidden="true" viewBox="0 0 24 24">'+path+'</svg>';
+          const phoneIcon=icon('<path d="M5 3h4l2 5-3 2a13 13 0 0 0 6 6l2-3 5 2v4a2 2 0 0 1-2 2A18 18 0 0 1 3 5a2 2 0 0 1 2-2Z"/>');
+          const mailIcon=icon('<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m3 6 9 7 9-7"/>');
+          const whatsappIcon=icon('<path d="M21 11.5a9 9 0 0 1-13.4 7.9L3 21l1.6-4.4A9 9 0 1 1 21 11.5Z"/><path d="M8 8c0 4 4 8 8 8l1-2-3-1-1 1a7 7 0 0 1-3-3l1-1-1-3Z"/>');
           const number=String(c.phone??'').trim().replace(/[\s().-]/g,'').replace(/^00/,'+');
           const canCall=/^\+?\d{7,15}$/.test(number);
-          const popupId='mi-travel-contact-'+(++travelContactSequence);
-          const whatsapp=/^\+[1-9]\d{6,14}$/.test(number)
-            ? '<a href="https://wa.me/'+number.slice(1)+'" target="_blank" rel="noopener noreferrer" aria-label="Scrivi su WhatsApp" title="Scrivi su WhatsApp"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M21 11.5a9 9 0 0 1-13.4 7.9L3 21l1.6-4.4A9 9 0 1 1 21 11.5Z"/><path d="M8 8c0 4 4 8 8 8l1-2-3-1-1 1a7 7 0 0 1-3-3l1-1-1-3Z"/></svg></a>'
-            : '';
-          const phone=c.phone?'<span>'+
-            (canCall?'<button type="button" class="mi-travel-phone-trigger" popovertarget="'+popupId+'" aria-haspopup="dialog" aria-label="Contatta il referente" title="Contatta il referente">'+mobileIcon+'</button>':mobileIcon)+
-            '<span class="mi-travel-phone-number">'+esc(c.phone)+'</span>'+
-            (canCall?'<span id="'+popupId+'" class="mi-travel-contact-popup" popover role="dialog" aria-label="Contatta il referente"><a href="tel:'+number+'" aria-label="Chiama" title="Chiama">'+phoneIcon+'</a>'+whatsapp+'</span>':'')+'</span>':'';
-          const email=c.email?'<span><svg role="img" aria-label="Email del referente" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m3 6 9 7 9-7"/></svg><span>'+esc(c.email)+'</span></span>':'';
-          const contacts=phone||email?'<p class="mi-travel-crew-contacts">'+phone+email+'</p>':'';
-          const counts=offersSeats?'<small>'+Number(c.assigned)+(Number(c.assigned)===1?' passaggio confermato':' passaggi confermati')+' · '+Number(c.reserved)+' in attesa</small>':'';
-          const details=(departureText?'<div><dt>Partenza</dt><dd>'+departureText+'</dd></div>':'')+price;
-          return '<article class="mi-travel-crew"><header class="mi-crew-heading"><h4>'+esc(c.driver)+'</h4><span class="mi-crew-seats'+(offersSeats&&Number(c.available)>0?' has-space':'')+'">'+availability+'</span></header>'+counts+(people?'<div class="mi-crew-people">'+people+'</div>':'')+(details?'<dl class="mi-crew-details">'+details+'</dl>':'')+contacts+'</article>';
+          const canWrite=/^\+[1-9]\d{6,14}$/.test(number);
+          const phone=c.phone?(canCall?'<a class="mi-crew-contact" href="tel:'+number+'" title="Chiama">'+phoneIcon+'<span>'+esc(c.phone)+'</span></a>':'<span class="mi-crew-contact">'+phoneIcon+'<span>'+esc(c.phone)+'</span></span>'):'';
+          const whatsapp=canWrite?'<a class="mi-crew-contact mi-crew-contact--icon" href="https://wa.me/'+number.slice(1)+'" target="_blank" rel="noopener noreferrer" aria-label="Scrivi su WhatsApp a '+esc(c.driver)+'" title="Scrivi su WhatsApp">'+whatsappIcon+'</a>':'';
+          const email=c.email?'<a class="mi-crew-contact" href="mailto:'+esc(c.email)+'" title="Scrivi un’email">'+mailIcon+'<span>'+esc(c.email)+'</span></a>':'';
+          const contacts=phone||email?'<div class="mi-travel-crew-contacts">'+(phone?'<span class="mi-crew-call">'+phone+whatsapp+'</span>':'')+email+'</div>':'';
+          return '<article class="mi-travel-crew'+(offersSeats?' mi-travel-crew--driver':'')+'"><header class="mi-crew-heading"><span class="mi-crew-avatar" aria-hidden="true">'+esc(initials(c.driver))+'</span><div class="mi-crew-who"><h4>'+esc(c.driver)+'</h4>'+together+'</div>'+badge+'</header>'+(offersSeats?'<div class="mi-crew-body">'+occupancy+details+passengers+'</div>':'')+contacts+'</article>';
         }).join('');
         status.textContent=data.crews.length?'':'Nessun trasferimento disponibile al momento.';
       }catch(error){if(ticket===sequence&&panel.open&&isCurrent())status.textContent='Equipaggi non disponibili. '+error.message;}
